@@ -1,0 +1,89 @@
+# vcdeploy Master Configuration
+# Copy to /etc/vcdeploy/master.yaml
+
+server:
+  listen: ":9000"
+  tls:
+    enabled: true
+    cert: /etc/vcdeploy/tls/cert.pem
+    key: /etc/vcdeploy/tls/key.pem
+
+grpc:
+  listen: ":9001"
+
+ssh:
+  default_user: deploy
+  default_key: /etc/vcdeploy/keys/default.pem
+  known_hosts: /etc/vcdeploy/known_hosts
+  connection_timeout: 30s
+  keepalive_interval: 15s
+  idle_timeout: 60s
+  
+  # Jump servers (optional)
+  # jump_servers:
+  #   - name: bastion
+  #     host: bastion.example.com
+  #     user: jump
+  #     key: /etc/vcdeploy/keys/bastion.pem
+
+security:
+  key_rotation:
+    enabled: true
+    interval: 720h  # 30 days
+  session_timeout: 24h
+  require_2fa_admin: true
+
+backup:
+  database:
+    enabled: true
+    interval: 720h   # 30 days
+    retention: 8760h # 365 days
+    path: /var/lib/vcdeploy/backups/
+  config:
+    versions: 5
+
+logs:
+  deployment:
+    retention: 2160h  # 90 days
+    max_size_mb: 100
+  audit:
+    retention: 8760h  # 365 days
+    export:
+      enabled: false
+      destination: ""
+      schedule: "0 0 1 * *"
+  application:
+    level: info
+    retention: 720h  # 30 days
+  rotation:
+    schedule: "0 3 * * *"
+
+webhooks:
+  github:
+    enabled: true
+    path: /webhook/github
+  gitlab:
+    enabled: true
+    path: /webhook/gitlab
+  bitbucket:
+    enabled: true
+    path: /webhook/bitbucket
+
+notifications:
+  providers:
+    slack:
+      enabled: true
+    email:
+      enabled: true
+      smtp:
+        host: smtp.example.com
+        port: 587
+        user: notifications@example.com
+    webhook:
+      enabled: true
+
+api:
+  enabled: true
+
+appearance:
+  theme: dark

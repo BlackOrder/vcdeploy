@@ -1,0 +1,41 @@
+# vcdeploy Agent Configuration
+# Copy to /etc/vcdeploy/agent.yaml
+
+master:
+  address: master.example.com:9001
+  token: ""  # Set during registration
+  cert: /etc/vcdeploy/agent/cert.pem
+  reconnect:
+    initial_delay: 1s
+    max_delay: 5m
+    heartbeat_interval: 10s
+
+agent:
+  id: ""  # Required: unique identifier for this agent
+  labels:
+    # Add labels to identify this agent
+    # region: us-east
+    # env: production
+    # role: web
+
+paths:
+  repos: /var/lib/vcdeploy/repos/
+  releases: /var/www/
+
+execution:
+  user: www-data
+  group: www-data
+  timeout: 600s  # 10 minutes
+  use_namespaces: true
+  allowed_env_vars:
+    - PATH
+    - HOME
+    - USER
+    - LANG
+
+health:
+  disk_warning_threshold: 90  # percent
+  report_interval: 30s
+
+graceful_shutdown:
+  drain_timeout: 600s  # 10 minutes

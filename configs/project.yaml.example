@@ -1,0 +1,95 @@
+# Example Project Configuration
+# Save to /etc/vcdeploy/projects/<name>.yaml
+
+name: my-app
+type: laravel
+repository: git@github.com:org/my-app.git
+archived: false
+
+# Branch watching settings
+watch:
+  branches:
+    - main
+    - develop
+    - "release/*"
+  actions:
+    - push
+    - pull_request.merged
+  guards:
+    reject_force_push: true
+    require_ci_pass: false
+
+# Deployment behavior
+deployment:
+  on_busy: cancel        # cancel | queue | skip
+  strategy: symlink      # symlink | inplace
+  keep_releases: 5
+
+# Environment file configuration
+env:
+  template: ".env.${target}"
+  placeholder_pattern: "${SECRET_NAME}"
+  required_keys:
+    - APP_KEY
+    - DB_PASSWORD
+
+# Deployment targets
+targets:
+  # Agent-based deployment (recommended)
+  production:
+    agents:
+      - prod-web-01
+      - prod-web-02
+    branch: main
+    path: /var/www/my-app
+    deploy_strategy: rolling  # parallel | rolling
+
+  staging:
+    agent: staging-01
+    branch: develop
+    path: /var/www/my-app
+
+  # SSH-based deployment (no agent required)
+  legacy:
+    ssh:
+      host: legacy.example.com
+      user: deploy
+      # key: /etc/vcdeploy/keys/legacy.pem  # optional, uses default
+    branch: main
+    path: /var/www/my-app
+
+  # SSH via jump server
+  datacenter:
+    ssh:
+      host: 192.168.1.10
+      user: deploy
+      jump: bastion  # references master.yaml jump_servers
+    branch: main
+    path: /var/www/my-app
+
+# Deployment hooks
+hooks:
+  pre_deploy:
+    - echo "Starting deployment"
+  post_deploy:
+    - npm ci && npm run build
+  reload:
+    - service: php-fpm
+      action: reload
+  rollback:
+    - php artisan migrate:rollback --step=1
+
+# Health check (optional)
+health:
+  url: https://my-app.com/health
+  timeout: 30s
+  retries: 3
+  rollback_on_fail: true
+
+# Notifications (optional)
+notifications:
+  on_success:
+    - slack: https://hooks.slack.com/services/xxx
+  on_failure:
+    - slack: https://hooks.slack.com/services/xxx
+    - email: ops@company.com
