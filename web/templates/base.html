@@ -1,0 +1,75 @@
+{{define "base"}}
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}} - vcdeploy</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        dark: {
+                            bg: '#0d1117',
+                            card: '#161b22',
+                            border: '#30363d',
+                            text: '#c9d1d9',
+                            muted: '#8b949e',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        [data-loading] { display: none; }
+        .htmx-request [data-loading] { display: inline-block; }
+        .htmx-request [data-ready] { display: none; }
+    </style>
+</head>
+<body class="bg-dark-bg text-dark-text min-h-screen">
+    {{if .ShowNav}}
+    <nav class="bg-dark-card border-b border-dark-border">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <span class="text-xl font-bold text-green-500">vcdeploy</span>
+                    </div>
+                    <div class="hidden md:block ml-10">
+                        <div class="flex items-baseline space-x-4">
+                            <a href="/dashboard" class="{{if eq .Active "dashboard"}}bg-dark-border text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Dashboard</a>
+                            <a href="/projects" class="{{if eq .Active "projects"}}bg-dark-border text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Projects</a>
+                            <a href="/deployments" class="{{if eq .Active "deployments"}}bg-dark-border text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Deployments</a>
+                            <a href="/agents" class="{{if eq .Active "agents"}}bg-dark-border text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Agents</a>
+                            <a href="/settings" class="{{if eq .Active "settings"}}bg-dark-border text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Settings</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span class="text-dark-muted text-sm">{{.Username}}</span>
+                    <a href="/logout" class="text-dark-muted hover:text-white text-sm">Logout</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+    {{end}}
+    
+    <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+        {{template "content" .}}
+    </main>
+    
+    {{if .ShowNav}}
+    <footer class="bg-dark-card border-t border-dark-border mt-auto">
+        <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
+            <p class="text-center text-dark-muted text-sm">vcdeploy - Open Source Deployment Platform</p>
+        </div>
+    </footer>
+    {{end}}
+</body>
+</html>
+{{end}}

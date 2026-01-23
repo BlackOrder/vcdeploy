@@ -1,0 +1,293 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="space-y-6">
+    <h1 class="text-2xl font-bold">Settings</h1>
+
+    <!-- Settings Tabs -->
+    <div class="border-b border-dark-border">
+        <nav class="-mb-px flex space-x-8">
+            <button onclick="showTab('general')" id="tab-general"
+                class="settings-tab border-green-500 text-white border-b-2 whitespace-nowrap py-4 px-1 font-medium text-sm">
+                General
+            </button>
+            <button onclick="showTab('security')" id="tab-security"
+                class="settings-tab border-transparent text-dark-muted hover:text-white hover:border-dark-border border-b-2 whitespace-nowrap py-4 px-1 font-medium text-sm">
+                Security
+            </button>
+            <button onclick="showTab('notifications')" id="tab-notifications"
+                class="settings-tab border-transparent text-dark-muted hover:text-white hover:border-dark-border border-b-2 whitespace-nowrap py-4 px-1 font-medium text-sm">
+                Notifications
+            </button>
+            <button onclick="showTab('users')" id="tab-users"
+                class="settings-tab border-transparent text-dark-muted hover:text-white hover:border-dark-border border-b-2 whitespace-nowrap py-4 px-1 font-medium text-sm">
+                Users
+            </button>
+        </nav>
+    </div>
+
+    <!-- General Settings -->
+    <div id="panel-general" class="settings-panel">
+        <form hx-put="/api/v1/settings/general" hx-target="#settings-status" class="space-y-6">
+            <div class="bg-dark-card border border-dark-border rounded-lg p-6 space-y-6">
+                <h2 class="text-lg font-medium">Server Configuration</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-dark-muted mb-1">Master URL</label>
+                        <input type="url" name="master_url" value="{{.Settings.MasterURL}}"
+                            class="w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text focus:ring-green-500 focus:border-green-500">
+                        <p class="mt-1 text-xs text-dark-muted">URL used by agents to connect</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-dark-muted mb-1">Log Level</label>
+                        <select name="log_level" class="w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text">
+                            <option value="debug" {{if eq .Settings.LogLevel "debug"}}selected{{end}}>Debug</option>
+                            <option value="info" {{if eq .Settings.LogLevel "info"}}selected{{end}}>Info</option>
+                            <option value="warn" {{if eq .Settings.LogLevel "warn"}}selected{{end}}>Warning</option>
+                            <option value="error" {{if eq .Settings.LogLevel "error"}}selected{{end}}>Error</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-dark-muted mb-1">Deployment Retention (days)</label>
+                        <input type="number" name="retention_days" value="{{.Settings.RetentionDays}}" min="1" max="365"
+                            class="w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-dark-muted mb-1">Max Concurrent Deployments</label>
+                        <input type="number" name="max_concurrent" value="{{.Settings.MaxConcurrent}}" min="1" max="50"
+                            class="w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text">
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end">
+                <button type="submit"
+                    class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md">
+                    Save Changes
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Security Settings -->
+    <div id="panel-security" class="settings-panel hidden">
+        <form hx-put="/api/v1/settings/security" hx-target="#settings-status" class="space-y-6">
+            <div class="bg-dark-card border border-dark-border rounded-lg p-6 space-y-6">
+                <h2 class="text-lg font-medium">Security Configuration</h2>
+                
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-dark-text">Require Two-Factor Authentication</p>
+                            <p class="text-xs text-dark-muted">All users must enable 2FA</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" name="require_2fa" class="sr-only peer" {{if .Settings.Require2FA}}checked{{end}}>
+                            <div class="w-11 h-6 bg-dark-border rounded-full peer peer-checked:bg-green-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                        </label>
+                    </div>
+                    
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-dark-text">Force HTTPS</p>
+                            <p class="text-xs text-dark-muted">Redirect all HTTP requests to HTTPS</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" name="force_https" class="sr-only peer" {{if .Settings.ForceHTTPS}}checked{{end}}>
+                            <div class="w-11 h-6 bg-dark-border rounded-full peer peer-checked:bg-green-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                        </label>
+                    </div>
+
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-dark-text">Audit Logging</p>
+                            <p class="text-xs text-dark-muted">Log all user actions for compliance</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" name="audit_log" class="sr-only peer" {{if .Settings.AuditLog}}checked{{end}}>
+                            <div class="w-11 h-6 bg-dark-border rounded-full peer peer-checked:bg-green-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="pt-4 border-t border-dark-border">
+                    <label class="block text-sm font-medium text-dark-muted mb-1">Session Timeout (minutes)</label>
+                    <input type="number" name="session_timeout" value="{{.Settings.SessionTimeout}}" min="5" max="1440"
+                        class="w-64 px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text">
+                </div>
+            </div>
+
+            <div class="flex justify-end">
+                <button type="submit"
+                    class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md">
+                    Save Changes
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Notifications Settings -->
+    <div id="panel-notifications" class="settings-panel hidden">
+        <form hx-put="/api/v1/settings/notifications" hx-target="#settings-status" class="space-y-6">
+            <div class="bg-dark-card border border-dark-border rounded-lg p-6 space-y-6">
+                <h2 class="text-lg font-medium">Slack</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-medium text-dark-muted mb-1">Webhook URL</label>
+                        <input type="url" name="slack_webhook" value="{{.Settings.SlackWebhook}}" placeholder="https://hooks.slack.com/services/..."
+                            class="w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-dark-muted mb-1">Channel</label>
+                        <input type="text" name="slack_channel" value="{{.Settings.SlackChannel}}" placeholder="#deployments"
+                            class="w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text">
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-dark-card border border-dark-border rounded-lg p-6 space-y-6">
+                <h2 class="text-lg font-medium">Email (SMTP)</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-dark-muted mb-1">SMTP Host</label>
+                        <input type="text" name="smtp_host" value="{{.Settings.SMTPHost}}" placeholder="smtp.example.com"
+                            class="w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-dark-muted mb-1">SMTP Port</label>
+                        <input type="number" name="smtp_port" value="{{.Settings.SMTPPort}}" placeholder="587"
+                            class="w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-dark-muted mb-1">Username</label>
+                        <input type="text" name="smtp_user" value="{{.Settings.SMTPUser}}"
+                            class="w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-dark-muted mb-1">Password</label>
+                        <input type="password" name="smtp_password" placeholder="••••••••"
+                            class="w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-dark-muted mb-1">From Address</label>
+                        <input type="email" name="smtp_from" value="{{.Settings.SMTPFrom}}" placeholder="deploy@example.com"
+                            class="w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text">
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end">
+                <button type="submit"
+                    class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md">
+                    Save Changes
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Users Settings -->
+    <div id="panel-users" class="settings-panel hidden">
+        <div class="space-y-6">
+            <div class="flex justify-between items-center">
+                <h2 class="text-lg font-medium">User Management</h2>
+                <button onclick="document.getElementById('add-user-modal').classList.remove('hidden')"
+                    class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md">
+                    Add User
+                </button>
+            </div>
+
+            <div class="bg-dark-card border border-dark-border rounded-lg overflow-hidden">
+                <table class="min-w-full divide-y divide-dark-border">
+                    <thead class="bg-dark-bg">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-dark-muted uppercase tracking-wider">User</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-dark-muted uppercase tracking-wider">Role</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-dark-muted uppercase tracking-wider">2FA</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-dark-muted uppercase tracking-wider">Last Login</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-dark-muted uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-dark-border" hx-get="/api/v1/users" hx-trigger="load" hx-swap="innerHTML">
+                        <tr>
+                            <td colspan="5" class="px-6 py-4 text-center text-dark-muted">Loading users...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="settings-status"></div>
+</div>
+
+<!-- Add User Modal -->
+<div id="add-user-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-dark-card border border-dark-border rounded-lg max-w-md w-full mx-4">
+        <div class="px-6 py-4 border-b border-dark-border flex items-center justify-between">
+            <h3 class="text-lg font-medium">Add New User</h3>
+            <button onclick="document.getElementById('add-user-modal').classList.add('hidden')" class="text-dark-muted hover:text-white">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        <form hx-post="/api/v1/users" hx-target="#panel-users tbody" hx-swap="innerHTML" class="p-6 space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-dark-muted mb-1">Username</label>
+                <input type="text" name="username" required
+                    class="w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-dark-muted mb-1">Email</label>
+                <input type="email" name="email" required
+                    class="w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-dark-muted mb-1">Password</label>
+                <input type="password" name="password" required minlength="8"
+                    class="w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-dark-muted mb-1">Role</label>
+                <select name="role" class="w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text">
+                    <option value="viewer">Viewer</option>
+                    <option value="deployer">Deployer</option>
+                    <option value="admin">Admin</option>
+                </select>
+            </div>
+            <div class="flex justify-end space-x-3 pt-4">
+                <button type="button" onclick="document.getElementById('add-user-modal').classList.add('hidden')"
+                    class="px-4 py-2 text-sm font-medium text-dark-text hover:text-white border border-dark-border rounded-md">
+                    Cancel
+                </button>
+                <button type="submit"
+                    class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md">
+                    Create User
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function showTab(tabName) {
+    // Hide all panels
+    document.querySelectorAll('.settings-panel').forEach(p => p.classList.add('hidden'));
+    // Reset all tabs
+    document.querySelectorAll('.settings-tab').forEach(t => {
+        t.classList.remove('border-green-500', 'text-white');
+        t.classList.add('border-transparent', 'text-dark-muted');
+    });
+    // Show selected panel
+    document.getElementById('panel-' + tabName).classList.remove('hidden');
+    // Highlight selected tab
+    const tab = document.getElementById('tab-' + tabName);
+    tab.classList.add('border-green-500', 'text-white');
+    tab.classList.remove('border-transparent', 'text-dark-muted');
+}
+</script>
+{{end}}
