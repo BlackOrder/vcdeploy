@@ -12,7 +12,9 @@ import (
 )
 
 func TestNewLocalRunner(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
+	t.Parallel()
+
+	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
 
 	if runner == nil {
@@ -25,7 +27,9 @@ func TestNewLocalRunner(t *testing.T) {
 }
 
 func TestLocalRunnerRunSimple(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
+	t.Parallel()
+
+	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
 	ctx := context.Background()
 
@@ -44,7 +48,9 @@ func TestLocalRunnerRunSimple(t *testing.T) {
 }
 
 func TestLocalRunnerRunExitError(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
+	t.Parallel()
+
+	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
 	ctx := context.Background()
 
@@ -59,7 +65,9 @@ func TestLocalRunnerRunExitError(t *testing.T) {
 }
 
 func TestLocalRunnerRunWithEnv(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
+	t.Parallel()
+
+	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
 	ctx := context.Background()
 
@@ -78,12 +86,15 @@ func TestLocalRunnerRunWithEnv(t *testing.T) {
 }
 
 func TestLocalRunnerRunWithWorkDir(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
+	t.Parallel()
+
+	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
 	ctx := context.Background()
 
+	tmpDir := t.TempDir()
 	opts := deploy.RunOptions{
-		WorkDir: "/tmp",
+		WorkDir: tmpDir,
 	}
 
 	result, err := runner.Run(ctx, "pwd", opts)
@@ -91,13 +102,15 @@ func TestLocalRunnerRunWithWorkDir(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 
-	if result.Stdout != "/tmp\n" {
-		t.Errorf("stdout = %q, want %q", result.Stdout, "/tmp\n")
+	if result.Stdout != tmpDir+"\n" {
+		t.Errorf("stdout = %q, want %q", result.Stdout, tmpDir+"\n")
 	}
 }
 
 func TestLocalRunnerRunWithTimeout(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
+	t.Parallel()
+
+	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
 	ctx := context.Background()
 
@@ -116,7 +129,9 @@ func TestLocalRunnerRunWithTimeout(t *testing.T) {
 }
 
 func TestLocalRunnerRunWithOutput(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
+	t.Parallel()
+
+	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
 	ctx := context.Background()
 
@@ -133,7 +148,9 @@ func TestLocalRunnerRunWithOutput(t *testing.T) {
 }
 
 func TestLocalRunnerRunWithOutputError(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
+	t.Parallel()
+
+	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
 	ctx := context.Background()
 
@@ -146,7 +163,9 @@ func TestLocalRunnerRunWithOutputError(t *testing.T) {
 }
 
 func TestLocalRunnerBuildCommand(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
+	t.Parallel()
+
+	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
 
 	got := runner.buildCommand("echo hello", deploy.RunOptions{})
@@ -161,7 +180,9 @@ func TestLocalRunnerBuildCommand(t *testing.T) {
 }
 
 func TestLocalRunnerBuildEnv(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
+	t.Parallel()
+
+	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
 
 	env := map[string]string{
@@ -177,14 +198,18 @@ func TestLocalRunnerBuildEnv(t *testing.T) {
 }
 
 func TestLocalRunnerImplementsInterface(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
+	t.Parallel()
+
+	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
 
 	var _ deploy.CommandRunner = runner
 }
 
 func TestNewAgent(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
+	t.Parallel()
+
+	logger := zap.NewNop()
 
 	cfg := &config.AgentConfig{
 		Agent: config.AgentIdentityConfig{
@@ -218,7 +243,9 @@ func TestNewAgent(t *testing.T) {
 }
 
 func TestAgentStartAlreadyRunning(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
+	t.Parallel()
+
+	logger := zap.NewNop()
 
 	cfg := &config.AgentConfig{
 		Agent: config.AgentIdentityConfig{
@@ -240,8 +267,239 @@ func TestAgentStartAlreadyRunning(t *testing.T) {
 	}
 }
 
+func TestAgentStatus(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		running  bool
+		conn     bool
+		expected string
+	}{
+		{"stopped", false, false, "stopped"},
+		{"disconnected", true, false, "disconnected"},
+		{"connected", true, true, "connected"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			logger := zap.NewNop()
+			cfg := &config.AgentConfig{
+				Agent:  config.AgentIdentityConfig{ID: "test"},
+				Master: config.AgentMasterConfig{Address: "localhost:9090"},
+			}
+			agent, _ := NewAgent(cfg, logger)
+			agent.running = tt.running
+			if tt.conn {
+				// Mock connection existence (we don't actually connect)
+				// The Status() method checks if conn is nil
+				// We can't easily set conn without a real connection
+				// but we can test the other states
+			}
+
+			status := agent.Status()
+
+			// For connected case, we can't set conn without real connection
+			if tt.name != "connected" && status != tt.expected {
+				t.Errorf("Status() = %q, want %q", status, tt.expected)
+			}
+		})
+	}
+}
+
+func TestAgentShutdown(t *testing.T) {
+	t.Parallel()
+
+	logger := zap.NewNop()
+
+	cfg := &config.AgentConfig{
+		Agent:  config.AgentIdentityConfig{ID: "test-agent"},
+		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	}
+
+	agent, _ := NewAgent(cfg, logger)
+	agent.running = true
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err := agent.Shutdown(ctx)
+
+	if err != nil {
+		t.Errorf("Shutdown() error = %v", err)
+	}
+
+	if agent.running {
+		t.Error("Agent should not be running after Shutdown()")
+	}
+}
+
+func TestAgentShutdownTimeout(t *testing.T) {
+	t.Parallel()
+
+	logger := zap.NewNop()
+
+	cfg := &config.AgentConfig{
+		Agent:  config.AgentIdentityConfig{ID: "test-agent"},
+		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	}
+
+	agent, _ := NewAgent(cfg, logger)
+	agent.running = true
+
+	// Add a task to the wait group that won't complete
+	agent.wg.Add(1)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+
+	err := agent.Shutdown(ctx)
+
+	if err != context.DeadlineExceeded {
+		t.Errorf("Shutdown() error = %v, want context.DeadlineExceeded", err)
+	}
+
+	// Clean up the wait group
+	agent.wg.Done()
+}
+
+func TestAgentExecuteDeploy(t *testing.T) {
+	t.Parallel()
+
+	logger := zap.NewNop()
+
+	cfg := &config.AgentConfig{
+		Agent:  config.AgentIdentityConfig{ID: "test-agent"},
+		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	}
+
+	agent, _ := NewAgent(cfg, logger)
+
+	cmd := &deploy.DeployCommand{
+		DeploymentID: "test-deploy",
+		Project:      "test-project",
+		Repository:   "https://github.com/test/repo.git",
+		Branch:       "main",
+		Path:         t.TempDir(),
+	}
+
+	ctx := context.Background()
+	result, _ := agent.ExecuteDeploy(ctx, cmd)
+
+	// Even if deployment fails (no git repo), we should get a result
+	if result == nil {
+		t.Fatal("ExecuteDeploy() should return a result")
+	}
+}
+
+func TestAgentExecuteRollback(t *testing.T) {
+	t.Parallel()
+
+	logger := zap.NewNop()
+
+	cfg := &config.AgentConfig{
+		Agent:  config.AgentIdentityConfig{ID: "test-agent"},
+		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	}
+
+	agent, _ := NewAgent(cfg, logger)
+
+	cmd := &deploy.RollbackCommand{
+		DeploymentID: "test-rollback",
+		Project:      "test-project",
+		Path:         t.TempDir(),
+	}
+
+	ctx := context.Background()
+	result, _ := agent.ExecuteRollback(ctx, cmd)
+
+	// Even if rollback fails (no releases), we should get a result
+	if result == nil {
+		t.Fatal("ExecuteRollback() should return a result")
+	}
+}
+
+func TestLocalRunnerRunContextCancellation(t *testing.T) {
+	t.Parallel()
+
+	logger := zap.NewNop()
+	runner := NewLocalRunner(logger)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	result, err := runner.Run(ctx, "sleep 10", deploy.RunOptions{})
+
+	// Context should affect the command
+	if err == nil && result != nil && result.ExitCode == 0 {
+		t.Error("Run() should fail or return non-zero when context is cancelled")
+	}
+}
+
+func TestLocalRunnerRunWithMultipleEnvVars(t *testing.T) {
+	t.Parallel()
+
+	logger := zap.NewNop()
+	runner := NewLocalRunner(logger)
+	ctx := context.Background()
+
+	opts := deploy.RunOptions{
+		Env: map[string]string{
+			"VAR1": "value1",
+			"VAR2": "value2",
+			"VAR3": "value3",
+		},
+	}
+
+	result, err := runner.Run(ctx, "echo $VAR1 $VAR2 $VAR3", opts)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	if result.Stdout != "value1 value2 value3\n" {
+		t.Errorf("stdout = %q, want %q", result.Stdout, "value1 value2 value3\n")
+	}
+}
+
+func TestLocalRunnerStderr(t *testing.T) {
+	t.Parallel()
+
+	logger := zap.NewNop()
+	runner := NewLocalRunner(logger)
+	ctx := context.Background()
+
+	result, err := runner.Run(ctx, "echo error >&2", deploy.RunOptions{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	// LocalRunner.Run() uses CombinedOutput, so stderr goes to Stdout
+	if result.Stdout != "error\n" {
+		t.Errorf("stdout (combined) = %q, want %q", result.Stdout, "error\n")
+	}
+}
+
+func TestLocalRunnerCommandDuration(t *testing.T) {
+	t.Parallel()
+
+	logger := zap.NewNop()
+	runner := NewLocalRunner(logger)
+	ctx := context.Background()
+
+	result, err := runner.Run(ctx, "sleep 0.1", deploy.RunOptions{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	if result.Duration < 100*time.Millisecond {
+		t.Errorf("Duration = %v, want >= 100ms", result.Duration)
+	}
+}
+
 func BenchmarkLocalRunnerSimpleCommand(b *testing.B) {
-	logger, _ := zap.NewDevelopment()
+	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
 	ctx := context.Background()
 

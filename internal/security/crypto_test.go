@@ -9,6 +9,8 @@ import (
 )
 
 func TestGenerateMasterKey(t *testing.T) {
+	t.Parallel()
+
 	key, err := GenerateMasterKey()
 	if err != nil {
 		t.Fatalf("GenerateMasterKey() error = %v", err)
@@ -22,6 +24,8 @@ func TestGenerateMasterKey(t *testing.T) {
 }
 
 func TestGenerateMasterKeyUniqueness(t *testing.T) {
+	t.Parallel()
+
 	key1, _ := GenerateMasterKey()
 	key2, _ := GenerateMasterKey()
 	if key1.KeyID() == key2.KeyID() {
@@ -30,6 +34,8 @@ func TestGenerateMasterKeyUniqueness(t *testing.T) {
 }
 
 func TestMasterKeyEncryptDecrypt(t *testing.T) {
+	t.Parallel()
+
 	key, _ := GenerateMasterKey()
 
 	tests := []struct {
@@ -45,7 +51,10 @@ func TestMasterKeyEncryptDecrypt(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			encrypted, err := key.Encrypt(tt.plaintext)
 			if err != nil {
 				t.Fatalf("Encrypt() error = %v", err)
@@ -64,6 +73,8 @@ func TestMasterKeyEncryptDecrypt(t *testing.T) {
 }
 
 func TestMasterKeyEncryptDifferentCiphertext(t *testing.T) {
+	t.Parallel()
+
 	key, _ := GenerateMasterKey()
 	plaintext := []byte("same message")
 
@@ -76,6 +87,8 @@ func TestMasterKeyEncryptDifferentCiphertext(t *testing.T) {
 }
 
 func TestMasterKeyDecryptWrongKey(t *testing.T) {
+	t.Parallel()
+
 	key1, _ := GenerateMasterKey()
 	key2, _ := GenerateMasterKey()
 
@@ -87,6 +100,8 @@ func TestMasterKeyDecryptWrongKey(t *testing.T) {
 }
 
 func TestMasterKeyDecryptTamperedData(t *testing.T) {
+	t.Parallel()
+
 	key, _ := GenerateMasterKey()
 	encrypted, _ := key.Encrypt([]byte("secret"))
 
@@ -100,6 +115,8 @@ func TestMasterKeyDecryptTamperedData(t *testing.T) {
 }
 
 func TestMasterKeyDecryptTooShort(t *testing.T) {
+	t.Parallel()
+
 	key, _ := GenerateMasterKey()
 	_, err := key.Decrypt([]byte("short"))
 	if err == nil {
@@ -108,11 +125,9 @@ func TestMasterKeyDecryptTooShort(t *testing.T) {
 }
 
 func TestMasterKeySaveAndLoad(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "vcdeploy-test-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tmpDir)
+	t.Parallel()
+
+	tmpDir := t.TempDir()
 
 	keyPath := filepath.Join(tmpDir, "master.key")
 
@@ -149,10 +164,11 @@ func TestMasterKeySaveAndLoad(t *testing.T) {
 }
 
 func TestLoadMasterKeyFromEnv(t *testing.T) {
+	// Note: Cannot use t.Parallel() - modifies environment
+
 	// Generate a valid key and encode it
 	key, _ := GenerateMasterKey()
-	tmpDir, _ := os.MkdirTemp("", "vcdeploy-test-*")
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 	keyPath := filepath.Join(tmpDir, "master.key")
 	key.SaveToFile(keyPath)
 
@@ -172,6 +188,8 @@ func TestLoadMasterKeyFromEnv(t *testing.T) {
 }
 
 func TestLoadMasterKeyInvalidEnv(t *testing.T) {
+	// Note: Cannot use t.Parallel() - modifies environment
+
 	os.Setenv("VCDEPLOY_MASTER_KEY", "invalid-base64!")
 	defer os.Unsetenv("VCDEPLOY_MASTER_KEY")
 
@@ -182,6 +200,8 @@ func TestLoadMasterKeyInvalidEnv(t *testing.T) {
 }
 
 func TestLoadMasterKeyWrongSize(t *testing.T) {
+	// Note: Cannot use t.Parallel() - modifies environment
+
 	os.Setenv("VCDEPLOY_MASTER_KEY", "dG9vLXNob3J0") // "too-short" in base64
 	defer os.Unsetenv("VCDEPLOY_MASTER_KEY")
 
@@ -192,6 +212,8 @@ func TestLoadMasterKeyWrongSize(t *testing.T) {
 }
 
 func TestLoadMasterKeyNotFound(t *testing.T) {
+	t.Parallel()
+
 	_, err := LoadMasterKey("/nonexistent/path/key")
 	if err == nil {
 		t.Error("LoadMasterKey with nonexistent file should fail")
@@ -202,6 +224,8 @@ func TestLoadMasterKeyNotFound(t *testing.T) {
 }
 
 func TestHashPassword(t *testing.T) {
+	t.Parallel()
+
 	password := "MySecureP@ssw0rd!"
 
 	hash, err := HashPassword(password)
@@ -223,6 +247,8 @@ func TestHashPassword(t *testing.T) {
 }
 
 func TestHashPasswordUnique(t *testing.T) {
+	t.Parallel()
+
 	password := "same-password"
 	hash1, _ := HashPassword(password)
 	hash2, _ := HashPassword(password)
@@ -238,6 +264,8 @@ func TestHashPasswordUnique(t *testing.T) {
 }
 
 func TestGenerateRandomPassword(t *testing.T) {
+	t.Parallel()
+
 	lengths := []int{8, 16, 32, 64}
 	for _, length := range lengths {
 		pass, err := GenerateRandomPassword(length)
@@ -251,6 +279,8 @@ func TestGenerateRandomPassword(t *testing.T) {
 }
 
 func TestGenerateRandomPasswordUnique(t *testing.T) {
+	t.Parallel()
+
 	pass1, _ := GenerateRandomPassword(16)
 	pass2, _ := GenerateRandomPassword(16)
 	if pass1 == pass2 {
@@ -259,6 +289,8 @@ func TestGenerateRandomPasswordUnique(t *testing.T) {
 }
 
 func TestGenerateToken(t *testing.T) {
+	t.Parallel()
+
 	token, err := GenerateToken(32)
 	if err != nil {
 		t.Fatalf("GenerateToken() error = %v", err)
@@ -269,6 +301,8 @@ func TestGenerateToken(t *testing.T) {
 }
 
 func TestGenerateTokenUnique(t *testing.T) {
+	t.Parallel()
+
 	token1, _ := GenerateToken(32)
 	token2, _ := GenerateToken(32)
 	if token1 == token2 {
@@ -277,6 +311,8 @@ func TestGenerateTokenUnique(t *testing.T) {
 }
 
 func TestGenerateSessionID(t *testing.T) {
+	t.Parallel()
+
 	sid1, err := GenerateSessionID()
 	if err != nil {
 		t.Fatalf("GenerateSessionID() error = %v", err)
