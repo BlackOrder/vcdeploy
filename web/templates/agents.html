@@ -1,0 +1,128 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold">Agents</h1>
+        <button onclick="document.getElementById('register-agent-modal').classList.remove('hidden')"
+            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700">
+            <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+            </svg>
+            Register Agent
+        </button>
+    </div>
+
+    <!-- Agents Grid -->
+    <div id="agents-grid" hx-get="/api/v1/agents" hx-trigger="load, every 30s" hx-swap="innerHTML">
+        <div class="text-center py-12 text-dark-muted">
+            <span class="animate-pulse">Loading agents...</span>
+        </div>
+    </div>
+</div>
+
+<!-- Register Agent Modal -->
+<div id="register-agent-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-dark-card border border-dark-border rounded-lg max-w-lg w-full mx-4">
+        <div class="px-6 py-4 border-b border-dark-border flex items-center justify-between">
+            <h3 class="text-lg font-medium">Register New Agent</h3>
+            <button onclick="document.getElementById('register-agent-modal').classList.add('hidden')" class="text-dark-muted hover:text-white">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        <div class="p-6 space-y-4">
+            <p class="text-sm text-dark-muted">
+                To register a new agent, install vcdeploy-agent on your server and run:
+            </p>
+            <div class="bg-dark-bg border border-dark-border rounded-md p-4 font-mono text-sm">
+                <p class="text-green-500"># Download and install</p>
+                <p class="text-dark-text">curl -fsSL https://vcdeploy.io/install-agent.sh | sudo bash</p>
+                <p class="text-dark-text mt-2"># Register with master</p>
+                <p class="text-dark-text">sudo vcdeploy-agent register --master {{.MasterURL}} --token <span class="text-yellow-500">YOUR_TOKEN</span></p>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-dark-muted mb-1">Registration Token</label>
+                <div class="flex">
+                    <input type="text" id="agent-token" readonly value="{{.RegistrationToken}}"
+                        class="flex-1 px-3 py-2 bg-dark-bg border border-dark-border rounded-l-md text-dark-text font-mono text-sm">
+                    <button onclick="navigator.clipboard.writeText(document.getElementById('agent-token').value)"
+                        class="px-4 py-2 bg-dark-border text-dark-text hover:text-white border border-dark-border border-l-0 rounded-r-md">
+                        Copy
+                    </button>
+                </div>
+                <p class="mt-1 text-xs text-dark-muted">This token expires in 24 hours</p>
+            </div>
+        </div>
+        <div class="px-6 py-4 border-t border-dark-border flex justify-end">
+            <button onclick="document.getElementById('register-agent-modal').classList.add('hidden')"
+                class="px-4 py-2 text-sm font-medium text-dark-text hover:text-white border border-dark-border rounded-md">
+                Close
+            </button>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{define "agent-card"}}
+<div class="bg-dark-card border border-dark-border rounded-lg p-6">
+    <div class="flex items-start justify-between">
+        <div class="flex items-center space-x-3">
+            <div class="flex-shrink-0">
+                {{if eq .Status "connected"}}
+                <span class="inline-flex h-3 w-3 rounded-full bg-green-500"></span>
+                {{else if eq .Status "stale"}}
+                <span class="inline-flex h-3 w-3 rounded-full bg-yellow-500"></span>
+                {{else}}
+                <span class="inline-flex h-3 w-3 rounded-full bg-red-500"></span>
+                {{end}}
+            </div>
+            <div>
+                <h3 class="text-sm font-medium text-dark-text">{{.Name}}</h3>
+                <p class="text-xs text-dark-muted">{{.ID}}</p>
+            </div>
+        </div>
+        <div class="relative">
+            <button class="text-dark-muted hover:text-white" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path>
+                </svg>
+            </button>
+            <div class="hidden absolute right-0 mt-2 w-48 bg-dark-card border border-dark-border rounded-md shadow-lg z-10">
+                <a href="#" hx-delete="/api/v1/agents/{{.ID}}" hx-target="#agents-grid" hx-confirm="Are you sure you want to remove this agent?"
+                    class="block px-4 py-2 text-sm text-red-400 hover:bg-dark-border">Remove Agent</a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="mt-4 grid grid-cols-2 gap-4 text-sm">
+        <div>
+            <p class="text-dark-muted">Status</p>
+            <p class="text-dark-text capitalize">{{.Status}}</p>
+        </div>
+        <div>
+            <p class="text-dark-muted">Last Ping</p>
+            <p class="text-dark-text">{{.LastPing}}</p>
+        </div>
+        <div>
+            <p class="text-dark-muted">CPU</p>
+            <p class="text-dark-text">{{.CPU}}%</p>
+        </div>
+        <div>
+            <p class="text-dark-muted">Memory</p>
+            <p class="text-dark-text">{{.Memory}}%</p>
+        </div>
+    </div>
+    
+    {{if .Tags}}
+    <div class="mt-4 flex flex-wrap gap-2">
+        {{range .Tags}}
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-dark-border text-dark-muted">
+            {{.}}
+        </span>
+        {{end}}
+    </div>
+    {{end}}
+</div>
+{{end}}

@@ -1,0 +1,100 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold">Deployments</h1>
+        <div class="flex space-x-3">
+            <select id="project-filter" hx-get="/api/v1/deployments" hx-trigger="change" hx-target="#deployments-list" name="project"
+                class="px-3 py-2 bg-dark-card border border-dark-border rounded-md text-dark-text focus:outline-none focus:ring-2 focus:ring-green-500">
+                <option value="">All Projects</option>
+                {{range .Projects}}
+                <option value="{{.ID}}">{{.Name}}</option>
+                {{end}}
+            </select>
+            <select hx-get="/api/v1/deployments" hx-trigger="change" hx-target="#deployments-list" name="status"
+                class="px-3 py-2 bg-dark-card border border-dark-border rounded-md text-dark-text focus:outline-none focus:ring-2 focus:ring-green-500">
+                <option value="">All Status</option>
+                <option value="success">Success</option>
+                <option value="failed">Failed</option>
+                <option value="running">Running</option>
+                <option value="queued">Queued</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Deployments List -->
+    <div id="deployments-list" hx-get="/api/v1/deployments" hx-trigger="load, every 10s" hx-swap="innerHTML">
+        <div class="text-center py-12 text-dark-muted">
+            <span class="animate-pulse">Loading deployments...</span>
+        </div>
+    </div>
+</div>
+
+<!-- Deployment Detail Modal -->
+<div id="deployment-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-dark-card border border-dark-border rounded-lg max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="px-6 py-4 border-b border-dark-border flex items-center justify-between sticky top-0 bg-dark-card">
+            <h3 class="text-lg font-medium">Deployment Details</h3>
+            <button onclick="document.getElementById('deployment-modal').classList.add('hidden')" class="text-dark-muted hover:text-white">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        <div id="deployment-detail-content" class="p-6">
+            <!-- Content loaded via HTMX -->
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{define "deployment-list-item"}}
+<div class="bg-dark-card border border-dark-border rounded-lg p-4 hover:border-dark-muted transition-colors cursor-pointer"
+    hx-get="/api/v1/deployments/{{.ID}}" hx-target="#deployment-detail-content" 
+    onclick="document.getElementById('deployment-modal').classList.remove('hidden')">
+    <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-4">
+            <div class="flex-shrink-0">
+                {{if eq .Status "success"}}
+                <span class="inline-flex items-center justify-center h-10 w-10 rounded-full bg-green-900/50">
+                    <svg class="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                </span>
+                {{else if eq .Status "failed"}}
+                <span class="inline-flex items-center justify-center h-10 w-10 rounded-full bg-red-900/50">
+                    <svg class="h-5 w-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </span>
+                {{else if eq .Status "running"}}
+                <span class="inline-flex items-center justify-center h-10 w-10 rounded-full bg-blue-900/50">
+                    <svg class="h-5 w-5 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </span>
+                {{else}}
+                <span class="inline-flex items-center justify-center h-10 w-10 rounded-full bg-yellow-900/50">
+                    <svg class="h-5 w-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </span>
+                {{end}}
+            </div>
+            <div>
+                <p class="text-sm font-medium text-dark-text">{{.ProjectName}}</p>
+                <p class="text-xs text-dark-muted">{{.Branch}} @ {{.CommitShort}}</p>
+            </div>
+        </div>
+        <div class="text-right">
+            <p class="text-sm text-dark-muted">{{.Duration}}</p>
+            <p class="text-xs text-dark-muted">{{.Timestamp}}</p>
+        </div>
+    </div>
+    {{if .Message}}
+    <p class="mt-2 text-sm text-dark-muted truncate">{{.Message}}</p>
+    {{end}}
+</div>
+{{end}}
