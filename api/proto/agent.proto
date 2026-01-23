@@ -1,0 +1,205 @@
+syntax = "proto3";
+
+package vcdeploy.v1;
+
+option go_package = "github.com/BlackOrder/vcdeploy/internal/proto";
+
+// AgentService defines the gRPC service for agent-master communication.
+service AgentService {
+  // Register registers an agent with the master.
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+  
+  // Connect establishes a bi-directional stream for commands and status.
+  rpc Connect(stream AgentMessage) returns (stream MasterMessage);
+  
+  // Heartbeat sends periodic health updates.
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+}
+
+// RegisterRequest is sent by agent to register with master.
+message RegisterRequest {
+  string agent_id = 1;
+  string token = 2;
+  string hostname = 3;
+  map<string, string> labels = 4;
+  AgentCapabilities capabilities = 5;
+}
+
+// AgentCapabilities describes what the agent can do.
+message AgentCapabilities {
+  bool can_use_namespaces = 1;
+  repeated string allowed_users = 2;
+  int64 disk_space_bytes = 3;
+  int64 memory_bytes = 4;
+}
+
+// RegisterResponse is returned after successful registration.
+message RegisterResponse {
+  bool success = 1;
+  string error = 2;
+  bytes certificate = 3;      // mTLS certificate for future connections
+  bytes ca_certificate = 4;   // CA certificate for verification
+}
+
+// HeartbeatRequest is sent periodically by agent.
+message HeartbeatRequest {
+  string agent_id = 1;
+  int64 timestamp = 2;
+  AgentStats stats = 3;
+  repeated DeploymentStatus active_deployments = 4;
+}
+
+// AgentStats contains agent resource statistics.
+message AgentStats {
+  double cpu_percent = 1;
+  double memory_percent = 2;
+  double disk_percent = 3;
+  int64 disk_free_bytes = 4;
+  int32 active_connections = 5;
+}
+
+// HeartbeatResponse acknowledges heartbeat.
+message HeartbeatResponse {
+  bool ok = 1;
+  int64 server_timestamp = 2;
+}
+
+// AgentMessage is sent from agent to master over the stream.
+message AgentMessage {
+  oneof message {
+    DeploymentStatus deployment_status = 1;
+    DeploymentLog deployment_log = 2;
+    CommandResult command_result = 3;
+    AgentReady agent_ready = 4;
+  }
+}
+
+// MasterMessage is sent from master to agent over the stream.
+message MasterMessage {
+  oneof message {
+    DeployCommand deploy_command = 1;
+    RollbackCommand rollback_command = 2;
+    CancelCommand cancel_command = 3;
+    HealthCheckCommand health_check_command = 4;
+  }
+}
+
+// DeployCommand instructs agent to deploy a project.
+message DeployCommand {
+  string deployment_id = 1;
+  string project = 2;
+  string target = 3;
+  string repository = 4;
+  string branch = 5;
+  string commit = 6;
+  string path = 7;
+  DeploymentSettings settings = 8;
+  map<string, string> env_vars = 9;
+  bytes env_file_content = 10;
+  repeated string pre_deploy_hooks = 11;
+  repeated string post_deploy_hooks = 12;
+  repeated ServiceReload reload_services = 13;
+}
+
+// DeploymentSettings contains deployment configuration.
+message DeploymentSettings {
+  string strategy = 1;           // symlink | inplace
+  int32 keep_releases = 2;
+  repeated string shared_dirs = 3;
+  repeated string shared_files = 4;
+  repeated string writable_dirs = 5;
+  string execution_user = 6;
+  string execution_group = 7;
+  int32 timeout_seconds = 8;
+}
+
+// ServiceReload defines a service to reload.
+message ServiceReload {
+  string service = 1;
+  string action = 2;
+}
+
+// RollbackCommand instructs agent to rollback to a previous release.
+message RollbackCommand {
+  string deployment_id = 1;
+  string project = 2;
+  string target = 3;
+  string path = 4;
+  int32 release_number = 5;  // 0 = previous release
+  repeated string rollback_hooks = 6;
+  repeated ServiceReload reload_services = 7;
+}
+
+// CancelCommand instructs agent to cancel an in-progress deployment.
+message CancelCommand {
+  string deployment_id = 1;
+  string reason = 2;
+}
+
+// HealthCheckCommand instructs agent to check health.
+message HealthCheckCommand {
+  string deployment_id = 1;
+  string url = 2;
+  int32 timeout_seconds = 3;
+  int32 retries = 4;
+}
+
+// DeploymentStatus reports deployment progress.
+message DeploymentStatus {
+  string deployment_id = 1;
+  DeploymentState state = 2;
+  string message = 3;
+  int64 timestamp = 4;
+  int32 progress_percent = 5;
+  string current_step = 6;
+  int32 release_number = 7;
+}
+
+// DeploymentState represents deployment state.
+enum DeploymentState {
+  DEPLOYMENT_STATE_UNSPECIFIED = 0;
+  DEPLOYMENT_STATE_PENDING = 1;
+  DEPLOYMENT_STATE_PREPARING = 2;
+  DEPLOYMENT_STATE_CLONING = 3;
+  DEPLOYMENT_STATE_BUILDING = 4;
+  DEPLOYMENT_STATE_DEPLOYING = 5;
+  DEPLOYMENT_STATE_VERIFYING = 6;
+  DEPLOYMENT_STATE_COMPLETED = 7;
+  DEPLOYMENT_STATE_FAILED = 8;
+  DEPLOYMENT_STATE_CANCELLED = 9;
+  DEPLOYMENT_STATE_ROLLING_BACK = 10;
+}
+
+// DeploymentLog streams log output from deployment.
+message DeploymentLog {
+  string deployment_id = 1;
+  int64 timestamp = 2;
+  LogLevel level = 3;
+  string message = 4;
+  string source = 5;  // hook name, git, etc.
+}
+
+// LogLevel represents log severity.
+enum LogLevel {
+  LOG_LEVEL_UNSPECIFIED = 0;
+  LOG_LEVEL_DEBUG = 1;
+  LOG_LEVEL_INFO = 2;
+  LOG_LEVEL_WARN = 3;
+  LOG_LEVEL_ERROR = 4;
+}
+
+// CommandResult reports the result of a command execution.
+message CommandResult {
+  string deployment_id = 1;
+  string command = 2;
+  int32 exit_code = 3;
+  string stdout = 4;
+  string stderr = 5;
+  int64 duration_ms = 6;
+}
+
+// AgentReady signals agent is ready for commands.
+message AgentReady {
+  string agent_id = 1;
+  int64 timestamp = 2;
+}
