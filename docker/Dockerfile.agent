@@ -1,0 +1,57 @@
+# VCDeploy Agent Dockerfile
+# Multi-stage build for minimal image size
+
+FROM golang:1.24-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache git ca-certificates tzdata
+
+WORKDIR /build
+
+# Copy go mod files first for layer caching
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build the binary
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG BUILD_TIME=unknown
+
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -ldflags "-X main.Version=${VERSION} -X main.Commit=${COMMIT} -X main.BuildTime=${BUILD_TIME}" \
+    -o vcdeploy-agent ./cmd/vcdeploy-agent
+
+# Final image
+FROM alpine:3.19
+
+# Install runtime dependencies
+RUN apk add --no-cache \
+    ca-certificates \
+    tzdata \
+    git \
+    bash \
+    curl \
+    rsync
+
+# Create directories
+RUN mkdir -p /etc/vcdeploy /var/lib/vcdeploy-agent /var/log/vcdeploy-agent
+
+# Copy binary from builder
+COPY --from=builder /build/vcdeploy-agent /usr/local/bin/vcdeploy-agent
+
+# Set permissions
+RUN chmod +x /usr/local/bin/vcdeploy-agent
+
+# Expose gRPC port (for debugging)
+EXPOSE 9091
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD pgrep vcdeploy-agent || exit 1
+
+# Default command
+ENTRYPOINT ["vcdeploy-agent"]
+CMD ["run", "--config", "/etc/vcdeploy/agent.yaml"]
