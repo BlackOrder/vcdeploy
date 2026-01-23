@@ -1,0 +1,93 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/vcdeploy
+/vcdeploy-agent
+/bin/
+/dist/
+
+# Test artifacts (Go test binaries, not Dockerfile.test)
+*.test.exe
+coverage.out
+coverage.html
+coverage.txt
+
+# Dependency directories
+vendor/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Debug files
+*.log
+debug
+__debug_bin*
+
+# Environment files
+.env
+.env.local
+.env.*.local
+*.env
+
+# Build artifacts
+*.o
+*.a
+*.mod.bak
+
+# Generated files (keep proto generated files)
+# /internal/proto/*.pb.go
+
+# Local configuration (keep example and dev configs)
+/configs/*.yaml
+!/configs/*.example.yaml
+!/configs/*-dev.yaml
+
+# Database files
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+/data/
+
+# Secrets and keys
+*.pem
+*.key
+*.crt
+*.p12
+/secrets/
+master.key
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+
+# Archives
+*.zip
+*.tar.gz
+*.tgz
+*.rar
+
+# Goreleaser
+/dist/
+
+# Air (hot reload)
+/tmp/
+
+# Profiling
+*.prof
+*.pprof
+cpu.out
+mem.out
