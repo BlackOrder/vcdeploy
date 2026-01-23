@@ -1,0 +1,69 @@
+# VCDeploy Master Development Configuration
+# For local development and testing
+
+server:
+  listen: ":8080"
+  tls:
+    enabled: false
+
+grpc:
+  listen: ":9090"
+
+ssh:
+  default_user: ${USER}
+  default_key: ~/.ssh/id_ed25519
+  connection_timeout: 30s
+  keepalive_interval: 10s
+  idle_timeout: 5m
+
+security:
+  key_rotation:
+    enabled: false
+  session_timeout: 72h  # Longer for dev
+  require_2fa_admin: false
+
+backup:
+  database:
+    enabled: false
+  config:
+    versions: 3
+
+logs:
+  deployment:
+    retention: 168h
+    max_size_mb: 50
+  audit:
+    retention: 720h
+    export:
+      enabled: false
+  application:
+    level: debug  # Debug level for development
+    retention: 72h
+  rotation:
+    schedule: "0 0 * * *"
+
+webhooks:
+  github:
+    enabled: true
+    path: /webhook/github
+  gitlab:
+    enabled: true
+    path: /webhook/gitlab
+  bitbucket:
+    enabled: true
+    path: /webhook/bitbucket
+
+notifications:
+  providers:
+    slack:
+      enabled: false
+    email:
+      enabled: false
+    webhook:
+      enabled: false
+
+api:
+  enabled: true
+
+appearance:
+  theme: dark

@@ -1,0 +1,41 @@
+# VCDeploy Agent Development Configuration
+# For local development and testing
+
+agent:
+  id: dev-agent-001
+  tags:
+    - dev
+    - local
+
+master:
+  address: "localhost:9090"
+  cert: ""  # No TLS for dev
+  reconnect:
+    heartbeat_interval: 10s  # Faster for dev
+    initial_delay: 1s
+    max_delay: 30s
+
+logging:
+  level: debug
+  file: ""  # stdout for dev
+
+deploy:
+  work_dir: /tmp/vcdeploy-agent
+  timeout: 10m
+  keep_releases: 3
+  shared_dirs:
+    - storage
+  shared_files:
+    - .env
+
+git:
+  depth: 1
+
+limits:
+  max_concurrent: 2
+  max_log_size: 5242880  # 5MB
+
+health:
+  enabled: true
+  port: 9091
+  include_metrics: true
