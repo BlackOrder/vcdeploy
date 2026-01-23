@@ -1,0 +1,81 @@
+# VCDeploy Docker Compose
+# Development and production setup
+
+services:
+  # VCDeploy Master
+  master:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        VERSION: ${VERSION:-dev}
+        COMMIT: ${COMMIT:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
+    image: vcdeploy:${VERSION:-latest}
+    container_name: vcdeploy-master
+    restart: unless-stopped
+    ports:
+      - "8080:8080"   # HTTP/Web UI
+      - "9090:9090"   # gRPC (agents)
+    volumes:
+      - ./config/master.yaml:/etc/vcdeploy/master.yaml:ro
+      - vcdeploy-data:/var/lib/vcdeploy
+      - vcdeploy-logs:/var/log/vcdeploy
+      - ./tls:/etc/vcdeploy/tls:ro
+      - ./ssh:/etc/vcdeploy/ssh:ro
+    environment:
+      - TZ=${TZ:-UTC}
+      - VCDEPLOY_LOG_LEVEL=${LOG_LEVEL:-info}
+    networks:
+      - vcdeploy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # VCDeploy Agent (for local testing)
+  agent:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.agent
+      args:
+        VERSION: ${VERSION:-dev}
+    image: vcdeploy-agent:${VERSION:-latest}
+    container_name: vcdeploy-agent
+    restart: unless-stopped
+    depends_on:
+      master:
+        condition: service_healthy
+    volumes:
+      - ./config/agent.yaml:/etc/vcdeploy/agent.yaml:ro
+      - agent-data:/var/lib/vcdeploy-agent
+      - agent-logs:/var/log/vcdeploy-agent
+      # Mount deployment targets (for local testing)
+      - ./deploy:/deploy
+    environment:
+      - TZ=${TZ:-UTC}
+      - VCDEPLOY_MASTER_ADDR=master:9090
+    networks:
+      - vcdeploy
+    # Agent runs as root for deployment capabilities
+    privileged: false
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+
+networks:
+  vcdeploy:
+    driver: bridge
+
+volumes:
+  vcdeploy-data:
+    driver: local
+  vcdeploy-logs:
+    driver: local
+  agent-data:
+    driver: local
+  agent-logs:
+    driver: local
