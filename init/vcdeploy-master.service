@@ -1,0 +1,31 @@
+[Unit]
+Description=vcdeploy Master Server
+Documentation=https://github.com/BlackOrder/vcdeploy
+After=network.target
+
+[Service]
+Type=simple
+User=vcdeploy
+Group=vcdeploy
+ExecStart=/usr/local/bin/vcdeploy master start --config=/etc/vcdeploy/master.yaml
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/vcdeploy /etc/vcdeploy
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vcdeploy-master
+
+# Environment
+Environment=VCDEPLOY_CONFIG=/etc/vcdeploy/master.yaml
+
+[Install]
+WantedBy=multi-user.target

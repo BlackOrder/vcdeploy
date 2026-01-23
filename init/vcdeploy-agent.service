@@ -1,0 +1,28 @@
+[Unit]
+Description=vcdeploy Agent
+Documentation=https://github.com/BlackOrder/vcdeploy
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/vcdeploy-agent start --config=/etc/vcdeploy/agent.yaml
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+
+# Allow graceful shutdown with drain
+TimeoutStopSec=660
+KillMode=mixed
+KillSignal=SIGTERM
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vcdeploy-agent
+
+# Environment
+Environment=VCDEPLOY_AGENT_CONFIG=/etc/vcdeploy/agent.yaml
+
+[Install]
+WantedBy=multi-user.target
