@@ -40,6 +40,8 @@ func (m *MockNotifier) WasCalled() bool {
 }
 
 func TestEvent(t *testing.T) {
+	t.Parallel()
+
 	event := Event{
 		Type:        "deployment",
 		ProjectID:   "proj-001",
@@ -68,6 +70,8 @@ func TestEvent(t *testing.T) {
 }
 
 func TestEventJSON(t *testing.T) {
+	t.Parallel()
+
 	event := Event{
 		Type:        "deployment",
 		ProjectID:   "proj-001",
@@ -91,6 +95,8 @@ func TestEventJSON(t *testing.T) {
 }
 
 func TestNewManager(t *testing.T) {
+	t.Parallel()
+
 	logger, _ := zap.NewDevelopment()
 	manager := NewManager(logger)
 
@@ -100,6 +106,8 @@ func TestNewManager(t *testing.T) {
 }
 
 func TestManagerRegister(t *testing.T) {
+	t.Parallel()
+
 	logger, _ := zap.NewDevelopment()
 	manager := NewManager(logger)
 
@@ -115,6 +123,8 @@ func TestManagerRegister(t *testing.T) {
 }
 
 func TestManagerNotify(t *testing.T) {
+	t.Parallel()
+
 	logger, _ := zap.NewDevelopment()
 	manager := NewManager(logger)
 
@@ -143,6 +153,8 @@ func TestManagerNotify(t *testing.T) {
 }
 
 func TestManagerNotifyMultiple(t *testing.T) {
+	t.Parallel()
+
 	logger, _ := zap.NewDevelopment()
 	manager := NewManager(logger)
 
@@ -176,6 +188,8 @@ func TestManagerNotifyMultiple(t *testing.T) {
 }
 
 func TestManagerNotifyWithError(t *testing.T) {
+	t.Parallel()
+
 	logger, _ := zap.NewDevelopment()
 	manager := NewManager(logger)
 
@@ -213,6 +227,8 @@ func TestManagerNotifyWithError(t *testing.T) {
 }
 
 func TestSlackConfig(t *testing.T) {
+	t.Parallel()
+
 	cfg := SlackConfig{
 		WebhookURL: "https://hooks.slack.com/services/xxx",
 		Channel:    "#deployments",
@@ -230,6 +246,8 @@ func TestSlackConfig(t *testing.T) {
 }
 
 func TestNewSlackNotifier(t *testing.T) {
+	t.Parallel()
+
 	cfg := SlackConfig{
 		WebhookURL: "https://hooks.slack.com/services/xxx",
 	}
@@ -246,6 +264,8 @@ func TestNewSlackNotifier(t *testing.T) {
 }
 
 func TestSlackNotifierSend(t *testing.T) {
+	t.Parallel()
+
 	// Create test server
 	var receivedPayload []byte
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -290,6 +310,8 @@ func TestSlackNotifierSend(t *testing.T) {
 }
 
 func TestSlackNotifierSendFailure(t *testing.T) {
+	t.Parallel()
+
 	// Create test server that returns error
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -316,6 +338,8 @@ func TestSlackNotifierSendFailure(t *testing.T) {
 }
 
 func TestSlackNotifierSendEmptyURL(t *testing.T) {
+	t.Parallel()
+
 	cfg := SlackConfig{
 		WebhookURL: "",
 	}
@@ -337,6 +361,8 @@ func TestSlackNotifierSendEmptyURL(t *testing.T) {
 }
 
 func TestEmailConfig(t *testing.T) {
+	t.Parallel()
+
 	cfg := EmailConfig{
 		SMTPHost:    "smtp.example.com",
 		SMTPPort:    587,
@@ -357,6 +383,8 @@ func TestEmailConfig(t *testing.T) {
 }
 
 func TestNewEmailNotifier(t *testing.T) {
+	t.Parallel()
+
 	cfg := EmailConfig{
 		SMTPHost:    "smtp.example.com",
 		SMTPPort:    587,
@@ -379,6 +407,8 @@ func TestNewEmailNotifier(t *testing.T) {
 }
 
 func TestWebhookConfig(t *testing.T) {
+	t.Parallel()
+
 	cfg := WebhookConfig{
 		URL:     "https://webhook.example.com/deploy",
 		Method:  "POST",
@@ -396,6 +426,8 @@ func TestWebhookConfig(t *testing.T) {
 }
 
 func TestNewWebhookNotifier(t *testing.T) {
+	t.Parallel()
+
 	cfg := WebhookConfig{
 		URL: "https://webhook.example.com/deploy",
 	}
@@ -412,6 +444,8 @@ func TestNewWebhookNotifier(t *testing.T) {
 }
 
 func TestWebhookNotifierDefaultMethod(t *testing.T) {
+	t.Parallel()
+
 	cfg := WebhookConfig{
 		URL:    "https://webhook.example.com/deploy",
 		Method: "", // Should default to POST
@@ -425,6 +459,8 @@ func TestWebhookNotifierDefaultMethod(t *testing.T) {
 }
 
 func TestWebhookNotifierSend(t *testing.T) {
+	t.Parallel()
+
 	var receivedPayload map[string]interface{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		decoder := json.NewDecoder(r.Body)
@@ -458,6 +494,8 @@ func TestWebhookNotifierSend(t *testing.T) {
 }
 
 func TestWebhookNotifierWithSignature(t *testing.T) {
+	t.Parallel()
+
 	var receivedSignature string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedSignature = r.Header.Get("X-VCDeploy-Signature")
@@ -486,6 +524,8 @@ func TestWebhookNotifierWithSignature(t *testing.T) {
 }
 
 func TestWebhookNotifierWithCustomHeaders(t *testing.T) {
+	t.Parallel()
+
 	var receivedHeader string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedHeader = r.Header.Get("X-Custom-Header")
@@ -516,6 +556,8 @@ func TestWebhookNotifierWithCustomHeaders(t *testing.T) {
 }
 
 func TestWebhookNotifierSendError(t *testing.T) {
+	t.Parallel()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
@@ -541,6 +583,8 @@ func TestWebhookNotifierSendError(t *testing.T) {
 }
 
 func TestWebhookNotifierEmptyURL(t *testing.T) {
+	t.Parallel()
+
 	cfg := WebhookConfig{
 		URL: "",
 	}
@@ -562,6 +606,8 @@ func TestWebhookNotifierEmptyURL(t *testing.T) {
 }
 
 func TestComputeHMACSHA256(t *testing.T) {
+	t.Parallel()
+
 	message := []byte("test message")
 	key := []byte("secret-key")
 
