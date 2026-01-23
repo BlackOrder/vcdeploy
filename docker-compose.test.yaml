@@ -1,0 +1,117 @@
+# VCDeploy E2E Test Docker Compose
+# Used for end-to-end testing with real master/agent instances
+
+services:
+  # VCDeploy Master for testing
+  master:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        VERSION: test
+    image: vcdeploy-test:latest
+    container_name: vcdeploy-test-master
+    ports:
+      - "18080:8080"   # HTTP/Web UI
+      - "19090:9090"   # gRPC (agents)
+    volumes:
+      - ./tests/e2e/config/master.yaml:/etc/vcdeploy/master.yaml:ro
+      - master-data:/var/lib/vcdeploy
+    environment:
+      - TZ=UTC
+      - VCDEPLOY_LOG_LEVEL=debug
+    networks:
+      - vcdeploy-test
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/api/v1/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  # NOTE: Agent is not included because the start command is a stub.
+  # When the agent is fully implemented, uncomment this section.
+  #
+  # # VCDeploy Agent for testing
+  # agent:
+  #   build:
+  #     context: .
+  #     dockerfile: docker/Dockerfile.agent
+  #     args:
+  #       VERSION: test
+  #   image: vcdeploy-test-agent:latest
+  #   container_name: vcdeploy-test-agent
+  #   command: ["start", "--config", "/etc/vcdeploy/agent.yaml"]
+  #   depends_on:
+  #     master:
+  #       condition: service_healthy
+  #   volumes:
+  #     - ./tests/e2e/config/agent.yaml:/etc/vcdeploy/agent.yaml:ro
+  #     - agent-data:/var/lib/vcdeploy-agent
+  #     - deploy-target:/deploy
+  #   environment:
+  #     - TZ=UTC
+  #     - VCDEPLOY_MASTER_ADDR=master:9090
+  #     - VCDEPLOY_LOG_LEVEL=debug
+  #   networks:
+  #     - vcdeploy-test
+
+  # Target SSH server for deployment testing
+  target:
+    image: lscr.io/linuxserver/openssh-server:latest
+    container_name: vcdeploy-test-target
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+      - USER_NAME=deploy
+      - USER_PASSWORD=deploypass
+      - PASSWORD_ACCESS=true
+      - SUDO_ACCESS=true
+    ports:
+      - "12222:2222"
+    volumes:
+      - deploy-target:/deploy
+    networks:
+      - vcdeploy-test
+    # Fix permissions on /deploy for the deploy user
+    entrypoint: ["/bin/sh", "-c", "chown -R 1000:1000 /deploy && exec /init"]
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f sshd || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  # Git server for repository testing
+  gitea:
+    image: gitea/gitea:latest
+    container_name: vcdeploy-test-git
+    environment:
+      - GITEA__security__INSTALL_LOCK=true
+      - GITEA__server__ROOT_URL=http://localhost:13000
+      - GITEA__server__HTTP_PORT=3000
+      - USER_UID=1000
+      - USER_GID=1000
+    ports:
+      - "13000:3000"
+      - "12223:22"
+    volumes:
+      - gitea-data:/data
+    networks:
+      - vcdeploy-test
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/v1/version"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
+
+networks:
+  vcdeploy-test:
+    driver: bridge
+
+volumes:
+  master-data:
+  deploy-target:
+  gitea-data:

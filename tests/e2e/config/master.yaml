@@ -1,0 +1,62 @@
+# vcdeploy Master E2E Test Configuration
+
+server:
+  listen: ":8080"
+  tls:
+    enabled: false
+
+grpc:
+  listen: ":9090"
+
+ssh:
+  default_user: deploy
+  connection_timeout: 30s
+  keepalive_interval: 15s
+  idle_timeout: 60s
+
+security:
+  key_rotation:
+    enabled: false
+  session_timeout: 24h
+  require_2fa_admin: false
+
+backup:
+  database:
+    enabled: false
+    path: /var/lib/vcdeploy/backups/
+  config:
+    versions: 3
+
+logs:
+  deployment:
+    retention: 24h
+    max_size_mb: 10
+  audit:
+    retention: 24h
+  application:
+    level: debug
+    retention: 24h
+  rotation:
+    schedule: "0 3 * * *"
+
+webhooks:
+  github:
+    enabled: true
+    path: /webhook/github
+  gitlab:
+    enabled: true
+    path: /webhook/gitlab
+  bitbucket:
+    enabled: true
+    path: /webhook/bitbucket
+
+notifications:
+  providers:
+    slack:
+      enabled: false
+    email:
+      enabled: false
+
+api:
+  rate_limit:
+    enabled: false

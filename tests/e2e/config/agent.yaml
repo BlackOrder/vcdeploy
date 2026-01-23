@@ -1,0 +1,37 @@
+# vcdeploy Agent E2E Test Configuration
+
+master:
+  address: master:9090
+  token: "test-token"
+  reconnect:
+    initial_delay: 1s
+    max_delay: 30s
+    heartbeat_interval: 5s
+
+agent:
+  id: "test-agent-1"
+  labels:
+    env: test
+    role: e2e
+
+paths:
+  repos: /var/lib/vcdeploy/repos/
+  releases: /deploy/
+
+execution:
+  user: root
+  group: root
+  timeout: 300s
+  use_namespaces: false
+  allowed_env_vars:
+    - PATH
+    - HOME
+    - USER
+    - LANG
+
+health:
+  disk_warning_threshold: 95
+  report_interval: 10s
+
+graceful_shutdown:
+  drain_timeout: 60s
