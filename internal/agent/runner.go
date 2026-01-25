@@ -20,6 +20,10 @@ import (
 // LocalRunner executes commands locally on the agent host.
 type LocalRunner struct {
 	logger *zap.Logger
+	// FailOpenOnUserLookup controls behavior when user/group lookup fails.
+	// If true, logs a warning and continues without user switching (less secure).
+	// If false (default), returns an error when user lookup fails.
+	FailOpenOnUserLookup bool
 }
 
 // NewLocalRunner creates a new local command runner.
@@ -147,11 +151,14 @@ func (r *LocalRunner) setUserGroup(cmd *exec.Cmd, user, group string) error {
 	// Look up the user's UID
 	uid, err := lookupUser(user)
 	if err != nil {
-		r.logger.Warn("Could not look up user, skipping user switch",
-			zap.String("user", user),
-			zap.Error(err),
-		)
-		return nil
+		if r.FailOpenOnUserLookup {
+			r.logger.Warn("Could not look up user, skipping user switch (fail-open enabled)",
+				zap.String("user", user),
+				zap.Error(err),
+			)
+			return nil
+		}
+		return fmt.Errorf("user lookup failed for %q: %w", user, err)
 	}
 
 	// Look up the group's GID (use user's primary group if not specified)
@@ -159,20 +166,29 @@ func (r *LocalRunner) setUserGroup(cmd *exec.Cmd, user, group string) error {
 	if group != "" {
 		gid, err = lookupGroup(group)
 		if err != nil {
-			r.logger.Warn("Could not look up group, using user's primary group",
-				zap.String("group", group),
-				zap.Error(err),
-			)
+			if r.FailOpenOnUserLookup {
+				r.logger.Warn("Could not look up group, using user's UID as GID (fail-open enabled)",
+					zap.String("group", group),
+					zap.Error(err),
+				)
+				// gid defaults to uid above
+			} else {
+				return fmt.Errorf("group lookup failed for %q: %w", group, err)
+			}
 		}
 	} else {
 		// Try to get user's primary group
 		primaryGid, err := lookupUserPrimaryGroup(user)
 		if err != nil {
-			r.logger.Warn("Could not look up user's primary group, using uid as gid",
-				zap.String("user", user),
-				zap.Error(err),
-			)
-			// gid already defaults to uid above
+			if r.FailOpenOnUserLookup {
+				r.logger.Warn("Could not look up user's primary group, using uid as gid (fail-open enabled)",
+					zap.String("user", user),
+					zap.Error(err),
+				)
+				// gid already defaults to uid above
+			} else {
+				return fmt.Errorf("primary group lookup failed for user %q: %w", user, err)
+			}
 		} else {
 			gid = primaryGid
 		}
