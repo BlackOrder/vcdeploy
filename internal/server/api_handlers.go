@@ -1111,7 +1111,9 @@ func (s *MasterServer) handleDeploymentRollback(w http.ResponseWriter, r *http.R
 
 				// Update status to running
 				rollback.Status = "running"
-				s.db.UpdateDeployment(ctx, rollback)
+				if err := s.db.UpdateDeployment(ctx, rollback); err != nil {
+					s.logger.Error("Failed to update deployment status to running", zap.Error(err))
+				}
 
 				if err := s.agentServer.SendRollbackCommand(agentID, rollbackCmd); err != nil {
 					s.logger.Error("Failed to send rollback command to agent",
@@ -1122,7 +1124,9 @@ func (s *MasterServer) handleDeploymentRollback(w http.ResponseWriter, r *http.R
 					rollback.Status = "failed"
 					now := time.Now()
 					rollback.CompletedAt = &now
-					s.db.UpdateDeployment(ctx, rollback)
+					if err := s.db.UpdateDeployment(ctx, rollback); err != nil {
+						s.logger.Error("Failed to update deployment status to failed", zap.Error(err))
+					}
 				} else {
 					s.logger.Info("Sent rollback command to agent",
 						zap.String("deployment_id", rollbackID),
