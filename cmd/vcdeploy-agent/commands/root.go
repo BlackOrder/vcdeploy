@@ -2,10 +2,18 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
+	"strings"
+	"syscall"
+	"time"
 
+	"github.com/BlackOrder/vcdeploy/internal/agent"
+	"github.com/BlackOrder/vcdeploy/internal/config"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 )
 
 var (
@@ -37,7 +45,8 @@ func Execute() error {
 
 func init() {
 	// Global flags
-	rootCmd.PersistentFlags().String("config", "/etc/vcdeploy/agent.yaml", "config file")
+	sysCfg := config.MustGetSystemConfig()
+	rootCmd.PersistentFlags().String("config", sysCfg.AgentConfigPath(), "config file")
 
 	// Add subcommands
 	rootCmd.AddCommand(startCmd)
@@ -93,45 +102,234 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Starting agent...\n")
 	fmt.Printf("  config: %s\n", configPath)
+
+	// Load configuration
+	cfg, err := config.LoadAgentConfig(configPath)
+	if err != nil {
+		// If config doesn't exist and master flag is provided, create a default config
+		if os.IsNotExist(err) && master != "" {
+			cfg = config.DefaultAgentConfig()
+		} else {
+			return fmt.Errorf("loading config: %w", err)
+		}
+	}
+
+	// Override config with command line flags
 	if master != "" {
-		fmt.Printf("  master: %s\n", master)
+		cfg.Master.Address = master
 	}
 	if token != "" {
-		fmt.Printf("  token: (provided)\n")
+		cfg.Master.Token = token
 	}
 
-	// TODO: Implement agent start
-	// 1. Load config
-	// 2. Connect to master
-	// 3. Register if needed
-	// 4. Start heartbeat
-	// 5. Listen for commands
+	// Generate agent ID if not set
+	if cfg.Agent.ID == "" {
+		hostname, _ := os.Hostname()
+		cfg.Agent.ID = hostname
+	}
 
+	// Validate config
+	if err := cfg.Validate(); err != nil {
+		return fmt.Errorf("invalid config: %w", err)
+	}
+
+	// Create logger
+	logger, err := zap.NewProduction()
+	if err != nil {
+		return fmt.Errorf("creating logger: %w", err)
+	}
+	defer logger.Sync()
+
+	// Create agent
+	ag, err := agent.NewAgent(cfg, logger)
+	if err != nil {
+		return fmt.Errorf("creating agent: %w", err)
+	}
+
+	// Setup signal handling
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error("panic in signal handler", zap.Any("panic", r))
+			}
+		}()
+		sig := <-sigCh
+		logger.Info("Received signal, shutting down", zap.String("signal", sig.String()))
+		cancel()
+	}()
+
+	// Start the agent
+	logger.Info("Agent starting",
+		zap.String("id", cfg.Agent.ID),
+		zap.String("master", cfg.Master.Address),
+	)
+
+	if err := ag.Start(ctx); err != nil && ctx.Err() == nil {
+		return fmt.Errorf("agent error: %w", err)
+	}
+
+	logger.Info("Agent stopped")
 	return nil
 }
 
 func runStatus(cmd *cobra.Command, args []string) error {
-	fmt.Println("Agent status: not running")
+	configPath, _ := cmd.Flags().GetString("config")
+
+	// Try to load config to get agent info
+	cfg, err := config.LoadAgentConfig(configPath)
+	if err != nil {
+		fmt.Println("Agent status: NOT CONFIGURED")
+		fmt.Printf("  config file: %s (not found or invalid)\n", configPath)
+		return nil
+	}
+
+	// Check if agent process is running via PID file
+	sysCfg := config.MustGetSystemConfig()
+	pidFile := sysCfg.AgentPIDPath()
+	isRunning, pid := checkAgentProcess(pidFile)
+
+	fmt.Printf("Agent ID: %s\n", cfg.Agent.ID)
+	fmt.Printf("Master: %s\n", cfg.Master.Address)
+
+	if isRunning {
+		fmt.Printf("Status: RUNNING (PID %d)\n", pid)
+	} else {
+		// Check if we can connect to master
+		fmt.Printf("Status: STOPPED\n")
+	}
+
+	fmt.Printf("\nConfiguration:\n")
+	fmt.Printf("  repos path: %s\n", cfg.Paths.Repos)
+	fmt.Printf("  releases path: %s\n", cfg.Paths.Releases)
+	fmt.Printf("  config file: %s\n", configPath)
+
+	if !isRunning {
+		fmt.Println("\nTo start the agent:")
+		fmt.Println("  vcdeploy-agent start")
+		fmt.Println("  or: systemctl start vcdeploy-agent")
+	}
+
 	return nil
+}
+
+// checkAgentProcess checks if the agent process is running by reading its PID file.
+func checkAgentProcess(pidFile string) (bool, int) {
+	data, err := os.ReadFile(pidFile)
+	if err != nil {
+		return false, 0
+	}
+
+	var pid int
+	if _, err := fmt.Sscanf(string(data), "%d", &pid); err != nil {
+		return false, 0
+	}
+
+	// Check if process is running by sending signal 0
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return false, 0
+	}
+
+	// On Unix, FindProcess always succeeds; we need to send signal 0 to check
+	if err := process.Signal(syscall.Signal(0)); err != nil {
+		return false, 0
+	}
+
+	return true, pid
 }
 
 func runRegister(cmd *cobra.Command, args []string) error {
 	master, _ := cmd.Flags().GetString("master")
-	_, _ = cmd.Flags().GetString("token") // token used in actual implementation
+	token, _ := cmd.Flags().GetString("token")
+	configPath, _ := cmd.Flags().GetString("config")
 
 	fmt.Printf("Registering agent with master: %s\n", master)
-	fmt.Printf("  token: (provided)\n")
 
-	// TODO: Implement registration
-	// 1. Connect to master
-	// 2. Send registration request with token
-	// 3. Receive and store certificate
-	// 4. Save config
+	// Create logger
+	logger, err := zap.NewProduction()
+	if err != nil {
+		return fmt.Errorf("creating logger: %w", err)
+	}
+	defer logger.Sync()
+
+	// Create or load config
+	var cfg *config.AgentConfig
+	cfg, err = config.LoadAgentConfig(configPath)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			cfg = config.DefaultAgentConfig()
+			// Clear the default cert path for initial registration
+			// The agent will use insecure credentials until it receives its certificate
+			cfg.Master.Cert = ""
+		} else {
+			return fmt.Errorf("loading config: %w", err)
+		}
+	}
+
+	cfg.Master.Address = master
+	cfg.Master.Token = token
+
+	// Generate agent ID from hostname if not set
+	if cfg.Agent.ID == "" {
+		hostname, _ := os.Hostname()
+		cfg.Agent.ID = hostname
+	}
+
+	// Create agent and register
+	ag, err := agent.NewAgent(cfg, logger)
+	if err != nil {
+		return fmt.Errorf("creating agent: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	cert, caCert, err := ag.Register(ctx, token)
+	if err != nil {
+		return fmt.Errorf("registration failed: %w", err)
+	}
+
+	// Save certificates
+	sysCfg := config.MustGetSystemConfig()
+	agentCertsDir := sysCfg.CertsDir() + "/agent"
+	certPath := agentCertsDir + "/cert.pem"
+	caPath := agentCertsDir + "/ca.pem"
+
+	if err := os.MkdirAll(agentCertsDir, 0755); err != nil {
+		return fmt.Errorf("creating agent directory: %w", err)
+	}
+
+	if len(cert) > 0 {
+		if err := os.WriteFile(certPath, cert, 0600); err != nil {
+			return fmt.Errorf("saving certificate: %w", err)
+		}
+		cfg.Master.Cert = certPath
+	}
+
+	if len(caCert) > 0 {
+		if err := os.WriteFile(caPath, caCert, 0600); err != nil {
+			return fmt.Errorf("saving CA certificate: %w", err)
+		}
+	}
+
+	// Clear the token from config (used only for initial registration)
+	cfg.Master.Token = ""
+
+	// Save updated config
+	if err := config.SaveAgentConfig(cfg, configPath); err != nil {
+		return fmt.Errorf("saving config: %w", err)
+	}
+
+	fmt.Printf("Registration successful!\n")
+	fmt.Printf("  Agent ID: %s\n", cfg.Agent.ID)
+	fmt.Printf("  Config saved to: %s\n", configPath)
+	fmt.Printf("  Certificate saved to: %s\n", certPath)
 
 	return nil
-}
-
-func exitWithError(msg string) {
-	fmt.Fprintln(os.Stderr, "Error:", msg)
-	os.Exit(1)
 }
