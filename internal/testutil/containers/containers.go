@@ -146,7 +146,7 @@ func NewGitServerContainer(ctx context.Context, t *testing.T) (*GitServerContain
 		HTTPPort:  httpPort.Port(),
 		SSHPort:   sshPort.Port(),
 		AdminUser: "gitea_admin",
-		AdminPass: "admin123",
+		AdminPass: "TestAdmin123!@#",
 	}, nil
 }
 

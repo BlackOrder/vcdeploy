@@ -200,6 +200,32 @@ vcdeploy uses a symlink-based deployment strategy (like Capistrano/Deployer):
 - **Webhook auth**: Signature verification (GitHub HMAC, GitLab token)
 - **Audit logging**: All actions logged with user, source, timestamp
 
+## Performance Tuning
+
+### Experimental JSON v2 (Go 1.25+)
+
+vcdeploy can benefit from the experimental JSON v2 implementation in Go 1.25, which provides improved performance for JSON encoding/decoding operations (used heavily in webhook processing and API responses).
+
+To enable:
+
+```bash
+# Build with experimental JSON v2
+GOEXPERIMENT=jsonv2 go build ./...
+
+# Or run with experimental JSON v2
+GOEXPERIMENT=jsonv2 ./vcdeploy master start
+```
+
+**Note:** This is an experimental feature. Test thoroughly before using in production.
+
+### Experimental Green Tea GC (Go 1.25+)
+
+For long-running server processes, the experimental Green Tea garbage collector can reduce GC overhead by 10-40%:
+
+```bash
+GOEXPERIMENT=greenteagc ./vcdeploy master start
+```
+
 ## License
 
 MIT License - see LICENSE file.
