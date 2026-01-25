@@ -216,7 +216,16 @@ func (s *AgentServer) Connect(stream proto.AgentService_ConnectServer) error {
 	s.connectionMutex.Lock()
 	// Close existing connection if any
 	if existing, ok := s.connections[agentID]; ok {
+		s.logger.Info("Replacing existing agent connection",
+			zap.String("agent_id", agentID),
+			zap.Time("old_connected_at", existing.ConnectedAt),
+		)
 		existing.Cancel()
+		// Brief delay to allow old connection to start cleanup
+		// This prevents command channel conflicts
+		s.connectionMutex.Unlock()
+		time.Sleep(100 * time.Millisecond)
+		s.connectionMutex.Lock()
 	}
 	s.connections[agentID] = conn
 
