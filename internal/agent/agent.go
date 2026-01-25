@@ -18,6 +18,7 @@ import (
 	"github.com/shirou/gopsutil/v4/mem"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -159,17 +160,20 @@ func (a *Agent) connect(ctx context.Context) error {
 		return fmt.Errorf("TLS certificate required: set master.cert or use master.allow_insecure=true (not recommended)")
 	}
 
-	// Add retry options
-	opts = append(opts,
-		grpc.WithBlock(),
-	)
+	// Use the modern grpc.NewClient API
+	conn, err := grpc.NewClient(a.config.Master.Address, opts...)
+	if err != nil {
+		return fmt.Errorf("creating grpc client: %w", err)
+	}
 
-	dialCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	// NewClient is lazy - verify connection with a timeout
+	connectCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	conn, err := grpc.DialContext(dialCtx, a.config.Master.Address, opts...)
-	if err != nil {
-		return fmt.Errorf("dialing master: %w", err)
+	conn.Connect()
+	if !conn.WaitForStateChange(connectCtx, connectivity.Idle) {
+		conn.Close()
+		return fmt.Errorf("connection timeout to master")
 	}
 
 	a.conn = conn
