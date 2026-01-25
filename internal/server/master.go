@@ -783,36 +783,6 @@ func (s *MasterServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *MasterServer) handleProjects(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		s.jsonResponse(w, []interface{}{})
-	case http.MethodPost:
-		s.jsonResponse(w, map[string]string{"status": "created"})
-	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-func (s *MasterServer) handleProject(w http.ResponseWriter, r *http.Request) {
-	s.jsonResponse(w, map[string]string{"status": "ok"})
-}
-
-func (s *MasterServer) handleDeployments(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		s.jsonResponse(w, []interface{}{})
-	case http.MethodPost:
-		s.jsonResponse(w, map[string]string{"status": "queued"})
-	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-func (s *MasterServer) handleDeployment(w http.ResponseWriter, r *http.Request) {
-	s.jsonResponse(w, map[string]string{"status": "ok"})
-}
-
 func (s *MasterServer) handleAgents(w http.ResponseWriter, r *http.Request) {
 	s.agentsMu.RLock()
 	agents := make([]map[string]interface{}, 0, len(s.agents))
