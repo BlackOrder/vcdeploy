@@ -34,10 +34,22 @@ func (s *MasterServer) handleStats(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	// Gather statistics
-	projects, _ := s.db.ListProjects()
-	agents, _ := s.db.ListAgents(ctx)
-	deployments, _ := s.db.ListDeploymentsRecent(ctx, 100)
+	// Gather statistics - log warnings on errors but continue with zero values
+	projects, err := s.db.ListProjects()
+	if err != nil {
+		s.logger.Warn("failed to list projects for stats", zap.Error(err))
+		projects = nil
+	}
+	agents, err := s.db.ListAgents(ctx)
+	if err != nil {
+		s.logger.Warn("failed to list agents for stats", zap.Error(err))
+		agents = nil
+	}
+	deployments, err := s.db.ListDeploymentsRecent(ctx, 100)
+	if err != nil {
+		s.logger.Warn("failed to list deployments for stats", zap.Error(err))
+		deployments = nil
+	}
 
 	// Count deployment stats
 	var successCount, failedCount, runningCount int

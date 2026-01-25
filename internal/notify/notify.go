@@ -41,9 +41,13 @@ type Notifier interface {
 	Name() string
 }
 
-// Manager handles multiple notification channels
+// Manager handles multiple notification channels.
+// Thread-safety: Register should only be called during initialization before
+// any calls to Notify. If dynamic registration is needed, external synchronization
+// is required.
 type Manager struct {
 	logger    *zap.Logger
+	mu        sync.RWMutex // Protects notifiers slice
 	notifiers []Notifier
 	wg        sync.WaitGroup
 }
@@ -56,8 +60,11 @@ func NewManager(logger *zap.Logger) *Manager {
 	}
 }
 
-// Register adds a notifier to the manager
+// Register adds a notifier to the manager.
+// Note: Register should be called during initialization only.
 func (m *Manager) Register(n Notifier) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.notifiers = append(m.notifiers, n)
 	m.logger.Info("registered notifier", zap.String("name", n.Name()))
 }
@@ -67,7 +74,11 @@ func (m *Manager) Register(n Notifier) {
 func (m *Manager) Notify(ctx context.Context, event Event) {
 	event.Timestamp = time.Now()
 
-	for _, n := range m.notifiers {
+	m.mu.RLock()
+	notifiers := m.notifiers // Copy slice reference under lock
+	m.mu.RUnlock()
+
+	for _, n := range notifiers {
 		m.wg.Add(1)
 		go func(notifier Notifier) {
 			defer m.wg.Done()
