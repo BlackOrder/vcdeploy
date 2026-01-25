@@ -1,4 +1,55 @@
 // Package security provides encryption and authentication utilities.
+//
+// # SSH Host Key Verification Modes
+//
+// This package supports three host key verification modes for SSH connections:
+//
+// ## StrictHostKey (Recommended for Production)
+//
+// Uses a pre-populated known_hosts database. Connections to unknown hosts are
+// rejected. This is the most secure option and should be used in production
+// environments where target hosts are known in advance.
+//
+// Usage:
+//
+//	callback := sshKeyMgr.StrictHostKeyCallback(ctx)
+//	config := &ssh.ClientConfig{HostKeyCallback: callback}
+//
+// Security: Prevents MITM attacks by rejecting connections to hosts with
+// unknown or changed keys.
+//
+// ## TrustOnFirstUse (TOFU) - Suitable for Dynamic Environments
+//
+// Trusts the first key presented by a host and stores it. Subsequent connections
+// verify the key matches. This provides a balance between security and usability
+// for environments where hosts are created dynamically (e.g., cloud provisioning).
+//
+// Usage:
+//
+//	callback := sshKeyMgr.TrustOnFirstUse(ctx)
+//	config := &ssh.ClientConfig{HostKeyCallback: callback}
+//
+// Security: Vulnerable to MITM on first connection only. Subsequent connections
+// are verified. Consider manual key verification for high-security environments.
+//
+// ## InsecureIgnoreHostKey (Testing Only - NEVER USE IN PRODUCTION)
+//
+// Accepts any host key without verification. This completely disables host key
+// checking and should ONLY be used in isolated test environments with no network
+// exposure.
+//
+// Usage:
+//
+//	config := &ssh.ClientConfig{HostKeyCallback: ssh.InsecureIgnoreHostKey()}
+//
+// Security: NO SECURITY. Vulnerable to MITM attacks. Using this in production
+// could allow attackers to intercept credentials and deployment data.
+//
+// # Recommendations
+//
+//   - Production: Use StrictHostKey with pre-provisioned known_hosts
+//   - Staging/Dev: Use TrustOnFirstUse with regular key audits
+//   - Testing: Use TrustOnFirstUse (preferred) or InsecureIgnoreHostKey (isolated only)
 package security
 
 import (
