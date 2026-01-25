@@ -91,3 +91,4 @@ ehthumbs.db
 *.pprof
 cpu.out
 mem.out
+*.sarif

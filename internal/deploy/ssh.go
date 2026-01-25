@@ -46,9 +46,10 @@ type SSHConfig struct {
 	JumpKeyPath string
 
 	// Host key verification settings
-	KnownHostsPath  string // Path to known_hosts file (default: ~/.ssh/known_hosts)
-	TrustOnFirstUse bool   // TOFU mode: automatically add unknown hosts
-	StrictHostKey   bool   // If true, reject unknown hosts even in TOFU mode
+	KnownHostsPath       string // Path to known_hosts file (default: ~/.ssh/known_hosts)
+	TrustOnFirstUse      bool   // TOFU mode: automatically add unknown hosts
+	StrictHostKey        bool   // If true, reject unknown hosts even in TOFU mode
+	InsecureIgnoreHostKey bool  // If true, skip host key verification (for testing only)
 }
 
 // NewSSHRunner creates a new SSH runner.
@@ -209,6 +210,11 @@ func (r *SSHRunner) buildJumpConfig() (*ssh.ClientConfig, error) {
 // 2. TOFU (Trust On First Use) mode for new hosts
 // 3. Strict mode that rejects all unknown hosts
 func (r *SSHRunner) buildHostKeyCallback() (ssh.HostKeyCallback, error) {
+	// For testing only: skip host key verification entirely
+	if r.config.InsecureIgnoreHostKey {
+		return ssh.InsecureIgnoreHostKey(), nil
+	}
+
 	// Determine known_hosts file path
 	knownHostsPath := r.config.KnownHostsPath
 	if knownHostsPath == "" {
