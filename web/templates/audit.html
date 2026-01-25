@@ -1,0 +1,151 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold">Audit Log</h1>
+        <div class="flex space-x-3">
+            <a href="/api/v1/audit?format=csv" 
+                class="inline-flex items-center px-4 py-2 border border-dark-border text-sm font-medium rounded-md text-dark-text hover:bg-dark-border">
+                <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                </svg>
+                Export CSV
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="flex flex-wrap gap-4">
+        <div>
+            <select id="filter-action" onchange="applyFilters()" 
+                class="px-3 py-2 bg-dark-card border border-dark-border rounded-md text-dark-text focus:outline-none focus:ring-2 focus:ring-green-500">
+                <option value="">All Actions</option>
+                <option value="create">Create</option>
+                <option value="update">Update</option>
+                <option value="delete">Delete</option>
+                <option value="deploy">Deploy</option>
+                <option value="login">Login</option>
+                <option value="logout">Logout</option>
+            </select>
+        </div>
+        <div>
+            <select id="filter-resource" onchange="applyFilters()"
+                class="px-3 py-2 bg-dark-card border border-dark-border rounded-md text-dark-text focus:outline-none focus:ring-2 focus:ring-green-500">
+                <option value="">All Resources</option>
+                <option value="user">Users</option>
+                <option value="project">Projects</option>
+                <option value="deployment">Deployments</option>
+                <option value="agent">Agents</option>
+                <option value="secret">Secrets</option>
+                <option value="settings">Settings</option>
+                <option value="apikey">API Keys</option>
+            </select>
+        </div>
+        <div>
+            <input type="text" id="filter-user" placeholder="Filter by user..." onkeyup="debounceFilters()"
+                class="px-3 py-2 bg-dark-card border border-dark-border rounded-md text-dark-text placeholder-dark-muted focus:outline-none focus:ring-2 focus:ring-green-500">
+        </div>
+        <div>
+            <input type="date" id="filter-from" onchange="applyFilters()"
+                class="px-3 py-2 bg-dark-card border border-dark-border rounded-md text-dark-text focus:outline-none focus:ring-2 focus:ring-green-500">
+        </div>
+        <span class="text-dark-muted self-center">to</span>
+        <div>
+            <input type="date" id="filter-to" onchange="applyFilters()"
+                class="px-3 py-2 bg-dark-card border border-dark-border rounded-md text-dark-text focus:outline-none focus:ring-2 focus:ring-green-500">
+        </div>
+    </div>
+
+    <!-- Audit Log Table -->
+    <div class="bg-dark-card border border-dark-border rounded-lg overflow-hidden">
+        <table class="min-w-full divide-y divide-dark-border">
+            <thead class="bg-dark-bg">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-dark-muted uppercase tracking-wider">Timestamp</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-dark-muted uppercase tracking-wider">User</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-dark-muted uppercase tracking-wider">Action</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-dark-muted uppercase tracking-wider">Resource</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-dark-muted uppercase tracking-wider">Details</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-dark-muted uppercase tracking-wider">IP Address</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-dark-muted uppercase tracking-wider">Result</th>
+                </tr>
+            </thead>
+            <tbody id="audit-list" class="divide-y divide-dark-border" hx-get="/api/v1/audit" hx-trigger="load" hx-swap="innerHTML">
+                <tr>
+                    <td colspan="7" class="px-6 py-4 text-center text-dark-muted">Loading audit logs...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="flex items-center justify-between">
+        <div class="text-sm text-dark-muted">
+            Showing <span id="page-info">0</span> entries
+        </div>
+        <div class="flex space-x-2">
+            <button onclick="prevPage()" id="btn-prev" disabled
+                class="px-3 py-1 bg-dark-card border border-dark-border rounded-md text-dark-text hover:bg-dark-border disabled:opacity-50 disabled:cursor-not-allowed">
+                Previous
+            </button>
+            <button onclick="nextPage()" id="btn-next"
+                class="px-3 py-1 bg-dark-card border border-dark-border rounded-md text-dark-text hover:bg-dark-border disabled:opacity-50 disabled:cursor-not-allowed">
+                Next
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentOffset = 0;
+const pageSize = 50;
+let filterTimeout;
+
+function buildQueryString() {
+    const params = new URLSearchParams();
+    params.set('limit', pageSize);
+    params.set('offset', currentOffset);
+    
+    const action = document.getElementById('filter-action').value;
+    const resource = document.getElementById('filter-resource').value;
+    const user = document.getElementById('filter-user').value;
+    const from = document.getElementById('filter-from').value;
+    const to = document.getElementById('filter-to').value;
+    
+    if (action) params.set('action', action);
+    if (resource) params.set('resource', resource);
+    if (user) params.set('user', user);
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    
+    return params.toString();
+}
+
+function applyFilters() {
+    currentOffset = 0;
+    loadAuditLogs();
+}
+
+function debounceFilters() {
+    clearTimeout(filterTimeout);
+    filterTimeout = setTimeout(applyFilters, 300);
+}
+
+function loadAuditLogs() {
+    htmx.ajax('GET', '/api/v1/audit?' + buildQueryString(), '#audit-list');
+}
+
+function prevPage() {
+    if (currentOffset > 0) {
+        currentOffset -= pageSize;
+        loadAuditLogs();
+    }
+}
+
+function nextPage() {
+    currentOffset += pageSize;
+    loadAuditLogs();
+}
+</script>
+{{end}}
