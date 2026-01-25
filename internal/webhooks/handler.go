@@ -94,6 +94,9 @@ func (h *Handler) HandleGitHub(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Limit request body size to prevent DoS attacks (1MB max)
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
 	// Read body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -326,6 +329,9 @@ func (h *Handler) HandleGitLab(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Limit request body size to prevent DoS attacks (1MB max)
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
 	// Read body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -543,6 +549,9 @@ func (h *Handler) HandleBitbucket(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid project ID", http.StatusBadRequest)
 		return
 	}
+
+	// Limit request body size to prevent DoS attacks (1MB max)
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 
 	// Read body
 	body, err := io.ReadAll(r.Body)

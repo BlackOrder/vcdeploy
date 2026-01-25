@@ -485,6 +485,7 @@ func (m *CAManager) ProcessExpiredCertificates(ctx context.Context) (int, error)
 	if err != nil {
 		return 0, err
 	}
+	// Note: SQLite's RowsAffected() never returns an error
 	affected, _ := result.RowsAffected()
 	return int(affected), nil
 }
