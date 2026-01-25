@@ -388,7 +388,11 @@ func runUserDelete(cmd *cobra.Command, args []string) error {
 	var userID float64
 	for _, u := range users {
 		if u["username"] == username {
-			userID = u["id"].(float64)
+			id, ok := u["id"].(float64)
+			if !ok {
+				return fmt.Errorf("invalid API response: user ID is not a number")
+			}
+			userID = id
 			break
 		}
 	}
@@ -452,7 +456,11 @@ func runUserPasswd(cmd *cobra.Command, args []string) error {
 	var userID float64
 	for _, u := range users {
 		if u["username"] == username {
-			userID = u["id"].(float64)
+			id, ok := u["id"].(float64)
+			if !ok {
+				return fmt.Errorf("invalid API response: user ID is not a number")
+			}
+			userID = id
 			break
 		}
 	}
@@ -616,7 +624,10 @@ func runAgentToken(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("decode response: %w", err)
 	}
 
-	token := result["token"].(string)
+	token, ok := result["token"].(string)
+	if !ok {
+		return fmt.Errorf("invalid API response: missing or invalid token")
+	}
 
 	fmt.Println("Agent Registration Token:")
 	fmt.Printf("  Token: %s\n", token)
