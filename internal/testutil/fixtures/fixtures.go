@@ -2,7 +2,6 @@
 package testutil
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -466,7 +465,7 @@ func (WebhookPayloadFixture) BitbucketPush() string {
 
 // BitbucketPullRequest returns a Bitbucket pull request event payload.
 func (WebhookPayloadFixture) BitbucketPullRequest() string {
-	return fmt.Sprintf(`{
+	return `{
   "pullrequest": {
     "id": 1,
     "title": "Test PR",
@@ -493,5 +492,5 @@ func (WebhookPayloadFixture) BitbucketPullRequest() string {
   "actor": {
     "display_name": "Test User"
   }
-}`)
+}`
 }

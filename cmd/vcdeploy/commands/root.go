@@ -292,7 +292,7 @@ var masterBackupCmd = &cobra.Command{
 // Global state for CLI operations
 var (
 	globalConfig *config.MasterConfig
-	globalDB     *storage.DB
+	globalDB     *storage.DB //nolint:unused // Used in master command
 	globalLogger *zap.Logger
 )
 
@@ -1364,7 +1364,8 @@ func runProjectRollback(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func timePtr(t time.Time) *time.Time {
+//nolint:unused // Reserved for future use
+func _timePtr(t time.Time) *time.Time {
 	return &t
 }
 

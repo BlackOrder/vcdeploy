@@ -332,8 +332,10 @@ func TestNewProjectListRunner(t *testing.T) {
 	}
 }
 
-// mockReadWriter implements io.Reader and io.Writer for testing
-type mockReadWriter struct {
+// _mockReadWriter implements io.Reader and io.Writer for testing
+//
+//nolint:unused // Reserved for future tests
+type _mockReadWriter struct {
 	io.Reader
 	io.Writer
 }
