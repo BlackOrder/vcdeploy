@@ -631,7 +631,7 @@ func TestHandleSecretsPost(t *testing.T) {
 
 	server := newTestServer(t)
 
-	// Test creating a secret - note: this will fail without KMS configured
+	// Test creating a secret - note: this will fail without SecretService configured
 	// This tests the validation path, not the full creation
 	body := bytes.NewBufferString(`{"project":"test-project","scope":"env","key":"TEST_KEY","value":"secret-value"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets", body)
@@ -640,18 +640,18 @@ func TestHandleSecretsPost(t *testing.T) {
 
 	server.handleSecrets(rec, req)
 
-	// Without KMS configured, should get encryption error
+	// Without SecretService configured, should get error
 	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("status = %d, want %d (expected error without KMS)", rec.Code, http.StatusInternalServerError)
+		t.Errorf("status = %d, want %d (expected error without SecretService)", rec.Code, http.StatusInternalServerError)
 	}
 
 	var resp map[string]interface{}
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode error: %v", err)
 	}
-	// Verify error message mentions encryption
-	if msg, ok := resp["message"].(string); !ok || !strings.Contains(msg, "encrypt") {
-		t.Errorf("expected encryption-related error message, got: %v", resp["message"])
+	// Verify error message mentions secret service
+	if msg, ok := resp["message"].(string); !ok || !strings.Contains(strings.ToLower(msg), "secret") {
+		t.Errorf("expected secret-related error message, got: %v", resp["message"])
 	}
 }
 
