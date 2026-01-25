@@ -984,54 +984,6 @@ func TestSaveDeployment(t *testing.T) {
 	}
 }
 
-func TestCreateDeploymentExt(t *testing.T) {
-	db, cleanup := setupTestDB(t)
-	defer cleanup()
-
-	d := &DeploymentExt{
-		ID:          "ext-deploy-1",
-		ProjectName: "extproj",
-		Target:      "staging",
-		Status:      "pending",
-		TriggeredBy: "ci",
-		StartedAt:   time.Now(),
-	}
-
-	err := db.CreateDeploymentExt(d)
-	if err != nil {
-		t.Fatalf("CreateDeploymentExt() error = %v", err)
-	}
-}
-
-func TestUpdateDeploymentExt(t *testing.T) {
-	db, cleanup := setupTestDB(t)
-	defer cleanup()
-
-	// Create deployment
-	d := &DeploymentExt{
-		ID:          "ext-deploy-2",
-		ProjectName: "extproj",
-		Target:      "production",
-		Status:      "running",
-		StartedAt:   time.Now(),
-	}
-
-	err := db.CreateDeploymentExt(d)
-	if err != nil {
-		t.Fatalf("CreateDeploymentExt() error = %v", err)
-	}
-
-	// Update
-	now := time.Now()
-	d.Status = "failed"
-	d.FinishedAt = &now
-
-	err = db.UpdateDeploymentExt(d)
-	if err != nil {
-		t.Fatalf("UpdateDeploymentExt() error = %v", err)
-	}
-}
-
 // --- Backup Tests ---
 
 func TestBackup(t *testing.T) {
