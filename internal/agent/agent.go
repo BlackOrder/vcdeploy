@@ -704,7 +704,9 @@ func (a *Agent) performHealthCheck(ctx context.Context, url string, timeout int3
 	defer resp.Body.Close()
 
 	// Read and discard the body (to allow connection reuse)
-	_, _ = io.Copy(io.Discard, resp.Body)
+	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+		a.logger.Debug("Failed to drain health check response body", zap.Error(err))
+	}
 
 	// Check status code (accept 2xx as success)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
