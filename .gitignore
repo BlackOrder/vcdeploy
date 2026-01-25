@@ -11,7 +11,7 @@
 
 # Test artifacts (Go test binaries, not Dockerfile.test)
 *.test.exe
-coverage.out
+*.out
 coverage.html
 coverage.txt
 
@@ -91,3 +91,4 @@ ehthumbs.db
 *.pprof
 cpu.out
 mem.out
+cover.out
