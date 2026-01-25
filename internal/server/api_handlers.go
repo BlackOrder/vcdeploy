@@ -1212,13 +1212,22 @@ func (s *MasterServer) handleDeploymentLogsStream(w http.ResponseWriter, r *http
 	}
 
 	// Poll for new logs until deployment completes or client disconnects
+	// Max streaming duration prevents resource exhaustion from abandoned connections
+	const maxStreamDuration = 30 * time.Minute
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
+	timeout := time.NewTimer(maxStreamDuration)
+	defer timeout.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			// Client disconnected
+			return
+		case <-timeout.C:
+			// Max streaming duration reached
+			fmt.Fprintf(w, "event: timeout\ndata: {\"message\":\"Max streaming duration reached\"}\n\n")
+			flusher.Flush()
 			return
 		case <-ticker.C:
 			// Check for new logs
