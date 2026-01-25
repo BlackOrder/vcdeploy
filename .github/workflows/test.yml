@@ -38,6 +38,9 @@ jobs:
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v4
       
@@ -60,7 +63,9 @@ jobs:
         continue-on-error: true
         
       - name: Upload gosec SARIF
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
+        # Don't fail on fork PRs which can't access security-events API
+        continue-on-error: true
         if: always()
         with:
           sarif_file: gosec-results.sarif
