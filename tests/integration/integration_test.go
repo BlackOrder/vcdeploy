@@ -440,7 +440,10 @@ func TestHTTPEndpoints(t *testing.T) {
 		t.Errorf("Expected status 200, got %d", resp.StatusCode)
 	}
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("Failed to read response body: %v", err)
+	}
 	if !bytes.Contains(body, []byte("ok")) {
 		t.Errorf("Expected body to contain 'ok', got %s", body)
 	}

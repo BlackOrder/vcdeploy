@@ -26,8 +26,14 @@ func TestGenerateMasterKey(t *testing.T) {
 func TestGenerateMasterKeyUniqueness(t *testing.T) {
 	t.Parallel()
 
-	key1, _ := GenerateMasterKey()
-	key2, _ := GenerateMasterKey()
+	key1, err := GenerateMasterKey()
+	if err != nil {
+		t.Fatalf("GenerateMasterKey() for key1: %v", err)
+	}
+	key2, err := GenerateMasterKey()
+	if err != nil {
+		t.Fatalf("GenerateMasterKey() for key2: %v", err)
+	}
 	if key1.KeyID() == key2.KeyID() {
 		t.Error("Generated keys should have different IDs")
 	}
@@ -36,7 +42,10 @@ func TestGenerateMasterKeyUniqueness(t *testing.T) {
 func TestMasterKeyEncryptDecrypt(t *testing.T) {
 	t.Parallel()
 
-	key, _ := GenerateMasterKey()
+	key, err := GenerateMasterKey()
+	if err != nil {
+		t.Fatalf("GenerateMasterKey(): %v", err)
+	}
 
 	tests := []struct {
 		name      string
@@ -75,11 +84,20 @@ func TestMasterKeyEncryptDecrypt(t *testing.T) {
 func TestMasterKeyEncryptDifferentCiphertext(t *testing.T) {
 	t.Parallel()
 
-	key, _ := GenerateMasterKey()
+	key, err := GenerateMasterKey()
+	if err != nil {
+		t.Fatalf("GenerateMasterKey(): %v", err)
+	}
 	plaintext := []byte("same message")
 
-	enc1, _ := key.Encrypt(plaintext)
-	enc2, _ := key.Encrypt(plaintext)
+	enc1, err := key.Encrypt(plaintext)
+	if err != nil {
+		t.Fatalf("Encrypt() for enc1: %v", err)
+	}
+	enc2, err := key.Encrypt(plaintext)
+	if err != nil {
+		t.Fatalf("Encrypt() for enc2: %v", err)
+	}
 
 	if bytes.Equal(enc1, enc2) {
 		t.Error("Same plaintext should produce different ciphertext due to random nonce")
@@ -89,11 +107,20 @@ func TestMasterKeyEncryptDifferentCiphertext(t *testing.T) {
 func TestMasterKeyDecryptWrongKey(t *testing.T) {
 	t.Parallel()
 
-	key1, _ := GenerateMasterKey()
-	key2, _ := GenerateMasterKey()
+	key1, err := GenerateMasterKey()
+	if err != nil {
+		t.Fatalf("GenerateMasterKey() for key1: %v", err)
+	}
+	key2, err := GenerateMasterKey()
+	if err != nil {
+		t.Fatalf("GenerateMasterKey() for key2: %v", err)
+	}
 
-	encrypted, _ := key1.Encrypt([]byte("secret"))
-	_, err := key2.Decrypt(encrypted)
+	encrypted, err := key1.Encrypt([]byte("secret"))
+	if err != nil {
+		t.Fatalf("Encrypt(): %v", err)
+	}
+	_, err = key2.Decrypt(encrypted)
 	if err == nil {
 		t.Error("Decrypt with wrong key should fail")
 	}
@@ -102,13 +129,19 @@ func TestMasterKeyDecryptWrongKey(t *testing.T) {
 func TestMasterKeyDecryptTamperedData(t *testing.T) {
 	t.Parallel()
 
-	key, _ := GenerateMasterKey()
-	encrypted, _ := key.Encrypt([]byte("secret"))
+	key, err := GenerateMasterKey()
+	if err != nil {
+		t.Fatalf("GenerateMasterKey(): %v", err)
+	}
+	encrypted, err := key.Encrypt([]byte("secret"))
+	if err != nil {
+		t.Fatalf("Encrypt(): %v", err)
+	}
 
 	// Tamper with the ciphertext
 	encrypted[len(encrypted)-1] ^= 0xFF
 
-	_, err := key.Decrypt(encrypted)
+	_, err = key.Decrypt(encrypted)
 	if err == nil {
 		t.Error("Decrypt of tampered data should fail")
 	}
@@ -117,8 +150,11 @@ func TestMasterKeyDecryptTamperedData(t *testing.T) {
 func TestMasterKeyDecryptTooShort(t *testing.T) {
 	t.Parallel()
 
-	key, _ := GenerateMasterKey()
-	_, err := key.Decrypt([]byte("short"))
+	key, err := GenerateMasterKey()
+	if err != nil {
+		t.Fatalf("GenerateMasterKey(): %v", err)
+	}
+	_, err = key.Decrypt([]byte("short"))
 	if err == nil {
 		t.Error("Decrypt of too-short data should fail")
 	}
@@ -132,13 +168,19 @@ func TestMasterKeySaveAndLoad(t *testing.T) {
 	keyPath := filepath.Join(tmpDir, "master.key")
 
 	// Generate and save
-	key1, _ := GenerateMasterKey()
+	key1, err := GenerateMasterKey()
+	if err != nil {
+		t.Fatalf("GenerateMasterKey(): %v", err)
+	}
 	if err := key1.SaveToFile(keyPath); err != nil {
 		t.Fatalf("SaveToFile() error = %v", err)
 	}
 
 	// Check permissions
-	info, _ := os.Stat(keyPath)
+	info, err := os.Stat(keyPath)
+	if err != nil {
+		t.Fatalf("os.Stat(): %v", err)
+	}
 	if info.Mode().Perm() != 0600 {
 		t.Errorf("Key file permissions = %o, want 0600", info.Mode().Perm())
 	}
@@ -155,8 +197,14 @@ func TestMasterKeySaveAndLoad(t *testing.T) {
 
 	// Verify encryption/decryption works across save/load
 	plaintext := []byte("test message")
-	encrypted, _ := key1.Encrypt(plaintext)
-	decrypted, _ := key2.Decrypt(encrypted)
+	encrypted, err := key1.Encrypt(plaintext)
+	if err != nil {
+		t.Fatalf("Encrypt(): %v", err)
+	}
+	decrypted, err := key2.Decrypt(encrypted)
+	if err != nil {
+		t.Fatalf("Decrypt(): %v", err)
+	}
 
 	if !bytes.Equal(decrypted, plaintext) {
 		t.Error("Loaded key should decrypt data encrypted by original key")
@@ -167,13 +215,21 @@ func TestLoadMasterKeyFromEnv(t *testing.T) {
 	// Note: Cannot use t.Parallel() - modifies environment
 
 	// Generate a valid key and encode it
-	key, _ := GenerateMasterKey()
+	key, err := GenerateMasterKey()
+	if err != nil {
+		t.Fatalf("GenerateMasterKey(): %v", err)
+	}
 	tmpDir := t.TempDir()
 	keyPath := filepath.Join(tmpDir, "master.key")
-	key.SaveToFile(keyPath)
+	if err := key.SaveToFile(keyPath); err != nil {
+		t.Fatalf("SaveToFile(): %v", err)
+	}
 
 	// Read the encoded key
-	data, _ := os.ReadFile(keyPath)
+	data, err := os.ReadFile(keyPath)
+	if err != nil {
+		t.Fatalf("os.ReadFile(): %v", err)
+	}
 	os.Setenv("VCDEPLOY_MASTER_KEY", string(data))
 	defer os.Unsetenv("VCDEPLOY_MASTER_KEY")
 
@@ -250,8 +306,14 @@ func TestHashPasswordUnique(t *testing.T) {
 	t.Parallel()
 
 	password := "same-password"
-	hash1, _ := HashPassword(password)
-	hash2, _ := HashPassword(password)
+	hash1, err := HashPassword(password)
+	if err != nil {
+		t.Fatalf("HashPassword() for hash1: %v", err)
+	}
+	hash2, err := HashPassword(password)
+	if err != nil {
+		t.Fatalf("HashPassword() for hash2: %v", err)
+	}
 
 	if hash1 == hash2 {
 		t.Error("Same password should produce different hashes (salt)")
@@ -281,8 +343,14 @@ func TestGenerateRandomPassword(t *testing.T) {
 func TestGenerateRandomPasswordUnique(t *testing.T) {
 	t.Parallel()
 
-	pass1, _ := GenerateRandomPassword(16)
-	pass2, _ := GenerateRandomPassword(16)
+	pass1, err := GenerateRandomPassword(16)
+	if err != nil {
+		t.Fatalf("GenerateRandomPassword() for pass1: %v", err)
+	}
+	pass2, err := GenerateRandomPassword(16)
+	if err != nil {
+		t.Fatalf("GenerateRandomPassword() for pass2: %v", err)
+	}
 	if pass1 == pass2 {
 		t.Error("Generated passwords should be unique")
 	}
@@ -303,8 +371,14 @@ func TestGenerateToken(t *testing.T) {
 func TestGenerateTokenUnique(t *testing.T) {
 	t.Parallel()
 
-	token1, _ := GenerateToken(32)
-	token2, _ := GenerateToken(32)
+	token1, err := GenerateToken(32)
+	if err != nil {
+		t.Fatalf("GenerateToken() for token1: %v", err)
+	}
+	token2, err := GenerateToken(32)
+	if err != nil {
+		t.Fatalf("GenerateToken() for token2: %v", err)
+	}
 	if token1 == token2 {
 		t.Error("Generated tokens should be unique")
 	}
@@ -317,7 +391,10 @@ func TestGenerateSessionID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateSessionID() error = %v", err)
 	}
-	sid2, _ := GenerateSessionID()
+	sid2, err := GenerateSessionID()
+	if err != nil {
+		t.Fatalf("GenerateSessionID() for sid2: %v", err)
+	}
 
 	if sid1 == "" {
 		t.Error("Session ID should not be empty")
@@ -335,7 +412,10 @@ func BenchmarkGenerateMasterKey(b *testing.B) {
 }
 
 func BenchmarkEncrypt(b *testing.B) {
-	key, _ := GenerateMasterKey()
+	key, err := GenerateMasterKey()
+	if err != nil {
+		b.Fatalf("GenerateMasterKey(): %v", err)
+	}
 	plaintext := []byte("benchmark test message for encryption")
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -344,9 +424,15 @@ func BenchmarkEncrypt(b *testing.B) {
 }
 
 func BenchmarkDecrypt(b *testing.B) {
-	key, _ := GenerateMasterKey()
+	key, err := GenerateMasterKey()
+	if err != nil {
+		b.Fatalf("GenerateMasterKey(): %v", err)
+	}
 	plaintext := []byte("benchmark test message for decryption")
-	encrypted, _ := key.Encrypt(plaintext)
+	encrypted, err := key.Encrypt(plaintext)
+	if err != nil {
+		b.Fatalf("Encrypt(): %v", err)
+	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		key.Decrypt(encrypted)
@@ -360,7 +446,10 @@ func BenchmarkHashPassword(b *testing.B) {
 }
 
 func BenchmarkVerifyPassword(b *testing.B) {
-	hash, _ := HashPassword("benchmark-password")
+	hash, err := HashPassword("benchmark-password")
+	if err != nil {
+		b.Fatalf("HashPassword(): %v", err)
+	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		VerifyPassword("benchmark-password", hash)

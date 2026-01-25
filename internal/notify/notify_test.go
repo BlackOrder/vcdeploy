@@ -274,7 +274,11 @@ func TestSlackNotifierSend(t *testing.T) {
 		}
 
 		buf := make([]byte, 4096)
-		n, _ := r.Body.Read(buf)
+		n, err := r.Body.Read(buf)
+		if err != nil && err.Error() != "EOF" {
+			t.Errorf("Failed to read request body: %v", err)
+			return
+		}
 		receivedPayload = buf[:n]
 
 		w.WriteHeader(http.StatusOK)

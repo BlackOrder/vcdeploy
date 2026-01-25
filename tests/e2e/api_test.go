@@ -76,7 +76,10 @@ func TestHealthEndpoint(t *testing.T) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("failed to read response body: %v", err)
+		}
 		t.Errorf("expected status 200, got %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -114,7 +117,10 @@ func TestAPIProjects(t *testing.T) {
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatalf("failed to read response body: %v", err)
+			}
 			t.Errorf("expected status 200, got %d: %s", resp.StatusCode, string(body))
 		}
 	})
@@ -143,7 +149,10 @@ func TestAPIProjects(t *testing.T) {
 
 		// 201 Created or 200 OK are acceptable
 		if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
-			respBody, _ := io.ReadAll(resp.Body)
+			respBody, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatalf("failed to read response body: %v", err)
+			}
 			t.Errorf("expected status 201 or 200, got %d: %s", resp.StatusCode, string(respBody))
 		}
 	})
@@ -173,7 +182,10 @@ func TestAPIAgents(t *testing.T) {
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatalf("failed to read response body: %v", err)
+			}
 			t.Errorf("expected status 200, got %d: %s", resp.StatusCode, string(body))
 		}
 	})
@@ -203,7 +215,10 @@ func TestAPIDeployments(t *testing.T) {
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatalf("failed to read response body: %v", err)
+			}
 			t.Errorf("expected status 200, got %d: %s", resp.StatusCode, string(body))
 		}
 	})
@@ -233,7 +248,10 @@ func TestWebhookEndpoints(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req, _ := http.NewRequest(tt.method, cfg.MasterHTTPURL+tt.endpoint, nil)
+			req, err := http.NewRequest(tt.method, cfg.MasterHTTPURL+tt.endpoint, nil)
+			if err != nil {
+				t.Fatalf("failed to create request: %v", err)
+			}
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				t.Fatalf("failed to call webhook: %v", err)

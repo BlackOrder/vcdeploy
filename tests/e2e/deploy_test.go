@@ -147,10 +147,14 @@ func TestDeploymentSimulation(t *testing.T) {
 
 	// Cleanup
 	t.Cleanup(func() {
-		session, _ := client.NewSession()
-		if session != nil {
-			session.Run("rm -rf /deploy/test-app")
-			session.Close()
+		session, err := client.NewSession()
+		if err != nil {
+			t.Logf("Warning: failed to create cleanup session: %v", err)
+			return
+		}
+		defer session.Close()
+		if err := session.Run("rm -rf /deploy/test-app"); err != nil {
+			t.Logf("Warning: cleanup command failed: %v", err)
 		}
 	})
 }
@@ -190,8 +194,12 @@ func TestRollbackSimulation(t *testing.T) {
 	}
 
 	for _, cmd := range setupCmds {
-		session, _ := client.NewSession()
+		session, err := client.NewSession()
+		if err != nil {
+			t.Fatalf("failed to create session: %v", err)
+		}
 		if err := session.Run(cmd); err != nil {
+			session.Close()
 			t.Fatalf("setup command failed: %s: %v", cmd, err)
 		}
 		session.Close()
@@ -199,7 +207,10 @@ func TestRollbackSimulation(t *testing.T) {
 
 	// Verify current is v2
 	t.Run("verify current is v2", func(t *testing.T) {
-		session, _ := client.NewSession()
+		session, err := client.NewSession()
+		if err != nil {
+			t.Fatalf("failed to create session: %v", err)
+		}
 		defer session.Close()
 		output, err := session.Output("cat /deploy/rollback-app/current/version.txt")
 		if err != nil {
@@ -212,7 +223,10 @@ func TestRollbackSimulation(t *testing.T) {
 
 	// Rollback to v1
 	t.Run("rollback to v1", func(t *testing.T) {
-		session, _ := client.NewSession()
+		session, err := client.NewSession()
+		if err != nil {
+			t.Fatalf("failed to create session: %v", err)
+		}
 		defer session.Close()
 		if err := session.Run("ln -sfn /deploy/rollback-app/releases/v1.0.0 /deploy/rollback-app/current"); err != nil {
 			t.Fatalf("rollback failed: %v", err)
@@ -221,7 +235,10 @@ func TestRollbackSimulation(t *testing.T) {
 
 	// Verify current is now v1
 	t.Run("verify current is v1 after rollback", func(t *testing.T) {
-		session, _ := client.NewSession()
+		session, err := client.NewSession()
+		if err != nil {
+			t.Fatalf("failed to create session: %v", err)
+		}
 		defer session.Close()
 		output, err := session.Output("cat /deploy/rollback-app/current/version.txt")
 		if err != nil {
@@ -234,10 +251,14 @@ func TestRollbackSimulation(t *testing.T) {
 
 	// Cleanup
 	t.Cleanup(func() {
-		session, _ := client.NewSession()
-		if session != nil {
-			session.Run("rm -rf /deploy/rollback-app")
-			session.Close()
+		session, err := client.NewSession()
+		if err != nil {
+			t.Logf("Warning: failed to create cleanup session: %v", err)
+			return
+		}
+		defer session.Close()
+		if err := session.Run("rm -rf /deploy/rollback-app"); err != nil {
+			t.Logf("Warning: cleanup command failed: %v", err)
 		}
 	})
 }

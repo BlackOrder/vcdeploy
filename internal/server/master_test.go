@@ -99,7 +99,10 @@ func TestNewMasterServer(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
-	db, _ := storage.New(":memory:", logger)
+	db, err := storage.New(":memory:", logger)
+	if err != nil {
+		t.Fatalf("failed to create db: %v", err)
+	}
 
 	cfg := &config.MasterConfig{
 		Server: config.ServerConfig{Listen: ":8080"},
@@ -604,9 +607,15 @@ func TestJsonResponse(t *testing.T) {
 
 func BenchmarkHandleHealth(b *testing.B) {
 	logger := zap.NewNop()
-	db, _ := storage.New(":memory:", logger)
+	db, err := storage.New(":memory:", logger)
+	if err != nil {
+		b.Fatalf("failed to create db: %v", err)
+	}
 	cfg := &config.MasterConfig{}
-	server, _ := NewMasterServer(cfg, db, logger)
+	server, err := NewMasterServer(cfg, db, logger)
+	if err != nil {
+		b.Fatalf("failed to create server: %v", err)
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
 
