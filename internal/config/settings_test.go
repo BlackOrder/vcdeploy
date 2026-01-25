@@ -590,6 +590,92 @@ func TestSettingsService_ExportImport(t *testing.T) {
 	}
 }
 
+func TestSettingsService_Import(t *testing.T) {
+	db, kms, cleanup := setupTestSettingsDB(t)
+	defer cleanup()
+
+	svc := NewSettingsService(db, kms)
+	ctx := context.Background()
+
+	// Import settings from YAML
+	yamlData := []byte(`
+server:
+  listen: ":9000"
+  tls_enabled: true
+database:
+  max_connections: 100
+`)
+
+	if err := svc.Import(ctx, yamlData); err != nil {
+		t.Fatalf("Import failed: %v", err)
+	}
+
+	// Verify imported values
+	listen, err := svc.Get(ctx, "server", "listen")
+	if err != nil {
+		t.Fatalf("Get server/listen failed: %v", err)
+	}
+	if listen != ":9000" {
+		t.Errorf("expected ':9000', got '%s'", listen)
+	}
+
+	maxConn := svc.GetInt(ctx, "database", "max_connections", 0)
+	if maxConn != 100 {
+		t.Errorf("expected 100, got %d", maxConn)
+	}
+}
+
+func TestSettingsService_ImportInvalidYAML(t *testing.T) {
+	db, kms, cleanup := setupTestSettingsDB(t)
+	defer cleanup()
+
+	svc := NewSettingsService(db, kms)
+	ctx := context.Background()
+
+	// Import invalid YAML
+	invalidYAML := []byte(`{invalid yaml`)
+
+	err := svc.Import(ctx, invalidYAML)
+	if err == nil {
+		t.Error("expected error for invalid YAML")
+	}
+}
+
+func TestSettingsService_ImportBoolAndString(t *testing.T) {
+	db, kms, cleanup := setupTestSettingsDB(t)
+	defer cleanup()
+
+	svc := NewSettingsService(db, kms)
+	ctx := context.Background()
+
+	// Import settings with different types
+	yamlData := []byte(`
+features:
+  enabled: true
+  name: "test-feature"
+  count: 42
+`)
+
+	if err := svc.Import(ctx, yamlData); err != nil {
+		t.Fatalf("Import failed: %v", err)
+	}
+
+	// Verify bool was imported
+	enabled := svc.GetBool(ctx, "features", "enabled", false)
+	if !enabled {
+		t.Error("expected enabled to be true")
+	}
+
+	// Verify string was imported
+	name, err := svc.Get(ctx, "features", "name")
+	if err != nil {
+		t.Fatalf("Get features/name failed: %v", err)
+	}
+	if name != "test-feature" {
+		t.Errorf("expected 'test-feature', got '%s'", name)
+	}
+}
+
 func TestSettingsService_UpdateOverwrite(t *testing.T) {
 	db, kms, cleanup := setupTestSettingsDB(t)
 	defer cleanup()
