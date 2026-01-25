@@ -22,10 +22,11 @@ type AgentConfig struct {
 
 // AgentMasterConfig defines master connection settings.
 type AgentMasterConfig struct {
-	Address   string          `yaml:"address"`
-	Token     string          `yaml:"token"`
-	Cert      string          `yaml:"cert"`
-	Reconnect ReconnectConfig `yaml:"reconnect"`
+	Address       string          `yaml:"address"`
+	Token         string          `yaml:"token"`
+	Cert          string          `yaml:"cert"`
+	AllowInsecure bool            `yaml:"allow_insecure"` // Allow unencrypted connection (NOT recommended)
+	Reconnect     ReconnectConfig `yaml:"reconnect"`
 }
 
 // ReconnectConfig defines reconnection behavior.
