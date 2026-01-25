@@ -387,6 +387,7 @@ func runMasterStart(cmd *cobra.Command, args []string) error {
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigCh) // Cleanup signal handling on exit
 
 	errCh := make(chan error, 1)
 	go func() {
