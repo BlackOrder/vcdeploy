@@ -151,9 +151,8 @@ func (c *AppContext) InitLogger() error {
 		return fmt.Errorf("config not loaded")
 	}
 
-	var zapCfg zap.Config
 	// Default to development config
-	zapCfg = zap.NewDevelopmentConfig()
+	zapCfg := zap.NewDevelopmentConfig()
 
 	// Set log level from config
 	if c.Config.Logs.Application.Level != "" {

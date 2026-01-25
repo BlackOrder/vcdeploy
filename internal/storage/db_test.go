@@ -2124,7 +2124,7 @@ func TestDeleteUser(t *testing.T) {
 	}
 
 	// Verify deleted
-	found, err := db.GetUserByID(ctx, user.ID)
+	found, _ := db.GetUserByID(ctx, user.ID)
 	if found != nil {
 		t.Error("DeleteUser() user still found after deletion")
 	}

@@ -296,7 +296,7 @@ func TestAgentServer_SendDeployCommand(t *testing.T) {
 	case msg := <-cmdChan:
 		deployCmd := msg.GetDeployCommand()
 		if deployCmd == nil {
-			t.Error("Expected deploy command")
+			t.Fatal("Expected deploy command")
 		}
 		if deployCmd.DeploymentId != "deploy-1" {
 			t.Errorf("Expected deployment ID 'deploy-1', got %q", deployCmd.DeploymentId)
@@ -334,7 +334,7 @@ func TestAgentServer_SendRollbackCommand(t *testing.T) {
 	case msg := <-cmdChan:
 		rollbackCmd := msg.GetRollbackCommand()
 		if rollbackCmd == nil {
-			t.Error("Expected rollback command")
+			t.Fatal("Expected rollback command")
 		}
 		if rollbackCmd.ReleaseNumber != 5 {
 			t.Errorf("Expected release number 5, got %d", rollbackCmd.ReleaseNumber)
@@ -371,7 +371,7 @@ func TestAgentServer_SendCancelCommand(t *testing.T) {
 	case msg := <-cmdChan:
 		cancelCmd := msg.GetCancelCommand()
 		if cancelCmd == nil {
-			t.Error("Expected cancel command")
+			t.Fatal("Expected cancel command")
 		}
 		if cancelCmd.Reason != "User requested" {
 			t.Errorf("Expected reason 'User requested', got %q", cancelCmd.Reason)
