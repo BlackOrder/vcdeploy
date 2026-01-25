@@ -227,6 +227,57 @@ func TestManagerNotifyWithError(t *testing.T) {
 	}
 }
 
+func TestManagerNotifyAndWait(t *testing.T) {
+	t.Parallel()
+
+	logger, _ := zap.NewDevelopment()
+	manager := NewManager(logger)
+
+	notifier := &MockNotifier{
+		NameValue: "test-notifier",
+	}
+	manager.Register(notifier)
+
+	event := Event{
+		Type:   "deployment",
+		Status: "success",
+	}
+
+	ctx := context.Background()
+	manager.NotifyAndWait(ctx, event)
+
+	// After NotifyAndWait returns, the notifier should have been called
+	if !notifier.WasCalled() {
+		t.Error("Notifier should have been called")
+	}
+}
+
+func TestManagerWait(t *testing.T) {
+	t.Parallel()
+
+	logger, _ := zap.NewDevelopment()
+	manager := NewManager(logger)
+
+	notifier := &MockNotifier{
+		NameValue: "test-notifier",
+	}
+	manager.Register(notifier)
+
+	event := Event{
+		Type:   "deployment",
+		Status: "success",
+	}
+
+	ctx := context.Background()
+	manager.Notify(ctx, event)
+	manager.Wait()
+
+	// After Wait returns, all notifications should be complete
+	if !notifier.WasCalled() {
+		t.Error("Notifier should have been called")
+	}
+}
+
 func TestSlackConfig(t *testing.T) {
 	t.Parallel()
 
