@@ -378,7 +378,14 @@ func (a *Agent) reconnect(ctx context.Context) error {
 				zap.Error(err),
 				zap.Duration("retry_in", backoff),
 			)
-			time.Sleep(backoff)
+			// Use select to respect context cancellation during backoff
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-a.shutdown:
+				return fmt.Errorf("shutdown requested")
+			case <-time.After(backoff):
+			}
 			backoff *= 2
 			if backoff > maxBackoff {
 				backoff = maxBackoff
@@ -406,7 +413,14 @@ func (a *Agent) commandLoop(ctx context.Context) {
 				return
 			}
 			a.logger.Error("Command stream error", zap.Error(err))
-			time.Sleep(5 * time.Second)
+			// Use select to respect context cancellation during backoff
+			select {
+			case <-ctx.Done():
+				return
+			case <-a.shutdown:
+				return
+			case <-time.After(5 * time.Second):
+			}
 		}
 	}
 }
@@ -645,6 +659,7 @@ func (a *Agent) handleHealthCheckCommand(ctx context.Context, stream pb.AgentSer
 				zap.Int32("attempt", attempt),
 				zap.Int32("max_retries", retries),
 			)
+			// Brief sleep between health check retries - context checked at loop start
 			time.Sleep(time.Second)
 		}
 	}
