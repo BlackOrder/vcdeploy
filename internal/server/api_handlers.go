@@ -316,12 +316,12 @@ func (s *MasterServer) handleSettingsCategory(w http.ResponseWriter, r *http.Req
 
 	switch r.Method {
 	case http.MethodGet:
-		if s.settingsService == nil {
+		if s.settingsSvc == nil {
 			http.Error(w, "Settings service not configured", http.StatusInternalServerError)
 			return
 		}
 
-		settings, err := s.settingsService.ListByCategory(ctx, category)
+		settings, err := s.settingsSvc.ListByCategory(ctx, category)
 		if err != nil {
 			s.logger.Error("Failed to list settings", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -335,7 +335,7 @@ func (s *MasterServer) handleSettingsCategory(w http.ResponseWriter, r *http.Req
 		s.jsonResponse(w, result)
 
 	case http.MethodPut:
-		if s.settingsService == nil {
+		if s.settingsSvc == nil {
 			http.Error(w, "Settings service not configured", http.StatusInternalServerError)
 			return
 		}
@@ -347,7 +347,7 @@ func (s *MasterServer) handleSettingsCategory(w http.ResponseWriter, r *http.Req
 		}
 
 		for key, value := range req {
-			if err := s.settingsService.Set(ctx, category, key, value, false); err != nil {
+			if err := s.settingsSvc.Set(ctx, category, key, value, false); err != nil {
 				s.logger.Error("Failed to set setting", zap.String("key", key), zap.Error(err))
 				http.Error(w, "Internal server error", http.StatusInternalServerError)
 				return
@@ -369,7 +369,7 @@ func (s *MasterServer) handleSettingsExport(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if s.settingsService == nil {
+	if s.settingsSvc == nil {
 		http.Error(w, "Settings service not configured", http.StatusInternalServerError)
 		return
 	}
@@ -377,7 +377,7 @@ func (s *MasterServer) handleSettingsExport(w http.ResponseWriter, r *http.Reque
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	settings, err := s.settingsService.ListAll(ctx)
+	settings, err := s.settingsSvc.ListAll(ctx)
 	if err != nil {
 		s.logger.Error("Failed to list settings", zap.Error(err))
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -408,7 +408,7 @@ func (s *MasterServer) handleSettingsImport(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if s.settingsService == nil {
+	if s.settingsSvc == nil {
 		http.Error(w, "Settings service not configured", http.StatusServiceUnavailable)
 		return
 	}
@@ -433,7 +433,7 @@ func (s *MasterServer) handleSettingsImport(w http.ResponseWriter, r *http.Reque
 			if valueType == "" {
 				valueType = "string"
 			}
-			if err := s.settingsService.SetRaw(ctx, category, key, setting.Value, valueType, setting.Encrypted); err != nil {
+			if err := s.settingsSvc.SetRaw(ctx, category, key, setting.Value, valueType, setting.Encrypted); err != nil {
 				s.logger.Error("Failed to import setting", zap.String("key", key), zap.Error(err))
 				continue
 			}
