@@ -839,37 +839,6 @@ func (db *DB) SaveDeployment(d *DeploymentCLI) error {
 	return err
 }
 
-// --- Extended Deployment operations ---
-
-// DeploymentExt is an extended deployment struct for CLI
-type DeploymentExt struct {
-	ID          string
-	ProjectID   int64
-	ProjectName string
-	Target      string
-	Status      string
-	TriggeredBy string
-	StartedAt   time.Time
-	FinishedAt  *time.Time
-}
-
-// CreateDeploymentExt creates a deployment (extended version for CLI)
-func (db *DB) CreateDeploymentExt(d *DeploymentExt) error {
-	_, err := db.conn.Exec(`
-		INSERT INTO deployments (id, project, target, branch, status, triggered_by, started_at)
-		VALUES (?, ?, ?, '', ?, ?, ?)
-	`, d.ID, d.ProjectName, d.Target, d.Status, d.TriggeredBy, d.StartedAt)
-	return err
-}
-
-// UpdateDeploymentExt updates a deployment (extended version for CLI)
-func (db *DB) UpdateDeploymentExt(d *DeploymentExt) error {
-	_, err := db.conn.Exec(`
-		UPDATE deployments SET status = ?, completed_at = ? WHERE id = ?
-	`, d.Status, d.FinishedAt, d.ID)
-	return err
-}
-
 // ExportAllSecrets exports all secrets (for backup)
 func (db *DB) ExportAllSecrets() (map[string]map[string]string, error) {
 	rows, err := db.conn.Query(`SELECT project, key, value_encrypted FROM secrets`)
