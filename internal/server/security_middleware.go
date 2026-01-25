@@ -236,11 +236,11 @@ func (sm *SecurityMiddleware) isExemptPath(path string) bool {
 }
 
 // GenerateCSRFToken generates a new CSRF token for a session.
-func (sm *SecurityMiddleware) GenerateCSRFToken(sessionID string) string {
+// Returns an error if secure random generation fails.
+func (sm *SecurityMiddleware) GenerateCSRFToken(sessionID string) (string, error) {
 	token := make([]byte, sm.config.CSRFTokenLength)
 	if _, err := rand.Read(token); err != nil {
-		// Fallback to time-based token
-		token = []byte(fmt.Sprintf("%d", time.Now().UnixNano()))
+		return "", fmt.Errorf("generating CSRF token: %w", err)
 	}
 
 	tokenStr := base64.URLEncoding.EncodeToString(token)
@@ -252,7 +252,7 @@ func (sm *SecurityMiddleware) GenerateCSRFToken(sessionID string) string {
 	}
 	sm.csrfMu.Unlock()
 
-	return tokenStr
+	return tokenStr, nil
 }
 
 // validateCSRFToken validates the CSRF token from the request.
@@ -322,7 +322,8 @@ func (sm *SecurityMiddleware) Stop() {
 }
 
 // GetCSRFToken returns the current CSRF token for a session.
-func (sm *SecurityMiddleware) GetCSRFToken(sessionID string) string {
+// If no valid token exists, generates a new one.
+func (sm *SecurityMiddleware) GetCSRFToken(sessionID string) (string, error) {
 	sm.csrfMu.RLock()
 	token, exists := sm.csrfTokens[sessionID]
 	sm.csrfMu.RUnlock()
@@ -330,5 +331,5 @@ func (sm *SecurityMiddleware) GetCSRFToken(sessionID string) string {
 	if !exists || time.Now().After(token.ExpiresAt) {
 		return sm.GenerateCSRFToken(sessionID)
 	}
-	return token.Token
+	return token.Token, nil
 }

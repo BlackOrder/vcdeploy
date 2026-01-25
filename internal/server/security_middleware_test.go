@@ -262,7 +262,10 @@ func TestSecurityMiddleware_GenerateCSRFToken(t *testing.T) {
 	sm := NewSecurityMiddleware(cfg)
 
 	sessionID := "test-session-123"
-	token1 := sm.GenerateCSRFToken(sessionID)
+	token1, err := sm.GenerateCSRFToken(sessionID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if token1 == "" {
 		t.Fatal("expected non-empty CSRF token")
@@ -284,7 +287,10 @@ func TestSecurityMiddleware_GenerateCSRFToken(t *testing.T) {
 	}
 
 	// Generate new token for same session (should overwrite)
-	token2 := sm.GenerateCSRFToken(sessionID)
+	token2, err := sm.GenerateCSRFToken(sessionID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if token1 == token2 {
 		t.Error("expected different token on regeneration")
 	}
@@ -297,13 +303,19 @@ func TestSecurityMiddleware_GetCSRFToken(t *testing.T) {
 	sessionID := "test-session-456"
 
 	// First call should generate a token
-	token1 := sm.GetCSRFToken(sessionID)
+	token1, err := sm.GetCSRFToken(sessionID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if token1 == "" {
 		t.Fatal("expected non-empty token")
 	}
 
 	// Second call should return the same token
-	token2 := sm.GetCSRFToken(sessionID)
+	token2, err := sm.GetCSRFToken(sessionID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if token1 != token2 {
 		t.Error("expected same token on second call")
 	}
@@ -318,13 +330,19 @@ func TestSecurityMiddleware_GetCSRFToken_ExpiredToken(t *testing.T) {
 	sm := NewSecurityMiddleware(cfg)
 
 	sessionID := "test-session-expire"
-	token1 := sm.GenerateCSRFToken(sessionID)
+	token1, err := sm.GenerateCSRFToken(sessionID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	// Wait for token to expire
 	time.Sleep(5 * time.Millisecond)
 
 	// GetCSRFToken should generate a new token
-	token2 := sm.GetCSRFToken(sessionID)
+	token2, err := sm.GetCSRFToken(sessionID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if token1 == token2 {
 		t.Error("expected new token after expiration")
 	}
@@ -335,7 +353,10 @@ func TestSecurityMiddleware_ValidateCSRFToken(t *testing.T) {
 	sm := NewSecurityMiddleware(cfg)
 
 	sessionID := "test-session-validate"
-	token := sm.GenerateCSRFToken(sessionID)
+	token, err := sm.GenerateCSRFToken(sessionID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	// Create request with valid token
 	req := httptest.NewRequest("POST", "/", nil)
@@ -352,7 +373,10 @@ func TestSecurityMiddleware_ValidateCSRFToken_InvalidToken(t *testing.T) {
 	sm := NewSecurityMiddleware(cfg)
 
 	sessionID := "test-session-invalid"
-	sm.GenerateCSRFToken(sessionID)
+	_, err := sm.GenerateCSRFToken(sessionID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	// Create request with invalid token
 	req := httptest.NewRequest("POST", "/", nil)
@@ -398,7 +422,10 @@ func TestSecurityMiddleware_ValidateCSRFToken_FormValue(t *testing.T) {
 	sm := NewSecurityMiddleware(cfg)
 
 	sessionID := "test-session-form"
-	token := sm.GenerateCSRFToken(sessionID)
+	token, err := sm.GenerateCSRFToken(sessionID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	// Create request with token in form
 	req := httptest.NewRequest("POST", "/", strings.NewReader("_csrf_token="+token))
@@ -415,7 +442,10 @@ func TestSecurityMiddleware_CSRFProtection(t *testing.T) {
 	sm := NewSecurityMiddleware(cfg)
 
 	sessionID := "csrf-middleware-test"
-	token := sm.GenerateCSRFToken(sessionID)
+	token, err := sm.GenerateCSRFToken(sessionID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	handler := sm.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
