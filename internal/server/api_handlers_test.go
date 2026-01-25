@@ -1452,3 +1452,127 @@ func TestHandleDeploymentLogs_MethodNotAllowed(t *testing.T) {
 		t.Errorf("expected status %d, got %d", http.StatusMethodNotAllowed, w.Code)
 	}
 }
+
+// --- Deployment Cancel Tests ---
+
+func TestHandleDeploymentCancel_NotFound(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/v1/deployments/nonexistent/cancel", nil)
+	req.Header.Set("X-API-Key", apiKey)
+
+	server.handleDeploymentCancel(w, req, "nonexistent")
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status %d, got %d", http.StatusNotFound, w.Code)
+	}
+}
+
+func TestHandleDeploymentCancel_MethodNotAllowed(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/v1/deployments/test/cancel", nil)
+	req.Header.Set("X-API-Key", apiKey)
+
+	server.handleDeploymentCancel(w, req, "test")
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected status %d, got %d", http.StatusMethodNotAllowed, w.Code)
+	}
+}
+
+func TestHandleDeploymentCancel_NotCancellable(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	ctx := context.Background()
+
+	// Create a completed deployment that can't be cancelled
+	deployment := &storage.Deployment{
+		ID:     "cancel-completed-deploy",
+		Status: "completed",
+	}
+	_ = server.db.CreateDeployment(ctx, deployment)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/v1/deployments/cancel-completed-deploy/cancel", nil)
+	req.Header.Set("X-API-Key", apiKey)
+
+	server.handleDeploymentCancel(w, req, "cancel-completed-deploy")
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleDeploymentCancel_Success(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	ctx := context.Background()
+
+	// Create a running deployment
+	deployment := &storage.Deployment{
+		ID:     "cancel-running-deploy",
+		Status: "running",
+	}
+	_ = server.db.CreateDeployment(ctx, deployment)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/v1/deployments/cancel-running-deploy/cancel", nil)
+	req.Header.Set("X-API-Key", apiKey)
+
+	server.handleDeploymentCancel(w, req, "cancel-running-deploy")
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+}
+
+// --- Deployment Rollback Tests ---
+
+func TestHandleDeploymentRollback_NotFound(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/v1/deployments/nonexistent/rollback", nil)
+	req.Header.Set("X-API-Key", apiKey)
+
+	server.handleDeploymentRollback(w, req, "nonexistent")
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status %d, got %d", http.StatusNotFound, w.Code)
+	}
+}
+
+func TestHandleDeploymentRollback_MethodNotAllowed(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/v1/deployments/test/rollback", nil)
+	req.Header.Set("X-API-Key", apiKey)
+
+	server.handleDeploymentRollback(w, req, "test")
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected status %d, got %d", http.StatusMethodNotAllowed, w.Code)
+	}
+}
