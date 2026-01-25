@@ -33,8 +33,8 @@ type WatchConfig struct {
 
 // GuardsConfig defines deployment guards.
 type GuardsConfig struct {
-	RejectForcePush bool `yaml:"reject_force_push"`
-	RequireCIPass   bool `yaml:"require_ci_pass"`
+	RejectForcePush *bool `yaml:"reject_force_push"`
+	RequireCIPass   bool  `yaml:"require_ci_pass"`
 }
 
 // DeploymentConfig defines deployment behavior.
@@ -137,8 +137,9 @@ func LoadProjectConfig(path string) (*ProjectConfig, error) {
 	if config.Env.PlaceholderPattern == "" {
 		config.Env.PlaceholderPattern = "${SECRET_NAME}"
 	}
-	if config.Watch.Guards.RejectForcePush == false {
-		config.Watch.Guards.RejectForcePush = true // Default to true
+	if config.Watch.Guards.RejectForcePush == nil {
+		defaultTrue := true
+		config.Watch.Guards.RejectForcePush = &defaultTrue // Default to true for security
 	}
 
 	return &config, nil
