@@ -74,6 +74,34 @@ func (s *DBHostKeyStore) GetHostKeys(ctx context.Context, hostname string, port 
 	return result, nil
 }
 
+// ListAllKeys retrieves all stored host keys across all hosts.
+func (s *DBHostKeyStore) ListAllKeys(ctx context.Context) ([]*StoredHostKey, error) {
+	keys, err := s.db.ListSSHHostKeys(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("database error: %w", err)
+	}
+
+	result := make([]*StoredHostKey, 0, len(keys))
+	for _, key := range keys {
+		pubKey, err := base64.StdEncoding.DecodeString(key.PublicKey)
+		if err != nil {
+			continue // Skip keys with invalid encoding
+		}
+
+		result = append(result, &StoredHostKey{
+			Hostname:    key.Hostname,
+			Port:        key.Port,
+			KeyType:     key.KeyType,
+			PublicKey:   pubKey,
+			Fingerprint: key.Fingerprint,
+			Trusted:     key.Trusted,
+			AddedBy:     key.AddedBy,
+		})
+	}
+
+	return result, nil
+}
+
 // StoreHostKey stores a new host key (untrusted by default).
 func (s *DBHostKeyStore) StoreHostKey(ctx context.Context, key *StoredHostKey) error {
 	dbKey := &storage.SSHHostKey{
