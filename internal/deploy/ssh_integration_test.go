@@ -26,11 +26,12 @@ func TestSSHRunner_Integration(t *testing.T) {
 	port, _ := container.MappedPort(ctx, "2222")
 
 	config := &SSHConfig{
-		Host:     host,
-		Port:     port.Int(),
-		User:     "testuser",
-		Password: "testpass",
-		Timeout:  30 * time.Second,
+		Host:                  host,
+		Port:                  port.Int(),
+		User:                  "testuser",
+		Password:              "testpass",
+		Timeout:               30 * time.Second,
+		InsecureIgnoreHostKey: true, // Skip host key verification for testing
 	}
 
 	runner, err := NewSSHRunner(config)
@@ -136,11 +137,12 @@ func TestSSHPool_Integration(t *testing.T) {
 	defer pool.Close()
 
 	config := &SSHConfig{
-		Host:     host,
-		Port:     port.Int(),
-		User:     "testuser",
-		Password: "testpass",
-		Timeout:  30 * time.Second,
+		Host:                  host,
+		Port:                  port.Int(),
+		User:                  "testuser",
+		Password:              "testpass",
+		Timeout:               30 * time.Second,
+		InsecureIgnoreHostKey: true, // Skip host key verification for testing
 	}
 
 	t.Run("get and run", func(t *testing.T) {
