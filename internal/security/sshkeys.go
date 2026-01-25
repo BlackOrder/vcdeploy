@@ -62,6 +62,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -460,7 +461,9 @@ func (m *SSHKeyManager) GetHostKeyCallback(ctx context.Context) ssh.HostKeyCallb
 		}
 
 		port := 22
-		fmt.Sscanf(portStr, "%d", &port)
+		if p, err := strconv.Atoi(portStr); err == nil && p > 0 && p <= 65535 {
+			port = p
+		}
 
 		return m.VerifyHostKey(ctx, host, port, key)
 	}
@@ -476,7 +479,9 @@ func (m *SSHKeyManager) TrustOnFirstUse(ctx context.Context) ssh.HostKeyCallback
 		}
 
 		port := 22
-		fmt.Sscanf(portStr, "%d", &port)
+		if p, err := strconv.Atoi(portStr); err == nil && p > 0 && p <= 65535 {
+			port = p
+		}
 
 		err = m.VerifyHostKey(ctx, host, port, key)
 		if err == nil {
