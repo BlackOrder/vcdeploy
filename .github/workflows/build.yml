@@ -48,6 +48,8 @@ jobs:
         with:
           file: ./coverage.out
           flags: unittests
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   build:
     name: Build
@@ -204,7 +206,7 @@ jobs:
           OUTPUT: CHANGELOG.md
           
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           body_path: CHANGELOG.md
           files: |
