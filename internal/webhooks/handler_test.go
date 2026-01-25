@@ -227,6 +227,263 @@ func TestHandleGitHubPushInvalidSignature(t *testing.T) {
 	}
 }
 
+func TestHandleGitHubPushInvalidPayload(t *testing.T) {
+	secrets := &MockSecretStore{
+		Secrets: map[string]string{
+			"test-project": "test-secret",
+		},
+	}
+	processor := &MockEventProcessor{}
+	handler := newTestHandler(secrets, processor)
+
+	payload := []byte(`{invalid json`)
+	signature := createGitHubSignature("test-secret", payload)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/github/test-project", bytes.NewReader(payload))
+	req.Header.Set("X-GitHub-Event", "push")
+	req.Header.Set("X-Hub-Signature-256", signature)
+
+	rr := httptest.NewRecorder()
+	handler.HandleGitHub(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("HandleGitHub() with invalid JSON status = %d, want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleGitHubPushProcessorError(t *testing.T) {
+	secrets := &MockSecretStore{
+		Secrets: map[string]string{
+			"test-project": "test-secret",
+		},
+	}
+	processor := &MockEventProcessor{
+		PushErr: http.ErrHandlerTimeout,
+	}
+	handler := newTestHandler(secrets, processor)
+
+	payload := map[string]interface{}{
+		"ref":   "refs/heads/main",
+		"after": "abc123",
+		"repository": map[string]interface{}{
+			"full_name": "test/repo",
+			"clone_url": "https://github.com/test/repo.git",
+		},
+		"head_commit": map[string]interface{}{
+			"id":      "abc123",
+			"message": "Test",
+			"author":  map[string]interface{}{"name": "Test", "email": "test@test.com"},
+		},
+	}
+
+	payloadBytes, _ := json.Marshal(payload)
+	signature := createGitHubSignature("test-secret", payloadBytes)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/github/test-project", bytes.NewReader(payloadBytes))
+	req.Header.Set("X-GitHub-Event", "push")
+	req.Header.Set("X-Hub-Signature-256", signature)
+
+	rr := httptest.NewRecorder()
+	handler.HandleGitHub(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("HandleGitHub() push processor error status = %d, want %d", rr.Code, http.StatusInternalServerError)
+	}
+}
+
+func TestHandleGitHubPushTagRef(t *testing.T) {
+	secrets := &MockSecretStore{
+		Secrets: map[string]string{
+			"test-project": "test-secret",
+		},
+	}
+	processor := &MockEventProcessor{}
+	handler := newTestHandler(secrets, processor)
+
+	payload := map[string]interface{}{
+		"ref":   "refs/tags/v1.0.0",  // Tag push should be ignored
+		"after": "abc123",
+		"repository": map[string]interface{}{
+			"full_name": "test/repo",
+			"clone_url": "https://github.com/test/repo.git",
+		},
+	}
+
+	payloadBytes, _ := json.Marshal(payload)
+	signature := createGitHubSignature("test-secret", payloadBytes)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/github/test-project", bytes.NewReader(payloadBytes))
+	req.Header.Set("X-GitHub-Event", "push")
+	req.Header.Set("X-Hub-Signature-256", signature)
+
+	rr := httptest.NewRecorder()
+	handler.HandleGitHub(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("HandleGitHub() tag ref status = %d, want %d", rr.Code, http.StatusOK)
+	}
+
+	// Should not process as push event
+	if len(processor.PushEvents) != 0 {
+		t.Error("HandleGitHub() should not process tag ref as push event")
+	}
+}
+
+func TestHandleGitHubPRInvalidPayload(t *testing.T) {
+	secrets := &MockSecretStore{
+		Secrets: map[string]string{
+			"test-project": "test-secret",
+		},
+	}
+	processor := &MockEventProcessor{}
+	handler := newTestHandler(secrets, processor)
+
+	payload := []byte(`{invalid json`)
+	signature := createGitHubSignature("test-secret", payload)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/github/test-project", bytes.NewReader(payload))
+	req.Header.Set("X-GitHub-Event", "pull_request")
+	req.Header.Set("X-Hub-Signature-256", signature)
+
+	rr := httptest.NewRecorder()
+	handler.HandleGitHub(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("HandleGitHub() PR invalid JSON status = %d, want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleGitHubPRProcessorError(t *testing.T) {
+	secrets := &MockSecretStore{
+		Secrets: map[string]string{
+			"test-project": "test-secret",
+		},
+	}
+	processor := &MockEventProcessor{
+		PRErr: http.ErrHandlerTimeout,
+	}
+	handler := newTestHandler(secrets, processor)
+
+	payload := map[string]interface{}{
+		"action": "opened",
+		"number": 123,
+		"pull_request": map[string]interface{}{
+			"title": "Test PR",
+			"user":  map[string]interface{}{"login": "user"},
+			"head":  map[string]interface{}{"ref": "feature"},
+			"base":  map[string]interface{}{"ref": "main"},
+		},
+		"repository": map[string]interface{}{"full_name": "test/repo"},
+	}
+
+	payloadBytes, _ := json.Marshal(payload)
+	signature := createGitHubSignature("test-secret", payloadBytes)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/github/test-project", bytes.NewReader(payloadBytes))
+	req.Header.Set("X-GitHub-Event", "pull_request")
+	req.Header.Set("X-Hub-Signature-256", signature)
+
+	rr := httptest.NewRecorder()
+	handler.HandleGitHub(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("HandleGitHub() PR processor error status = %d, want %d", rr.Code, http.StatusInternalServerError)
+	}
+}
+
+func TestHandleGitHubTagInvalidPayload(t *testing.T) {
+	secrets := &MockSecretStore{
+		Secrets: map[string]string{
+			"test-project": "test-secret",
+		},
+	}
+	processor := &MockEventProcessor{}
+	handler := newTestHandler(secrets, processor)
+
+	payload := []byte(`{invalid json`)
+	signature := createGitHubSignature("test-secret", payload)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/github/test-project", bytes.NewReader(payload))
+	req.Header.Set("X-GitHub-Event", "create")
+	req.Header.Set("X-Hub-Signature-256", signature)
+
+	rr := httptest.NewRecorder()
+	handler.HandleGitHub(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("HandleGitHub() tag invalid JSON status = %d, want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleGitHubTagProcessorError(t *testing.T) {
+	secrets := &MockSecretStore{
+		Secrets: map[string]string{
+			"test-project": "test-secret",
+		},
+	}
+	processor := &MockEventProcessor{
+		TagErr: http.ErrHandlerTimeout,
+	}
+	handler := newTestHandler(secrets, processor)
+
+	payload := map[string]interface{}{
+		"ref_type": "tag",
+		"ref":      "v1.0.0",
+		"sender":   map[string]interface{}{"login": "user"},
+		"repository": map[string]interface{}{"full_name": "test/repo"},
+	}
+
+	payloadBytes, _ := json.Marshal(payload)
+	signature := createGitHubSignature("test-secret", payloadBytes)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/github/test-project", bytes.NewReader(payloadBytes))
+	req.Header.Set("X-GitHub-Event", "create")
+	req.Header.Set("X-Hub-Signature-256", signature)
+
+	rr := httptest.NewRecorder()
+	handler.HandleGitHub(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("HandleGitHub() tag processor error status = %d, want %d", rr.Code, http.StatusInternalServerError)
+	}
+}
+
+func TestHandleGitHubTagNotTag(t *testing.T) {
+	secrets := &MockSecretStore{
+		Secrets: map[string]string{
+			"test-project": "test-secret",
+		},
+	}
+	processor := &MockEventProcessor{}
+	handler := newTestHandler(secrets, processor)
+
+	payload := map[string]interface{}{
+		"ref_type": "branch",  // Not a tag
+		"ref":      "feature",
+		"sender":   map[string]interface{}{"login": "user"},
+		"repository": map[string]interface{}{"full_name": "test/repo"},
+	}
+
+	payloadBytes, _ := json.Marshal(payload)
+	signature := createGitHubSignature("test-secret", payloadBytes)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/github/test-project", bytes.NewReader(payloadBytes))
+	req.Header.Set("X-GitHub-Event", "create")
+	req.Header.Set("X-Hub-Signature-256", signature)
+
+	rr := httptest.NewRecorder()
+	handler.HandleGitHub(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("HandleGitHub() branch create status = %d, want %d", rr.Code, http.StatusOK)
+	}
+
+	// Should not process as tag event
+	if len(processor.TagEvents) != 0 {
+		t.Error("HandleGitHub() should not process branch create as tag event")
+	}
+}
+
 func TestHandleGitHubMissingProjectID(t *testing.T) {
 	handler := newTestHandler(&MockSecretStore{}, &MockEventProcessor{})
 
@@ -456,6 +713,71 @@ func TestHandleGitLabInvalidToken(t *testing.T) {
 	}
 }
 
+func TestHandleGitLabPushInvalidPayload(t *testing.T) {
+	secrets := &MockSecretStore{
+		Secrets: map[string]string{
+			"gitlab-project": "gitlab-secret",
+		},
+	}
+	processor := &MockEventProcessor{}
+	handler := newTestHandler(secrets, processor)
+
+	payload := []byte(`{invalid json`)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/gitlab/gitlab-project", bytes.NewReader(payload))
+	req.Header.Set("X-Gitlab-Event", "Push Hook")
+	req.Header.Set("X-Gitlab-Token", "gitlab-secret")
+
+	rr := httptest.NewRecorder()
+	handler.HandleGitLab(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("HandleGitLab() push invalid JSON status = %d, want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleGitLabPushProcessorError(t *testing.T) {
+	secrets := &MockSecretStore{
+		Secrets: map[string]string{
+			"gitlab-project": "gitlab-secret",
+		},
+	}
+	processor := &MockEventProcessor{
+		PushErr: http.ErrHandlerTimeout,
+	}
+	handler := newTestHandler(secrets, processor)
+
+	payload := map[string]interface{}{
+		"ref":    "refs/heads/main",
+		"before": "0000000000000000000000000000000000000000",
+		"after":  "gitlab-commit-123",
+		"project": map[string]interface{}{
+			"path_with_namespace": "test/repo",
+			"git_http_url":        "https://gitlab.com/test/repo.git",
+		},
+		"commits": []map[string]interface{}{
+			{
+				"id":      "gitlab-commit-123",
+				"message": "Test",
+				"author":  map[string]interface{}{"name": "Test", "email": "test@test.com"},
+			},
+		},
+	}
+
+	payloadBytes, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/gitlab/gitlab-project", bytes.NewReader(payloadBytes))
+	req.Header.Set("X-Gitlab-Event", "Push Hook")
+	req.Header.Set("X-Gitlab-Token", "gitlab-secret")
+
+	rr := httptest.NewRecorder()
+	handler.HandleGitLab(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("HandleGitLab() push processor error status = %d, want %d", rr.Code, http.StatusInternalServerError)
+	}
+}
+
 func TestHandleBitbucketPush(t *testing.T) {
 	secrets := &MockSecretStore{
 		Secrets: map[string]string{
@@ -508,6 +830,743 @@ func TestHandleBitbucketPush(t *testing.T) {
 
 	if rr.Code != http.StatusOK {
 		t.Errorf("HandleBitbucket() push status = %d, want %d, body: %s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+}
+
+func TestHandleBitbucketPushInvalidPayload(t *testing.T) {
+	secrets := &MockSecretStore{
+		Secrets: map[string]string{
+			"bb-project": "",
+		},
+	}
+	processor := &MockEventProcessor{}
+	handler := newTestHandler(secrets, processor)
+
+	payload := []byte(`{invalid json`)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/bitbucket/bb-project", bytes.NewReader(payload))
+	req.Header.Set("X-Event-Key", "repo:push")
+
+	rr := httptest.NewRecorder()
+	handler.HandleBitbucket(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("HandleBitbucket() push invalid JSON status = %d, want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleBitbucketPushProcessorError(t *testing.T) {
+	secrets := &MockSecretStore{
+		Secrets: map[string]string{
+			"bb-project": "",
+		},
+	}
+	processor := &MockEventProcessor{
+		PushErr: http.ErrHandlerTimeout,
+	}
+	handler := newTestHandler(secrets, processor)
+
+	payload := map[string]interface{}{
+		"push": map[string]interface{}{
+			"changes": []map[string]interface{}{
+				{
+					"new": map[string]interface{}{
+						"type": "branch",
+						"name": "main",
+						"target": map[string]interface{}{
+							"hash":    "bb-commit-123",
+							"message": "Test",
+							"date":    "2024-01-01T12:00:00Z",
+							"author":  map[string]interface{}{"user": map[string]interface{}{"display_name": "Test"}},
+						},
+					},
+				},
+			},
+		},
+		"repository": map[string]interface{}{
+			"full_name": "test/repo",
+			"links": map[string]interface{}{
+				"html": map[string]interface{}{"href": "https://bitbucket.org/test/repo"},
+			},
+		},
+	}
+
+	payloadBytes, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/bitbucket/bb-project", bytes.NewReader(payloadBytes))
+	req.Header.Set("X-Event-Key", "repo:push")
+
+	rr := httptest.NewRecorder()
+	handler.HandleBitbucket(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("HandleBitbucket() push processor error status = %d, want %d", rr.Code, http.StatusInternalServerError)
+	}
+}
+
+func TestHandleBitbucketPushTagChange(t *testing.T) {
+	secrets := &MockSecretStore{
+		Secrets: map[string]string{
+			"bb-project": "",
+		},
+	}
+	processor := &MockEventProcessor{}
+	handler := newTestHandler(secrets, processor)
+
+	payload := map[string]interface{}{
+		"push": map[string]interface{}{
+			"changes": []map[string]interface{}{
+				{
+					"new": map[string]interface{}{
+						"type": "tag",  // Tag change - should be skipped
+						"name": "v1.0.0",
+						"target": map[string]interface{}{
+							"hash":    "bb-commit-123",
+							"message": "Test",
+							"date":    "2024-01-01T12:00:00Z",
+						},
+					},
+				},
+			},
+		},
+		"repository": map[string]interface{}{
+			"full_name": "test/repo",
+			"links": map[string]interface{}{
+				"html": map[string]interface{}{"href": "https://bitbucket.org/test/repo"},
+			},
+		},
+	}
+
+	payloadBytes, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/bitbucket/bb-project", bytes.NewReader(payloadBytes))
+	req.Header.Set("X-Event-Key", "repo:push")
+
+	rr := httptest.NewRecorder()
+	handler.HandleBitbucket(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("HandleBitbucket() tag change status = %d, want %d", rr.Code, http.StatusOK)
+	}
+
+	// Should not process tag changes as push events
+	if len(processor.PushEvents) != 0 {
+		t.Error("HandleBitbucket() should not process tag change as push event")
+	}
+}
+
+func TestHandleBitbucketMissingProjectID(t *testing.T) {
+	handler := newTestHandler(&MockSecretStore{}, &MockEventProcessor{})
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/bitbucket/", nil)
+	req.Header.Set("X-Event-Key", "repo:push")
+
+	rr := httptest.NewRecorder()
+	handler.HandleBitbucket(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("HandleBitbucket() without project ID status = %d, want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleBitbucketMissingEventKey(t *testing.T) {
+	secrets := &MockSecretStore{
+		Secrets: map[string]string{
+			"bb-project": "",
+		},
+	}
+	handler := newTestHandler(secrets, &MockEventProcessor{})
+
+	payload := []byte(`{"test": "data"}`)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/bitbucket/bb-project", bytes.NewReader(payload))
+	// No X-Event-Key header
+
+	rr := httptest.NewRecorder()
+	handler.HandleBitbucket(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("HandleBitbucket() without event key status = %d, want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleBitbucketUnknownEventKey(t *testing.T) {
+	secrets := &MockSecretStore{
+		Secrets: map[string]string{
+			"bb-project": "",
+		},
+	}
+	handler := newTestHandler(secrets, &MockEventProcessor{})
+
+	payload := []byte(`{"test": "data"}`)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/bitbucket/bb-project", bytes.NewReader(payload))
+	req.Header.Set("X-Event-Key", "unknown:event")
+
+	rr := httptest.NewRecorder()
+	handler.HandleBitbucket(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("HandleBitbucket() unknown event status = %d, want %d (should ignore)", rr.Code, http.StatusOK)
+	}
+}
+
+func TestHandleGitLabMergeRequest(t *testing.T) {
+	secrets := &MockSecretStore{
+		Secrets: map[string]string{
+			"gitlab-project": "gitlab-secret",
+		},
+	}
+	processor := &MockEventProcessor{}
+	handler := newTestHandler(secrets, processor)
+
+	payload := map[string]interface{}{
+		"object_attributes": map[string]interface{}{
+			"action":        "open",
+			"iid":           42,
+			"title":         "Test MR",
+			"source_branch": "feature-branch",
+			"target_branch": "main",
+		},
+		"user": map[string]interface{}{
+			"username": "testuser",
+		},
+		"project": map[string]interface{}{
+			"path_with_namespace": "test/repo",
+		},
+	}
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("failed to marshal payload: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/gitlab/gitlab-project", bytes.NewReader(payloadBytes))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Gitlab-Event", "Merge Request Hook")
+	req.Header.Set("X-Gitlab-Token", "gitlab-secret")
+
+	rr := httptest.NewRecorder()
+	handler.HandleGitLab(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("HandleGitLab() MR status = %d, want %d, body: %s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	if len(processor.PREvents) != 1 {
+		t.Fatalf("Expected 1 PR event, got %d", len(processor.PREvents))
+	}
+
+	event := processor.PREvents[0]
+	if event.Provider != "gitlab" {
+		t.Errorf("PREvent.Provider = %v, want gitlab", event.Provider)
+	}
+	if event.Number != 42 {
+		t.Errorf("PREvent.Number = %d, want 42", event.Number)
+	}
+	if event.SourceBranch != "feature-branch" {
+		t.Errorf("PREvent.SourceBranch = %v, want feature-branch", event.SourceBranch)
+	}
+	if event.TargetBranch != "main" {
+		t.Errorf("PREvent.TargetBranch = %v, want main", event.TargetBranch)
+	}
+}
+
+func TestHandleGitLabMergeRequestInvalidPayload(t *testing.T) {
+	secrets := &MockSecretStore{
+		Secrets: map[string]string{
+			"gitlab-project": "gitlab-secret",
+		},
+	}
+	processor := &MockEventProcessor{}
+	handler := newTestHandler(secrets, processor)
+
+	// Invalid JSON
+	req := httptest.NewRequest(http.MethodPost, "/webhook/gitlab/gitlab-project", bytes.NewReader([]byte(`{invalid`)))
+	req.Header.Set("X-Gitlab-Event", "Merge Request Hook")
+	req.Header.Set("X-Gitlab-Token", "gitlab-secret")
+
+	rr := httptest.NewRecorder()
+	handler.HandleGitLab(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("HandleGitLab() invalid MR payload status = %d, want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleGitLabMergeRequestProcessorError(t *testing.T) {
+	secrets := &MockSecretStore{
+		Secrets: map[string]string{
+			"gitlab-project": "gitlab-secret",
+		},
+	}
+	processor := &MockEventProcessor{
+		PRErr: http.ErrHandlerTimeout, // Simulate processor error
+	}
+	handler := newTestHandler(secrets, processor)
+
+	payload := map[string]interface{}{
+		"object_attributes": map[string]interface{}{
+			"action":        "open",
+			"iid":           42,
+			"title":         "Test MR",
+			"source_branch": "feature-branch",
+			"target_branch": "main",
+		},
+		"user": map[string]interface{}{
+			"username": "testuser",
+		},
+		"project": map[string]interface{}{
+			"path_with_namespace": "test/repo",
+		},
+	}
+
+	payloadBytes, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/gitlab/gitlab-project", bytes.NewReader(payloadBytes))
+	req.Header.Set("X-Gitlab-Event", "Merge Request Hook")
+	req.Header.Set("X-Gitlab-Token", "gitlab-secret")
+
+	rr := httptest.NewRecorder()
+	handler.HandleGitLab(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("HandleGitLab() MR processor error status = %d, want %d", rr.Code, http.StatusInternalServerError)
+	}
+}
+
+func TestHandleGitLabTagPush(t *testing.T) {
+	secrets := &MockSecretStore{
+		Secrets: map[string]string{
+			"gitlab-project": "gitlab-secret",
+		},
+	}
+	processor := &MockEventProcessor{}
+	handler := newTestHandler(secrets, processor)
+
+	payload := map[string]interface{}{
+		"ref":       "refs/tags/v1.0.0",
+		"before":    "0000000000000000000000000000000000000000",
+		"after":     "abc123def456",
+		"user_name": "testuser",
+		"project": map[string]interface{}{
+			"path_with_namespace": "test/repo",
+		},
+	}
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("failed to marshal payload: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/gitlab/gitlab-project", bytes.NewReader(payloadBytes))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Gitlab-Event", "Tag Push Hook")
+	req.Header.Set("X-Gitlab-Token", "gitlab-secret")
+
+	rr := httptest.NewRecorder()
+	handler.HandleGitLab(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("HandleGitLab() tag push status = %d, want %d, body: %s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	if len(processor.TagEvents) != 1 {
+		t.Fatalf("Expected 1 tag event, got %d", len(processor.TagEvents))
+	}
+
+	event := processor.TagEvents[0]
+	if event.Provider != "gitlab" {
+		t.Errorf("TagEvent.Provider = %v, want gitlab", event.Provider)
+	}
+	if event.Tag != "v1.0.0" {
+		t.Errorf("TagEvent.Tag = %v, want v1.0.0", event.Tag)
+	}
+	if event.Deleted {
+		t.Error("TagEvent.Deleted should be false for create")
+	}
+}
+
+func TestHandleGitLabTagDelete(t *testing.T) {
+	secrets := &MockSecretStore{
+		Secrets: map[string]string{
+			"gitlab-project": "gitlab-secret",
+		},
+	}
+	processor := &MockEventProcessor{}
+	handler := newTestHandler(secrets, processor)
+
+	payload := map[string]interface{}{
+		"ref":       "refs/tags/v1.0.0",
+		"before":    "abc123def456",
+		"after":     "0000000000000000000000000000000000000000", // Zero hash = deleted
+		"user_name": "testuser",
+		"project": map[string]interface{}{
+			"path_with_namespace": "test/repo",
+		},
+	}
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("failed to marshal payload: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/gitlab/gitlab-project", bytes.NewReader(payloadBytes))
+	req.Header.Set("X-Gitlab-Event", "Tag Push Hook")
+	req.Header.Set("X-Gitlab-Token", "gitlab-secret")
+
+	rr := httptest.NewRecorder()
+	handler.HandleGitLab(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("HandleGitLab() tag delete status = %d, want %d", rr.Code, http.StatusOK)
+	}
+
+	if len(processor.TagEvents) != 1 {
+		t.Fatalf("Expected 1 tag event, got %d", len(processor.TagEvents))
+	}
+
+	event := processor.TagEvents[0]
+	if !event.Deleted {
+		t.Error("TagEvent.Deleted should be true for tag deletion")
+	}
+}
+
+func TestHandleGitLabTagInvalidPayload(t *testing.T) {
+	secrets := &MockSecretStore{
+		Secrets: map[string]string{
+			"gitlab-project": "gitlab-secret",
+		},
+	}
+	processor := &MockEventProcessor{}
+	handler := newTestHandler(secrets, processor)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/gitlab/gitlab-project", bytes.NewReader([]byte(`{invalid`)))
+	req.Header.Set("X-Gitlab-Event", "Tag Push Hook")
+	req.Header.Set("X-Gitlab-Token", "gitlab-secret")
+
+	rr := httptest.NewRecorder()
+	handler.HandleGitLab(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("HandleGitLab() invalid tag payload status = %d, want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleGitLabTagProcessorError(t *testing.T) {
+	secrets := &MockSecretStore{
+		Secrets: map[string]string{
+			"gitlab-project": "gitlab-secret",
+		},
+	}
+	processor := &MockEventProcessor{
+		TagErr: http.ErrHandlerTimeout,
+	}
+	handler := newTestHandler(secrets, processor)
+
+	payload := map[string]interface{}{
+		"ref":       "refs/tags/v1.0.0",
+		"before":    "0000000000000000000000000000000000000000",
+		"after":     "abc123def456",
+		"user_name": "testuser",
+		"project": map[string]interface{}{
+			"path_with_namespace": "test/repo",
+		},
+	}
+
+	payloadBytes, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/gitlab/gitlab-project", bytes.NewReader(payloadBytes))
+	req.Header.Set("X-Gitlab-Event", "Tag Push Hook")
+	req.Header.Set("X-Gitlab-Token", "gitlab-secret")
+
+	rr := httptest.NewRecorder()
+	handler.HandleGitLab(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("HandleGitLab() tag processor error status = %d, want %d", rr.Code, http.StatusInternalServerError)
+	}
+}
+
+func TestHandleBitbucketPullRequestCreated(t *testing.T) {
+	secrets := &MockSecretStore{
+		Secrets: map[string]string{
+			"bb-project": "",
+		},
+	}
+	processor := &MockEventProcessor{}
+	handler := newTestHandler(secrets, processor)
+
+	payload := map[string]interface{}{
+		"pullrequest": map[string]interface{}{
+			"id":    123,
+			"title": "Test PR",
+			"source": map[string]interface{}{
+				"branch": map[string]interface{}{
+					"name": "feature-branch",
+				},
+			},
+			"destination": map[string]interface{}{
+				"branch": map[string]interface{}{
+					"name": "main",
+				},
+			},
+			"author": map[string]interface{}{
+				"display_name": "Test User",
+			},
+		},
+		"repository": map[string]interface{}{
+			"full_name": "test/repo",
+		},
+	}
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("failed to marshal payload: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/bitbucket/bb-project", bytes.NewReader(payloadBytes))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Event-Key", "pullrequest:created")
+
+	rr := httptest.NewRecorder()
+	handler.HandleBitbucket(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("HandleBitbucket() PR status = %d, want %d, body: %s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	if len(processor.PREvents) != 1 {
+		t.Fatalf("Expected 1 PR event, got %d", len(processor.PREvents))
+	}
+
+	event := processor.PREvents[0]
+	if event.Provider != "bitbucket" {
+		t.Errorf("PREvent.Provider = %v, want bitbucket", event.Provider)
+	}
+	if event.Action != "opened" {
+		t.Errorf("PREvent.Action = %v, want opened", event.Action)
+	}
+	if event.Number != 123 {
+		t.Errorf("PREvent.Number = %d, want 123", event.Number)
+	}
+}
+
+func TestHandleBitbucketPullRequestUpdated(t *testing.T) {
+	secrets := &MockSecretStore{
+		Secrets: map[string]string{
+			"bb-project": "",
+		},
+	}
+	processor := &MockEventProcessor{}
+	handler := newTestHandler(secrets, processor)
+
+	payload := map[string]interface{}{
+		"pullrequest": map[string]interface{}{
+			"id":    123,
+			"title": "Test PR",
+			"source": map[string]interface{}{
+				"branch": map[string]interface{}{
+					"name": "feature-branch",
+				},
+			},
+			"destination": map[string]interface{}{
+				"branch": map[string]interface{}{
+					"name": "main",
+				},
+			},
+			"author": map[string]interface{}{
+				"display_name": "Test User",
+			},
+		},
+		"repository": map[string]interface{}{
+			"full_name": "test/repo",
+		},
+	}
+
+	payloadBytes, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/bitbucket/bb-project", bytes.NewReader(payloadBytes))
+	req.Header.Set("X-Event-Key", "pullrequest:updated")
+
+	rr := httptest.NewRecorder()
+	handler.HandleBitbucket(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("HandleBitbucket() PR updated status = %d, want %d", rr.Code, http.StatusOK)
+	}
+
+	if len(processor.PREvents) != 1 {
+		t.Fatalf("Expected 1 PR event, got %d", len(processor.PREvents))
+	}
+
+	if processor.PREvents[0].Action != "synchronize" {
+		t.Errorf("PREvent.Action = %v, want synchronize", processor.PREvents[0].Action)
+	}
+}
+
+func TestHandleBitbucketPullRequestFulfilled(t *testing.T) {
+	secrets := &MockSecretStore{
+		Secrets: map[string]string{
+			"bb-project": "",
+		},
+	}
+	processor := &MockEventProcessor{}
+	handler := newTestHandler(secrets, processor)
+
+	payload := map[string]interface{}{
+		"pullrequest": map[string]interface{}{
+			"id":    123,
+			"title": "Test PR",
+			"source": map[string]interface{}{
+				"branch": map[string]interface{}{
+					"name": "feature-branch",
+				},
+			},
+			"destination": map[string]interface{}{
+				"branch": map[string]interface{}{
+					"name": "main",
+				},
+			},
+			"author": map[string]interface{}{
+				"display_name": "Test User",
+			},
+		},
+		"repository": map[string]interface{}{
+			"full_name": "test/repo",
+		},
+	}
+
+	payloadBytes, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/bitbucket/bb-project", bytes.NewReader(payloadBytes))
+	req.Header.Set("X-Event-Key", "pullrequest:fulfilled")
+
+	rr := httptest.NewRecorder()
+	handler.HandleBitbucket(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("HandleBitbucket() PR fulfilled status = %d, want %d", rr.Code, http.StatusOK)
+	}
+
+	if processor.PREvents[0].Action != "merged" {
+		t.Errorf("PREvent.Action = %v, want merged", processor.PREvents[0].Action)
+	}
+}
+
+func TestHandleBitbucketPullRequestRejected(t *testing.T) {
+	secrets := &MockSecretStore{
+		Secrets: map[string]string{
+			"bb-project": "",
+		},
+	}
+	processor := &MockEventProcessor{}
+	handler := newTestHandler(secrets, processor)
+
+	payload := map[string]interface{}{
+		"pullrequest": map[string]interface{}{
+			"id":    123,
+			"title": "Test PR",
+			"source": map[string]interface{}{
+				"branch": map[string]interface{}{
+					"name": "feature-branch",
+				},
+			},
+			"destination": map[string]interface{}{
+				"branch": map[string]interface{}{
+					"name": "main",
+				},
+			},
+			"author": map[string]interface{}{
+				"display_name": "Test User",
+			},
+		},
+		"repository": map[string]interface{}{
+			"full_name": "test/repo",
+		},
+	}
+
+	payloadBytes, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/bitbucket/bb-project", bytes.NewReader(payloadBytes))
+	req.Header.Set("X-Event-Key", "pullrequest:rejected")
+
+	rr := httptest.NewRecorder()
+	handler.HandleBitbucket(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("HandleBitbucket() PR rejected status = %d, want %d", rr.Code, http.StatusOK)
+	}
+
+	if processor.PREvents[0].Action != "closed" {
+		t.Errorf("PREvent.Action = %v, want closed", processor.PREvents[0].Action)
+	}
+}
+
+func TestHandleBitbucketPRInvalidPayload(t *testing.T) {
+	secrets := &MockSecretStore{
+		Secrets: map[string]string{
+			"bb-project": "",
+		},
+	}
+	processor := &MockEventProcessor{}
+	handler := newTestHandler(secrets, processor)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/bitbucket/bb-project", bytes.NewReader([]byte(`{invalid`)))
+	req.Header.Set("X-Event-Key", "pullrequest:created")
+
+	rr := httptest.NewRecorder()
+	handler.HandleBitbucket(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("HandleBitbucket() invalid PR payload status = %d, want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleBitbucketPRProcessorError(t *testing.T) {
+	secrets := &MockSecretStore{
+		Secrets: map[string]string{
+			"bb-project": "",
+		},
+	}
+	processor := &MockEventProcessor{
+		PRErr: http.ErrHandlerTimeout,
+	}
+	handler := newTestHandler(secrets, processor)
+
+	payload := map[string]interface{}{
+		"pullrequest": map[string]interface{}{
+			"id":    123,
+			"title": "Test PR",
+			"source": map[string]interface{}{
+				"branch": map[string]interface{}{
+					"name": "feature-branch",
+				},
+			},
+			"destination": map[string]interface{}{
+				"branch": map[string]interface{}{
+					"name": "main",
+				},
+			},
+			"author": map[string]interface{}{
+				"display_name": "Test User",
+			},
+		},
+		"repository": map[string]interface{}{
+			"full_name": "test/repo",
+		},
+	}
+
+	payloadBytes, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/bitbucket/bb-project", bytes.NewReader(payloadBytes))
+	req.Header.Set("X-Event-Key", "pullrequest:created")
+
+	rr := httptest.NewRecorder()
+	handler.HandleBitbucket(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("HandleBitbucket() PR processor error status = %d, want %d", rr.Code, http.StatusInternalServerError)
 	}
 }
 
