@@ -2011,3 +2011,121 @@ func TestUpdateProjectTypeByName(t *testing.T) {
 		t.Errorf("UpdateProjectTypeByName() description = %v, want %v", found.Description, "Updated")
 	}
 }
+
+// --- User Management Tests ---
+
+func TestListUsers(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create some users
+	for i := 0; i < 3; i++ {
+		user := &User{
+			Username:     "user" + string(rune('0'+i)),
+			PasswordHash: "hash",
+			Email:        "user" + string(rune('0'+i)) + "@example.com",
+			Role:         "viewer",
+		}
+		_ = db.CreateUser(ctx, user)
+	}
+
+	// List users
+	users, err := db.ListUsers(ctx)
+	if err != nil {
+		t.Fatalf("ListUsers() error = %v", err)
+	}
+
+	if len(users) != 3 {
+		t.Errorf("ListUsers() count = %d, want 3", len(users))
+	}
+}
+
+func TestGetUserByID(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a user
+	user := &User{
+		Username:     "getbyid",
+		PasswordHash: "hash",
+		Email:        "getbyid@example.com",
+		Role:         "admin",
+	}
+	_ = db.CreateUser(ctx, user)
+
+	// Get by ID
+	found, err := db.GetUserByID(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("GetUserByID() error = %v", err)
+	}
+
+	if found == nil {
+		t.Fatal("GetUserByID() returned nil")
+	}
+
+	if found.Username != "getbyid" {
+		t.Errorf("GetUserByID().Username = %v, want getbyid", found.Username)
+	}
+}
+
+func TestUpdateUserByID(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a user
+	user := &User{
+		Username:     "updatebyid",
+		PasswordHash: "hash",
+		Email:        "update@example.com",
+		Role:         "viewer",
+	}
+	_ = db.CreateUser(ctx, user)
+
+	// Update user
+	user.Email = "newemail@example.com"
+	user.Role = "admin"
+	err := db.UpdateUserByID(ctx, user)
+	if err != nil {
+		t.Fatalf("UpdateUserByID() error = %v", err)
+	}
+
+	// Verify update
+	found, _ := db.GetUserByID(ctx, user.ID)
+	if found.Email != "newemail@example.com" {
+		t.Errorf("UpdateUserByID() email = %v, want newemail@example.com", found.Email)
+	}
+}
+
+func TestDeleteUser(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a user
+	user := &User{
+		Username:     "deleteuser",
+		PasswordHash: "hash",
+		Email:        "delete@example.com",
+		Role:         "viewer",
+	}
+	_ = db.CreateUser(ctx, user)
+
+	// Delete user
+	err := db.DeleteUser(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("DeleteUser() error = %v", err)
+	}
+
+	// Verify deleted
+	found, err := db.GetUserByID(ctx, user.ID)
+	if found != nil {
+		t.Error("DeleteUser() user still found after deletion")
+	}
+}
