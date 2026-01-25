@@ -301,7 +301,7 @@ func TestHandleGitHubPushTagRef(t *testing.T) {
 	handler := newTestHandler(secrets, processor)
 
 	payload := map[string]interface{}{
-		"ref":   "refs/tags/v1.0.0",  // Tag push should be ignored
+		"ref":   "refs/tags/v1.0.0", // Tag push should be ignored
 		"after": "abc123",
 		"repository": map[string]interface{}{
 			"full_name": "test/repo",
@@ -427,9 +427,9 @@ func TestHandleGitHubTagProcessorError(t *testing.T) {
 	handler := newTestHandler(secrets, processor)
 
 	payload := map[string]interface{}{
-		"ref_type": "tag",
-		"ref":      "v1.0.0",
-		"sender":   map[string]interface{}{"login": "user"},
+		"ref_type":   "tag",
+		"ref":        "v1.0.0",
+		"sender":     map[string]interface{}{"login": "user"},
 		"repository": map[string]interface{}{"full_name": "test/repo"},
 	}
 
@@ -458,9 +458,9 @@ func TestHandleGitHubTagNotTag(t *testing.T) {
 	handler := newTestHandler(secrets, processor)
 
 	payload := map[string]interface{}{
-		"ref_type": "branch",  // Not a tag
-		"ref":      "feature",
-		"sender":   map[string]interface{}{"login": "user"},
+		"ref_type":   "branch", // Not a tag
+		"ref":        "feature",
+		"sender":     map[string]interface{}{"login": "user"},
 		"repository": map[string]interface{}{"full_name": "test/repo"},
 	}
 
@@ -918,7 +918,7 @@ func TestHandleBitbucketPushTagChange(t *testing.T) {
 			"changes": []map[string]interface{}{
 				{
 					"new": map[string]interface{}{
-						"type": "tag",  // Tag change - should be skipped
+						"type": "tag", // Tag change - should be skipped
 						"name": "v1.0.0",
 						"target": map[string]interface{}{
 							"hash":    "bb-commit-123",
