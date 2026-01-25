@@ -2,7 +2,7 @@
 package config
 
 import (
-	"log"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -85,12 +85,13 @@ func GetSystemConfig() (*SystemConfig, error) {
 	return systemConfig, systemConfigErr
 }
 
-// MustGetSystemConfig returns the system config or exits on error.
-// This should only be used during application startup.
+// MustGetSystemConfig returns the system config or panics on error.
+// This should only be used during application startup where recovery is not possible.
+// Prefer GetSystemConfig() with proper error handling in most cases.
 func MustGetSystemConfig() *SystemConfig {
 	cfg, err := GetSystemConfig()
 	if err != nil {
-		log.Fatalf("failed to load system config: %v", err)
+		panic(fmt.Sprintf("failed to load system config: %v", err))
 	}
 	return cfg
 }
