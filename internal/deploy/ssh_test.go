@@ -171,7 +171,10 @@ func TestSSHRunner_buildCommand(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := runner.buildCommand(tt.cmd, tt.opts)
+			got, err := runner.buildCommand(tt.cmd, tt.opts)
+			if err != nil {
+				t.Fatalf("buildCommand() error: %v", err)
+			}
 
 			// For multi-env test, just check structure
 			if tt.name == "with multiple env vars" {

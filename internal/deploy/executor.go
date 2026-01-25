@@ -3,10 +3,13 @@ package deploy
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"strings"
 	"time"
+
+	"github.com/BlackOrder/vcdeploy/internal/validation"
 )
 
 // Executor defines the interface for deployment execution.
@@ -396,11 +399,24 @@ func (s *SymlinkStrategy) linkShared(ctx context.Context, releasePath, sharedPat
 }
 
 func (s *SymlinkStrategy) writeEnvFile(ctx context.Context, sharedPath string, content []byte) error {
-	// This would write via the command runner
-	// In practice, the content would be passed securely
+	if len(content) == 0 {
+		return nil
+	}
+
 	envPath := sharedPath + "/.env"
-	// Implementation depends on how we pass content securely
-	_ = envPath
+
+	// Use base64 encoding to safely pass content through shell
+	// This avoids issues with special characters in env file content
+	encoded := base64.StdEncoding.EncodeToString(content)
+
+	// Write the env file using echo with base64 decode
+	// This is safe for any content including newlines and special chars
+	cmd := fmt.Sprintf("echo '%s' | base64 -d > %s && chmod 600 %s", encoded, envPath, envPath)
+	_, err := s.runner.Run(ctx, cmd, RunOptions{})
+	if err != nil {
+		return fmt.Errorf("write env file: %w", err)
+	}
+
 	return nil
 }
 
@@ -467,6 +483,11 @@ func (s *SymlinkStrategy) activateRelease(ctx context.Context, releasePath, curr
 
 func (s *SymlinkStrategy) reloadServices(ctx context.Context, services []ServiceReload, logCh chan<- LogEntry) error {
 	for _, svc := range services {
+		// Validate service name to prevent command injection
+		if !validation.IsValidServiceName(svc.Service) {
+			return fmt.Errorf("invalid service name: %q", svc.Service)
+		}
+
 		logCh <- LogEntry{
 			Timestamp: time.Now(),
 			Level:     LogInfo,
