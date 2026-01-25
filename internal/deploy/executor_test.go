@@ -1126,3 +1126,63 @@ func TestDeployContextCancellation(t *testing.T) {
 		t.Log("Deploy completed before cancellation (acceptable in fast mock)")
 	}
 }
+
+func TestSymlinkStrategyWriteEnvFile(t *testing.T) {
+	t.Run("empty content does nothing", func(t *testing.T) {
+		runner := &MockCommandRunner{}
+		strategy := NewSymlinkStrategy(runner)
+
+		ctx := context.Background()
+		err := strategy.writeEnvFile(ctx, "/var/www/shared", nil)
+		if err != nil {
+			t.Errorf("writeEnvFile() with empty content error = %v", err)
+		}
+
+		if len(runner.Commands) != 0 {
+			t.Errorf("writeEnvFile() with empty content should not run commands, got %d", len(runner.Commands))
+		}
+	})
+
+	t.Run("writes env file with content", func(t *testing.T) {
+		runner := &MockCommandRunner{
+			Results: map[string]*CommandResult{},
+		}
+		runner.RunFunc = func(ctx context.Context, cmd string, opts RunOptions) (*CommandResult, error) {
+			return &CommandResult{ExitCode: 0}, nil
+		}
+		strategy := NewSymlinkStrategy(runner)
+
+		ctx := context.Background()
+		content := []byte("KEY=value\nSECRET=test")
+		err := strategy.writeEnvFile(ctx, "/var/www/shared", content)
+		if err != nil {
+			t.Errorf("writeEnvFile() error = %v", err)
+		}
+
+		if len(runner.Commands) != 1 {
+			t.Errorf("writeEnvFile() should run 1 command, got %d", len(runner.Commands))
+		}
+
+		// Check that command contains base64 encoding
+		if len(runner.Commands) > 0 && !strings.Contains(runner.Commands[0], "base64") {
+			t.Errorf("writeEnvFile() command should use base64 encoding")
+		}
+	})
+
+	t.Run("returns error on command failure", func(t *testing.T) {
+		runner := &MockCommandRunner{
+			Errors: map[string]error{},
+		}
+		runner.RunFunc = func(ctx context.Context, cmd string, opts RunOptions) (*CommandResult, error) {
+			return nil, errors.New("command failed")
+		}
+		strategy := NewSymlinkStrategy(runner)
+
+		ctx := context.Background()
+		content := []byte("KEY=value")
+		err := strategy.writeEnvFile(ctx, "/var/www/shared", content)
+		if err == nil {
+			t.Error("writeEnvFile() should return error on command failure")
+		}
+	})
+}
