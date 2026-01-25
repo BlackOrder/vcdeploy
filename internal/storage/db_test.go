@@ -798,12 +798,17 @@ func TestGetProject(t *testing.T) {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 
-	// Note: GetProject has a bug where it doesn't handle NULL for last_deploy_status
-	// This test documents the current behavior. To fully test GetProject,
-	// the implementation should use sql.NullString for LastDeployStatus
-	// For now, we skip the retrieval test and just verify creation worked
 	if project.ID == 0 {
 		t.Error("CreateProject() did not set project ID")
+	}
+
+	// Verify we can retrieve the project (NULL handling is fixed with sql.NullString)
+	retrieved, err := db.GetProjectByName(context.Background(), "findme")
+	if err != nil {
+		t.Fatalf("GetProjectByName() error = %v", err)
+	}
+	if retrieved.Name != "findme" {
+		t.Errorf("GetProjectByName() Name = %v, want findme", retrieved.Name)
 	}
 }
 
@@ -824,19 +829,25 @@ func TestListProjects(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	// Note: ListProjects has a bug where it doesn't handle NULL for last_deploy_status
-	// This test documents that the method can return an error for rows with NULL status
-	// For a proper fix, the implementation should use sql.NullString
-
-	// Create a single project and verify we can at least create
-	p := &Project{Name: "alpha", CreatedAt: time.Now()}
-	if err := db.CreateProject(p); err != nil {
-		t.Fatalf("CreateProject() error = %v", err)
+	// Create multiple projects
+	p1 := &Project{Name: "alpha", CreatedAt: time.Now()}
+	if err := db.CreateProject(p1); err != nil {
+		t.Fatalf("CreateProject(alpha) error = %v", err)
 	}
 
-	// ListProjects will fail due to NULL handling but we verify creation worked
-	if p.ID == 0 {
-		t.Error("CreateProject() did not set project ID")
+	p2 := &Project{Name: "beta", CreatedAt: time.Now()}
+	if err := db.CreateProject(p2); err != nil {
+		t.Fatalf("CreateProject(beta) error = %v", err)
+	}
+
+	// ListProjects should work correctly (NULL handling fixed with sql.NullString)
+	projects, err := db.ListProjects()
+	if err != nil {
+		t.Fatalf("ListProjects() error = %v", err)
+	}
+
+	if len(projects) != 2 {
+		t.Errorf("ListProjects() returned %d projects, want 2", len(projects))
 	}
 }
 
