@@ -293,3 +293,187 @@ func TestNewSafeOps_Errors(t *testing.T) {
 		}
 	})
 }
+
+func TestSafeOps_SafeOpen(t *testing.T) {
+	tmpDir := t.TempDir()
+	safeOps, err := NewSafeOps(tmpDir)
+	if err != nil {
+		t.Fatalf("NewSafeOps() error = %v", err)
+	}
+
+	// Create a test file
+	testFile := filepath.Join(tmpDir, "testfile.txt")
+	if err := os.WriteFile(testFile, []byte("test content"), 0644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	// Test successful open
+	f, err := safeOps.SafeOpen("testfile.txt")
+	if err != nil {
+		t.Errorf("SafeOpen() error = %v", err)
+	}
+	if f != nil {
+		f.Close()
+	}
+
+	// Test path traversal
+	_, err = safeOps.SafeOpen("../etc/passwd")
+	if err == nil {
+		t.Error("SafeOpen() should fail for path traversal")
+	}
+}
+
+func TestSafeOps_SafeCreate(t *testing.T) {
+	tmpDir := t.TempDir()
+	safeOps, err := NewSafeOps(tmpDir)
+	if err != nil {
+		t.Fatalf("NewSafeOps() error = %v", err)
+	}
+
+	// Test successful create with relative path
+	f, err := safeOps.SafeCreate("newfile.txt")
+	if err != nil {
+		t.Errorf("SafeCreate() error = %v", err)
+	}
+	if f != nil {
+		f.Close()
+	}
+
+	// Test successful create with absolute path inside base
+	absPath := filepath.Join(tmpDir, "newfile2.txt")
+	f, err = safeOps.SafeCreate(absPath)
+	if err != nil {
+		t.Errorf("SafeCreate() with absolute path error = %v", err)
+	}
+	if f != nil {
+		f.Close()
+	}
+
+	// Test path traversal with relative path
+	_, err = safeOps.SafeCreate("../etc/passwd")
+	if err == nil {
+		t.Error("SafeCreate() should fail for path traversal")
+	}
+
+	// Test path traversal with absolute path outside base
+	_, err = safeOps.SafeCreate("/tmp/outside.txt")
+	if err != ErrOperationDenied {
+		t.Errorf("SafeCreate() with absolute path outside base error = %v, want ErrOperationDenied", err)
+	}
+}
+
+func TestSafeOps_SafeStat(t *testing.T) {
+	tmpDir := t.TempDir()
+	safeOps, err := NewSafeOps(tmpDir)
+	if err != nil {
+		t.Fatalf("NewSafeOps() error = %v", err)
+	}
+
+	// Create a test file
+	testFile := filepath.Join(tmpDir, "testfile.txt")
+	if err := os.WriteFile(testFile, []byte("test content"), 0644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	// Test successful stat
+	info, err := safeOps.SafeStat("testfile.txt")
+	if err != nil {
+		t.Errorf("SafeStat() error = %v", err)
+	}
+	if info == nil {
+		t.Error("SafeStat() returned nil info")
+	}
+
+	// Test path traversal
+	_, err = safeOps.SafeStat("../etc/passwd")
+	if err == nil {
+		t.Error("SafeStat() should fail for path traversal")
+	}
+}
+
+func TestSafeOps_SafeLstat(t *testing.T) {
+	tmpDir := t.TempDir()
+	safeOps, err := NewSafeOps(tmpDir)
+	if err != nil {
+		t.Fatalf("NewSafeOps() error = %v", err)
+	}
+
+	// Create a test file
+	testFile := filepath.Join(tmpDir, "testfile.txt")
+	if err := os.WriteFile(testFile, []byte("test content"), 0644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	// Test successful lstat
+	info, err := safeOps.SafeLstat("testfile.txt")
+	if err != nil {
+		t.Errorf("SafeLstat() error = %v", err)
+	}
+	if info == nil {
+		t.Error("SafeLstat() returned nil info")
+	}
+
+	// Test path traversal
+	_, err = safeOps.SafeLstat("../etc/passwd")
+	if err == nil {
+		t.Error("SafeLstat() should fail for path traversal")
+	}
+}
+
+func TestSafeOps_SafeChmod(t *testing.T) {
+	tmpDir := t.TempDir()
+	safeOps, err := NewSafeOps(tmpDir)
+	if err != nil {
+		t.Fatalf("NewSafeOps() error = %v", err)
+	}
+
+	// Create a test file
+	testFile := filepath.Join(tmpDir, "testfile.txt")
+	if err := os.WriteFile(testFile, []byte("test content"), 0644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	// Test successful chmod
+	err = safeOps.SafeChmod("testfile.txt", 0600)
+	if err != nil {
+		t.Errorf("SafeChmod() error = %v", err)
+	}
+
+	// Verify the mode changed
+	info, _ := os.Stat(testFile)
+	if info.Mode().Perm() != 0600 {
+		t.Errorf("SafeChmod() mode = %v, want 0600", info.Mode().Perm())
+	}
+
+	// Test path traversal
+	err = safeOps.SafeChmod("../etc/passwd", 0600)
+	if err == nil {
+		t.Error("SafeChmod() should fail for path traversal")
+	}
+}
+
+func TestSafeOps_SafeChown(t *testing.T) {
+	tmpDir := t.TempDir()
+	safeOps, err := NewSafeOps(tmpDir)
+	if err != nil {
+		t.Fatalf("NewSafeOps() error = %v", err)
+	}
+
+	// Create a test file
+	testFile := filepath.Join(tmpDir, "testfile.txt")
+	if err := os.WriteFile(testFile, []byte("test content"), 0644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	// Test chown with -1 (no change) - this should succeed
+	err = safeOps.SafeChown("testfile.txt", -1, -1)
+	if err != nil {
+		t.Errorf("SafeChown() error = %v", err)
+	}
+
+	// Test path traversal
+	err = safeOps.SafeChown("../etc/passwd", -1, -1)
+	if err == nil {
+		t.Error("SafeChown() should fail for path traversal")
+	}
+}

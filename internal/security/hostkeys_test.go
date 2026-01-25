@@ -7,6 +7,7 @@ import (
 	"crypto/rsa"
 	"net"
 	"os"
+	"strings"
 	"testing"
 
 	"golang.org/x/crypto/ssh"
@@ -438,5 +439,136 @@ func TestMockHostKeyStore_ListAllKeys(t *testing.T) {
 
 	if len(keys) != 2 {
 		t.Errorf("ListAllKeys() returned %d keys, want 2", len(keys))
+	}
+}
+
+func TestHostKeyVerifier_HostKeyCallback(t *testing.T) {
+	store := newMockHostKeyStore()
+	verifier := NewHostKeyVerifier(store)
+	verifier.StrictMode = true // Use strict mode to avoid storing keys
+
+	ctx := context.Background()
+
+	// Get the callback
+	callback := verifier.HostKeyCallback(ctx)
+	if callback == nil {
+		t.Fatal("HostKeyCallback() returned nil")
+	}
+
+	// Try to verify an unknown host - should fail in strict mode
+	pubKey, _ := generateTestKey(t)
+	addr := &net.TCPAddr{IP: net.ParseIP("192.168.1.1"), Port: 22}
+	err := callback("test.example.com:22", addr, pubKey)
+	if err == nil {
+		t.Error("HostKeyCallback() should fail for unknown host in strict mode")
+	}
+}
+
+func TestParseKnownHostsLine(t *testing.T) {
+	tests := []struct {
+		name      string
+		line      string
+		wantNil   bool
+		wantHost  string
+		wantPort  int
+		wantError bool
+	}{
+		{
+			name:    "empty line",
+			line:    "",
+			wantNil: true,
+		},
+		{
+			name:    "comment line",
+			line:    "# This is a comment",
+			wantNil: true,
+		},
+		{
+			name:      "invalid format",
+			line:      "only-one-field",
+			wantError: true,
+		},
+		{
+			name:      "invalid base64",
+			line:      "hostname ssh-ed25519 not-valid-base64!!!",
+			wantError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info, err := ParseKnownHostsLine(tt.line)
+
+			if tt.wantError {
+				if err == nil {
+					t.Error("ParseKnownHostsLine() expected error")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("ParseKnownHostsLine() error = %v", err)
+				return
+			}
+
+			if tt.wantNil {
+				if info != nil {
+					t.Error("ParseKnownHostsLine() expected nil")
+				}
+				return
+			}
+
+			if info.Hostname != tt.wantHost {
+				t.Errorf("ParseKnownHostsLine() hostname = %v, want %v", info.Hostname, tt.wantHost)
+			}
+
+			if info.Port != tt.wantPort {
+				t.Errorf("ParseKnownHostsLine() port = %v, want %v", info.Port, tt.wantPort)
+			}
+		})
+	}
+}
+
+func TestExportToKnownHostsFile(t *testing.T) {
+	store := newMockHostKeyStore()
+	verifier := NewHostKeyVerifier(store)
+
+	pubKey, _ := generateTestKey(t)
+	ctx := context.Background()
+
+	// Store a trusted key
+	if err := store.StoreHostKey(ctx, &StoredHostKey{
+		Hostname:    "test.example.com",
+		Port:        22,
+		KeyType:     pubKey.Type(),
+		PublicKey:   pubKey.Marshal(),
+		Fingerprint: FingerprintSHA256(pubKey),
+		Trusted:     true,
+	}); err != nil {
+		t.Fatalf("StoreHostKey() error = %v", err)
+	}
+
+	// Export to file
+	tmpDir := t.TempDir()
+	filePath := tmpDir + "/known_hosts"
+
+	err := verifier.ExportToKnownHostsFile(ctx, filePath, true)
+	if err != nil {
+		t.Fatalf("ExportToKnownHostsFile() error = %v", err)
+	}
+
+	// Verify file exists and has content
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+
+	if len(content) == 0 {
+		t.Error("ExportToKnownHostsFile() created empty file")
+	}
+
+	// Should contain the hostname
+	if !strings.Contains(string(content), "test.example.com") {
+		t.Error("ExportToKnownHostsFile() should contain hostname")
 	}
 }

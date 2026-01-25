@@ -251,3 +251,22 @@ func TestTruncateForError(t *testing.T) {
 		t.Error("truncateForError should end with ...")
 	}
 }
+
+func TestCommandValidator_BlockSubstring(t *testing.T) {
+	v := NewCommandValidator()
+
+	// Initially "FORBIDDEN" is not blocked
+	err := v.Validate("git FORBIDDEN clone")
+	if err != nil {
+		t.Errorf("Validate() error = %v, expected nil before blocking", err)
+	}
+
+	// Block the substring
+	v.BlockSubstring("FORBIDDEN")
+
+	// Now it should be blocked
+	err = v.Validate("git FORBIDDEN clone")
+	if err == nil {
+		t.Error("Validate() should fail after blocking substring")
+	}
+}

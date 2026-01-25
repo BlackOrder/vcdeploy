@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"crypto/tls"
 	"crypto/x509"
 	"database/sql"
 	"path/filepath"
@@ -554,5 +555,56 @@ func TestDefaultCAConfig(t *testing.T) {
 
 	if config.RenewalThreshold <= 0 {
 		t.Error("RenewalThreshold should be positive")
+	}
+}
+
+func TestCAManager_GetTLSConfig(t *testing.T) {
+	db, kms := setupTestCADB(t)
+	defer db.Close()
+
+	manager, err := NewCAManager(db, kms, nil)
+	if err != nil {
+		t.Fatalf("NewCAManager() error = %v", err)
+	}
+
+	ctx := context.Background()
+	config := DefaultCAConfig()
+	if err := manager.Initialize(ctx, config); err != nil {
+		t.Fatalf("Initialize() error = %v", err)
+	}
+
+	// Issue an agent certificate to use as server cert
+	agentCert, err := manager.IssueAgentCertificate(ctx, "server", "localhost")
+	if err != nil {
+		t.Fatalf("IssueAgentCertificate() error = %v", err)
+	}
+
+	// Parse the cert for tls.Certificate
+	tlsCert, err := tls.X509KeyPair([]byte(agentCert.CertificatePEM), []byte(agentCert.PrivateKeyPEM))
+	if err != nil {
+		t.Fatalf("tls.X509KeyPair() error = %v", err)
+	}
+
+	// Get TLS config
+	tlsConfig := manager.GetTLSConfig(tlsCert)
+
+	if tlsConfig == nil {
+		t.Fatal("GetTLSConfig() returned nil")
+	}
+
+	if len(tlsConfig.Certificates) != 1 {
+		t.Errorf("GetTLSConfig() Certificates count = %d, want 1", len(tlsConfig.Certificates))
+	}
+
+	if tlsConfig.ClientCAs == nil {
+		t.Error("GetTLSConfig() ClientCAs should not be nil")
+	}
+
+	if tlsConfig.ClientAuth != tls.RequireAndVerifyClientCert {
+		t.Errorf("GetTLSConfig() ClientAuth = %v, want RequireAndVerifyClientCert", tlsConfig.ClientAuth)
+	}
+
+	if tlsConfig.MinVersion != tls.VersionTLS12 {
+		t.Errorf("GetTLSConfig() MinVersion = %v, want TLS 1.2", tlsConfig.MinVersion)
 	}
 }
