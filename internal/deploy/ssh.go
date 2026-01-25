@@ -356,7 +356,9 @@ func (r *SSHRunner) Run(ctx context.Context, cmd string, opts RunOptions) (*Comm
 		}
 	}
 
+	r.mu.Lock()
 	r.lastUsed = time.Now()
+	r.mu.Unlock()
 	return result, nil
 }
 
@@ -385,7 +387,9 @@ func (r *SSHRunner) RunWithOutput(ctx context.Context, cmd string, stdout, stder
 	}
 
 	err = session.Run(fullCmd)
+	r.mu.Lock()
 	r.lastUsed = time.Now()
+	r.mu.Unlock()
 
 	if err != nil {
 		if _, ok := err.(*ssh.ExitError); ok {
