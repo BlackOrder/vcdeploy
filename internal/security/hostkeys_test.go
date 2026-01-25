@@ -1,10 +1,12 @@
 package security
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"net"
+	"os"
 	"testing"
 
 	"golang.org/x/crypto/ssh"
@@ -67,6 +69,14 @@ func (m *mockHostKeyStore) DeleteHostKey(ctx context.Context, hostname string, p
 	}
 	delete(m.keys, id)
 	return nil
+}
+
+func (m *mockHostKeyStore) ListAllKeys(ctx context.Context) ([]*StoredHostKey, error) {
+	result := make([]*StoredHostKey, 0, len(m.keys))
+	for _, key := range m.keys {
+		result = append(result, key)
+	}
+	return result, nil
 }
 
 func generateTestKey(t *testing.T) (ssh.PublicKey, *rsa.PrivateKey) {
@@ -268,5 +278,165 @@ func TestFingerprintSHA256(t *testing.T) {
 	}
 	if fp[:7] != "SHA256:" {
 		t.Errorf("Fingerprint should start with 'SHA256:', got %s", fp)
+	}
+}
+
+func TestKnownHostsExporter_ExportAll(t *testing.T) {
+	store := newMockHostKeyStore()
+	exporter := NewKnownHostsExporter(store)
+
+	pubKey1, _ := generateTestKey(t)
+	pubKey2, _ := generateTestKey(t)
+
+	ctx := context.Background()
+
+	// Store some keys (must be trusted for export)
+	if err := store.StoreHostKey(ctx, &StoredHostKey{
+		Hostname:    "host1.example.com",
+		Port:        22,
+		KeyType:     pubKey1.Type(),
+		PublicKey:   pubKey1.Marshal(),
+		Fingerprint: FingerprintSHA256(pubKey1),
+		Trusted:     true,
+	}); err != nil {
+		t.Fatalf("Failed to store key 1: %v", err)
+	}
+
+	if err := store.StoreHostKey(ctx, &StoredHostKey{
+		Hostname:    "host2.example.com",
+		Port:        2222,
+		KeyType:     pubKey2.Type(),
+		PublicKey:   pubKey2.Marshal(),
+		Fingerprint: FingerprintSHA256(pubKey2),
+		Trusted:     true,
+	}); err != nil {
+		t.Fatalf("Failed to store key 2: %v", err)
+	}
+
+	// Export to file
+	tmpDir := t.TempDir()
+	exportPath := tmpDir + "/known_hosts"
+
+	if err := exporter.ExportAll(ctx, exportPath); err != nil {
+		t.Fatalf("ExportAll() error = %v", err)
+	}
+
+	// Read and verify file
+	content, err := os.ReadFile(exportPath)
+	if err != nil {
+		t.Fatalf("Failed to read exported file: %v", err)
+	}
+
+	// Should contain both hosts
+	if !bytes.Contains(content, []byte("host1.example.com")) {
+		t.Error("Exported file should contain host1.example.com")
+	}
+	if !bytes.Contains(content, []byte("host2.example.com")) {
+		t.Error("Exported file should contain host2.example.com")
+	}
+	if !bytes.Contains(content, []byte("[host2.example.com]:2222")) {
+		t.Error("Exported file should contain [host2.example.com]:2222 for non-standard port")
+	}
+}
+
+func TestKnownHostsExporter_ExportHost(t *testing.T) {
+	store := newMockHostKeyStore()
+	exporter := NewKnownHostsExporter(store)
+
+	pubKey, _ := generateTestKey(t)
+
+	ctx := context.Background()
+
+	// Store a trusted key
+	if err := store.StoreHostKey(ctx, &StoredHostKey{
+		Hostname:    "test.example.com",
+		Port:        22,
+		KeyType:     pubKey.Type(),
+		PublicKey:   pubKey.Marshal(),
+		Fingerprint: FingerprintSHA256(pubKey),
+		Trusted:     true,
+	}); err != nil {
+		t.Fatalf("Failed to store key: %v", err)
+	}
+
+	// Export host
+	lines, err := exporter.ExportHost(ctx, "test.example.com", 22)
+	if err != nil {
+		t.Fatalf("ExportHost() error = %v", err)
+	}
+
+	if len(lines) != 1 {
+		t.Errorf("ExportHost() returned %d lines, want 1", len(lines))
+	}
+
+	if len(lines) > 0 && !bytes.Contains([]byte(lines[0]), []byte("test.example.com")) {
+		t.Errorf("Exported line should contain hostname")
+	}
+}
+
+func TestKnownHostsExporter_ExportAllEmpty(t *testing.T) {
+	store := newMockHostKeyStore()
+	exporter := NewKnownHostsExporter(store)
+
+	ctx := context.Background()
+
+	// Export to file with no keys
+	tmpDir := t.TempDir()
+	exportPath := tmpDir + "/known_hosts"
+
+	// Should not error even with no keys
+	if err := exporter.ExportAll(ctx, exportPath); err != nil {
+		t.Fatalf("ExportAll() with no keys should not error: %v", err)
+	}
+
+	// File should exist with header but no key lines
+	content, err := os.ReadFile(exportPath)
+	if err != nil {
+		t.Fatalf("Failed to read exported file: %v", err)
+	}
+
+	// Should have header comments but no actual key lines
+	if !bytes.Contains(content, []byte("# Auto-generated")) {
+		t.Error("Exported file should contain header")
+	}
+}
+
+func TestMockHostKeyStore_ListAllKeys(t *testing.T) {
+	store := newMockHostKeyStore()
+
+	pubKey1, _ := generateTestKey(t)
+	pubKey2, _ := generateTestKey(t)
+
+	ctx := context.Background()
+
+	// Store keys for different hosts
+	if err := store.StoreHostKey(ctx, &StoredHostKey{
+		Hostname:    "host1.example.com",
+		Port:        22,
+		KeyType:     pubKey1.Type(),
+		PublicKey:   pubKey1.Marshal(),
+		Fingerprint: FingerprintSHA256(pubKey1),
+	}); err != nil {
+		t.Fatalf("Failed to store key 1: %v", err)
+	}
+
+	if err := store.StoreHostKey(ctx, &StoredHostKey{
+		Hostname:    "host2.example.com",
+		Port:        22,
+		KeyType:     pubKey2.Type(),
+		PublicKey:   pubKey2.Marshal(),
+		Fingerprint: FingerprintSHA256(pubKey2),
+	}); err != nil {
+		t.Fatalf("Failed to store key 2: %v", err)
+	}
+
+	// List all keys
+	keys, err := store.ListAllKeys(ctx)
+	if err != nil {
+		t.Fatalf("ListAllKeys() error = %v", err)
+	}
+
+	if len(keys) != 2 {
+		t.Errorf("ListAllKeys() returned %d keys, want 2", len(keys))
 	}
 }
