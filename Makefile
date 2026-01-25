@@ -3,7 +3,7 @@
 
 .PHONY: all build build-master build-agent clean test test-unit test-integration \
         test-systemd test-e2e test-all test-coverage test-bench lint proto \
-        install install-systemd dev dev-agent help
+        install install-systemd dev dev-agent help vuln gosec sbom security
 
 # ------------------------------------------------------------------------------
 # Configuration
@@ -119,6 +119,37 @@ test-coverage-ci:
 test-bench:
 	@echo "Running benchmarks..."
 	go test -v -bench=. -benchmem -run=^$$ ./...
+
+# ------------------------------------------------------------------------------
+# Security & SBOM
+# ------------------------------------------------------------------------------
+
+## vuln: Run vulnerability check
+vuln:
+	@echo "Running vulnerability check..."
+	@command -v govulncheck >/dev/null 2>&1 || \
+		(echo "govulncheck not installed. Run: go install golang.org/x/vuln/cmd/govulncheck@latest"; exit 1)
+	govulncheck ./...
+
+## gosec: Run security scanner
+gosec:
+	@echo "Running security scanner..."
+	@command -v gosec >/dev/null 2>&1 || \
+		(echo "gosec not installed. Run: go install github.com/securego/gosec/v2/cmd/gosec@latest"; exit 1)
+	gosec ./...
+
+## sbom: Generate Software Bill of Materials (SBOM)
+sbom:
+	@echo "Generating SBOM..."
+	@command -v cyclonedx-gomod >/dev/null 2>&1 || \
+		(echo "cyclonedx-gomod not installed. Run: go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest"; exit 1)
+	@mkdir -p $(OUT_DIR)
+	cyclonedx-gomod mod -json -output $(OUT_DIR)/sbom.json
+	cyclonedx-gomod mod -output $(OUT_DIR)/sbom.xml
+	@echo "SBOM generated: $(OUT_DIR)/sbom.json and $(OUT_DIR)/sbom.xml"
+
+## security: Run all security checks (vuln + gosec)
+security: vuln gosec
 
 # ------------------------------------------------------------------------------
 # Code quality
