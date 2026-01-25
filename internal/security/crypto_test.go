@@ -527,7 +527,7 @@ func TestGenerateSecureTokenLength(t *testing.T) {
 // Benchmarks
 func BenchmarkGenerateMasterKey(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		GenerateMasterKey()
+		_, _ = GenerateMasterKey()
 	}
 }
 
@@ -539,7 +539,7 @@ func BenchmarkEncrypt(b *testing.B) {
 	plaintext := []byte("benchmark test message for encryption")
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		key.Encrypt(plaintext)
+		_, _ = key.Encrypt(plaintext)
 	}
 }
 
@@ -555,13 +555,13 @@ func BenchmarkDecrypt(b *testing.B) {
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		key.Decrypt(encrypted)
+		_, _ = key.Decrypt(encrypted)
 	}
 }
 
 func BenchmarkHashPassword(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		HashPassword("benchmark-password")
+		_, _ = HashPassword("benchmark-password")
 	}
 }
 

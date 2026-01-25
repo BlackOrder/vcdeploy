@@ -291,7 +291,7 @@ func TestOrchestrator_ListDeployments(t *testing.T) {
 			AgentID:    "agent-1",
 			Repository: "git@github.com:example/repo.git",
 		}
-		orch.Deploy(ctx, req)
+		_, _ = orch.Deploy(ctx, req)
 	}
 
 	deployments = orch.ListDeployments()
@@ -306,14 +306,14 @@ func TestOrchestrator_ListProjectDeployments(t *testing.T) {
 
 	// Create deployments for different projects
 	for i := 0; i < 3; i++ {
-		orch.Deploy(ctx, &DeployRequest{
+		_, _ = orch.Deploy(ctx, &DeployRequest{
 			ProjectID:  "project-a",
 			AgentID:    "agent-1",
 			Repository: "repo",
 		})
 	}
 	for i := 0; i < 2; i++ {
-		orch.Deploy(ctx, &DeployRequest{
+		_, _ = orch.Deploy(ctx, &DeployRequest{
 			ProjectID:  "project-b",
 			AgentID:    "agent-1",
 			Repository: "repo",

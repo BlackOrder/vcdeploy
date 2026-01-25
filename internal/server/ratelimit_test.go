@@ -411,7 +411,7 @@ func TestRateLimiterMiddleware(t *testing.T) {
 
 	handler := rl.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		_, _ = w.Write([]byte("OK"))
 	}))
 
 	// First two requests should succeed (burst)
@@ -545,8 +545,8 @@ func TestRateLimiterListBlockedIPs(t *testing.T) {
 	ctx := context.Background()
 
 	// Block some IPs
-	rl.BlockIP(ctx, "192.168.1.1", "reason1", time.Hour)
-	rl.BlockIP(ctx, "192.168.1.2", "reason2", time.Hour)
+	_ = rl.BlockIP(ctx, "192.168.1.1", "reason1", time.Hour)
+	_ = rl.BlockIP(ctx, "192.168.1.2", "reason2", time.Hour)
 
 	// List blocked
 	blocked, err := rl.ListBlockedIPs(ctx)

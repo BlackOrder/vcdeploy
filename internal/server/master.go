@@ -554,7 +554,7 @@ func (s *MasterServer) processScheduledDeployments() {
 			deployment.Status = "failed"
 			now := time.Now()
 			deployment.CompletedAt = &now
-			s.db.UpdateDeployment(ctx, deployment)
+			_ = s.db.UpdateDeployment(ctx, deployment)
 			continue
 		}
 
@@ -626,7 +626,7 @@ func (s *MasterServer) Shutdown(ctx context.Context) error {
 	}
 
 	if s.httpServer != nil {
-		s.httpServer.Shutdown(ctx)
+		_ = s.httpServer.Shutdown(ctx)
 	}
 	if s.grpcServer != nil {
 		s.grpcServer.GracefulStop()
@@ -783,7 +783,7 @@ func (rw *responseWriter) WriteHeader(code int) {
 
 func (s *MasterServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"status":    "healthy",
 		"timestamp": time.Now().UTC(),
 	})
@@ -1120,7 +1120,7 @@ func (s *MasterServer) logAudit(r *http.Request, action, resource, details, resu
 
 func (s *MasterServer) jsonResponse(w http.ResponseWriter, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(data)
+	_ = json.NewEncoder(w).Encode(data)
 }
 
 func (s *MasterServer) handleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
@@ -1296,7 +1296,7 @@ func (s *MasterServer) handleLogout(w http.ResponseWriter, r *http.Request) {
 
 		// Get user ID for audit log (if session exists) before deleting
 		if session, err := s.db.GetSessionByToken(ctx, cookie.Value); err == nil {
-			s.db.LogAudit(ctx, &storage.AuditEntry{
+			_ = s.db.LogAudit(ctx, &storage.AuditEntry{
 				Source:    "web",
 				User:      fmt.Sprintf("user:%d", session.UserID),
 				Action:    "logout",

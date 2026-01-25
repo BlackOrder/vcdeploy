@@ -182,7 +182,7 @@ func TestHandleAgents(t *testing.T) {
 	}
 
 	var agents []map[string]interface{}
-	json.NewDecoder(rec.Body).Decode(&agents)
+	_ = json.NewDecoder(rec.Body).Decode(&agents)
 
 	if len(agents) != 1 {
 		t.Errorf("len(agents) = %d, want 1", len(agents))
@@ -472,7 +472,7 @@ func TestLoggingMiddleware(t *testing.T) {
 
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
+		_, _ = w.Write([]byte("ok"))
 	})
 
 	wrapped := server.loggingMiddleware(inner)
@@ -598,7 +598,7 @@ func TestJsonResponse(t *testing.T) {
 	}
 
 	var result map[string]interface{}
-	json.NewDecoder(rec.Body).Decode(&result)
+	_ = json.NewDecoder(rec.Body).Decode(&result)
 
 	if result["key"] != "value" {
 		t.Errorf("key = %v, want value", result["key"])
@@ -841,7 +841,7 @@ func TestHandleDeploymentLogs(t *testing.T) {
 
 	// Create a test project
 	project := &storage.Project{Name: "test-project", Repository: "https://github.com/test/test"}
-	server.db.CreateProject(project)
+	_ = server.db.CreateProject(project)
 
 	// Create a test deployment
 	deployment := &storage.Deployment{
@@ -852,7 +852,7 @@ func TestHandleDeploymentLogs(t *testing.T) {
 		CommitHash:  "abc123",
 		TriggeredBy: "test",
 	}
-	server.db.CreateDeployment(ctx, deployment)
+	_ = server.db.CreateDeployment(ctx, deployment)
 
 	// Test non-streaming logs request via the logs path component
 	// The handler expects deployment ID from path, which we need to simulate
@@ -874,8 +874,8 @@ func TestSecretsFilterByProject(t *testing.T) {
 	ctx := context.Background()
 
 	// Create secrets for different projects
-	server.db.SetSecretEncrypted(ctx, "project-a", "env", "KEY1", []byte("value1"))
-	server.db.SetSecretEncrypted(ctx, "project-b", "env", "KEY2", []byte("value2"))
+	_ = server.db.SetSecretEncrypted(ctx, "project-a", "env", "KEY1", []byte("value1"))
+	_ = server.db.SetSecretEncrypted(ctx, "project-b", "env", "KEY2", []byte("value2"))
 
 	// Filter by project-a
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/secrets?project=project-a", nil)

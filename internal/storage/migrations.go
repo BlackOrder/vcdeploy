@@ -924,7 +924,7 @@ func (db *DB) applyMigration(ctx context.Context, m Migration, up bool) error {
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	if up {
 		if err := m.Up(tx); err != nil {

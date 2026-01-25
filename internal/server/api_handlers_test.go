@@ -1390,7 +1390,7 @@ func TestHandleAgentToken_Success(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 	if resp["agent_id"] != "token-agent-1" {
 		t.Errorf("expected agent_id 'token-agent-1', got %v", resp["agent_id"])
 	}

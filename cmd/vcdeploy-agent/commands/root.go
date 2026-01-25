@@ -92,8 +92,8 @@ func init() {
 
 	registerCmd.Flags().String("master", "", "Master address")
 	registerCmd.Flags().String("token", "", "Registration token")
-	registerCmd.MarkFlagRequired("master")
-	registerCmd.MarkFlagRequired("token")
+	_ = registerCmd.MarkFlagRequired("master")
+	_ = registerCmd.MarkFlagRequired("token")
 }
 
 func runStart(cmd *cobra.Command, args []string) error {
@@ -139,7 +139,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("creating logger: %w", err)
 	}
-	defer logger.Sync()
+	defer func() { _ = logger.Sync() }()
 
 	// Create agent
 	ag, err := agent.NewAgent(cfg, logger)
@@ -280,7 +280,7 @@ func runRegister(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("creating logger: %w", err)
 	}
-	defer logger.Sync()
+	defer func() { _ = logger.Sync() }()
 
 	// Create or load config
 	var cfg *config.AgentConfig
