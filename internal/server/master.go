@@ -232,23 +232,6 @@ func (s *MasterServer) encryptSecret(plaintext []byte) ([]byte, error) {
 	return []byte(encrypted), nil
 }
 
-// decryptSecret decrypts a secret value using the KMS.
-func (s *MasterServer) decryptSecret(ciphertext []byte) ([]byte, error) {
-	if s.kms == nil {
-		return nil, fmt.Errorf("KMS not configured")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	plaintext, err := s.kms.Decrypt(ctx, string(ciphertext))
-	if err != nil {
-		return nil, fmt.Errorf("decrypting secret: %w", err)
-	}
-
-	return plaintext, nil
-}
-
 // GetAgentServer returns the gRPC agent server.
 func (s *MasterServer) GetAgentServer() *AgentServer {
 	return s.agentServer
