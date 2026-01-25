@@ -322,7 +322,7 @@ func (m *SSHKeyManager) GetSigner(ctx context.Context, name string) (ssh.Signer,
 	m.mu.Unlock()
 
 	// Update last used
-	m.db.ExecContext(ctx, `UPDATE ssh_keys SET last_used_at = ? WHERE name = ?`, time.Now(), name)
+	_, _ = m.db.ExecContext(ctx, `UPDATE ssh_keys SET last_used_at = ? WHERE name = ?`, time.Now(), name)
 
 	return signer, nil
 }
@@ -433,7 +433,7 @@ func (m *SSHKeyManager) VerifyHostKey(ctx context.Context, hostname string, port
 	for _, h := range hosts {
 		if h.KeyType == keyType && h.PublicKey == keyData {
 			// Update last verified
-			m.db.ExecContext(ctx, `
+			_, _ = m.db.ExecContext(ctx, `
 				UPDATE known_hosts SET last_verified_at = ? 
 				WHERE hostname = ? AND port = ? AND key_type = ?
 			`, time.Now(), hostname, port, keyType)

@@ -259,7 +259,7 @@ func TestLogWriterMultiple(t *testing.T) {
 
 	messages := []string{"First", "Second", "Third"}
 	for _, msg := range messages {
-		writer.Write([]byte(msg))
+		_, _ = writer.Write([]byte(msg))
 	}
 
 	for i, expected := range messages {
@@ -547,7 +547,7 @@ func BenchmarkLogWriter(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		writer.Write(message)
+		_, _ = writer.Write(message)
 	}
 }
 
@@ -717,7 +717,7 @@ func TestSymlinkStrategyDeployWithHooks(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	strategy.Deploy(ctx, cmd, logCh)
+	_, _ = strategy.Deploy(ctx, cmd, logCh)
 	close(logCh)
 
 	// Check hooks were executed

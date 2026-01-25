@@ -300,7 +300,7 @@ func (s *SymlinkStrategy) getNextReleaseNumber(ctx context.Context, releasesPath
 		return 1, nil // First release
 	}
 	var lastRelease int
-	fmt.Sscanf(result.Stdout, "%d", &lastRelease)
+	_, _ = fmt.Sscanf(result.Stdout, "%d", &lastRelease)
 	return lastRelease + 1, nil
 }
 
@@ -362,7 +362,7 @@ func (s *SymlinkStrategy) linkShared(ctx context.Context, releasePath, sharedPat
 		source := sharedPath + "/" + dir
 
 		// Remove existing directory in release
-		s.runner.Run(ctx, fmt.Sprintf("rm -rf %s", target), RunOptions{})
+		_, _ = s.runner.Run(ctx, fmt.Sprintf("rm -rf %s", target), RunOptions{})
 
 		// Create symlink
 		_, err := s.runner.Run(ctx, fmt.Sprintf("ln -nfs %s %s", source, target), RunOptions{})
@@ -377,10 +377,10 @@ func (s *SymlinkStrategy) linkShared(ctx context.Context, releasePath, sharedPat
 		source := sharedPath + "/" + file
 
 		// Ensure parent directory exists
-		s.runner.Run(ctx, fmt.Sprintf("mkdir -p $(dirname %s)", target), RunOptions{})
+		_, _ = s.runner.Run(ctx, fmt.Sprintf("mkdir -p $(dirname %s)", target), RunOptions{})
 
 		// Remove existing file in release
-		s.runner.Run(ctx, fmt.Sprintf("rm -f %s", target), RunOptions{})
+		_, _ = s.runner.Run(ctx, fmt.Sprintf("rm -f %s", target), RunOptions{})
 
 		// Create symlink
 		_, err := s.runner.Run(ctx, fmt.Sprintf("ln -nfs %s %s", source, target), RunOptions{})
@@ -392,7 +392,7 @@ func (s *SymlinkStrategy) linkShared(ctx context.Context, releasePath, sharedPat
 	// Set writable permissions
 	for _, dir := range settings.WritableDirs {
 		target := releasePath + "/" + dir
-		s.runner.Run(ctx, fmt.Sprintf("mkdir -p %s && chmod -R 775 %s", target, target), RunOptions{})
+		_, _ = s.runner.Run(ctx, fmt.Sprintf("mkdir -p %s && chmod -R 775 %s", target, target), RunOptions{})
 	}
 
 	return nil
@@ -471,7 +471,7 @@ func (s *SymlinkStrategy) activateRelease(ctx context.Context, releasePath, curr
 	_, err = s.runner.Run(ctx, fmt.Sprintf("mv -T %s %s", tmpLink, currentPath), RunOptions{})
 	if err != nil {
 		// Fallback for systems without mv -T
-		s.runner.Run(ctx, fmt.Sprintf("rm -f %s", tmpLink), RunOptions{})
+		_, _ = s.runner.Run(ctx, fmt.Sprintf("rm -f %s", tmpLink), RunOptions{})
 		_, err = s.runner.Run(ctx, fmt.Sprintf("ln -nfs %s %s", releasePath, currentPath), RunOptions{})
 		if err != nil {
 			return fmt.Errorf("activate symlink: %w", err)

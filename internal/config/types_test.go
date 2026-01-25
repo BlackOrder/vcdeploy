@@ -341,7 +341,7 @@ hooks:
     - npm install
     - npm run build
 `
-	os.WriteFile(configPath, []byte(configContent), 0644)
+	_ = os.WriteFile(configPath, []byte(configContent), 0644)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

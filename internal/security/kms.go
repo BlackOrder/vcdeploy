@@ -255,7 +255,7 @@ func (k *KMS) RotateKey(ctx context.Context) (*EncryptionKey, error) {
 	if err != nil {
 		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	// Deactivate current key
 	if k.currentKey != nil {
@@ -521,7 +521,7 @@ func (k *KMS) generateKey() (*EncryptionKey, error) {
 
 	// Get next version
 	var maxVersion sql.NullInt64
-	k.db.QueryRow(`SELECT MAX(version) FROM encryption_keys`).Scan(&maxVersion)
+	_ = k.db.QueryRow(`SELECT MAX(version) FROM encryption_keys`).Scan(&maxVersion)
 	version := 1
 	if maxVersion.Valid {
 		version = int(maxVersion.Int64) + 1

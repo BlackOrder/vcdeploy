@@ -173,16 +173,14 @@ func (s *SafeOps) SafeSymlink(target, linkPath string) error {
 
 	// Validate the target - it must also be within base directory
 	// For relative targets, resolve them relative to the link's directory
-	var absTarget string
 	if filepath.IsAbs(target) {
 		if !IsWithinBase(s.BaseDir, target) {
 			return ErrSymlinkTarget
 		}
-		absTarget = target
 	} else {
 		// Resolve relative target from link's directory
 		linkDir := filepath.Dir(absLinkPath)
-		absTarget = filepath.Join(linkDir, target)
+		absTarget := filepath.Join(linkDir, target)
 		if !IsWithinBase(s.BaseDir, absTarget) {
 			return ErrSymlinkTarget
 		}

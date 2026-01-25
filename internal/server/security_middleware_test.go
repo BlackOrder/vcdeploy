@@ -393,7 +393,7 @@ func TestSecurityMiddleware_ValidateCSRFToken_MissingToken(t *testing.T) {
 	sm := NewSecurityMiddleware(cfg)
 
 	sessionID := "test-session-missing"
-	sm.GenerateCSRFToken(sessionID)
+	_, _ = sm.GenerateCSRFToken(sessionID)
 
 	// Create request without token
 	req := httptest.NewRequest("POST", "/", nil)

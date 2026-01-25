@@ -568,7 +568,7 @@ func (h *HTTPChallengeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	}
 
 	w.Header().Set("Content-Type", "text/plain")
-	w.Write([]byte(keyAuth))
+	_, _ = w.Write([]byte(keyAuth))
 }
 
 // --- Helper Types for ACME Protocol ---

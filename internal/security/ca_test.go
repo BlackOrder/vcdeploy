@@ -153,11 +153,11 @@ func TestCAManagerDoubleInitialize(t *testing.T) {
 	ctx := context.Background()
 	config := DefaultCAConfig()
 
-	mgr.Initialize(ctx, config)
+	_ = mgr.Initialize(ctx, config)
 	caBefore := mgr.GetCurrentCA()
 
 	// Second initialize should be no-op
-	mgr.Initialize(ctx, config)
+	_ = mgr.Initialize(ctx, config)
 	caAfter := mgr.GetCurrentCA()
 
 	if caBefore.ID != caAfter.ID {
@@ -172,7 +172,7 @@ func TestCAManagerGetTrustPool(t *testing.T) {
 	mgr, _ := NewCAManager(db, kms, nil)
 	ctx := context.Background()
 	config := DefaultCAConfig()
-	mgr.Initialize(ctx, config)
+	_ = mgr.Initialize(ctx, config)
 
 	pool := mgr.GetTrustPool()
 	if pool == nil {
@@ -334,8 +334,8 @@ func TestCAManagerListCAs(t *testing.T) {
 	mgr.Initialize(ctx, config)
 
 	// Rotate a few times
-	mgr.RotateCA(ctx, config)
-	mgr.RotateCA(ctx, config)
+	_, _ = mgr.RotateCA(ctx, config)
+	_, _ = mgr.RotateCA(ctx, config)
 
 	cas, err := mgr.ListCAs(ctx)
 	if err != nil {
@@ -407,10 +407,10 @@ func TestCAManagerProcessExpiredCertificates(t *testing.T) {
 	mgr.Initialize(ctx, config)
 
 	// Issue certificate
-	mgr.IssueAgentCertificate(ctx, "agent-001", "agent1.example.com")
+	_, _ = mgr.IssueAgentCertificate(ctx, "agent-001", "agent1.example.com")
 
 	// Manually set certificate as expired (backdoor for testing)
-	db.Exec(`UPDATE agent_certificates SET not_after = datetime('now', '-1 day')`)
+	_, _ = db.Exec(`UPDATE agent_certificates SET not_after = datetime('now', '-1 day')`)
 
 	count, err := mgr.ProcessExpiredCertificates(ctx)
 	if err != nil {
@@ -463,7 +463,7 @@ func TestCAManagerPersistence(t *testing.T) {
 
 	// Create initial CA
 	db1, _ := sql.Open("sqlite", dbPath+"?_journal_mode=WAL")
-	db1.Exec(`
+	_, _ = db1.Exec(`
 		CREATE TABLE encryption_keys (
 			id TEXT PRIMARY KEY, version INTEGER NOT NULL, key_material_encrypted BLOB NOT NULL,
 			algorithm TEXT NOT NULL DEFAULT 'AES-256-GCM', status TEXT NOT NULL DEFAULT 'active',
@@ -492,11 +492,11 @@ func TestCAManagerPersistence(t *testing.T) {
 
 	kms1, _ := NewKMS(db1, nil)
 	ctx := context.Background()
-	kms1.Initialize(ctx)
+	_ = kms1.Initialize(ctx)
 
 	mgr1, _ := NewCAManager(db1, kms1, nil)
 	config := DefaultCAConfig()
-	mgr1.Initialize(ctx, config)
+	_ = mgr1.Initialize(ctx, config)
 
 	caID := mgr1.GetCurrentCA().ID
 

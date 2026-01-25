@@ -519,7 +519,7 @@ func BenchmarkLocalRunnerSimpleCommand(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		runner.Run(ctx, "true", deploy.RunOptions{})
+		_, _ = runner.Run(ctx, "true", deploy.RunOptions{})
 	}
 }
 

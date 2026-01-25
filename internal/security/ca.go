@@ -307,7 +307,7 @@ func (m *CAManager) RotateCA(ctx context.Context, config CAConfig) (*Certificate
 	if err != nil {
 		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	now := time.Now()
 
@@ -555,7 +555,7 @@ func (m *CAManager) generateCA(ctx context.Context, config CAConfig) (*Certifica
 
 	// Get next version
 	var maxVersion sql.NullInt64
-	m.db.QueryRow(`SELECT MAX(version) FROM certificate_authorities`).Scan(&maxVersion)
+	_ = m.db.QueryRow(`SELECT MAX(version) FROM certificate_authorities`).Scan(&maxVersion)
 	version := 1
 	if maxVersion.Valid {
 		version = int(maxVersion.Int64) + 1

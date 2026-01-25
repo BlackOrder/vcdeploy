@@ -365,7 +365,7 @@ func TestProvisioner_RegenerateToken_AlreadyRegistered(t *testing.T) {
 	// Simulate agent registration
 	agent, _ := db.GetAgent(ctx, "agent-1")
 	agent.Status = "online"
-	db.UpsertAgent(ctx, agent)
+	_ = db.UpsertAgent(ctx, agent)
 
 	// Try to regenerate - should fail
 	_, err = p.RegenerateToken(ctx, "agent-1")

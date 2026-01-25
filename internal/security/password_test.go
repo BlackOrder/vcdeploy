@@ -225,7 +225,7 @@ func TestMinPasswordLength(t *testing.T) {
 func BenchmarkValidatePassword(b *testing.B) {
 	password := "MySecureP@ssw0rd!"
 	for i := 0; i < b.N; i++ {
-		ValidatePassword(password)
+		_ = ValidatePassword(password)
 	}
 }
 

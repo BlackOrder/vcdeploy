@@ -329,8 +329,8 @@ func TestSSHPool_Close(t *testing.T) {
 	pool := NewSSHPool(5 * time.Minute)
 
 	// Add some connections
-	pool.Get(&SSHConfig{Host: "host1.com", User: "deploy"})
-	pool.Get(&SSHConfig{Host: "host2.com", User: "deploy"})
+	_, _ = pool.Get(&SSHConfig{Host: "host1.com", User: "deploy"})
+	_, _ = pool.Get(&SSHConfig{Host: "host2.com", User: "deploy"})
 
 	// Close should clear all connections
 	err := pool.Close()

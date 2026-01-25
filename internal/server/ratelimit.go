@@ -259,7 +259,7 @@ func (rl *RateLimiter) Allow(ip, endpoint string) (bool, RateLimitStatus) {
 
 			// Persist to database if enabled
 			if rl.config.UseDatabase && rl.db != nil {
-				go rl.saveBlockedIP(context.Background(), ip, blockedUntil, "rate_limit_exceeded")
+				go func() { _ = rl.saveBlockedIP(context.Background(), ip, blockedUntil, "rate_limit_exceeded") }()
 			}
 		}
 
