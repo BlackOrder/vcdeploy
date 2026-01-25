@@ -126,6 +126,48 @@ func (s *SecretService) List(ctx context.Context, project, scope string) ([]*Sec
 	return result, nil
 }
 
+// ListByProject returns metadata for all secrets in a project (all scopes).
+func (s *SecretService) ListByProject(ctx context.Context, project string) ([]*SecretMetadata, error) {
+	secrets, err := s.db.ListSecretsCtx(ctx, project)
+	if err != nil {
+		return nil, fmt.Errorf("listing secrets: %w", err)
+	}
+
+	result := make([]*SecretMetadata, len(secrets))
+	for i, sec := range secrets {
+		result[i] = &SecretMetadata{
+			ID:        sec.ID,
+			Project:   sec.Project,
+			Scope:     sec.Scope,
+			Key:       sec.Key,
+			CreatedAt: sec.CreatedAt,
+			UpdatedAt: sec.UpdatedAt,
+		}
+	}
+	return result, nil
+}
+
+// ListAll returns metadata for all secrets across all projects (admin only).
+func (s *SecretService) ListAll(ctx context.Context) ([]*SecretMetadata, error) {
+	secrets, err := s.db.ListAllSecretsCtx(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("listing secrets: %w", err)
+	}
+
+	result := make([]*SecretMetadata, len(secrets))
+	for i, sec := range secrets {
+		result[i] = &SecretMetadata{
+			ID:        sec.ID,
+			Project:   sec.Project,
+			Scope:     sec.Scope,
+			Key:       sec.Key,
+			CreatedAt: sec.CreatedAt,
+			UpdatedAt: sec.UpdatedAt,
+		}
+	}
+	return result, nil
+}
+
 // Export returns all decrypted secrets for a scope as a map.
 func (s *SecretService) Export(ctx context.Context, project, scope string) (map[string]string, error) {
 	secrets, err := s.db.ListSecretsWithScope(ctx, project, scope)

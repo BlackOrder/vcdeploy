@@ -786,18 +786,23 @@ func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		var secrets []*storage.Secret
+		if s.secretService == nil {
+			s.jsonError(w, http.StatusInternalServerError, "Secret service not configured")
+			return
+		}
+
+		var secrets []*security.SecretMetadata
 		var err error
 
 		if projectFilter != "" && scopeFilter != "" {
 			// Get secrets for specific project/scope
-			secrets, err = s.db.ListSecretsWithScope(ctx, projectFilter, scopeFilter)
+			secrets, err = s.secretService.List(ctx, projectFilter, scopeFilter)
 		} else if projectFilter != "" {
 			// Get all secrets for a project
-			secrets, err = s.db.ListSecretsCtx(ctx, projectFilter)
+			secrets, err = s.secretService.ListByProject(ctx, projectFilter)
 		} else {
 			// Get all secrets (admin only)
-			secrets, err = s.db.ListAllSecretsCtx(ctx)
+			secrets, err = s.secretService.ListAll(ctx)
 		}
 
 		if err != nil {
@@ -889,7 +894,12 @@ func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
 			scope = "default"
 		}
 
-		if err := s.db.DeleteSecretCtx(ctx, project, scope, key); err != nil {
+		if s.secretService == nil {
+			s.jsonError(w, http.StatusInternalServerError, "Secret service not configured")
+			return
+		}
+
+		if err := s.secretService.Delete(ctx, project, scope, key); err != nil {
 			s.logger.Error("Failed to delete secret", zap.Error(err))
 			s.jsonError(w, http.StatusInternalServerError, "Failed to delete secret")
 			return
