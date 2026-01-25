@@ -1204,10 +1204,16 @@ func runProjectDeploy(cmd *cobra.Command, args []string) error {
 	fmt.Printf("   Deployment ID: %s\n", deployResp.ID)
 	fmt.Println()
 
-	// Poll for deployment status
+	// Poll for deployment status (interruptible with Ctrl+C)
 	fmt.Println("⏳ Waiting for deployment to complete...")
 	for i := 0; i < 120; i++ { // Max 10 minutes
-		time.Sleep(5 * time.Second)
+		select {
+		case <-cmd.Context().Done():
+			fmt.Println("\n⚠️  Interrupted. Deployment continues in background.")
+			fmt.Printf("   Check status with: vcdeploy deployment status %s\n", deployResp.ID)
+			return nil
+		case <-time.After(5 * time.Second):
+		}
 
 		statusReq, _ := http.NewRequest("GET", baseURL+"/api/v1/deployments/"+deployResp.ID, nil)
 		if apiToken != "" {
