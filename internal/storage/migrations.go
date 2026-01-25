@@ -647,6 +647,38 @@ var migrations = []Migration{
 			return nil
 		},
 	},
+	{
+		Version:     14,
+		Description: "SSH host keys table for secure host key verification",
+		Up: func(tx *sql.Tx) error {
+			_, err := tx.Exec(`
+				-- SSH host keys table for database-backed host key verification
+				CREATE TABLE IF NOT EXISTS ssh_host_keys (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					hostname TEXT NOT NULL,
+					port INTEGER NOT NULL DEFAULT 22,
+					key_type TEXT NOT NULL,
+					public_key TEXT NOT NULL,
+					fingerprint TEXT NOT NULL,
+					trusted INTEGER NOT NULL DEFAULT 0,
+					added_by TEXT,
+					verified_at DATETIME,
+					created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+					updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+					UNIQUE(hostname, port, key_type)
+				);
+
+				-- Index for quick lookups
+				CREATE INDEX IF NOT EXISTS idx_ssh_host_keys_hostname_port ON ssh_host_keys(hostname, port);
+				CREATE INDEX IF NOT EXISTS idx_ssh_host_keys_fingerprint ON ssh_host_keys(fingerprint);
+			`)
+			return err
+		},
+		Down: func(tx *sql.Tx) error {
+			_, err := tx.Exec(`DROP TABLE IF EXISTS ssh_host_keys`)
+			return err
+		},
+	},
 }
 
 // MigrateUp runs all pending migrations.

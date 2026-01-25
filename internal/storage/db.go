@@ -1616,3 +1616,164 @@ func (db *DB) CleanupOrphanedWebhooks(ctx context.Context) (int64, error) {
 	}
 	return result.RowsAffected()
 }
+
+// --- SSH Host Key operations ---
+
+// SSHHostKey represents a stored SSH host key.
+type SSHHostKey struct {
+	ID          int64
+	Hostname    string
+	Port        int
+	KeyType     string
+	PublicKey   string // Base64 encoded public key
+	Fingerprint string // SHA256 fingerprint
+	Trusted     bool
+	AddedBy     string
+	VerifiedAt  *time.Time
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+// CreateSSHHostKey creates a new SSH host key record.
+func (db *DB) CreateSSHHostKey(ctx context.Context, key *SSHHostKey) error {
+	result, err := db.conn.ExecContext(ctx, `
+		INSERT INTO ssh_host_keys (hostname, port, key_type, public_key, fingerprint, trusted, added_by, verified_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, key.Hostname, key.Port, key.KeyType, key.PublicKey, key.Fingerprint, key.Trusted, key.AddedBy, key.VerifiedAt)
+	if err != nil {
+		return fmt.Errorf("creating ssh host key: %w", err)
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("getting last insert id: %w", err)
+	}
+	key.ID = id
+	return nil
+}
+
+// GetSSHHostKey retrieves an SSH host key by hostname, port, and key type.
+func (db *DB) GetSSHHostKey(ctx context.Context, hostname string, port int, keyType string) (*SSHHostKey, error) {
+	key := &SSHHostKey{}
+	var verifiedAt sql.NullTime
+	err := db.conn.QueryRowContext(ctx, `
+		SELECT id, hostname, port, key_type, public_key, fingerprint, trusted, added_by, verified_at, created_at, updated_at
+		FROM ssh_host_keys
+		WHERE hostname = ? AND port = ? AND key_type = ?
+	`, hostname, port, keyType).Scan(
+		&key.ID, &key.Hostname, &key.Port, &key.KeyType, &key.PublicKey, &key.Fingerprint,
+		&key.Trusted, &key.AddedBy, &verifiedAt, &key.CreatedAt, &key.UpdatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("getting ssh host key: %w", err)
+	}
+	if verifiedAt.Valid {
+		key.VerifiedAt = &verifiedAt.Time
+	}
+	return key, nil
+}
+
+// GetSSHHostKeysByHost retrieves all SSH host keys for a hostname and port.
+func (db *DB) GetSSHHostKeysByHost(ctx context.Context, hostname string, port int) ([]*SSHHostKey, error) {
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, hostname, port, key_type, public_key, fingerprint, trusted, added_by, verified_at, created_at, updated_at
+		FROM ssh_host_keys
+		WHERE hostname = ? AND port = ?
+		ORDER BY key_type
+	`, hostname, port)
+	if err != nil {
+		return nil, fmt.Errorf("listing ssh host keys: %w", err)
+	}
+	defer rows.Close()
+
+	var keys []*SSHHostKey
+	for rows.Next() {
+		key := &SSHHostKey{}
+		var verifiedAt sql.NullTime
+		if err := rows.Scan(
+			&key.ID, &key.Hostname, &key.Port, &key.KeyType, &key.PublicKey, &key.Fingerprint,
+			&key.Trusted, &key.AddedBy, &verifiedAt, &key.CreatedAt, &key.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scanning ssh host key: %w", err)
+		}
+		if verifiedAt.Valid {
+			key.VerifiedAt = &verifiedAt.Time
+		}
+		keys = append(keys, key)
+	}
+	return keys, nil
+}
+
+// ListSSHHostKeys retrieves all SSH host keys.
+func (db *DB) ListSSHHostKeys(ctx context.Context) ([]*SSHHostKey, error) {
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, hostname, port, key_type, public_key, fingerprint, trusted, added_by, verified_at, created_at, updated_at
+		FROM ssh_host_keys
+		ORDER BY hostname, port, key_type
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("listing ssh host keys: %w", err)
+	}
+	defer rows.Close()
+
+	var keys []*SSHHostKey
+	for rows.Next() {
+		key := &SSHHostKey{}
+		var verifiedAt sql.NullTime
+		if err := rows.Scan(
+			&key.ID, &key.Hostname, &key.Port, &key.KeyType, &key.PublicKey, &key.Fingerprint,
+			&key.Trusted, &key.AddedBy, &verifiedAt, &key.CreatedAt, &key.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scanning ssh host key: %w", err)
+		}
+		if verifiedAt.Valid {
+			key.VerifiedAt = &verifiedAt.Time
+		}
+		keys = append(keys, key)
+	}
+	return keys, nil
+}
+
+// UpdateSSHHostKeyTrust updates the trust status of an SSH host key.
+func (db *DB) UpdateSSHHostKeyTrust(ctx context.Context, id int64, trusted bool, verifiedBy string) error {
+	now := time.Now()
+	var verifiedAt *time.Time
+	if trusted {
+		verifiedAt = &now
+	}
+	_, err := db.conn.ExecContext(ctx, `
+		UPDATE ssh_host_keys
+		SET trusted = ?, added_by = ?, verified_at = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE id = ?
+	`, trusted, verifiedBy, verifiedAt, id)
+	if err != nil {
+		return fmt.Errorf("updating ssh host key trust: %w", err)
+	}
+	return nil
+}
+
+// DeleteSSHHostKey deletes an SSH host key by ID.
+func (db *DB) DeleteSSHHostKey(ctx context.Context, id int64) error {
+	result, err := db.conn.ExecContext(ctx, `DELETE FROM ssh_host_keys WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("deleting ssh host key: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// DeleteSSHHostKeysByHost deletes all SSH host keys for a hostname and port.
+func (db *DB) DeleteSSHHostKeysByHost(ctx context.Context, hostname string, port int) (int64, error) {
+	result, err := db.conn.ExecContext(ctx, `
+		DELETE FROM ssh_host_keys WHERE hostname = ? AND port = ?
+	`, hostname, port)
+	if err != nil {
+		return 0, fmt.Errorf("deleting ssh host keys: %w", err)
+	}
+	return result.RowsAffected()
+}
