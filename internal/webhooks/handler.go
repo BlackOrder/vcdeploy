@@ -23,6 +23,7 @@ type Handler struct {
 // SecretStore retrieves webhook secrets for projects.
 type SecretStore interface {
 	GetWebhookSecret(projectID string) (string, error)
+	IsSecretRequired(projectID string) bool
 }
 
 // EventProcessor handles processed webhook events.
@@ -88,6 +89,10 @@ func (h *Handler) HandleGitHub(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Missing project ID", http.StatusBadRequest)
 		return
 	}
+	if !isValidProjectID(projectID) {
+		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		return
+	}
 
 	// Read body
 	body, err := io.ReadAll(r.Body)
@@ -105,7 +110,8 @@ func (h *Handler) HandleGitHub(w http.ResponseWriter, r *http.Request) {
 	}
 
 	signature := r.Header.Get("X-Hub-Signature-256")
-	if !h.validateGitHubSignature(body, signature, secret) {
+	requireSecret := h.secrets.IsSecretRequired(projectID)
+	if !h.validateGitHubSignature(body, signature, secret, requireSecret) {
 		h.logger.Warn("Invalid GitHub signature", zap.String("project", projectID))
 		http.Error(w, "Invalid signature", http.StatusUnauthorized)
 		return
@@ -134,9 +140,14 @@ func (h *Handler) HandleGitHub(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) validateGitHubSignature(payload []byte, signature, secret string) bool {
+func (h *Handler) validateGitHubSignature(payload []byte, signature, secret string, requireSecret bool) bool {
 	if secret == "" {
-		return true // No secret configured
+		if requireSecret {
+			h.logger.Warn("Webhook secret required but not configured")
+			return false
+		}
+		h.logger.Debug("No webhook secret configured, allowing request")
+		return true
 	}
 
 	if !strings.HasPrefix(signature, "sha256=") {
@@ -308,6 +319,10 @@ func (h *Handler) HandleGitLab(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Missing project ID", http.StatusBadRequest)
 		return
 	}
+	if !isValidProjectID(projectID) {
+		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		return
+	}
 
 	// Read body
 	body, err := io.ReadAll(r.Body)
@@ -325,6 +340,12 @@ func (h *Handler) HandleGitLab(w http.ResponseWriter, r *http.Request) {
 	}
 
 	token := r.Header.Get("X-Gitlab-Token")
+	requireSecret := h.secrets.IsSecretRequired(projectID)
+	if secret == "" && requireSecret {
+		h.logger.Warn("Webhook secret required but not configured", zap.String("project", projectID))
+		http.Error(w, "Webhook secret required", http.StatusUnauthorized)
+		return
+	}
 	if secret != "" && token != secret {
 		h.logger.Warn("Invalid GitLab token", zap.String("project", projectID))
 		http.Error(w, "Invalid token", http.StatusUnauthorized)
@@ -511,6 +532,10 @@ func (h *Handler) HandleBitbucket(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Missing project ID", http.StatusBadRequest)
 		return
 	}
+	if !isValidProjectID(projectID) {
+		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		return
+	}
 
 	// Read body
 	body, err := io.ReadAll(r.Body)
@@ -673,6 +698,21 @@ func (h *Handler) handleBitbucketPR(w http.ResponseWriter, body []byte, projectI
 	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+// isValidProjectID validates that a project ID contains only safe characters.
+// Valid characters: alphanumeric, dash, underscore (no path traversal or injection)
+func isValidProjectID(id string) bool {
+	if id == "" || len(id) > 128 {
+		return false
+	}
+	for _, r := range id {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') || r == '-' || r == '_') {
+			return false
+		}
+	}
+	return true
 }
 
 func extractProjectID(path, prefix string) string {

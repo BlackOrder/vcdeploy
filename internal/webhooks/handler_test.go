@@ -15,8 +15,9 @@ import (
 
 // MockSecretStore implements SecretStore for testing
 type MockSecretStore struct {
-	Secrets map[string]string
-	Err     error
+	Secrets        map[string]string
+	RequireSecrets map[string]bool
+	Err            error
 }
 
 func (m *MockSecretStore) GetWebhookSecret(projectID string) (string, error) {
@@ -24,6 +25,13 @@ func (m *MockSecretStore) GetWebhookSecret(projectID string) (string, error) {
 		return "", m.Err
 	}
 	return m.Secrets[projectID], nil
+}
+
+func (m *MockSecretStore) IsSecretRequired(projectID string) bool {
+	if m.RequireSecrets == nil {
+		return false
+	}
+	return m.RequireSecrets[projectID]
 }
 
 // MockEventProcessor implements EventProcessor for testing
@@ -73,10 +81,11 @@ func TestValidateGitHubSignatureMethod(t *testing.T) {
 	payload := []byte(`{"action": "push"}`)
 
 	tests := []struct {
-		name      string
-		signature string
-		secret    string
-		valid     bool
+		name          string
+		signature     string
+		secret        string
+		requireSecret bool
+		valid         bool
 	}{
 		{
 			name:      "valid signature",
@@ -108,11 +117,18 @@ func TestValidateGitHubSignatureMethod(t *testing.T) {
 			secret:    "",
 			valid:     true, // No secret configured means no validation
 		},
+		{
+			name:          "empty secret but required",
+			signature:     "",
+			secret:        "",
+			requireSecret: true,
+			valid:         false, // Secret required but not configured
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := h.validateGitHubSignature(payload, tt.signature, tt.secret)
+			result := h.validateGitHubSignature(payload, tt.signature, tt.secret, tt.requireSecret)
 			if result != tt.valid {
 				t.Errorf("validateGitHubSignature() = %v, want %v", result, tt.valid)
 			}
@@ -150,7 +166,10 @@ func TestHandleGitHubPush(t *testing.T) {
 		},
 	}
 
-	payloadBytes, _ := json.Marshal(payload)
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("failed to marshal payload: %v", err)
+	}
 	signature := createGitHubSignature("test-secret", payloadBytes)
 
 	req := httptest.NewRequest(http.MethodPost, "/webhook/github/test-project", bytes.NewReader(payloadBytes))
@@ -276,7 +295,10 @@ func TestHandleGitHubPullRequest(t *testing.T) {
 		},
 	}
 
-	payloadBytes, _ := json.Marshal(payload)
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("failed to marshal payload: %v", err)
+	}
 	signature := createGitHubSignature("test-secret", payloadBytes)
 
 	req := httptest.NewRequest(http.MethodPost, "/webhook/github/test-project", bytes.NewReader(payloadBytes))
@@ -323,7 +345,10 @@ func TestHandleGitHubTagCreate(t *testing.T) {
 		},
 	}
 
-	payloadBytes, _ := json.Marshal(payload)
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("failed to marshal payload: %v", err)
+	}
 	signature := createGitHubSignature("test-secret", payloadBytes)
 
 	req := httptest.NewRequest(http.MethodPost, "/webhook/github/test-project", bytes.NewReader(payloadBytes))
@@ -381,7 +406,10 @@ func TestHandleGitLabPush(t *testing.T) {
 		},
 	}
 
-	payloadBytes, _ := json.Marshal(payload)
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("failed to marshal payload: %v", err)
+	}
 
 	req := httptest.NewRequest(http.MethodPost, "/webhook/gitlab/gitlab-project", bytes.NewReader(payloadBytes))
 	req.Header.Set("Content-Type", "application/json")
@@ -466,7 +494,10 @@ func TestHandleBitbucketPush(t *testing.T) {
 		},
 	}
 
-	payloadBytes, _ := json.Marshal(payload)
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("failed to marshal payload: %v", err)
+	}
 
 	req := httptest.NewRequest(http.MethodPost, "/webhook/bitbucket/bb-project", bytes.NewReader(payloadBytes))
 	req.Header.Set("Content-Type", "application/json")
@@ -518,7 +549,7 @@ func BenchmarkValidateGitHubSignature(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		h.validateGitHubSignature(payload, signature, secret)
+		h.validateGitHubSignature(payload, signature, secret, false)
 	}
 }
 
@@ -545,7 +576,10 @@ func BenchmarkHandleGitHub(b *testing.B) {
 		},
 	}
 
-	payloadBytes, _ := json.Marshal(payload)
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		b.Fatalf("failed to marshal payload: %v", err)
+	}
 	signature := createGitHubSignature("bench-secret", payloadBytes)
 
 	b.ResetTimer()
