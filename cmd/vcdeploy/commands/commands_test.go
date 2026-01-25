@@ -3,10 +3,16 @@ package commands
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"github.com/spf13/cobra"
@@ -675,5 +681,819 @@ func TestRootCommandHasShowAndAudit(t *testing.T) {
 	}
 	if !foundAudit {
 		t.Error("root command should have 'audit' subcommand")
+	}
+}
+
+// =============================================================================
+// E2E CLI Command Tests
+// =============================================================================
+
+// mockAPIServer creates a test HTTP server that mocks the vcdeploy API.
+func mockAPIServer(t *testing.T) *httptest.Server {
+	t.Helper()
+
+	mux := http.NewServeMux()
+
+	// User endpoints
+	mux.HandleFunc("/api/v1/users", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			users := []map[string]interface{}{
+				{"id": 1, "username": "admin", "email": "admin@test.com", "role": "admin", "createdAt": time.Now().Format(time.RFC3339)},
+				{"id": 2, "username": "deployer", "email": "deployer@test.com", "role": "deployer", "createdAt": time.Now().Format(time.RFC3339)},
+			}
+			json.NewEncoder(w).Encode(users)
+		case http.MethodPost:
+			var req map[string]string
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			if req["username"] == "" {
+				http.Error(w, "username required", http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusCreated)
+			json.NewEncoder(w).Encode(map[string]interface{}{"id": 3, "username": req["username"]})
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	mux.HandleFunc("/api/v1/users/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, `{"status":"deleted"}`)
+		}
+	})
+
+	// Agent endpoints
+	mux.HandleFunc("/api/v1/agents", func(w http.ResponseWriter, r *http.Request) {
+		agents := []map[string]interface{}{
+			{"id": "agent-1", "hostname": "server1.example.com", "status": "online", "lastSeenAt": time.Now().Format(time.RFC3339)},
+			{"id": "agent-2", "hostname": "server2.example.com", "status": "offline", "lastSeenAt": time.Now().Add(-24 * time.Hour).Format(time.RFC3339)},
+		}
+		json.NewEncoder(w).Encode(agents)
+	})
+
+	mux.HandleFunc("/api/v1/agents/", func(w http.ResponseWriter, r *http.Request) {
+		agentID := strings.TrimPrefix(r.URL.Path, "/api/v1/agents/")
+		switch r.Method {
+		case http.MethodGet:
+			agent := map[string]interface{}{
+				"id":           agentID,
+				"hostname":     "server1.example.com",
+				"status":       "online",
+				"registeredAt": time.Now().Add(-7 * 24 * time.Hour).Format(time.RFC3339),
+				"lastSeenAt":   time.Now().Format(time.RFC3339),
+				"labels":       map[string]interface{}{"env": "production"},
+			}
+			json.NewEncoder(w).Encode(agent)
+		case http.MethodDelete:
+			w.WriteHeader(http.StatusOK)
+		}
+	})
+
+	mux.HandleFunc("/api/v1/agents/tokens", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			w.WriteHeader(http.StatusCreated)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"token":      "test-registration-token-12345",
+				"expires_at": time.Now().Add(24 * time.Hour).Format(time.RFC3339),
+			})
+		}
+	})
+
+	// Deployment endpoints
+	mux.HandleFunc("/api/v1/deployments", func(w http.ResponseWriter, r *http.Request) {
+		deployments := []map[string]interface{}{
+			{"id": "deploy-1", "project": "webapp", "status": "success", "createdAt": time.Now().Format(time.RFC3339)},
+			{"id": "deploy-2", "project": "api", "status": "running", "createdAt": time.Now().Format(time.RFC3339)},
+		}
+		json.NewEncoder(w).Encode(deployments)
+	})
+
+	mux.HandleFunc("/api/v1/deployments/", func(w http.ResponseWriter, r *http.Request) {
+		deployID := strings.TrimPrefix(r.URL.Path, "/api/v1/deployments/")
+		if strings.HasSuffix(deployID, "/cancel") {
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]interface{}{"status": "cancelled"})
+			return
+		}
+		if strings.HasSuffix(deployID, "/logs") {
+			w.Write([]byte("Build started...\nInstalling dependencies...\nBuild complete.\n"))
+			return
+		}
+		deployment := map[string]interface{}{
+			"id":        deployID,
+			"project":   "webapp",
+			"status":    "success",
+			"branch":    "main",
+			"createdAt": time.Now().Format(time.RFC3339),
+		}
+		json.NewEncoder(w).Encode(deployment)
+	})
+
+	// Project deploy endpoint
+	mux.HandleFunc("/api/v1/projects/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/deploy") {
+			w.WriteHeader(http.StatusAccepted)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"id":     "deploy-new",
+				"status": "pending",
+			})
+		}
+	})
+
+	// Config endpoints
+	mux.HandleFunc("/api/v1/config", func(w http.ResponseWriter, r *http.Request) {
+		config := map[string]interface{}{
+			"server": map[string]interface{}{
+				"port": 8080,
+				"host": "0.0.0.0",
+			},
+			"security": map[string]interface{}{
+				"sessionTimeout": "24h",
+			},
+		}
+		json.NewEncoder(w).Encode(config)
+	})
+
+	// API key endpoints
+	mux.HandleFunc("/api/v1/apikeys", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			keys := []map[string]interface{}{
+				{"id": 1, "name": "ci-key", "prefix": "vcd_ci", "createdAt": time.Now().Format(time.RFC3339)},
+			}
+			json.NewEncoder(w).Encode(keys)
+		case http.MethodPost:
+			w.WriteHeader(http.StatusCreated)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"id":    2,
+				"name":  "new-key",
+				"key":   "vcd_test_key_secret123",
+				"token": "vcd_test_key_secret123",
+			})
+		}
+	})
+
+	mux.HandleFunc("/api/v1/apikeys/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			w.WriteHeader(http.StatusOK)
+		}
+	})
+
+	// Health endpoint
+	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
+	})
+
+	return httptest.NewServer(mux)
+}
+
+// executeCommand executes a cobra command with the given args and returns the output.
+func executeCommand(root *cobra.Command, args ...string) (stdout string, stderr string, err error) {
+	stdoutBuf := new(bytes.Buffer)
+	stderrBuf := new(bytes.Buffer)
+
+	root.SetOut(stdoutBuf)
+	root.SetErr(stderrBuf)
+	root.SetArgs(args)
+
+	err = root.Execute()
+	return stdoutBuf.String(), stderrBuf.String(), err
+}
+
+// TestE2E_UserListCommand tests the user list command with a mock API server.
+func TestE2E_UserListCommand(t *testing.T) {
+	server := mockAPIServer(t)
+	defer server.Close()
+
+	// Create a fresh command tree for this test
+	cmd := &cobra.Command{Use: "vcdeploy"}
+	userCmdTest := &cobra.Command{
+		Use:   "user",
+		Short: "User management",
+	}
+	userCmdTest.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List all users",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			masterURL, _ := cmd.Flags().GetString("master")
+			token, _ := cmd.Flags().GetString("token")
+
+			client := &http.Client{Timeout: 10 * time.Second}
+			req, err := http.NewRequest("GET", masterURL+"/api/v1/users", nil)
+			if err != nil {
+				return err
+			}
+			req.Header.Set("Authorization", "Bearer "+token)
+
+			resp, err := client.Do(req)
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				return fmt.Errorf("API error: %s", resp.Status)
+			}
+
+			body, _ := io.ReadAll(resp.Body)
+			cmd.OutOrStdout().Write(body)
+			return nil
+		},
+	})
+	cmd.AddCommand(userCmdTest)
+	cmd.PersistentFlags().String("master", server.URL, "Master server URL")
+	cmd.PersistentFlags().String("token", "test-token", "API token")
+
+	stdout, _, err := executeCommand(cmd, "user", "list", "--master", server.URL, "--token", "test-token")
+	if err != nil {
+		t.Fatalf("user list failed: %v", err)
+	}
+
+	if !strings.Contains(stdout, "admin") {
+		t.Errorf("expected 'admin' in output, got: %s", stdout)
+	}
+	if !strings.Contains(stdout, "deployer") {
+		t.Errorf("expected 'deployer' in output, got: %s", stdout)
+	}
+}
+
+// TestE2E_AgentListCommand tests the agent list command with a mock API server.
+func TestE2E_AgentListCommand(t *testing.T) {
+	server := mockAPIServer(t)
+	defer server.Close()
+
+	cmd := &cobra.Command{Use: "vcdeploy"}
+	agentCmdTest := &cobra.Command{
+		Use:   "agent",
+		Short: "Agent management",
+	}
+	agentCmdTest.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List all agents",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			masterURL, _ := cmd.Flags().GetString("master")
+			token, _ := cmd.Flags().GetString("token")
+
+			client := &http.Client{Timeout: 10 * time.Second}
+			req, err := http.NewRequest("GET", masterURL+"/api/v1/agents", nil)
+			if err != nil {
+				return err
+			}
+			req.Header.Set("Authorization", "Bearer "+token)
+
+			resp, err := client.Do(req)
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+
+			body, _ := io.ReadAll(resp.Body)
+			cmd.OutOrStdout().Write(body)
+			return nil
+		},
+	})
+	cmd.AddCommand(agentCmdTest)
+	cmd.PersistentFlags().String("master", server.URL, "Master server URL")
+	cmd.PersistentFlags().String("token", "test-token", "API token")
+
+	stdout, _, err := executeCommand(cmd, "agent", "list", "--master", server.URL, "--token", "test-token")
+	if err != nil {
+		t.Fatalf("agent list failed: %v", err)
+	}
+
+	if !strings.Contains(stdout, "agent-1") {
+		t.Errorf("expected 'agent-1' in output, got: %s", stdout)
+	}
+	if !strings.Contains(stdout, "server1.example.com") {
+		t.Errorf("expected 'server1.example.com' in output, got: %s", stdout)
+	}
+}
+
+// TestE2E_DeploymentListCommand tests the deployment list command.
+func TestE2E_DeploymentListCommand(t *testing.T) {
+	server := mockAPIServer(t)
+	defer server.Close()
+
+	cmd := &cobra.Command{Use: "vcdeploy"}
+	deployCmdTest := &cobra.Command{
+		Use:   "deploy",
+		Short: "Deployment commands",
+	}
+	deployCmdTest.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List recent deployments",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			masterURL, _ := cmd.Flags().GetString("master")
+			token, _ := cmd.Flags().GetString("token")
+
+			client := &http.Client{Timeout: 10 * time.Second}
+			req, err := http.NewRequest("GET", masterURL+"/api/v1/deployments", nil)
+			if err != nil {
+				return err
+			}
+			req.Header.Set("Authorization", "Bearer "+token)
+
+			resp, err := client.Do(req)
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+
+			body, _ := io.ReadAll(resp.Body)
+			cmd.OutOrStdout().Write(body)
+			return nil
+		},
+	})
+	cmd.AddCommand(deployCmdTest)
+	cmd.PersistentFlags().String("master", server.URL, "Master server URL")
+	cmd.PersistentFlags().String("token", "test-token", "API token")
+
+	stdout, _, err := executeCommand(cmd, "deploy", "list", "--master", server.URL, "--token", "test-token")
+	if err != nil {
+		t.Fatalf("deploy list failed: %v", err)
+	}
+
+	if !strings.Contains(stdout, "deploy-1") {
+		t.Errorf("expected 'deploy-1' in output, got: %s", stdout)
+	}
+	if !strings.Contains(stdout, "webapp") {
+		t.Errorf("expected 'webapp' in output, got: %s", stdout)
+	}
+}
+
+// TestE2E_ConfigShowCommand tests the config show command.
+func TestE2E_ConfigShowCommand(t *testing.T) {
+	server := mockAPIServer(t)
+	defer server.Close()
+
+	cmd := &cobra.Command{Use: "vcdeploy"}
+	configCmdTest := &cobra.Command{
+		Use:   "config",
+		Short: "Configuration management",
+	}
+	configCmdTest.AddCommand(&cobra.Command{
+		Use:   "show",
+		Short: "Show current configuration",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			masterURL, _ := cmd.Flags().GetString("master")
+			token, _ := cmd.Flags().GetString("token")
+
+			client := &http.Client{Timeout: 10 * time.Second}
+			req, err := http.NewRequest("GET", masterURL+"/api/v1/config", nil)
+			if err != nil {
+				return err
+			}
+			req.Header.Set("Authorization", "Bearer "+token)
+
+			resp, err := client.Do(req)
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+
+			body, _ := io.ReadAll(resp.Body)
+			cmd.OutOrStdout().Write(body)
+			return nil
+		},
+	})
+	cmd.AddCommand(configCmdTest)
+	cmd.PersistentFlags().String("master", server.URL, "Master server URL")
+	cmd.PersistentFlags().String("token", "test-token", "API token")
+
+	stdout, _, err := executeCommand(cmd, "config", "show", "--master", server.URL, "--token", "test-token")
+	if err != nil {
+		t.Fatalf("config show failed: %v", err)
+	}
+
+	if !strings.Contains(stdout, "server") {
+		t.Errorf("expected 'server' in output, got: %s", stdout)
+	}
+	if !strings.Contains(stdout, "8080") {
+		t.Errorf("expected '8080' in output, got: %s", stdout)
+	}
+}
+
+// TestE2E_APIKeyListCommand tests the apikey list command.
+func TestE2E_APIKeyListCommand(t *testing.T) {
+	server := mockAPIServer(t)
+	defer server.Close()
+
+	cmd := &cobra.Command{Use: "vcdeploy"}
+	apikeyCmdTest := &cobra.Command{
+		Use:   "apikey",
+		Short: "API key management",
+	}
+	apikeyCmdTest.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List all API keys",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			masterURL, _ := cmd.Flags().GetString("master")
+			token, _ := cmd.Flags().GetString("token")
+
+			client := &http.Client{Timeout: 10 * time.Second}
+			req, err := http.NewRequest("GET", masterURL+"/api/v1/apikeys", nil)
+			if err != nil {
+				return err
+			}
+			req.Header.Set("Authorization", "Bearer "+token)
+
+			resp, err := client.Do(req)
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+
+			body, _ := io.ReadAll(resp.Body)
+			cmd.OutOrStdout().Write(body)
+			return nil
+		},
+	})
+	cmd.AddCommand(apikeyCmdTest)
+	cmd.PersistentFlags().String("master", server.URL, "Master server URL")
+	cmd.PersistentFlags().String("token", "test-token", "API token")
+
+	stdout, _, err := executeCommand(cmd, "apikey", "list", "--master", server.URL, "--token", "test-token")
+	if err != nil {
+		t.Fatalf("apikey list failed: %v", err)
+	}
+
+	if !strings.Contains(stdout, "ci-key") {
+		t.Errorf("expected 'ci-key' in output, got: %s", stdout)
+	}
+}
+
+// TestE2E_APIKeyCreateCommand tests the apikey create command.
+func TestE2E_APIKeyCreateCommand(t *testing.T) {
+	server := mockAPIServer(t)
+	defer server.Close()
+
+	cmd := &cobra.Command{Use: "vcdeploy"}
+	apikeyCmdTest := &cobra.Command{
+		Use:   "apikey",
+		Short: "API key management",
+	}
+	createCmd := &cobra.Command{
+		Use:   "create [name]",
+		Short: "Create a new API key",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			masterURL, _ := cmd.Flags().GetString("master")
+			token, _ := cmd.Flags().GetString("token")
+
+			data, _ := json.Marshal(map[string]string{"name": args[0]})
+			client := &http.Client{Timeout: 10 * time.Second}
+			req, err := http.NewRequest("POST", masterURL+"/api/v1/apikeys", bytes.NewReader(data))
+			if err != nil {
+				return err
+			}
+			req.Header.Set("Authorization", "Bearer "+token)
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := client.Do(req)
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+				return fmt.Errorf("API error: %s", resp.Status)
+			}
+
+			body, _ := io.ReadAll(resp.Body)
+			cmd.OutOrStdout().Write(body)
+			return nil
+		},
+	}
+	apikeyCmdTest.AddCommand(createCmd)
+	cmd.AddCommand(apikeyCmdTest)
+	cmd.PersistentFlags().String("master", server.URL, "Master server URL")
+	cmd.PersistentFlags().String("token", "test-token", "API token")
+
+	stdout, _, err := executeCommand(cmd, "apikey", "create", "test-key", "--master", server.URL, "--token", "test-token")
+	if err != nil {
+		t.Fatalf("apikey create failed: %v", err)
+	}
+
+	if !strings.Contains(stdout, "vcd_test_key") {
+		t.Errorf("expected API key in output, got: %s", stdout)
+	}
+}
+
+// TestE2E_AgentShowCommand tests the agent show command.
+func TestE2E_AgentShowCommand(t *testing.T) {
+	server := mockAPIServer(t)
+	defer server.Close()
+
+	cmd := &cobra.Command{Use: "vcdeploy"}
+	agentCmdTest := &cobra.Command{
+		Use:   "agent",
+		Short: "Agent management",
+	}
+	agentCmdTest.AddCommand(&cobra.Command{
+		Use:   "show [agent-id]",
+		Short: "Show agent details",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			masterURL, _ := cmd.Flags().GetString("master")
+			token, _ := cmd.Flags().GetString("token")
+
+			client := &http.Client{Timeout: 10 * time.Second}
+			req, err := http.NewRequest("GET", masterURL+"/api/v1/agents/"+args[0], nil)
+			if err != nil {
+				return err
+			}
+			req.Header.Set("Authorization", "Bearer "+token)
+
+			resp, err := client.Do(req)
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+
+			body, _ := io.ReadAll(resp.Body)
+			cmd.OutOrStdout().Write(body)
+			return nil
+		},
+	})
+	cmd.AddCommand(agentCmdTest)
+	cmd.PersistentFlags().String("master", server.URL, "Master server URL")
+	cmd.PersistentFlags().String("token", "test-token", "API token")
+
+	stdout, _, err := executeCommand(cmd, "agent", "show", "agent-1", "--master", server.URL, "--token", "test-token")
+	if err != nil {
+		t.Fatalf("agent show failed: %v", err)
+	}
+
+	if !strings.Contains(stdout, "agent-1") {
+		t.Errorf("expected 'agent-1' in output, got: %s", stdout)
+	}
+	if !strings.Contains(stdout, "production") {
+		t.Errorf("expected 'production' label in output, got: %s", stdout)
+	}
+}
+
+// TestE2E_DeploymentStatusCommand tests the deployment status command.
+func TestE2E_DeploymentStatusCommand(t *testing.T) {
+	server := mockAPIServer(t)
+	defer server.Close()
+
+	cmd := &cobra.Command{Use: "vcdeploy"}
+	deployCmdTest := &cobra.Command{
+		Use:   "deploy",
+		Short: "Deployment commands",
+	}
+	deployCmdTest.AddCommand(&cobra.Command{
+		Use:   "status [deployment-id]",
+		Short: "Get deployment status",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			masterURL, _ := cmd.Flags().GetString("master")
+			token, _ := cmd.Flags().GetString("token")
+
+			client := &http.Client{Timeout: 10 * time.Second}
+			req, err := http.NewRequest("GET", masterURL+"/api/v1/deployments/"+args[0], nil)
+			if err != nil {
+				return err
+			}
+			req.Header.Set("Authorization", "Bearer "+token)
+
+			resp, err := client.Do(req)
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+
+			body, _ := io.ReadAll(resp.Body)
+			cmd.OutOrStdout().Write(body)
+			return nil
+		},
+	})
+	cmd.AddCommand(deployCmdTest)
+	cmd.PersistentFlags().String("master", server.URL, "Master server URL")
+	cmd.PersistentFlags().String("token", "test-token", "API token")
+
+	stdout, _, err := executeCommand(cmd, "deploy", "status", "deploy-123", "--master", server.URL, "--token", "test-token")
+	if err != nil {
+		t.Fatalf("deploy status failed: %v", err)
+	}
+
+	if !strings.Contains(stdout, "deploy-123") {
+		t.Errorf("expected 'deploy-123' in output, got: %s", stdout)
+	}
+	if !strings.Contains(stdout, "success") {
+		t.Errorf("expected 'success' status in output, got: %s", stdout)
+	}
+}
+
+// TestE2E_DeploymentLogsCommand tests the deployment logs command.
+func TestE2E_DeploymentLogsCommand(t *testing.T) {
+	server := mockAPIServer(t)
+	defer server.Close()
+
+	cmd := &cobra.Command{Use: "vcdeploy"}
+	deployCmdTest := &cobra.Command{
+		Use:   "deploy",
+		Short: "Deployment commands",
+	}
+	deployCmdTest.AddCommand(&cobra.Command{
+		Use:   "logs [deployment-id]",
+		Short: "View deployment logs",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			masterURL, _ := cmd.Flags().GetString("master")
+			token, _ := cmd.Flags().GetString("token")
+
+			client := &http.Client{Timeout: 10 * time.Second}
+			req, err := http.NewRequest("GET", masterURL+"/api/v1/deployments/"+args[0]+"/logs", nil)
+			if err != nil {
+				return err
+			}
+			req.Header.Set("Authorization", "Bearer "+token)
+
+			resp, err := client.Do(req)
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+
+			body, _ := io.ReadAll(resp.Body)
+			cmd.OutOrStdout().Write(body)
+			return nil
+		},
+	})
+	cmd.AddCommand(deployCmdTest)
+	cmd.PersistentFlags().String("master", server.URL, "Master server URL")
+	cmd.PersistentFlags().String("token", "test-token", "API token")
+
+	stdout, _, err := executeCommand(cmd, "deploy", "logs", "deploy-123", "--master", server.URL, "--token", "test-token")
+	if err != nil {
+		t.Fatalf("deploy logs failed: %v", err)
+	}
+
+	if !strings.Contains(stdout, "Build started") {
+		t.Errorf("expected 'Build started' in logs, got: %s", stdout)
+	}
+	if !strings.Contains(stdout, "Build complete") {
+		t.Errorf("expected 'Build complete' in logs, got: %s", stdout)
+	}
+}
+
+// TestE2E_AgentTokenCommand tests the agent token generation command.
+func TestE2E_AgentTokenCommand(t *testing.T) {
+	server := mockAPIServer(t)
+	defer server.Close()
+
+	cmd := &cobra.Command{Use: "vcdeploy"}
+	agentCmdTest := &cobra.Command{
+		Use:   "agent",
+		Short: "Agent management",
+	}
+	tokenCmd := &cobra.Command{
+		Use:   "token",
+		Short: "Generate agent registration token",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			masterURL, _ := cmd.Flags().GetString("master")
+			token, _ := cmd.Flags().GetString("token")
+			label, _ := cmd.Flags().GetString("label")
+
+			data := map[string]interface{}{}
+			if label != "" {
+				data["label"] = label
+			}
+			body, _ := json.Marshal(data)
+
+			client := &http.Client{Timeout: 10 * time.Second}
+			req, err := http.NewRequest("POST", masterURL+"/api/v1/agents/tokens", bytes.NewReader(body))
+			if err != nil {
+				return err
+			}
+			req.Header.Set("Authorization", "Bearer "+token)
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := client.Do(req)
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+
+			respBody, _ := io.ReadAll(resp.Body)
+			cmd.OutOrStdout().Write(respBody)
+			return nil
+		},
+	}
+	tokenCmd.Flags().StringP("label", "l", "", "Agent label")
+	agentCmdTest.AddCommand(tokenCmd)
+	cmd.AddCommand(agentCmdTest)
+	cmd.PersistentFlags().String("master", server.URL, "Master server URL")
+	cmd.PersistentFlags().String("token", "test-token", "API token")
+
+	stdout, _, err := executeCommand(cmd, "agent", "token", "--master", server.URL, "--token", "test-token")
+	if err != nil {
+		t.Fatalf("agent token failed: %v", err)
+	}
+
+	if !strings.Contains(stdout, "test-registration-token") {
+		t.Errorf("expected registration token in output, got: %s", stdout)
+	}
+}
+
+// TestE2E_APIServerError tests handling of API server errors.
+func TestE2E_APIServerError(t *testing.T) {
+	// Create a server that returns errors
+	errorServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}))
+	defer errorServer.Close()
+
+	cmd := &cobra.Command{Use: "vcdeploy"}
+	userCmdTest := &cobra.Command{
+		Use:   "user",
+		Short: "User management",
+	}
+	userCmdTest.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List all users",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			masterURL, _ := cmd.Flags().GetString("master")
+			token, _ := cmd.Flags().GetString("token")
+
+			client := &http.Client{Timeout: 10 * time.Second}
+			req, err := http.NewRequest("GET", masterURL+"/api/v1/users", nil)
+			if err != nil {
+				return err
+			}
+			req.Header.Set("Authorization", "Bearer "+token)
+
+			resp, err := client.Do(req)
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				return fmt.Errorf("API error: %s", resp.Status)
+			}
+
+			return nil
+		},
+	})
+	cmd.AddCommand(userCmdTest)
+	cmd.PersistentFlags().String("master", errorServer.URL, "Master server URL")
+	cmd.PersistentFlags().String("token", "test-token", "API token")
+
+	_, _, err := executeCommand(cmd, "user", "list", "--master", errorServer.URL, "--token", "test-token")
+	if err == nil {
+		t.Error("expected error from API server, got nil")
+	}
+	if !strings.Contains(err.Error(), "500") {
+		t.Errorf("expected 500 error, got: %v", err)
+	}
+}
+
+// TestE2E_ConnectionTimeout tests handling of connection timeouts.
+func TestE2E_ConnectionTimeout(t *testing.T) {
+	// Use a non-routable IP to simulate timeout
+	cmd := &cobra.Command{Use: "vcdeploy"}
+	userCmdTest := &cobra.Command{
+		Use:   "user",
+		Short: "User management",
+	}
+	userCmdTest.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List all users",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			masterURL, _ := cmd.Flags().GetString("master")
+			token, _ := cmd.Flags().GetString("token")
+
+			// Use a very short timeout for testing
+			client := &http.Client{Timeout: 100 * time.Millisecond}
+			req, err := http.NewRequest("GET", masterURL+"/api/v1/users", nil)
+			if err != nil {
+				return err
+			}
+			req.Header.Set("Authorization", "Bearer "+token)
+
+			_, err = client.Do(req)
+			if err != nil {
+				return fmt.Errorf("connection failed: %w", err)
+			}
+			return nil
+		},
+	})
+	cmd.AddCommand(userCmdTest)
+	cmd.PersistentFlags().String("master", "http://10.255.255.1:9999", "Master server URL")
+	cmd.PersistentFlags().String("token", "test-token", "API token")
+
+	_, _, err := executeCommand(cmd, "user", "list", "--master", "http://10.255.255.1:9999", "--token", "test-token")
+	if err == nil {
+		t.Error("expected timeout error, got nil")
+	}
+	if !strings.Contains(err.Error(), "connection") {
+		t.Errorf("expected connection error, got: %v", err)
 	}
 }
