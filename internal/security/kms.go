@@ -404,6 +404,7 @@ func (k *KMS) ProcessScheduledDeletions(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("process deletions: %w", err)
 	}
 
+	// Note: SQLite's RowsAffected() never returns an error
 	affected, _ := result.RowsAffected()
 
 	// Clear affected keys from cache
