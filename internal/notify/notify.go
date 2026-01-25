@@ -8,9 +8,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/smtp"
+	"strconv"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
 
@@ -42,6 +45,7 @@ type Notifier interface {
 type Manager struct {
 	logger    *zap.Logger
 	notifiers []Notifier
+	wg        sync.WaitGroup
 }
 
 // NewManager creates a notification manager
@@ -58,12 +62,23 @@ func (m *Manager) Register(n Notifier) {
 	m.logger.Info("registered notifier", zap.String("name", n.Name()))
 }
 
-// Notify sends an event to all registered notifiers
+// Notify sends an event to all registered notifiers asynchronously.
+// Use NotifyAndWait if you need to wait for all notifications to complete.
 func (m *Manager) Notify(ctx context.Context, event Event) {
 	event.Timestamp = time.Now()
 
 	for _, n := range m.notifiers {
+		m.wg.Add(1)
 		go func(notifier Notifier) {
+			defer m.wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					m.logger.Error("panic in notifier",
+						zap.String("notifier", notifier.Name()),
+						zap.Any("panic", r),
+					)
+				}
+			}()
 			if err := notifier.Send(ctx, event); err != nil {
 				m.logger.Error("notification failed",
 					zap.String("notifier", notifier.Name()),
@@ -72,6 +87,18 @@ func (m *Manager) Notify(ctx context.Context, event Event) {
 			}
 		}(n)
 	}
+}
+
+// NotifyAndWait sends an event to all registered notifiers and waits for completion.
+// Use this during shutdown to ensure all notifications are sent.
+func (m *Manager) NotifyAndWait(ctx context.Context, event Event) {
+	m.Notify(ctx, event)
+	m.Wait()
+}
+
+// Wait blocks until all in-flight notifications complete.
+func (m *Manager) Wait() {
+	m.wg.Wait()
 }
 
 // SlackConfig holds Slack notification settings
@@ -280,7 +307,7 @@ func (e *EmailNotifier) Send(ctx context.Context, event Event) error {
 		body.String(),
 	)
 
-	addr := fmt.Sprintf("%s:%d", e.config.SMTPHost, e.config.SMTPPort)
+	addr := net.JoinHostPort(e.config.SMTPHost, strconv.Itoa(e.config.SMTPPort))
 	var auth smtp.Auth
 	if e.config.Username != "" {
 		auth = smtp.PlainAuth("", e.config.Username, e.config.Password, e.config.SMTPHost)
