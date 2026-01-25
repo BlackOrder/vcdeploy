@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -407,6 +408,185 @@ func TestNewEmailNotifier(t *testing.T) {
 
 	if notifier.Name() != "email" {
 		t.Errorf("EmailNotifier.Name() = %v, want email", notifier.Name())
+	}
+}
+
+func TestEmailNotifierSendEmptyConfig(t *testing.T) {
+	t.Parallel()
+
+	// Test with empty SMTP host - should skip silently
+	cfg := EmailConfig{
+		SMTPHost:    "",
+		ToAddresses: []string{"test@example.com"},
+	}
+
+	notifier, err := NewEmailNotifier(cfg)
+	if err != nil {
+		t.Fatalf("NewEmailNotifier() error = %v", err)
+	}
+
+	event := Event{
+		Type:        "deployment",
+		ProjectName: "Test Project",
+		Environment: "production",
+		Status:      "success",
+	}
+
+	ctx := context.Background()
+	err = notifier.Send(ctx, event)
+	if err != nil {
+		t.Errorf("Send() with empty host should not error, got: %v", err)
+	}
+}
+
+func TestEmailNotifierSendEmptyRecipients(t *testing.T) {
+	t.Parallel()
+
+	// Test with no recipients - should skip silently
+	cfg := EmailConfig{
+		SMTPHost:    "smtp.example.com",
+		SMTPPort:    587,
+		ToAddresses: []string{},
+	}
+
+	notifier, err := NewEmailNotifier(cfg)
+	if err != nil {
+		t.Fatalf("NewEmailNotifier() error = %v", err)
+	}
+
+	event := Event{
+		Type:        "deployment",
+		ProjectName: "Test Project",
+		Status:      "success",
+	}
+
+	ctx := context.Background()
+	err = notifier.Send(ctx, event)
+	if err != nil {
+		t.Errorf("Send() with no recipients should not error, got: %v", err)
+	}
+}
+
+func TestEmailNotifierDefaultTemplate(t *testing.T) {
+	t.Parallel()
+
+	cfg := EmailConfig{
+		SMTPHost:    "smtp.example.com",
+		SMTPPort:    587,
+		FromAddress: "test@example.com",
+		FromName:    "VCDeploy",
+		ToAddresses: []string{"team@example.com"},
+	}
+
+	notifier, err := NewEmailNotifier(cfg)
+	if err != nil {
+		t.Fatalf("NewEmailNotifier() error = %v", err)
+	}
+
+	event := Event{
+		Type:        "deployment",
+		ProjectName: "Test Project",
+		Environment: "production",
+		Status:      "success",
+		Version:     "v1.2.3",
+		User:        "deployer",
+		Message:     "Test deployment message",
+		URL:         "https://example.com/deploy/123",
+		Timestamp:   time.Now(),
+	}
+
+	// Test default template rendering (internal method)
+	template := notifier.defaultTemplate(event)
+
+	if template == "" {
+		t.Error("defaultTemplate() returned empty string")
+	}
+
+	// Verify template contains key elements
+	if !strings.Contains(template, "Test Project") {
+		t.Error("template should contain project name")
+	}
+	if !strings.Contains(template, "production") {
+		t.Error("template should contain environment")
+	}
+	if !strings.Contains(template, "success") {
+		t.Error("template should contain status")
+	}
+	if !strings.Contains(template, "v1.2.3") {
+		t.Error("template should contain version")
+	}
+	if !strings.Contains(template, "Test deployment message") {
+		t.Error("template should contain message")
+	}
+	if !strings.Contains(template, "https://example.com/deploy/123") {
+		t.Error("template should contain URL")
+	}
+}
+
+func TestEmailNotifierDefaultTemplateStatuses(t *testing.T) {
+	t.Parallel()
+
+	cfg := EmailConfig{
+		SMTPHost:    "smtp.example.com",
+		SMTPPort:    587,
+		FromAddress: "test@example.com",
+		ToAddresses: []string{"team@example.com"},
+	}
+
+	notifier, err := NewEmailNotifier(cfg)
+	if err != nil {
+		t.Fatalf("NewEmailNotifier() error = %v", err)
+	}
+
+	statuses := []string{"success", "failed", "pending", "running", "rolled_back"}
+
+	for _, status := range statuses {
+		t.Run(status, func(t *testing.T) {
+			event := Event{
+				ProjectName: "Test",
+				Environment: "prod",
+				Status:      status,
+				Timestamp:   time.Now(),
+			}
+
+			template := notifier.defaultTemplate(event)
+			if template == "" {
+				t.Errorf("defaultTemplate() for status %s returned empty", status)
+			}
+			if !strings.Contains(template, status) {
+				t.Errorf("template should contain status %s", status)
+			}
+		})
+	}
+}
+
+func TestEmailNotifierDefaultTemplateNoMessage(t *testing.T) {
+	t.Parallel()
+
+	cfg := EmailConfig{
+		SMTPHost:    "smtp.example.com",
+		SMTPPort:    587,
+		FromAddress: "test@example.com",
+		ToAddresses: []string{"team@example.com"},
+	}
+
+	notifier, err := NewEmailNotifier(cfg)
+	if err != nil {
+		t.Fatalf("NewEmailNotifier() error = %v", err)
+	}
+
+	event := Event{
+		ProjectName: "Test",
+		Environment: "prod",
+		Status:      "success",
+		Message:     "", // No message
+		URL:         "", // No URL
+		Timestamp:   time.Now(),
+	}
+
+	template := notifier.defaultTemplate(event)
+	if template == "" {
+		t.Error("defaultTemplate() returned empty string")
 	}
 }
 
