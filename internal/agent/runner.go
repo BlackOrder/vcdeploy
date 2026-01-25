@@ -2,10 +2,13 @@
 package agent
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -128,7 +131,9 @@ func (r *LocalRunner) buildCommand(cmd string, opts deploy.RunOptions) string {
 }
 
 func (r *LocalRunner) buildEnv(env map[string]string) []string {
-	result := make([]string, 0, len(env))
+	// Start with the current environment to preserve PATH, HOME, etc.
+	result := os.Environ()
+	// Overlay custom environment variables
 	for k, v := range env {
 		result = append(result, fmt.Sprintf("%s=%s", k, v))
 	}
@@ -139,21 +144,158 @@ func (r *LocalRunner) setUserGroup(cmd *exec.Cmd, user, group string) error {
 	// Note: This requires the agent to run as root to switch users
 	// In production, you might want to use sudo or capabilities instead
 
-	// For now, we'll use SysProcAttr to set the user/group
-	// This requires looking up the UID/GID
+	// Look up the user's UID
+	uid, err := lookupUser(user)
+	if err != nil {
+		r.logger.Warn("Could not look up user, skipping user switch",
+			zap.String("user", user),
+			zap.Error(err),
+		)
+		return nil
+	}
 
-	// Simple approach: use sudo -u user if available
-	// The more robust approach would be to look up the user in /etc/passwd
-	// and set cmd.SysProcAttr = &syscall.SysProcAttr{Credential: ...}
+	// Look up the group's GID (use user's primary group if not specified)
+	gid := uid // Default to UID (same as primary group in many cases)
+	if group != "" {
+		gid, err = lookupGroup(group)
+		if err != nil {
+			r.logger.Warn("Could not look up group, using user's primary group",
+				zap.String("group", group),
+				zap.Error(err),
+			)
+		}
+	} else {
+		// Try to get user's primary group
+		primaryGid, err := lookupUserPrimaryGroup(user)
+		if err != nil {
+			r.logger.Warn("Could not look up user's primary group, using uid as gid",
+				zap.String("user", user),
+				zap.Error(err),
+			)
+			// gid already defaults to uid above
+		} else {
+			gid = primaryGid
+		}
+	}
 
-	// For simplicity, we skip user switching in this implementation
-	// The command should be run with appropriate permissions
-	_ = cmd
-	_ = user
-	_ = group
-	_ = syscall.SYS_SETUID // Just to use syscall import
+	// Set the credentials on the command
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Credential: &syscall.Credential{
+			Uid: uint32(uid),
+			Gid: uint32(gid),
+		},
+	}
+
+	r.logger.Debug("Set user/group for command",
+		zap.String("user", user),
+		zap.Int("uid", uid),
+		zap.String("group", group),
+		zap.Int("gid", gid),
+	)
 
 	return nil
+}
+
+// lookupUser looks up a user by name and returns the UID.
+func lookupUser(username string) (int, error) {
+	// First check if it's already a numeric UID
+	if uid, err := strconv.Atoi(username); err == nil {
+		return uid, nil
+	}
+
+	// Look up in /etc/passwd
+	f, err := os.Open("/etc/passwd")
+	if err != nil {
+		return 0, fmt.Errorf("open passwd: %w", err)
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "#") {
+			continue
+		}
+		fields := strings.Split(line, ":")
+		if len(fields) < 3 {
+			continue
+		}
+		if fields[0] == username {
+			uid, err := strconv.Atoi(fields[2])
+			if err != nil {
+				return 0, fmt.Errorf("parse uid: %w", err)
+			}
+			return uid, nil
+		}
+	}
+
+	return 0, fmt.Errorf("user not found: %s", username)
+}
+
+// lookupGroup looks up a group by name and returns the GID.
+func lookupGroup(groupname string) (int, error) {
+	// First check if it's already a numeric GID
+	if gid, err := strconv.Atoi(groupname); err == nil {
+		return gid, nil
+	}
+
+	// Look up in /etc/group
+	f, err := os.Open("/etc/group")
+	if err != nil {
+		return 0, fmt.Errorf("open group: %w", err)
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "#") {
+			continue
+		}
+		fields := strings.Split(line, ":")
+		if len(fields) < 3 {
+			continue
+		}
+		if fields[0] == groupname {
+			gid, err := strconv.Atoi(fields[2])
+			if err != nil {
+				return 0, fmt.Errorf("parse gid: %w", err)
+			}
+			return gid, nil
+		}
+	}
+
+	return 0, fmt.Errorf("group not found: %s", groupname)
+}
+
+// lookupUserPrimaryGroup looks up a user's primary group from /etc/passwd.
+func lookupUserPrimaryGroup(username string) (int, error) {
+	f, err := os.Open("/etc/passwd")
+	if err != nil {
+		return 0, fmt.Errorf("open passwd: %w", err)
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "#") {
+			continue
+		}
+		fields := strings.Split(line, ":")
+		if len(fields) < 4 {
+			continue
+		}
+		if fields[0] == username {
+			gid, err := strconv.Atoi(fields[3])
+			if err != nil {
+				return 0, fmt.Errorf("parse gid: %w", err)
+			}
+			return gid, nil
+		}
+	}
+
+	return 0, fmt.Errorf("user not found: %s", username)
 }
 
 // Verify LocalRunner implements CommandRunner interface

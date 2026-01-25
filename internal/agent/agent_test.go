@@ -192,8 +192,20 @@ func TestLocalRunnerBuildEnv(t *testing.T) {
 
 	result := runner.buildEnv(env)
 
-	if len(result) != 2 {
-		t.Errorf("buildEnv() returned %d items, want 2", len(result))
+	// Should include os.Environ() plus our custom vars
+	// Check that our custom vars are present
+	found := make(map[string]bool)
+	for _, e := range result {
+		if e == "VAR1=value1" || e == "VAR2=value2" {
+			found[e] = true
+		}
+	}
+
+	if !found["VAR1=value1"] {
+		t.Error("buildEnv() missing VAR1=value1")
+	}
+	if !found["VAR2=value2"] {
+		t.Error("buildEnv() missing VAR2=value2")
 	}
 }
 
