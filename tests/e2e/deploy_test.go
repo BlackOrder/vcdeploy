@@ -6,11 +6,58 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"sync"
 	"testing"
 	"time"
 
 	"golang.org/x/crypto/ssh"
 )
+
+// knownHostsStore provides thread-safe storage for host keys discovered during tests.
+// This implements Trust-On-First-Use (TOFU) with verification on subsequent connections.
+type knownHostsStore struct {
+	mu    sync.RWMutex
+	hosts map[string]ssh.PublicKey
+}
+
+var testKnownHosts = &knownHostsStore{
+	hosts: make(map[string]ssh.PublicKey),
+}
+
+// trustOnFirstUseCallback returns a HostKeyCallback that trusts the first key seen
+// for a host and verifies all subsequent connections use the same key.
+// This is more secure than InsecureIgnoreHostKey while still allowing dynamic test environments.
+func (k *knownHostsStore) trustOnFirstUseCallback() ssh.HostKeyCallback {
+	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+		k.mu.Lock()
+		defer k.mu.Unlock()
+
+		existingKey, exists := k.hosts[hostname]
+		if !exists {
+			// First connection - trust and store the key
+			k.hosts[hostname] = key
+			return nil
+		}
+
+		// Subsequent connection - verify key matches
+		if string(existingKey.Marshal()) != string(key.Marshal()) {
+			return fmt.Errorf("host key mismatch for %s: possible MITM attack", hostname)
+		}
+		return nil
+	}
+}
+
+// getSSHClientConfig returns a secure SSH client config using TOFU verification.
+func getSSHClientConfig() *ssh.ClientConfig {
+	return &ssh.ClientConfig{
+		User: "deploy",
+		Auth: []ssh.AuthMethod{
+			ssh.Password("deploypass"),
+		},
+		HostKeyCallback: testKnownHosts.trustOnFirstUseCallback(),
+		Timeout:         10 * time.Second,
+	}
+}
 
 // TestSSHTargetConnectivity verifies the SSH target is reachable.
 func TestSSHTargetConnectivity(t *testing.T) {
@@ -23,14 +70,7 @@ func TestSSHTargetConnectivity(t *testing.T) {
 		t.Skipf("SSH target not available: %v", err)
 	}
 
-	sshConfig := &ssh.ClientConfig{
-		User: "deploy",
-		Auth: []ssh.AuthMethod{
-			ssh.Password("deploypass"),
-		},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         10 * time.Second,
-	}
+	sshConfig := getSSHClientConfig()
 
 	client, err := ssh.Dial("tcp", addr, sshConfig)
 	if err != nil {
@@ -64,14 +104,7 @@ func TestSSHTargetDeployDirectory(t *testing.T) {
 		t.Skipf("SSH target not available: %v", err)
 	}
 
-	sshConfig := &ssh.ClientConfig{
-		User: "deploy",
-		Auth: []ssh.AuthMethod{
-			ssh.Password("deploypass"),
-		},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         10 * time.Second,
-	}
+	sshConfig := getSSHClientConfig()
 
 	client, err := ssh.Dial("tcp", addr, sshConfig)
 	if err != nil {
@@ -103,14 +136,7 @@ func TestDeploymentSimulation(t *testing.T) {
 		t.Skipf("SSH target not available: %v", err)
 	}
 
-	sshConfig := &ssh.ClientConfig{
-		User: "deploy",
-		Auth: []ssh.AuthMethod{
-			ssh.Password("deploypass"),
-		},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         10 * time.Second,
-	}
+	sshConfig := getSSHClientConfig()
 
 	client, err := ssh.Dial("tcp", addr, sshConfig)
 	if err != nil {
@@ -169,14 +195,7 @@ func TestRollbackSimulation(t *testing.T) {
 		t.Skipf("SSH target not available: %v", err)
 	}
 
-	sshConfig := &ssh.ClientConfig{
-		User: "deploy",
-		Auth: []ssh.AuthMethod{
-			ssh.Password("deploypass"),
-		},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         10 * time.Second,
-	}
+	sshConfig := getSSHClientConfig()
 
 	client, err := ssh.Dial("tcp", addr, sshConfig)
 	if err != nil {
