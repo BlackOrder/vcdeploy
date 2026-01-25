@@ -694,3 +694,17 @@ func init() {
 	// Suppress unused import error
 	_ = os.TempDir
 }
+
+func TestDefaultKMSConfig(t *testing.T) {
+	config := DefaultKMSConfig()
+
+	// Check default values
+	expectedGracePeriod := 30 * 24 * time.Hour
+	if config.DeletionGracePeriod != expectedGracePeriod {
+		t.Errorf("DefaultKMSConfig().DeletionGracePeriod = %v, want %v", config.DeletionGracePeriod, expectedGracePeriod)
+	}
+
+	if config.AutoRotationPeriod != 0 {
+		t.Errorf("DefaultKMSConfig().AutoRotationPeriod = %v, want 0 (disabled)", config.AutoRotationPeriod)
+	}
+}

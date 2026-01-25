@@ -404,6 +404,126 @@ func TestGenerateSessionID(t *testing.T) {
 	}
 }
 
+func TestEncryptWithPassphrase(t *testing.T) {
+	t.Parallel()
+
+	plaintext := []byte("test secret data")
+	passphrase := []byte("my-secure-passphrase")
+
+	encrypted, err := EncryptWithPassphrase(plaintext, passphrase)
+	if err != nil {
+		t.Fatalf("EncryptWithPassphrase failed: %v", err)
+	}
+
+	if len(encrypted) == 0 {
+		t.Error("encrypted data should not be empty")
+	}
+
+	// Encrypted should be longer than plaintext (salt + nonce + ciphertext + auth tag)
+	if len(encrypted) <= len(plaintext) {
+		t.Errorf("encrypted length %d should be greater than plaintext length %d", len(encrypted), len(plaintext))
+	}
+}
+
+func TestDecryptWithPassphrase(t *testing.T) {
+	t.Parallel()
+
+	plaintext := []byte("test secret data for roundtrip")
+	passphrase := []byte("my-secure-passphrase")
+
+	encrypted, err := EncryptWithPassphrase(plaintext, passphrase)
+	if err != nil {
+		t.Fatalf("EncryptWithPassphrase failed: %v", err)
+	}
+
+	decrypted, err := DecryptWithPassphrase(encrypted, passphrase)
+	if err != nil {
+		t.Fatalf("DecryptWithPassphrase failed: %v", err)
+	}
+
+	if string(decrypted) != string(plaintext) {
+		t.Errorf("decrypted = %q, want %q", string(decrypted), string(plaintext))
+	}
+}
+
+func TestDecryptWithPassphraseWrongPassword(t *testing.T) {
+	t.Parallel()
+
+	plaintext := []byte("test secret data")
+	passphrase := []byte("correct-passphrase")
+	wrongPassphrase := []byte("wrong-passphrase")
+
+	encrypted, err := EncryptWithPassphrase(plaintext, passphrase)
+	if err != nil {
+		t.Fatalf("EncryptWithPassphrase failed: %v", err)
+	}
+
+	_, err = DecryptWithPassphrase(encrypted, wrongPassphrase)
+	if err == nil {
+		t.Error("expected error for wrong passphrase")
+	}
+}
+
+func TestDecryptWithPassphraseTooShort(t *testing.T) {
+	t.Parallel()
+
+	passphrase := []byte("passphrase")
+
+	// Ciphertext is too short
+	_, err := DecryptWithPassphrase([]byte("short"), passphrase)
+	if err == nil {
+		t.Error("expected error for too short ciphertext")
+	}
+}
+
+func TestGenerateSecureToken(t *testing.T) {
+	t.Parallel()
+
+	token, err := GenerateSecureToken(32)
+	if err != nil {
+		t.Fatalf("GenerateSecureToken failed: %v", err)
+	}
+
+	// 32 bytes -> 64 hex chars
+	if len(token) != 64 {
+		t.Errorf("expected token length 64, got %d", len(token))
+	}
+
+	// Generate another to verify uniqueness
+	token2, err := GenerateSecureToken(32)
+	if err != nil {
+		t.Fatalf("GenerateSecureToken failed: %v", err)
+	}
+
+	if token == token2 {
+		t.Error("tokens should be unique")
+	}
+}
+
+func TestGenerateSecureTokenLength(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		length  int
+		hexLen  int
+	}{
+		{16, 32},
+		{32, 64},
+		{64, 128},
+	}
+
+	for _, tc := range testCases {
+		token, err := GenerateSecureToken(tc.length)
+		if err != nil {
+			t.Errorf("GenerateSecureToken(%d) failed: %v", tc.length, err)
+			continue
+		}
+		if len(token) != tc.hexLen {
+			t.Errorf("GenerateSecureToken(%d) = %d chars, want %d", tc.length, len(token), tc.hexLen)
+		}
+	}
+}
+
 // Benchmarks
 func BenchmarkGenerateMasterKey(b *testing.B) {
 	for i := 0; i < b.N; i++ {
