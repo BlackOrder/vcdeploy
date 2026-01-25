@@ -45,6 +45,9 @@ type MasterServer struct {
 	// KMS for secret encryption/decryption
 	kms *security.KMS
 
+	// Secret management service
+	secretService *security.SecretService
+
 	// Webhook handling
 	webhookHandler *webhookHandlerAdapter
 
@@ -202,6 +205,7 @@ func (s *MasterServer) SetKMS(kms *security.KMS) {
 func (s *MasterServer) SetWebhookHandler(kms *security.KMS, processor webhooks.EventProcessor) {
 	// Also set KMS on the server for secrets API
 	s.kms = kms
+	s.secretService = security.NewSecretService(s.db, kms)
 
 	secretStore := &webhookSecretStoreAdapter{
 		db:     s.db,
@@ -212,24 +216,6 @@ func (s *MasterServer) SetWebhookHandler(kms *security.KMS, processor webhooks.E
 	s.webhookHandler = &webhookHandlerAdapter{
 		handler: webhooks.NewHandler(s.logger, secretStore, processor),
 	}
-}
-
-// encryptSecret encrypts a secret value using the KMS.
-func (s *MasterServer) encryptSecret(plaintext []byte) ([]byte, error) {
-	if s.kms == nil {
-		return nil, fmt.Errorf("KMS not configured")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	// Encrypt returns a versioned string (v1:keyid:base64)
-	encrypted, err := s.kms.Encrypt(ctx, plaintext)
-	if err != nil {
-		return nil, fmt.Errorf("encrypting secret: %w", err)
-	}
-
-	return []byte(encrypted), nil
 }
 
 // GetAgentServer returns the gRPC agent server.
@@ -868,15 +854,13 @@ func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
 			req.Scope = "default"
 		}
 
-		// Encrypt the value before storing
-		encrypted, err := s.encryptSecret([]byte(req.Value))
-		if err != nil {
-			s.logger.Error("Failed to encrypt secret", zap.Error(err))
-			s.jsonError(w, http.StatusInternalServerError, "Failed to encrypt secret")
+		// Use SecretService for encryption and storage
+		if s.secretService == nil {
+			s.jsonError(w, http.StatusInternalServerError, "Secret service not configured")
 			return
 		}
 
-		if err := s.db.SetSecretEncrypted(ctx, req.Project, req.Scope, req.Key, encrypted); err != nil {
+		if err := s.secretService.Set(ctx, req.Project, req.Scope, req.Key, req.Value); err != nil {
 			s.logger.Error("Failed to store secret", zap.Error(err))
 			s.jsonError(w, http.StatusInternalServerError, "Failed to store secret")
 			return
