@@ -5,28 +5,101 @@ import (
 	"context"
 	"io"
 	"sync"
+	"time"
 )
 
-// MockDB implements a mock database for testing.
+// User represents a user for typed mocks.
+type User struct {
+	ID                 int64
+	Username           string
+	PasswordHash       string
+	Email              string
+	Role               string
+	TOTPSecret         string
+	TOTPEnabled        bool
+	MustChangePassword bool
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+}
+
+// Agent represents an agent for typed mocks.
+type Agent struct {
+	ID           string
+	Hostname     string
+	Labels       map[string]string
+	Capabilities string
+	Status       string
+	LastSeenAt   time.Time
+	RegisteredAt time.Time
+	Certificate  string
+}
+
+// Project represents a project for typed mocks.
+type Project struct {
+	ID              int64
+	Name            string
+	Repository      string
+	Branch          string
+	DeployPath      string
+	Type            string
+	WebhookSecret   string
+	AutoDeploy      bool
+	AllowedBranches string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
+// Deployment represents a deployment for typed mocks.
+type Deployment struct {
+	ID          string
+	ProjectID   int64
+	ProjectName string
+	AgentID     string
+	Version     string
+	Branch      string
+	Commit      string
+	Status      string
+	StartedAt   time.Time
+	FinishedAt  *time.Time
+	StartedBy   string
+	Error       string
+}
+
+// MockDB implements a mock database for testing with typed functions.
 type MockDB struct {
 	mu sync.Mutex
 
 	// Track calls
 	Calls []string
 
-	// Mock returns
-	GetUserFunc     func(id int64) (interface{}, error)
-	GetUsersFunc    func() ([]interface{}, error)
-	CreateUserFunc  func(user interface{}) error
-	UpdateUserFunc  func(user interface{}) error
-	DeleteUserFunc  func(id int64) error
-	GetAgentFunc    func(id string) (interface{}, error)
-	GetAgentsFunc   func() ([]interface{}, error)
-	CreateAgentFunc func(agent interface{}) error
-	UpdateAgentFunc func(agent interface{}) error
+	// Typed mock returns for User operations
+	GetUserFunc    func(id int64) (*User, error)
+	GetUsersFunc   func() ([]*User, error)
+	CreateUserFunc func(user *User) error
+	UpdateUserFunc func(user *User) error
+	DeleteUserFunc func(id int64) error
+
+	// Typed mock returns for Agent operations
+	GetAgentFunc    func(id string) (*Agent, error)
+	GetAgentsFunc   func() ([]*Agent, error)
+	CreateAgentFunc func(agent *Agent) error
+	UpdateAgentFunc func(agent *Agent) error
 	DeleteAgentFunc func(id string) error
 
-	// Generic mock data store
+	// Typed mock returns for Project operations
+	GetProjectFunc    func(id int64) (*Project, error)
+	GetProjectsFunc   func() ([]*Project, error)
+	CreateProjectFunc func(project *Project) error
+	UpdateProjectFunc func(project *Project) error
+	DeleteProjectFunc func(id int64) error
+
+	// Typed mock returns for Deployment operations
+	GetDeploymentFunc    func(id string) (*Deployment, error)
+	GetDeploymentsFunc   func() ([]*Deployment, error)
+	CreateDeploymentFunc func(deployment *Deployment) error
+	UpdateDeploymentFunc func(deployment *Deployment) error
+
+	// Generic mock data store (for backward compatibility)
 	Data map[string]interface{}
 }
 
@@ -135,7 +208,7 @@ func (m *MockSSHClient) Close() error {
 type MockGRPCStream struct {
 	mu sync.Mutex
 
-	// Received messages
+	// Received messages (typed for proto messages)
 	ReceivedMsgs []interface{}
 	// Messages to send back
 	SendMsgs []interface{}
@@ -192,6 +265,15 @@ func (m *MockGRPCStream) AddSendMsg(msg interface{}) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.SendMsgs = append(m.SendMsgs, msg)
+}
+
+// GetReceivedMsgs returns all messages received by Send.
+func (m *MockGRPCStream) GetReceivedMsgs() []interface{} {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	result := make([]interface{}, len(m.ReceivedMsgs))
+	copy(result, m.ReceivedMsgs)
+	return result
 }
 
 // MockHTTPClient implements a mock HTTP client for testing.
