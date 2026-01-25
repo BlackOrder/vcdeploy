@@ -456,7 +456,10 @@ func (s *MasterServer) startGRPC() error {
 		if err != nil {
 			return fmt.Errorf("loading TLS cert: %w", err)
 		}
-		creds := credentials.NewTLS(&tls.Config{Certificates: []tls.Certificate{cert}})
+		creds := credentials.NewTLS(&tls.Config{
+			Certificates: []tls.Certificate{cert},
+			MinVersion:   tls.VersionTLS12,
+		})
 		opts = append(opts, grpc.Creds(creds))
 	}
 

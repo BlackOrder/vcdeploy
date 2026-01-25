@@ -1729,6 +1729,7 @@ func (db *DB) DeleteSSHHostKey(ctx context.Context, id int64) error {
 	if err != nil {
 		return fmt.Errorf("deleting ssh host key: %w", err)
 	}
+	// Note: SQLite's RowsAffected() never returns an error
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
 		return ErrNotFound
