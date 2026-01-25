@@ -127,7 +127,10 @@ func TestAPIProjects(t *testing.T) {
 			"deploy_path": "/deploy/test",
 		}
 
-		body, _ := json.Marshal(project)
+		body, err := json.Marshal(project)
+		if err != nil {
+			t.Fatalf("failed to marshal project: %v", err)
+		}
 		req, err := newAuthenticatedRequest("POST", cfg.MasterHTTPURL+"/api/v1/projects", bytes.NewReader(body), cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to create request: %v", err)
