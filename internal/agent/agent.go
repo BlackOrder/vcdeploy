@@ -55,6 +55,8 @@ type activeDeployment struct {
 	StartTime time.Time
 	State     pb.DeploymentState
 	Cancel    context.CancelFunc
+	// cancelDone is closed when the deployment has acknowledged cancellation
+	cancelDone chan struct{}
 }
 
 // NewAgent creates a new agent instance.
@@ -475,19 +477,24 @@ func (a *Agent) runCommandStream(ctx context.Context) error {
 // handleDeployCommand executes a deployment command.
 func (a *Agent) handleDeployCommand(ctx context.Context, stream pb.AgentService_ConnectClient, cmd *pb.DeployCommand) {
 	deployCtx, cancel := context.WithCancel(ctx)
+	cancelDone := make(chan struct{})
 
 	// Register active deployment
 	a.deployMu.Lock()
 	a.activeDeployments[cmd.DeploymentId] = &activeDeployment{
-		ID:        cmd.DeploymentId,
-		Project:   cmd.Project,
-		StartTime: time.Now(),
-		State:     pb.DeploymentState_DEPLOYMENT_STATE_PREPARING,
-		Cancel:    cancel,
+		ID:         cmd.DeploymentId,
+		Project:    cmd.Project,
+		StartTime:  time.Now(),
+		State:      pb.DeploymentState_DEPLOYMENT_STATE_PREPARING,
+		Cancel:     cancel,
+		cancelDone: cancelDone,
 	}
 	a.deployMu.Unlock()
 
 	defer func() {
+		// Signal that we're done (handles cancellation acknowledgment)
+		close(cancelDone)
+
 		a.deployMu.Lock()
 		delete(a.activeDeployments, cmd.DeploymentId)
 		a.deployMu.Unlock()
@@ -517,6 +524,12 @@ func (a *Agent) handleDeployCommand(ctx context.Context, stream pb.AgentService_
 	close(logCh)
 
 	if err != nil {
+		// Check if this was a cancellation
+		if deployCtx.Err() == context.Canceled {
+			a.updateDeploymentState(cmd.DeploymentId, pb.DeploymentState_DEPLOYMENT_STATE_CANCELLED)
+			a.sendDeploymentStatus(stream, cmd.DeploymentId, pb.DeploymentState_DEPLOYMENT_STATE_CANCELLED, "Deployment cancelled", 100)
+			return
+		}
 		a.updateDeploymentState(cmd.DeploymentId, pb.DeploymentState_DEPLOYMENT_STATE_FAILED)
 		a.sendDeploymentStatus(stream, cmd.DeploymentId, pb.DeploymentState_DEPLOYMENT_STATE_FAILED, err.Error(), 100)
 		return
@@ -555,19 +568,54 @@ func (a *Agent) handleRollbackCommand(ctx context.Context, stream pb.AgentServic
 }
 
 // handleCancelCommand cancels an in-progress deployment.
+// It uses channel-based coordination to safely cancel and wait for acknowledgment.
 func (a *Agent) handleCancelCommand(cmd *pb.CancelCommand) {
 	a.logger.Info("Received cancel command",
 		zap.String("deployment_id", cmd.DeploymentId),
 		zap.String("reason", cmd.Reason),
 	)
 
-	a.deployMu.RLock()
+	// Hold lock while reading AND calling Cancel to avoid race with deployment cleanup
+	a.deployMu.Lock()
 	ad, exists := a.activeDeployments[cmd.DeploymentId]
-	a.deployMu.RUnlock()
+	if !exists {
+		a.deployMu.Unlock()
+		a.logger.Warn("Cannot cancel deployment: not found",
+			zap.String("deployment_id", cmd.DeploymentId),
+		)
+		return
+	}
 
-	if exists && ad.Cancel != nil {
-		ad.Cancel()
-		a.logger.Info("Cancelled deployment", zap.String("deployment_id", cmd.DeploymentId))
+	if ad.Cancel == nil {
+		a.deployMu.Unlock()
+		a.logger.Warn("Cannot cancel deployment: no cancel function",
+			zap.String("deployment_id", cmd.DeploymentId),
+		)
+		return
+	}
+
+	// Get the cancelDone channel while still holding the lock
+	cancelDone := ad.cancelDone
+
+	// Call cancel while holding the lock to prevent the deployment
+	// from being deleted between our check and the cancel call
+	ad.Cancel()
+	a.deployMu.Unlock()
+
+	a.logger.Info("Sent cancellation signal, waiting for acknowledgment",
+		zap.String("deployment_id", cmd.DeploymentId),
+	)
+
+	// Wait for the deployment to acknowledge cancellation with timeout
+	select {
+	case <-cancelDone:
+		a.logger.Info("Deployment cancellation acknowledged",
+			zap.String("deployment_id", cmd.DeploymentId),
+		)
+	case <-time.After(30 * time.Second):
+		a.logger.Warn("Deployment cancellation timed out waiting for acknowledgment",
+			zap.String("deployment_id", cmd.DeploymentId),
+		)
 	}
 }
 
