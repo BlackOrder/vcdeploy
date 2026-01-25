@@ -679,6 +679,7 @@ func (m *CAManager) saveAgentCert(ctx context.Context, cert *AgentCertificate) e
 	if err != nil {
 		return err
 	}
+	// Note: SQLite's LastInsertId() never returns an error
 	id, _ := result.LastInsertId()
 	cert.ID = id
 	return nil

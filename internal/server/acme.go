@@ -230,6 +230,7 @@ func (c *ACMEClient) saveCertificate(ctx context.Context, cert *ACMECertificate)
 		return fmt.Errorf("insert certificate: %w", err)
 	}
 
+	// Note: SQLite's LastInsertId() never returns an error
 	id, _ := result.LastInsertId()
 	cert.ID = id
 	return nil
@@ -414,6 +415,7 @@ func (c *ACMEClient) createAccount(ctx context.Context) (*ACMEAccount, crypto.Pr
 		return nil, nil, fmt.Errorf("insert account: %w", err)
 	}
 
+	// Note: SQLite's LastInsertId() never returns an error
 	id, _ := result.LastInsertId()
 	account.ID = id
 

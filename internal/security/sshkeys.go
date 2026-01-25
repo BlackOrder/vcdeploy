@@ -175,6 +175,7 @@ func (m *SSHKeyManager) GenerateKey(ctx context.Context, name string) (*SSHKey, 
 		return nil, fmt.Errorf("save key: %w", err)
 	}
 
+	// Note: SQLite's LastInsertId() never returns an error
 	id, _ := result.LastInsertId()
 	key.ID = id
 
