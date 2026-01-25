@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/BlackOrder/vcdeploy/internal/config"
+	"github.com/BlackOrder/vcdeploy/internal/security"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"go.uber.org/zap"
 )
@@ -39,6 +40,14 @@ func newTestServer(t *testing.T) *MasterServer {
 	if err != nil {
 		t.Fatalf("failed to create server: %v", err)
 	}
+
+	// Set up KMS and SecretService for tests
+	kms, err := security.NewKMS(db.Conn(), nil)
+	if err != nil {
+		t.Fatalf("failed to create KMS: %v", err)
+	}
+	server.kms = kms
+	server.secretService = security.NewSecretService(db, kms)
 
 	return server
 }
