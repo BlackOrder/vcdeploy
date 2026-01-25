@@ -537,4 +537,3 @@ func TestSSHPoolKeyGeneration(t *testing.T) {
 
 // These tests require the //go:build integration tag and will be in a separate file
 // or guarded by build tags. See ssh_integration_test.go
-
