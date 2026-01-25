@@ -1,0 +1,172 @@
+// Package services provides service layer interfaces and implementations for vcdeploy.
+package services
+
+import (
+	"context"
+	"time"
+
+	"github.com/BlackOrder/vcdeploy/internal/storage"
+)
+
+// SecretServicer defines the interface for secret management.
+type SecretServicer interface {
+	Set(ctx context.Context, project, scope, key, value string) error
+	Get(ctx context.Context, project, scope, key string) (string, error)
+	Delete(ctx context.Context, project, scope, key string) error
+	List(ctx context.Context, project, scope string) ([]SecretMetadata, error)
+	ListByProject(ctx context.Context, project string) ([]SecretMetadata, error)
+	ListAll(ctx context.Context) ([]SecretMetadata, error)
+	Export(ctx context.Context, project, scope string) (map[string]string, error)
+	ExportEnvFile(ctx context.Context, project, scope string) (string, error)
+	Import(ctx context.Context, project, scope string, secrets map[string]string) error
+	ReEncryptAll(ctx context.Context) error
+}
+
+// SecretMetadata represents secret info without the value.
+type SecretMetadata struct {
+	ID        int64
+	Project   string
+	Scope     string
+	Key       string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+// SettingsServicer defines the interface for settings management.
+type SettingsServicer interface {
+	IsInitialized(ctx context.Context) (bool, error)
+	Get(ctx context.Context, category, key string) (string, error)
+	GetRequired(ctx context.Context, category, key string) (string, error)
+	GetRequiredInt(ctx context.Context, category, key string) (int, error)
+	GetRequiredBool(ctx context.Context, category, key string) (bool, error)
+	GetRequiredDuration(ctx context.Context, category, key string) (time.Duration, error)
+	GetString(ctx context.Context, category, key, defaultVal string) (string, error)
+	GetInt(ctx context.Context, category, key string, defaultVal int) (int, error)
+	GetBool(ctx context.Context, category, key string, defaultVal bool) (bool, error)
+	GetDuration(ctx context.Context, category, key string, defaultVal time.Duration) (time.Duration, error)
+	Set(ctx context.Context, category, key, value string, encrypted bool) error
+	SetInt(ctx context.Context, category, key string, value int) error
+	SetBool(ctx context.Context, category, key string, value bool) error
+	SetDuration(ctx context.Context, category, key string, value time.Duration) error
+	SetRaw(ctx context.Context, category, key, value, valueType string, encrypted bool) error
+	Delete(ctx context.Context, category, key string) error
+	ListByCategory(ctx context.Context, category string) ([]SettingMetadata, error)
+	ListAll(ctx context.Context) ([]SettingMetadata, error)
+}
+
+// SettingMetadata represents setting info.
+type SettingMetadata struct {
+	ID          int64
+	Category    string
+	Key         string
+	Value       string
+	ValueType   string
+	Encrypted   bool
+	Description string
+}
+
+// UserServicer defines the interface for user management.
+type UserServicer interface {
+	Create(ctx context.Context, username, password, email, role string) (*storage.User, error)
+	GetByID(ctx context.Context, id int64) (*storage.User, error)
+	GetByUsername(ctx context.Context, username string) (*storage.User, error)
+	List(ctx context.Context) ([]*storage.User, error)
+	Update(ctx context.Context, user *storage.User) error
+	Delete(ctx context.Context, id int64) error
+	VerifyPassword(ctx context.Context, username, password string) (*storage.User, error)
+	UpdatePassword(ctx context.Context, userID int64, newPassword string) error
+	SetTOTP(ctx context.Context, userID int64, secret string, enabled bool) error
+}
+
+// SessionServicer defines the interface for session management.
+type SessionServicer interface {
+	Create(ctx context.Context, userID int64, ipAddress, userAgent string, duration time.Duration) (*storage.Session, error)
+	GetByToken(ctx context.Context, token string) (*storage.Session, error)
+	Delete(ctx context.Context, token string) error
+	DeleteAllForUser(ctx context.Context, userID int64) error
+	DeleteExpired(ctx context.Context) (int64, error)
+	ListForUser(ctx context.Context, userID int64) ([]*storage.Session, error)
+}
+
+// APIKeyServicer defines the interface for API key management.
+type APIKeyServicer interface {
+	Create(ctx context.Context, userID int64, name string, scopes []string, expiresAt *time.Time) (rawKey string, key *storage.APIKey, err error)
+	GetByRawKey(ctx context.Context, rawKey string) (*storage.APIKey, error)
+	Delete(ctx context.Context, keyID int64) error
+	List(ctx context.Context, userID int64) ([]*storage.APIKey, error)
+	UpdateUsage(ctx context.Context, keyID int64) error
+	CleanupExpired(ctx context.Context) (int64, error)
+}
+
+// ProjectServicer defines the interface for project management.
+type ProjectServicer interface {
+	Create(ctx context.Context, name, repository, branch, deployPath, projectType string) (*storage.Project, error)
+	GetByName(ctx context.Context, name string) (*storage.Project, error)
+	List(ctx context.Context) ([]*storage.Project, error)
+	Update(ctx context.Context, project *storage.Project) error
+	Delete(ctx context.Context, name string) error
+}
+
+// WebhookServicer defines the interface for project webhook management.
+type WebhookServicer interface {
+	Get(ctx context.Context, projectID int64, provider string) (*storage.ProjectWebhook, error)
+	Set(ctx context.Context, projectID int64, provider string, secret []byte, enabled, requireSecret bool) error
+	List(ctx context.Context, projectID int64) ([]*storage.ProjectWebhook, error)
+	Delete(ctx context.Context, projectID int64, provider string) error
+}
+
+// DeploymentServicer defines the interface for deployment management.
+type DeploymentServicer interface {
+	Create(ctx context.Context, deployment *storage.DeploymentRecord) error
+	GetByID(ctx context.Context, id string) (*storage.DeploymentRecord, error)
+	Update(ctx context.Context, deployment *storage.DeploymentRecord) error
+	ListRecent(ctx context.Context, limit int) ([]*storage.DeploymentRecord, error)
+	Cancel(ctx context.Context, id string) error
+	// Logs
+	CreateLog(ctx context.Context, log *storage.DeploymentLog) error
+	ListLogs(ctx context.Context, deploymentID string) ([]*storage.DeploymentLog, error)
+	ListLogsAfter(ctx context.Context, deploymentID string, afterID int64) ([]*storage.DeploymentLog, error)
+	// Scheduled
+	CreateScheduled(ctx context.Context, id, project, target, branch string, scheduledAt time.Time, scheduledBy string) error
+	ListPendingScheduled(ctx context.Context) ([]*storage.ScheduledDeployment, error)
+	CancelScheduled(ctx context.Context, id string) error
+	// Cleanup
+	CleanupOld(ctx context.Context, cutoff time.Time) (int64, error)
+	CleanupOldLogs(ctx context.Context, cutoff time.Time) (int64, error)
+}
+
+// AgentServicer defines the interface for agent management.
+type AgentServicer interface {
+	Upsert(ctx context.Context, agent *storage.Agent) error
+	GetByID(ctx context.Context, id string) (*storage.Agent, error)
+	List(ctx context.Context) ([]*storage.Agent, error)
+	Delete(ctx context.Context, id string) error
+	MarkStale(ctx context.Context, cutoff time.Time) (int64, error)
+}
+
+// AuditServicer defines the interface for audit logging.
+type AuditServicer interface {
+	Log(ctx context.Context, entry *storage.AuditEntry) error
+	List(ctx context.Context, limit, offset int) ([]*storage.AuditEntry, error)
+	Cleanup(ctx context.Context, cutoff time.Time) (int64, error)
+}
+
+// HostKeyServicer defines the interface for SSH host key management.
+type HostKeyServicer interface {
+	Create(ctx context.Context, key *storage.SSHHostKey) error
+	Get(ctx context.Context, hostname string, port int, keyType string) (*storage.SSHHostKey, error)
+	GetByHost(ctx context.Context, hostname string, port int) ([]*storage.SSHHostKey, error)
+	List(ctx context.Context) ([]*storage.SSHHostKey, error)
+	UpdateTrust(ctx context.Context, id int64, trusted bool, verifiedBy string) error
+	Delete(ctx context.Context, id int64) error
+	DeleteByHost(ctx context.Context, hostname string, port int) (int64, error)
+}
+
+// ProjectTypeServicer defines the interface for project type management.
+type ProjectTypeServicer interface {
+	Create(ctx context.Context, name, description, buildCmd string) (*storage.ProjectType, error)
+	GetByName(ctx context.Context, name string) (*storage.ProjectType, error)
+	List(ctx context.Context) ([]*storage.ProjectType, error)
+	Update(ctx context.Context, pt *storage.ProjectType) error
+	Delete(ctx context.Context, name string) error
+}
