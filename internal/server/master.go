@@ -298,7 +298,10 @@ func (s *MasterServer) templateFuncs() template.FuncMap {
 			return t.Format("2006-01-02 15:04:05")
 		},
 		"json": func(v interface{}) string {
-			b, _ := json.Marshal(v)
+			b, err := json.Marshal(v)
+			if err != nil {
+				return "{}"
+			}
 			return string(b)
 		},
 	}
@@ -855,7 +858,8 @@ func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
 		s.jsonResponse(w, result)
 
 	case http.MethodPost:
-		// Create or update a secret
+		// Create or update a secret - limit body size to 1MB
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 		var req struct {
 			Project string `json:"project"`
 			Scope   string `json:"scope"`
@@ -943,6 +947,8 @@ func (s *MasterServer) handleProjectTypes(w http.ResponseWriter, r *http.Request
 		s.jsonResponse(w, types)
 
 	case http.MethodPost:
+		// Limit body size to 1MB
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 		var req struct {
 			Name        string `json:"name"`
 			Description string `json:"description"`
@@ -1132,7 +1138,7 @@ func (s *MasterServer) handleGitHubWebhook(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "Missing signature", http.StatusUnauthorized)
 		return
 	}
-	s.logger.Info("Received GitHub webhook (no processor configured)")
+	s.logger.Warn("Received GitHub webhook but no processor configured - webhook will not trigger deployment")
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -1154,7 +1160,7 @@ func (s *MasterServer) handleGitLabWebhook(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "Missing token", http.StatusUnauthorized)
 		return
 	}
-	s.logger.Info("Received GitLab webhook (no processor configured)")
+	s.logger.Warn("Received GitLab webhook but no processor configured - webhook will not trigger deployment")
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -1170,7 +1176,7 @@ func (s *MasterServer) handleBitbucketWebhook(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	s.logger.Info("Received Bitbucket webhook (no processor configured)")
+	s.logger.Warn("Received Bitbucket webhook but no processor configured - webhook will not trigger deployment")
 	w.WriteHeader(http.StatusOK)
 }
 
