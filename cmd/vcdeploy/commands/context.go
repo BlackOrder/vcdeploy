@@ -3,9 +3,12 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
+	"time"
 
 	"github.com/BlackOrder/vcdeploy/internal/config"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
@@ -130,7 +133,8 @@ func (c *AppContext) Errorln(args ...interface{}) {
 // LoadConfig loads the configuration from ConfigPath.
 func (c *AppContext) LoadConfig() error {
 	if c.ConfigPath == "" {
-		c.ConfigPath = "/etc/vcdeploy/master.yaml"
+		sysCfg := config.MustGetSystemConfig()
+		c.ConfigPath = sysCfg.MasterConfigPath()
 	}
 
 	cfg, err := config.LoadMasterConfig(c.ConfigPath)
@@ -180,12 +184,13 @@ func (c *AppContext) OpenStorage() error {
 	}
 
 	// Use default database path if not configured
-	dbPath := "/var/lib/vcdeploy/master.db"
+	sysCfg := config.MustGetSystemConfig()
+	dbPath := sysCfg.DatabasePath()
 	if c.Config.Backup.Database.Path != "" {
 		dbPath = c.Config.Backup.Database.Path
 	}
 
-	db, err := storage.New(dbPath)
+	db, err := storage.New(dbPath, c.Logger)
 	if err != nil {
 		return fmt.Errorf("open storage: %w", err)
 	}
@@ -279,18 +284,70 @@ func (r *VersionRunner) Run() error {
 
 // MasterStatusRunner executes the master status command.
 type MasterStatusRunner struct {
-	ctx *AppContext
+	ctx        *AppContext
+	masterAddr string
 }
 
 // NewMasterStatusRunner creates a new master status runner.
 func NewMasterStatusRunner(ctx *AppContext) *MasterStatusRunner {
-	return &MasterStatusRunner{ctx: ctx}
+	return &MasterStatusRunner{
+		ctx:        ctx,
+		masterAddr: "localhost:9000",
+	}
+}
+
+// SetMasterAddr sets the master address to check.
+func (r *MasterStatusRunner) SetMasterAddr(addr string) {
+	r.masterAddr = addr
 }
 
 // Run executes the master status command.
 func (r *MasterStatusRunner) Run() error {
-	// TODO: Implement actual status check
-	r.ctx.Println("Master server status: UNKNOWN")
-	r.ctx.Println("(Status check not yet implemented)")
+	r.ctx.Printf("Checking master at %s...\n\n", r.masterAddr)
+
+	// Try to call the health endpoint
+	healthURL := fmt.Sprintf("http://%s/api/v1/health", r.masterAddr)
+	statsURL := fmt.Sprintf("http://%s/api/v1/stats", r.masterAddr)
+
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	// Check health endpoint
+	healthResp, err := client.Get(healthURL)
+	if err != nil {
+		r.ctx.Println("Master server status: OFFLINE")
+		r.ctx.Printf("  Could not connect to %s\n", r.masterAddr)
+		r.ctx.Println("\nTip: If using systemd, check with: systemctl status vcdeploy-master")
+		return nil
+	}
+	defer healthResp.Body.Close()
+
+	if healthResp.StatusCode != http.StatusOK {
+		r.ctx.Println("Master server status: UNHEALTHY")
+		r.ctx.Printf("  Health check returned: %d\n", healthResp.StatusCode)
+		return nil
+	}
+
+	r.ctx.Println("Master server status: ONLINE")
+
+	// Get stats for more details
+	statsResp, err := client.Get(statsURL)
+	if err == nil {
+		defer statsResp.Body.Close()
+		if statsResp.StatusCode == http.StatusOK {
+			var stats map[string]interface{}
+			body, _ := io.ReadAll(statsResp.Body)
+			if json.Unmarshal(body, &stats) == nil {
+				r.ctx.Println()
+				if projects, ok := stats["projects"].(float64); ok {
+					r.ctx.Printf("  Projects: %.0f\n", projects)
+				}
+				if agents, ok := stats["connected_agents"].(float64); ok {
+					r.ctx.Printf("  Connected Agents: %.0f\n", agents)
+				}
+			}
+		}
+	}
+
+	r.ctx.Printf("\n  Address: %s\n", r.masterAddr)
 	return nil
 }

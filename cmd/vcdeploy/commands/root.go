@@ -4,8 +4,11 @@ package commands
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -13,10 +16,11 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/BlackOrder/vcdeploy/internal/config"
+	"github.com/BlackOrder/vcdeploy/internal/security"
 	"github.com/BlackOrder/vcdeploy/internal/server"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
+	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"golang.org/x/term"
@@ -160,12 +164,17 @@ func init() {
 		Args:  cobra.ExactArgs(1),
 		RunE:  runProjectAdd,
 	})
-	projectCmd.AddCommand(&cobra.Command{
+	editProjectCmd := &cobra.Command{
 		Use:   "edit [name]",
 		Short: "Edit a project",
 		Args:  cobra.ExactArgs(1),
 		RunE:  runProjectEdit,
-	})
+	}
+	editProjectCmd.Flags().String("repo", "", "Set repository URL")
+	editProjectCmd.Flags().String("branch", "", "Set default branch")
+	editProjectCmd.Flags().String("path", "", "Set deploy path")
+	editProjectCmd.Flags().String("type", "", "Set project type")
+	projectCmd.AddCommand(editProjectCmd)
 	projectCmd.AddCommand(&cobra.Command{
 		Use:   "delete [name]",
 		Short: "Delete a project",
@@ -212,12 +221,15 @@ func init() {
 		Args:  cobra.ExactArgs(1),
 		RunE:  runTypeCreate,
 	})
-	typeCmd.AddCommand(&cobra.Command{
+	editTypeCmd := &cobra.Command{
 		Use:   "edit [name]",
 		Short: "Edit a project type",
 		Args:  cobra.ExactArgs(1),
 		RunE:  runTypeEdit,
-	})
+	}
+	editTypeCmd.Flags().String("description", "", "Set type description")
+	editTypeCmd.Flags().String("build-cmd", "", "Set build command")
+	typeCmd.AddCommand(editTypeCmd)
 	typeCmd.AddCommand(&cobra.Command{
 		Use:   "delete [name]",
 		Short: "Delete a project type",
@@ -284,11 +296,18 @@ var (
 	globalLogger *zap.Logger
 )
 
+// getDBPath returns the database path from system config.
+func getDBPath() string {
+	sysCfg := config.MustGetSystemConfig()
+	return sysCfg.DatabasePath()
+}
+
 // initConfig loads configuration from file
 func initConfig(cmd *cobra.Command) error {
 	cfgPath, _ := cmd.Flags().GetString("config")
 	if cfgPath == "" {
-		cfgPath = "/etc/vcdeploy/master.yaml"
+		sysCfg := config.MustGetSystemConfig()
+		cfgPath = sysCfg.MasterConfigPath()
 	}
 
 	cfg, err := config.LoadMaster(cfgPath)
@@ -347,7 +366,8 @@ func runMasterStart(cmd *cobra.Command, args []string) error {
 	)
 
 	// Initialize database
-	dbPath := "/var/lib/vcdeploy/vcdeploy.db"
+	sysCfg := config.MustGetSystemConfig()
+	dbPath := sysCfg.DatabasePath()
 	db, err := storage.Open(dbPath)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
@@ -370,6 +390,12 @@ func runMasterStart(cmd *cobra.Command, args []string) error {
 
 	errCh := make(chan error, 1)
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				globalLogger.Error("panic in server start", zap.Any("panic", r))
+				errCh <- fmt.Errorf("server panicked: %v", r)
+			}
+		}()
 		if err := srv.Start(ctx); err != nil {
 			errCh <- err
 		}
@@ -392,9 +418,71 @@ func runMasterStart(cmd *cobra.Command, args []string) error {
 }
 
 func runMasterStop(cmd *cobra.Command, args []string) error {
+	masterAddr, _ := cmd.Flags().GetString("master")
+	if masterAddr == "" {
+		masterAddr = "localhost:9000"
+	}
+
 	fmt.Println("Sending stop signal to master server...")
-	// In practice, this would send a signal to the running process
-	// For systemd-managed installations, use: systemctl stop vcdeploy-master
+
+	// First, try to send a graceful shutdown request via API
+	shutdownURL := fmt.Sprintf("http://%s/api/v1/shutdown", masterAddr)
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	req, err := http.NewRequest(http.MethodPost, shutdownURL, nil)
+	if err != nil {
+		// If API fails, try PID file approach
+		return tryPidFileStop()
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Printf("Could not reach master at %s, trying PID file...\n", masterAddr)
+		return tryPidFileStop()
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusAccepted {
+		fmt.Println("Master server is shutting down gracefully.")
+		return nil
+	}
+
+	// Fallback to PID file approach
+	return tryPidFileStop()
+}
+
+// tryPidFileStop attempts to stop the master using its PID file.
+func tryPidFileStop() error {
+	sysCfg := config.MustGetSystemConfig()
+	pidFile := sysCfg.MasterPIDPath()
+
+	data, err := os.ReadFile(pidFile)
+	if err != nil {
+		fmt.Println("Could not find running master process.")
+		fmt.Println("If using systemd, use: systemctl stop vcdeploy-master")
+		return nil
+	}
+
+	var pid int
+	if _, err := fmt.Sscanf(string(data), "%d", &pid); err != nil {
+		return fmt.Errorf("invalid PID file: %w", err)
+	}
+
+	// Send SIGTERM to the process
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return fmt.Errorf("process not found: %w", err)
+	}
+
+	if err := process.Signal(syscall.SIGTERM); err != nil {
+		if err == os.ErrProcessDone {
+			fmt.Println("Process already stopped.")
+			return nil
+		}
+		return fmt.Errorf("failed to signal process: %w", err)
+	}
+
+	fmt.Printf("Sent SIGTERM to process %d\n", pid)
 	return nil
 }
 
@@ -404,14 +492,114 @@ func runMasterStatus(cmd *cobra.Command, args []string) error {
 		masterAddr = "localhost:9000"
 	}
 
-	// Try to connect and get status
 	fmt.Printf("Checking master at %s...\n\n", masterAddr)
 
-	// This would make an API call to the master
-	// For now, show placeholder
-	fmt.Println("Status: Unknown (API call not implemented)")
-	fmt.Println("\nTip: If using systemd, check with: systemctl status vcdeploy-master")
+	// Try to call the health/stats endpoint
+	healthURL := fmt.Sprintf("http://%s/api/v1/health", masterAddr)
+	statsURL := fmt.Sprintf("http://%s/api/v1/stats", masterAddr)
+
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	// Check health endpoint
+	healthResp, err := client.Get(healthURL)
+	if err != nil {
+		fmt.Println("Status: OFFLINE")
+		fmt.Printf("  Could not connect to %s\n", masterAddr)
+
+		// Check if process is running via PID file
+		if pid := checkMasterPid(); pid > 0 {
+			fmt.Printf("  PID file shows process %d may be starting up\n", pid)
+		}
+
+		fmt.Println("\nTip: If using systemd, check with: systemctl status vcdeploy-master")
+		return nil
+	}
+	defer healthResp.Body.Close()
+
+	if healthResp.StatusCode != http.StatusOK {
+		fmt.Println("Status: UNHEALTHY")
+		fmt.Printf("  Health check returned: %d\n", healthResp.StatusCode)
+		return nil
+	}
+
+	fmt.Println("Status: ONLINE")
+
+	// Get stats for more details
+	statsResp, err := client.Get(statsURL)
+	if err == nil {
+		defer statsResp.Body.Close()
+		if statsResp.StatusCode == http.StatusOK {
+			var stats map[string]interface{}
+			body, _ := io.ReadAll(statsResp.Body)
+			if json.Unmarshal(body, &stats) == nil {
+				fmt.Println()
+				if projects, ok := stats["projects"].(float64); ok {
+					fmt.Printf("  Projects: %.0f\n", projects)
+				}
+				if agents, ok := stats["connected_agents"].(float64); ok {
+					fmt.Printf("  Connected Agents: %.0f\n", agents)
+				}
+				if pending, ok := stats["pending_deployments"].(float64); ok {
+					fmt.Printf("  Pending Deployments: %.0f\n", pending)
+				}
+				if running, ok := stats["running_deployments"].(float64); ok {
+					fmt.Printf("  Running Deployments: %.0f\n", running)
+				}
+				if uptime, ok := stats["uptime_seconds"].(float64); ok {
+					fmt.Printf("  Uptime: %s\n", formatDuration(time.Duration(uptime)*time.Second))
+				}
+			}
+		}
+	}
+
+	fmt.Printf("\n  Address: %s\n", masterAddr)
 	return nil
+}
+
+// checkMasterPid reads the PID file and checks if process exists.
+func checkMasterPid() int {
+	sysCfg := config.MustGetSystemConfig()
+	pidFile := sysCfg.MasterPIDPath()
+	data, err := os.ReadFile(pidFile)
+	if err != nil {
+		return 0
+	}
+
+	var pid int
+	if _, err := fmt.Sscanf(string(data), "%d", &pid); err != nil {
+		return 0
+	}
+
+	// Check if process exists
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return 0
+	}
+
+	// On Unix, FindProcess always succeeds; we need to send signal 0 to check
+	if err := process.Signal(syscall.Signal(0)); err != nil {
+		return 0
+	}
+
+	return pid
+}
+
+// formatDuration formats a duration into a human-readable string.
+func formatDuration(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%.0f seconds", d.Seconds())
+	}
+	if d < time.Hour {
+		return fmt.Sprintf("%.0f minutes", d.Minutes())
+	}
+	if d < 24*time.Hour {
+		hours := d.Hours()
+		mins := (d % time.Hour).Minutes()
+		return fmt.Sprintf("%.0fh %.0fm", hours, mins)
+	}
+	days := d / (24 * time.Hour)
+	hours := (d % (24 * time.Hour)).Hours()
+	return fmt.Sprintf("%dd %.0fh", days, hours)
 }
 
 func runMasterRotateKey(cmd *cobra.Command, args []string) error {
@@ -433,8 +621,39 @@ func runMasterRotateKey(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println("\nRotating master key...")
-	// Implementation would call security.RotateMasterKey()
+
+	// Open database
+	sysCfg := config.MustGetSystemConfig()
+	dbPath := sysCfg.DatabasePath()
+	db, err := storage.Open(dbPath)
+	if err != nil {
+		return fmt.Errorf("open database: %w", err)
+	}
+	defer db.Close()
+
+	// Initialize KMS
+	kms, err := security.NewKMS(db.Conn(), globalLogger)
+	if err != nil {
+		return fmt.Errorf("initialize KMS: %w", err)
+	}
+
+	// Rotate the encryption key
+	ctx := context.Background()
+	newKey, err := kms.RotateKey(ctx)
+	if err != nil {
+		return fmt.Errorf("rotate key: %w", err)
+	}
+	fmt.Printf("New key generated: %s (version %d)\n", newKey.ID[:8]+"...", newKey.Version)
+
+	// Re-encrypt all secrets with the new key
+	fmt.Println("Re-encrypting secrets...")
+	secrets := security.NewSecretService(db, kms)
+	if err := secrets.ReEncryptAll(ctx); err != nil {
+		return fmt.Errorf("re-encrypt secrets: %w", err)
+	}
+
 	fmt.Println("Key rotated successfully.")
+	fmt.Println("\nNote: Make sure to restart the master server for changes to take effect.")
 	return nil
 }
 
@@ -445,7 +664,8 @@ func runBackupCreate(cmd *cobra.Command, args []string) error {
 
 	backupPath := globalConfig.Backup.Database.Path
 	if backupPath == "" {
-		backupPath = "/var/lib/vcdeploy/backups"
+		sysCfg := config.MustGetSystemConfig()
+		backupPath = sysCfg.BackupsDir()
 	}
 
 	timestamp := time.Now().Format("20060102-150405")
@@ -459,7 +679,8 @@ func runBackupCreate(cmd *cobra.Command, args []string) error {
 	}
 
 	// Open database and create backup
-	dbPath := "/var/lib/vcdeploy/vcdeploy.db"
+	sysCfg := config.MustGetSystemConfig()
+	dbPath := sysCfg.DatabasePath()
 	db, err := storage.Open(dbPath)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
@@ -481,7 +702,8 @@ func runBackupList(cmd *cobra.Command, args []string) error {
 
 	backupPath := globalConfig.Backup.Database.Path
 	if backupPath == "" {
-		backupPath = "/var/lib/vcdeploy/backups"
+		sysCfg := config.MustGetSystemConfig()
+		backupPath = sysCfg.BackupsDir()
 	}
 
 	entries, err := os.ReadDir(backupPath)
@@ -523,11 +745,18 @@ func runBackupRestore(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("backup file not found: %s", backupFile)
 	}
 
+	// Get the database path
+	dbPath := getDBPath()
+
 	fmt.Printf("WARNING: This will replace the current database with %s\n", backupFile)
+	fmt.Printf("Database location: %s\n", dbPath)
 	fmt.Print("Continue? [y/N]: ")
 
 	reader := bufio.NewReader(os.Stdin)
-	response, _ := reader.ReadString('\n')
+	response, err := reader.ReadString('\n')
+	if err != nil {
+		return fmt.Errorf("read input: %w", err)
+	}
 	response = strings.TrimSpace(strings.ToLower(response))
 
 	if response != "y" && response != "yes" {
@@ -536,7 +765,30 @@ func runBackupRestore(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println("\nRestoring from backup...")
-	// Implementation would copy backup file to database location
+
+	// Read the backup file
+	backupData, err := os.ReadFile(backupFile)
+	if err != nil {
+		return fmt.Errorf("read backup file: %w", err)
+	}
+
+	// Create a backup of the current database before replacing
+	if _, err := os.Stat(dbPath); err == nil {
+		backupCurrent := dbPath + ".pre-restore." + time.Now().Format("20060102-150405")
+		if currentData, err := os.ReadFile(dbPath); err == nil {
+			if err := os.WriteFile(backupCurrent, currentData, 0600); err != nil {
+				fmt.Printf("Warning: could not backup current database: %v\n", err)
+			} else {
+				fmt.Printf("Current database backed up to: %s\n", backupCurrent)
+			}
+		}
+	}
+
+	// Write the backup to the database location
+	if err := os.WriteFile(dbPath, backupData, 0600); err != nil {
+		return fmt.Errorf("write database file: %w", err)
+	}
+
 	fmt.Println("Database restored successfully.")
 	fmt.Println("Restart the master server to apply changes.")
 	return nil
@@ -547,7 +799,7 @@ func runProjectList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dbPath := "/var/lib/vcdeploy/vcdeploy.db"
+	dbPath := getDBPath()
 	db, err := storage.Open(dbPath)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
@@ -596,7 +848,7 @@ func runProjectAdd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dbPath := "/var/lib/vcdeploy/vcdeploy.db"
+	dbPath := getDBPath()
 	db, err := storage.Open(dbPath)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
@@ -647,11 +899,114 @@ func runProjectAdd(cmd *cobra.Command, args []string) error {
 
 func runProjectEdit(cmd *cobra.Command, args []string) error {
 	projectName := args[0]
-	fmt.Printf("Opening project editor for: %s\n", projectName)
-	fmt.Println("Tip: Use the web UI for easier project editing, or edit the config file directly.")
+
+	if err := initConfig(cmd); err != nil {
+		return err
+	}
+
+	dbPath := getDBPath()
+	db, err := storage.Open(dbPath)
+	if err != nil {
+		return fmt.Errorf("open database: %w", err)
+	}
+	defer db.Close()
+
+	// Get existing project
+	project, err := db.GetProjectByName(cmd.Context(), projectName)
+	if err != nil {
+		return fmt.Errorf("get project: %w", err)
+	}
+
+	// Check for flag values
+	repoFlag, _ := cmd.Flags().GetString("repo")
+	branchFlag, _ := cmd.Flags().GetString("branch")
+	pathFlag, _ := cmd.Flags().GetString("path")
+	typeFlag, _ := cmd.Flags().GetString("type")
+
+	// If any flags provided, use them directly
+	hasFlags := repoFlag != "" || branchFlag != "" || pathFlag != "" || typeFlag != ""
+
+	if hasFlags {
+		// Apply flag values
+		if repoFlag != "" {
+			project.Repository = repoFlag
+		}
+		if branchFlag != "" {
+			project.Branch = branchFlag
+		}
+		if pathFlag != "" {
+			project.DeployPath = pathFlag
+		}
+		if typeFlag != "" {
+			project.Type = typeFlag
+		}
+	} else {
+		// Interactive mode
+		fmt.Printf("Editing project: %s\n", projectName)
+		fmt.Println("Press Enter to keep current value, or enter a new value.")
+		fmt.Println()
+
+		reader := bufio.NewReader(os.Stdin)
+
+		// Repository
+		fmt.Printf("Repository [%s]: ", project.Repository)
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			// EOF or broken pipe - user terminated input
+			fmt.Println()
+			return fmt.Errorf("input terminated: %w", err)
+		}
+		input = strings.TrimSpace(input)
+		if input != "" {
+			project.Repository = input
+		}
+
+		// Branch
+		fmt.Printf("Branch [%s]: ", project.Branch)
+		input, err = reader.ReadString('\n')
+		if err != nil {
+			fmt.Println()
+			return fmt.Errorf("input terminated: %w", err)
+		}
+		input = strings.TrimSpace(input)
+		if input != "" {
+			project.Branch = input
+		}
+
+		// Deploy Path
+		fmt.Printf("Deploy Path [%s]: ", project.DeployPath)
+		input, err = reader.ReadString('\n')
+		if err != nil {
+			fmt.Println()
+			return fmt.Errorf("input terminated: %w", err)
+		}
+		input = strings.TrimSpace(input)
+		if input != "" {
+			project.DeployPath = input
+		}
+
+		// Type
+		fmt.Printf("Type [%s]: ", project.Type)
+		input, err = reader.ReadString('\n')
+		if err != nil {
+			fmt.Println()
+			return fmt.Errorf("input terminated: %w", err)
+		}
+		input = strings.TrimSpace(input)
+		if input != "" {
+			project.Type = input
+		}
+	}
+
+	// Update project
+	ctx := context.Background()
+	if err := db.UpdateProjectByName(ctx, project); err != nil {
+		return fmt.Errorf("update project: %w", err)
+	}
+
+	fmt.Printf("\nProject '%s' updated successfully.\n", projectName)
 	return nil
 }
-
 func runProjectDelete(cmd *cobra.Command, args []string) error {
 	projectName := args[0]
 
@@ -671,7 +1026,7 @@ func runProjectDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dbPath := "/var/lib/vcdeploy/vcdeploy.db"
+	dbPath := getDBPath()
 	db, err := storage.Open(dbPath)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
@@ -693,14 +1048,14 @@ func runProjectValidate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dbPath := "/var/lib/vcdeploy/vcdeploy.db"
+	dbPath := getDBPath()
 	db, err := storage.Open(dbPath)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}
 	defer db.Close()
 
-	project, err := db.GetProject(projectName)
+	project, err := db.GetProjectByName(cmd.Context(), projectName)
 	if err != nil {
 		return fmt.Errorf("get project: %w", err)
 	}
@@ -747,24 +1102,19 @@ func runProjectDeploy(cmd *cobra.Command, args []string) error {
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	force, _ := cmd.Flags().GetBool("force")
 
-	if err := initConfig(cmd); err != nil {
-		return err
+	// Get master address
+	masterAddr, _ := cmd.Flags().GetString("master")
+	if masterAddr == "" {
+		masterAddr = os.Getenv("VCDEPLOY_MASTER")
+	}
+	if masterAddr == "" {
+		masterAddr = "localhost:9000"
 	}
 
-	if err := initLogger("info"); err != nil {
-		return err
-	}
-
-	dbPath := "/var/lib/vcdeploy/vcdeploy.db"
-	db, err := storage.Open(dbPath)
-	if err != nil {
-		return fmt.Errorf("open database: %w", err)
-	}
-	defer db.Close()
-
-	project, err := db.GetProject(projectName)
-	if err != nil {
-		return fmt.Errorf("get project: %w", err)
+	// Get API token
+	apiToken, _ := cmd.Flags().GetString("token")
+	if apiToken == "" {
+		apiToken = os.Getenv("VCDEPLOY_TOKEN")
 	}
 
 	fmt.Printf("🚀 Deploying project: %s\n", projectName)
@@ -779,50 +1129,115 @@ func runProjectDeploy(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println()
 
-	// Create deployment record
-	deployment := &storage.DeploymentCLI{
-		ProjectID:   project.ID,
-		ProjectName: projectName,
-		Target:      target,
-		Status:      "pending",
-		TriggeredBy: "cli",
-		StartedAt:   time.Now(),
-	}
-
-	if !dryRun {
-		if err := db.InsertDeployment(deployment); err != nil {
-			return fmt.Errorf("create deployment record: %w", err)
-		}
-	}
-
-	// Execute deployment (simplified for CLI)
-	fmt.Println("📦 Fetching latest code...")
-	fmt.Printf("   Repository: %s\n", project.Repository)
-	fmt.Printf("   Branch: %s\n", project.Branch)
-
 	if dryRun {
+		fmt.Println("📋 Dry run - checking deployment configuration...")
+		// Just validate locally for dry run
+		if err := initConfig(cmd); err != nil {
+			return err
+		}
+		dbPath := getDBPath()
+		db, err := storage.Open(dbPath)
+		if err != nil {
+			return fmt.Errorf("open database: %w", err)
+		}
+		defer db.Close()
+
+		_, err = db.GetProjectByName(cmd.Context(), projectName)
+		if err != nil {
+			return fmt.Errorf("get project: %w", err)
+		}
 		fmt.Println("\n✅ Dry run completed successfully.")
-		fmt.Println("   No changes were made.")
+		fmt.Println("   Configuration is valid, no changes were made.")
 		return nil
 	}
 
-	// In real implementation, this would:
-	// 1. Clone/pull repository
-	// 2. Run build commands
-	// 3. Execute deployment strategy
-	// 4. Update symlinks
-	// 5. Run post-deploy hooks
+	// Call master API to trigger deployment
+	client := &http.Client{Timeout: 30 * time.Second}
+	baseURL := "http://" + masterAddr
 
-	fmt.Println("\n🏗️  Building...")
-	fmt.Println("🔗 Deploying...")
-	fmt.Println("\n✅ Deployment completed successfully!")
-
-	deployment.Status = "success"
-	deployment.FinishedAt = timePtr(time.Now())
-	if err := db.SaveDeployment(deployment); err != nil {
-		globalLogger.Warn("failed to update deployment record", zap.Error(err))
+	// Create deployment request
+	reqBody := map[string]interface{}{
+		"project": projectName,
+		"force":   force,
+	}
+	if target != "" {
+		reqBody["target"] = target
 	}
 
+	reqJSON, _ := json.Marshal(reqBody)
+	req, err := http.NewRequest("POST", baseURL+"/api/v1/deployments", strings.NewReader(string(reqJSON)))
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if apiToken != "" {
+		req.Header.Set("Authorization", "Bearer "+apiToken)
+	}
+
+	fmt.Println("📡 Triggering deployment via master...")
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("master not reachable at %s: %w\nStart the master with: vcdeploy master start", masterAddr, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		return fmt.Errorf("authentication required. Provide --token or set VCDEPLOY_TOKEN")
+	}
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("deployment failed: %s", string(body))
+	}
+
+	// Parse response to get deployment ID
+	var deployResp struct {
+		ID     string `json:"id"`
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&deployResp); err != nil {
+		fmt.Println("✅ Deployment triggered successfully!")
+		return nil
+	}
+
+	fmt.Printf("   Deployment ID: %s\n", deployResp.ID)
+	fmt.Println()
+
+	// Poll for deployment status
+	fmt.Println("⏳ Waiting for deployment to complete...")
+	for i := 0; i < 120; i++ { // Max 10 minutes
+		time.Sleep(5 * time.Second)
+
+		statusReq, _ := http.NewRequest("GET", baseURL+"/api/v1/deployments/"+deployResp.ID, nil)
+		if apiToken != "" {
+			statusReq.Header.Set("Authorization", "Bearer "+apiToken)
+		}
+
+		statusResp, err := client.Do(statusReq)
+		if err != nil {
+			continue
+		}
+
+		var status struct {
+			Status string `json:"status"`
+		}
+		json.NewDecoder(statusResp.Body).Decode(&status)
+		statusResp.Body.Close()
+
+		switch status.Status {
+		case "success", "completed":
+			fmt.Println("\n✅ Deployment completed successfully!")
+			return nil
+		case "failed", "error":
+			return fmt.Errorf("deployment failed. Check logs with: vcdeploy deployment logs %s", deployResp.ID)
+		case "cancelled":
+			return fmt.Errorf("deployment was cancelled")
+		}
+		fmt.Print(".")
+	}
+
+	fmt.Println("\n⚠️  Deployment still in progress. Check status with:")
+	fmt.Printf("   vcdeploy deployment status %s\n", deployResp.ID)
 	return nil
 }
 
@@ -831,20 +1246,19 @@ func runProjectRollback(cmd *cobra.Command, args []string) error {
 	target, _ := cmd.Flags().GetString("target")
 	release, _ := cmd.Flags().GetInt("release")
 
-	if err := initConfig(cmd); err != nil {
-		return err
+	// Get master address
+	masterAddr, _ := cmd.Flags().GetString("master")
+	if masterAddr == "" {
+		masterAddr = os.Getenv("VCDEPLOY_MASTER")
+	}
+	if masterAddr == "" {
+		masterAddr = "localhost:9000"
 	}
 
-	dbPath := "/var/lib/vcdeploy/vcdeploy.db"
-	db, err := storage.Open(dbPath)
-	if err != nil {
-		return fmt.Errorf("open database: %w", err)
-	}
-	defer db.Close()
-
-	project, err := db.GetProject(projectName)
-	if err != nil {
-		return fmt.Errorf("get project: %w", err)
+	// Get API token
+	apiToken, _ := cmd.Flags().GetString("token")
+	if apiToken == "" {
+		apiToken = os.Getenv("VCDEPLOY_TOKEN")
 	}
 
 	fmt.Printf("🔙 Rolling back project: %s\n", projectName)
@@ -868,28 +1282,77 @@ func runProjectRollback(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	fmt.Println("\n🔄 Rolling back...")
+	// First, get the latest deployment for this project to rollback
+	client := &http.Client{Timeout: 30 * time.Second}
+	baseURL := "http://" + masterAddr
 
-	// Create rollback deployment record
-	deployment := &storage.DeploymentCLI{
-		ProjectID:   project.ID,
-		ProjectName: projectName,
-		Target:      target,
-		Status:      "rolling_back",
-		TriggeredBy: "cli",
-		StartedAt:   time.Now(),
+	// Get latest deployment for this project
+	listReq, _ := http.NewRequest("GET", baseURL+"/api/v1/deployments?project="+projectName+"&limit=1", nil)
+	if apiToken != "" {
+		listReq.Header.Set("Authorization", "Bearer "+apiToken)
 	}
 
-	if err := db.InsertDeployment(deployment); err != nil {
-		return fmt.Errorf("create deployment record: %w", err)
+	listResp, err := client.Do(listReq)
+	if err != nil {
+		return fmt.Errorf("master not reachable at %s: %w\nStart the master with: vcdeploy master start", masterAddr, err)
+	}
+	defer listResp.Body.Close()
+
+	if listResp.StatusCode == http.StatusUnauthorized {
+		return fmt.Errorf("authentication required. Provide --token or set VCDEPLOY_TOKEN")
 	}
 
-	// In real implementation, would call deploy.Rollback()
-	fmt.Println("✅ Rollback completed successfully!")
+	var deployments []struct {
+		ID     string `json:"id"`
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(listResp.Body).Decode(&deployments); err != nil || len(deployments) == 0 {
+		return fmt.Errorf("no deployments found for project %s", projectName)
+	}
 
-	deployment.Status = "rolled_back"
-	deployment.FinishedAt = timePtr(time.Now())
-	db.SaveDeployment(deployment)
+	deploymentID := deployments[0].ID
+
+	// Call rollback API
+	reqBody := map[string]interface{}{}
+	if release > 0 {
+		reqBody["release"] = release
+	}
+	if target != "" {
+		reqBody["target"] = target
+	}
+
+	reqJSON, _ := json.Marshal(reqBody)
+	req, err := http.NewRequest("POST", baseURL+"/api/v1/deployments/"+deploymentID+"/rollback", strings.NewReader(string(reqJSON)))
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if apiToken != "" {
+		req.Header.Set("Authorization", "Bearer "+apiToken)
+	}
+
+	fmt.Println("\n🔄 Triggering rollback via master...")
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("rollback request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("rollback failed: %s", string(body))
+	}
+
+	fmt.Println("✅ Rollback triggered successfully!")
+
+	// Parse response
+	var rollbackResp struct {
+		Message string `json:"message"`
+		ID      string `json:"rollback_id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&rollbackResp); err == nil && rollbackResp.ID != "" {
+		fmt.Printf("   Rollback ID: %s\n", rollbackResp.ID)
+	}
 
 	return nil
 }
@@ -903,7 +1366,7 @@ func runTypeList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dbPath := "/var/lib/vcdeploy/vcdeploy.db"
+	dbPath := getDBPath()
 	db, err := storage.Open(dbPath)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
@@ -939,7 +1402,7 @@ func runTypeCreate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dbPath := "/var/lib/vcdeploy/vcdeploy.db"
+	dbPath := getDBPath()
 	db, err := storage.Open(dbPath)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
@@ -975,8 +1438,79 @@ func runTypeCreate(cmd *cobra.Command, args []string) error {
 
 func runTypeEdit(cmd *cobra.Command, args []string) error {
 	typeName := args[0]
-	fmt.Printf("Opening type editor for: %s\n", typeName)
-	fmt.Println("Tip: Use the web UI for easier editing.")
+
+	if err := initConfig(cmd); err != nil {
+		return err
+	}
+
+	dbPath := getDBPath()
+	db, err := storage.Open(dbPath)
+	if err != nil {
+		return fmt.Errorf("open database: %w", err)
+	}
+	defer db.Close()
+
+	// Get existing project type
+	projectType, err := db.GetProjectTypeByName(typeName)
+	if err != nil {
+		return fmt.Errorf("get project type: %w", err)
+	}
+
+	// Check for flag values
+	descFlag, _ := cmd.Flags().GetString("description")
+	buildCmdFlag, _ := cmd.Flags().GetString("build-cmd")
+
+	// If any flags provided, use them directly
+	hasFlags := descFlag != "" || buildCmdFlag != ""
+
+	if hasFlags {
+		// Apply flag values
+		if descFlag != "" {
+			projectType.Description = descFlag
+		}
+		if buildCmdFlag != "" {
+			projectType.BuildCmd = buildCmdFlag
+		}
+	} else {
+		// Interactive mode
+		fmt.Printf("Editing project type: %s\n", typeName)
+		fmt.Println("Press Enter to keep current value, or enter a new value.")
+		fmt.Println()
+
+		reader := bufio.NewReader(os.Stdin)
+
+		// Description
+		fmt.Printf("Description [%s]: ", projectType.Description)
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			// EOF or broken pipe - user terminated input
+			fmt.Println()
+			return fmt.Errorf("input terminated: %w", err)
+		}
+		input = strings.TrimSpace(input)
+		if input != "" {
+			projectType.Description = input
+		}
+
+		// Build Command
+		fmt.Printf("Build Command [%s]: ", projectType.BuildCmd)
+		input, err = reader.ReadString('\n')
+		if err != nil {
+			fmt.Println()
+			return fmt.Errorf("input terminated: %w", err)
+		}
+		input = strings.TrimSpace(input)
+		if input != "" {
+			projectType.BuildCmd = input
+		}
+	}
+
+	// Update project type
+	if err := db.UpdateProjectTypeByName(projectType); err != nil {
+		return fmt.Errorf("update project type: %w", err)
+	}
+
+	fmt.Printf("\nProject type '%s' updated successfully.\n", typeName)
 	return nil
 }
 
@@ -1000,7 +1534,7 @@ func runTypeDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dbPath := "/var/lib/vcdeploy/vcdeploy.db"
+	dbPath := getDBPath()
 	db, err := storage.Open(dbPath)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
@@ -1024,18 +1558,28 @@ func runSecretSet(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dbPath := "/var/lib/vcdeploy/vcdeploy.db"
+	dbPath := getDBPath()
 	db, err := storage.Open(dbPath)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}
 	defer db.Close()
 
+	// Initialize KMS for encryption
+	kms, err := security.NewKMS(db.Conn(), globalLogger)
+	if err != nil {
+		return fmt.Errorf("initialize KMS: %w", err)
+	}
+	secrets := security.NewSecretService(db, kms)
+
 	var value string
 	if stdin {
 		// Read from stdin
 		reader := bufio.NewReader(os.Stdin)
-		value, _ = reader.ReadString('\n')
+		value, err = reader.ReadString('\n')
+		if err != nil && value == "" {
+			return fmt.Errorf("read stdin: %w", err)
+		}
 		value = strings.TrimSpace(value)
 	} else {
 		// Read interactively without echo
@@ -1052,11 +1596,20 @@ func runSecretSet(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("value cannot be empty")
 	}
 
-	if err := db.SetSecret(scope, key, value); err != nil {
+	// Parse scope into project/scope - format: project/scope or just scope (project=scope)
+	project := scope
+	scopeName := "_default"
+	if parts := strings.SplitN(scope, "/", 2); len(parts) == 2 {
+		project = parts[0]
+		scopeName = parts[1]
+	}
+
+	ctx := context.Background()
+	if err := secrets.Set(ctx, project, scopeName, key, value); err != nil {
 		return fmt.Errorf("set secret: %w", err)
 	}
 
-	fmt.Printf("Secret '%s/%s' set successfully.\n", scope, key)
+	fmt.Printf("Secret '%s/%s' set successfully (encrypted).\n", scope, key)
 	return nil
 }
 
@@ -1067,7 +1620,7 @@ func runSecretList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dbPath := "/var/lib/vcdeploy/vcdeploy.db"
+	dbPath := getDBPath()
 	db, err := storage.Open(dbPath)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
@@ -1115,7 +1668,7 @@ func runSecretDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dbPath := "/var/lib/vcdeploy/vcdeploy.db"
+	dbPath := getDBPath()
 	db, err := storage.Open(dbPath)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
@@ -1137,7 +1690,7 @@ func runSecretImport(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dbPath := "/var/lib/vcdeploy/vcdeploy.db"
+	dbPath := getDBPath()
 	db, err := storage.Open(dbPath)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
@@ -1150,6 +1703,22 @@ func runSecretImport(cmd *cobra.Command, args []string) error {
 
 	scanner := bufio.NewScanner(os.Stdin)
 	count := 0
+
+	// Initialize KMS for encryption
+	kms, err := security.NewKMS(db.Conn(), globalLogger)
+	if err != nil {
+		return fmt.Errorf("initialize KMS: %w", err)
+	}
+	secrets := security.NewSecretService(db, kms)
+	ctx := context.Background()
+
+	// Parse scope into project/scope
+	project := scope
+	scopeName := "_default"
+	if parts := strings.SplitN(scope, "/", 2); len(parts) == 2 {
+		project = parts[0]
+		scopeName = parts[1]
+	}
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -1172,7 +1741,7 @@ func runSecretImport(cmd *cobra.Command, args []string) error {
 		// Remove quotes if present
 		value = strings.Trim(value, `"'`)
 
-		if err := db.SetSecret(scope, key, value); err != nil {
+		if err := secrets.Set(ctx, project, scopeName, key, value); err != nil {
 			fmt.Printf("  Error setting %s: %v\n", key, err)
 			continue
 		}
@@ -1212,11 +1781,15 @@ func runSecretBackup(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("passphrases do not match")
 	}
 
+	if len(passphrase1) < 8 {
+		return fmt.Errorf("passphrase must be at least 8 characters")
+	}
+
 	if err := initConfig(cmd); err != nil {
 		return err
 	}
 
-	dbPath := "/var/lib/vcdeploy/vcdeploy.db"
+	dbPath := getDBPath()
 	db, err := storage.Open(dbPath)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
@@ -1231,24 +1804,50 @@ func runSecretBackup(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("export secrets: %w", err)
 	}
 
-	// Encrypt with passphrase
-	data, _ := json.Marshal(secrets)
-	// In real implementation, would use security.EncryptWithPassphrase()
+	// Serialize to JSON
+	plaintext, err := json.Marshal(secrets)
+	if err != nil {
+		return fmt.Errorf("serialize secrets: %w", err)
+	}
 
-	if err := os.WriteFile(output, data, 0600); err != nil {
+	// Encrypt with passphrase
+	encrypted, err := security.EncryptWithPassphrase(plaintext, passphrase1)
+	if err != nil {
+		return fmt.Errorf("encrypt secrets: %w", err)
+	}
+
+	// Encode as base64 for safe storage
+	encoded := base64.StdEncoding.EncodeToString(encrypted)
+
+	// Write to file with header
+	backupData := fmt.Sprintf("VCDEPLOY-SECRETS-V1\n%s", encoded)
+	if err := os.WriteFile(output, []byte(backupData), 0600); err != nil {
 		return fmt.Errorf("write backup: %w", err)
 	}
 
 	fmt.Printf("Backed up %d secrets successfully.\n", len(secrets))
+	fmt.Printf("Keep this file and passphrase secure!\n")
 	return nil
 }
 
 func runSecretRestore(cmd *cobra.Command, args []string) error {
 	backupFile := args[0]
 
-	if _, err := os.Stat(backupFile); err != nil {
-		return fmt.Errorf("backup file not found: %s", backupFile)
+	// Read backup file
+	data, err := os.ReadFile(backupFile)
+	if err != nil {
+		return fmt.Errorf("read backup file: %w", err)
 	}
+
+	// Verify header
+	content := string(data)
+	if !strings.HasPrefix(content, "VCDEPLOY-SECRETS-V1\n") {
+		return fmt.Errorf("invalid backup file format")
+	}
+
+	// Extract encoded data
+	encoded := strings.TrimPrefix(content, "VCDEPLOY-SECRETS-V1\n")
+	encoded = strings.TrimSpace(encoded)
 
 	fmt.Print("Enter backup passphrase: ")
 	passphrase, err := term.ReadPassword(int(os.Stdin.Fd()))
@@ -1257,20 +1856,83 @@ func runSecretRestore(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println()
 
-	_ = passphrase // Would use to decrypt
+	// Decode base64
+	encrypted, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return fmt.Errorf("decode backup: %w", err)
+	}
+
+	// Decrypt with passphrase
+	decrypted, err := security.DecryptWithPassphrase(encrypted, passphrase)
+	if err != nil {
+		return fmt.Errorf("decrypt backup: %w (wrong passphrase?)", err)
+	}
+
+	// Parse JSON - secrets are stored as map[scope]map[key]value
+	var secrets map[string]map[string]string
+	if err := json.Unmarshal(decrypted, &secrets); err != nil {
+		return fmt.Errorf("parse backup: %w", err)
+	}
+
+	// Count total secrets
+	totalSecrets := 0
+	for _, scopeSecrets := range secrets {
+		totalSecrets += len(scopeSecrets)
+	}
+
+	fmt.Printf("\nFound %d secrets in backup.\n", totalSecrets)
+	fmt.Print("Restore all secrets? This will overwrite existing ones. [y/N]: ")
+
+	reader := bufio.NewReader(os.Stdin)
+	response, _ := reader.ReadString('\n')
+	response = strings.TrimSpace(strings.ToLower(response))
+
+	if response != "y" && response != "yes" {
+		fmt.Println("Aborted.")
+		return nil
+	}
+
+	if err := initConfig(cmd); err != nil {
+		return err
+	}
+
+	dbPath := getDBPath()
+	db, err := storage.Open(dbPath)
+	if err != nil {
+		return fmt.Errorf("open database: %w", err)
+	}
+	defer db.Close()
 
 	fmt.Printf("\nRestoring secrets from %s...\n", backupFile)
 
-	// In real implementation:
-	// 1. Read backup file
-	// 2. Decrypt with passphrase
-	// 3. Import each secret
+	// Initialize KMS for encryption
+	kms, err := security.NewKMS(db.Conn(), globalLogger)
+	if err != nil {
+		return fmt.Errorf("initialize KMS: %w", err)
+	}
+	secretsService := security.NewSecretService(db, kms)
+	ctx := context.Background()
 
-	fmt.Println("Secrets restored successfully.")
+	// Import each secret
+	restored := 0
+	for scope, scopeSecrets := range secrets {
+		// Parse scope into project/scope
+		project := scope
+		scopeName := "_default"
+		if parts := strings.SplitN(scope, "/", 2); len(parts) == 2 {
+			project = parts[0]
+			scopeName = parts[1]
+		}
+
+		for key, value := range scopeSecrets {
+			if err := secretsService.Set(ctx, project, scopeName, key, value); err != nil {
+				fmt.Printf("  Warning: failed to restore %s/%s: %v\n", scope, key, err)
+				continue
+			}
+			restored++
+		}
+	}
+
+	fmt.Printf("\nRestored %d/%d secrets successfully.\n", restored, totalSecrets)
 	return nil
-}
-
-func exitWithError(msg string) {
-	fmt.Fprintln(os.Stderr, "Error:", msg)
-	os.Exit(1)
 }
