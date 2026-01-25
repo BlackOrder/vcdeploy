@@ -262,7 +262,7 @@ func TestSecretDBOperations(t *testing.T) {
 
 // TestRootCmdStructure tests the root command structure.
 func TestRootCmdStructure(t *testing.T) {
-	t.Parallel()
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
 	// Check root command exists and has expected properties
 	if rootCmd == nil {
@@ -289,7 +289,7 @@ func TestRootCmdStructure(t *testing.T) {
 
 // TestProjectCmdStructure tests the project command structure.
 func TestProjectCmdStructure(t *testing.T) {
-	t.Parallel()
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
 	if projectCmd == nil {
 		t.Fatal("projectCmd is nil")
@@ -311,7 +311,7 @@ func TestProjectCmdStructure(t *testing.T) {
 
 // TestTypeCmdStructure tests the type command structure.
 func TestTypeCmdStructure(t *testing.T) {
-	t.Parallel()
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
 	if typeCmd == nil {
 		t.Fatal("typeCmd is nil")
@@ -333,7 +333,7 @@ func TestTypeCmdStructure(t *testing.T) {
 
 // TestSecretCmdStructure tests the secret command structure.
 func TestSecretCmdStructure(t *testing.T) {
-	t.Parallel()
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
 	if secretCmd == nil {
 		t.Fatal("secretCmd is nil")
@@ -355,7 +355,7 @@ func TestSecretCmdStructure(t *testing.T) {
 
 // TestMasterCmdStructure tests the master command structure.
 func TestMasterCmdStructure(t *testing.T) {
-	t.Parallel()
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
 	if masterCmd == nil {
 		t.Fatal("masterCmd is nil")
@@ -377,7 +377,7 @@ func TestMasterCmdStructure(t *testing.T) {
 
 // TestGlobalFlags tests that global flags are registered.
 func TestGlobalFlags(t *testing.T) {
-	t.Parallel()
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
 	configFlag := rootCmd.PersistentFlags().Lookup("config")
 	if configFlag == nil {
@@ -397,7 +397,7 @@ func TestGlobalFlags(t *testing.T) {
 
 // TestEditProjectFlags tests the edit project command has expected flags.
 func TestEditProjectFlags(t *testing.T) {
-	t.Parallel()
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
 	// Find the edit command under project
 	var editCmd *cobra.Command
@@ -423,7 +423,7 @@ func TestEditProjectFlags(t *testing.T) {
 
 // TestDeployFlags tests the deploy command has expected flags.
 func TestDeployFlags(t *testing.T) {
-	t.Parallel()
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
 	// Find the deploy command under project
 	var deployCmd *cobra.Command
@@ -449,7 +449,7 @@ func TestDeployFlags(t *testing.T) {
 
 // TestShowCommandStructure tests the show command has expected subcommands.
 func TestShowCommandStructure(t *testing.T) {
-	t.Parallel()
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
 	// Verify showCmd exists
 	if showCmd == nil {
@@ -486,7 +486,7 @@ func TestShowCommandStructure(t *testing.T) {
 
 // TestShowProjectCommand tests the show project command.
 func TestShowProjectCommand(t *testing.T) {
-	t.Parallel()
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
 	var projectShowCmd *cobra.Command
 	for _, cmd := range showCmd.Commands() {
@@ -518,7 +518,7 @@ func TestShowProjectCommand(t *testing.T) {
 
 // TestShowAgentCommand tests the show agent command.
 func TestShowAgentCommand(t *testing.T) {
-	t.Parallel()
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
 	var agentShowCmd *cobra.Command
 	for _, cmd := range showCmd.Commands() {
@@ -544,7 +544,7 @@ func TestShowAgentCommand(t *testing.T) {
 
 // TestShowDeploymentCommand tests the show deployment command.
 func TestShowDeploymentCommand(t *testing.T) {
-	t.Parallel()
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
 	var deploymentShowCmd *cobra.Command
 	for _, cmd := range showCmd.Commands() {
@@ -570,7 +570,7 @@ func TestShowDeploymentCommand(t *testing.T) {
 
 // TestAuditCommandStructure tests the audit command has expected subcommands.
 func TestAuditCommandStructure(t *testing.T) {
-	t.Parallel()
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
 	// Verify auditCmd exists
 	if auditCmd == nil {
@@ -596,7 +596,7 @@ func TestAuditCommandStructure(t *testing.T) {
 
 // TestAuditListFlags tests the audit list command flags.
 func TestAuditListFlags(t *testing.T) {
-	t.Parallel()
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
 	var listCmd *cobra.Command
 	for _, cmd := range auditCmd.Commands() {
@@ -627,7 +627,7 @@ func TestAuditListFlags(t *testing.T) {
 
 // TestAuditExportFlags tests the audit export command.
 func TestAuditExportFlags(t *testing.T) {
-	t.Parallel()
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
 	var exportCmd *cobra.Command
 	for _, cmd := range auditCmd.Commands() {
@@ -662,7 +662,7 @@ func TestAuditExportFlags(t *testing.T) {
 
 // TestRootCommandHasShowAndAudit tests that root command has show and audit.
 func TestRootCommandHasShowAndAudit(t *testing.T) {
-	t.Parallel()
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
 	foundShow := false
 	foundAudit := false
