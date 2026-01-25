@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -246,4 +247,14 @@ func DecryptWithPassphrase(ciphertext, passphrase []byte) ([]byte, error) {
 	}
 
 	return plaintext, nil
+}
+
+// GenerateSecureToken generates a cryptographically secure random token.
+// The returned token is hex-encoded, so it will be 2*length characters long.
+func GenerateSecureToken(length int) (string, error) {
+	bytes := make([]byte, length)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", fmt.Errorf("generating secure token: %w", err)
+	}
+	return hex.EncodeToString(bytes), nil
 }

@@ -4,9 +4,6 @@ package provision
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/base64"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"text/template"
@@ -119,7 +116,7 @@ func (p *Provisioner) Provision(ctx context.Context, req *ProvisionRequest) (*Pr
 	}
 
 	// Generate registration token
-	token, err := generateSecureToken(32)
+	token, err := security.GenerateSecureToken(32)
 	if err != nil {
 		return nil, fmt.Errorf("generating token: %w", err)
 	}
@@ -236,7 +233,7 @@ func (p *Provisioner) RegenerateToken(ctx context.Context, agentID string) (stri
 		return "", fmt.Errorf("agent %s is already registered (status: %s)", agentID, agent.Status)
 	}
 
-	token, err := generateSecureToken(32)
+	token, err := security.GenerateSecureToken(32)
 	if err != nil {
 		return "", fmt.Errorf("generating token: %w", err)
 	}
@@ -286,24 +283,6 @@ func (p *Provisioner) generateInstallScript(req *ProvisionRequest, token string)
 	}
 
 	return buf.String(), nil
-}
-
-// generateSecureToken generates a cryptographically secure random token.
-func generateSecureToken(length int) (string, error) {
-	bytes := make([]byte, length)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(bytes), nil
-}
-
-// generateSecureTokenBase64 generates a base64-encoded secure token.
-func generateSecureTokenBase64(length int) (string, error) {
-	bytes := make([]byte, length)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", err
-	}
-	return base64.URLEncoding.EncodeToString(bytes), nil
 }
 
 // installScriptTemplate is the bash script template for agent installation.

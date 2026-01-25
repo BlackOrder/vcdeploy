@@ -3,7 +3,6 @@ package server
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/hex"
@@ -1266,7 +1265,7 @@ func (s *MasterServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Generate session token
-		sessionToken, err := generateSecureToken(32)
+		sessionToken, err := security.GenerateSecureToken(32)
 		if err != nil {
 			s.logger.Error("Failed to generate session token", zap.Error(err))
 			s.renderTemplate(w, "login", map[string]interface{}{"Error": "Internal error"})
@@ -1433,15 +1432,6 @@ func verifyTOTP(secret, code string) bool {
 		return false
 	}
 	return security.ValidateTOTP(secret, code, security.DefaultTOTPConfig())
-}
-
-// generateSecureToken generates a cryptographically secure random token.
-func generateSecureToken(length int) (string, error) {
-	bytes := make([]byte, length)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(bytes), nil
 }
 
 // extractClientIP extracts the client IP from a request, handling proxies.
