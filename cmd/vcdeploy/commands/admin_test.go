@@ -1,13 +1,19 @@
 package commands
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
 )
+
+// --- API Client Tests ---
 
 // TestAPIClientCreation tests the apiClient constructor.
 func TestAPIClientCreation(t *testing.T) {
@@ -272,6 +278,1087 @@ func TestDeploymentStatusColors(t *testing.T) {
 		// Just verify these are valid status strings that the CLI handles
 		if status == "" {
 			t.Error("status should not be empty")
+		}
+	}
+}
+
+// --- Full Integration Tests for run* Functions ---
+
+// newMockAPIServer creates a comprehensive test server mocking the vcdeploy API.
+func newMockAPIServer(t *testing.T) *httptest.Server {
+	t.Helper()
+
+	mux := http.NewServeMux()
+
+	// Users endpoint
+	mux.HandleFunc("/api/v1/users", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			users := []map[string]interface{}{
+				{"id": 1.0, "username": "admin", "email": "admin@test.com", "role": "admin", "createdAt": "2024-01-01T00:00:00Z"},
+				{"id": 2.0, "username": "deployer", "email": "deployer@test.com", "role": "deployer", "createdAt": "2024-01-02T00:00:00Z"},
+			}
+			json.NewEncoder(w).Encode(users)
+		case http.MethodPost:
+			w.WriteHeader(http.StatusCreated)
+			json.NewEncoder(w).Encode(map[string]interface{}{"id": 3.0, "username": "newuser"})
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	// User by ID endpoint
+	mux.HandleFunc("/api/v1/users/", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodDelete:
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
+		case http.MethodPatch:
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]string{"status": "updated"})
+		}
+	})
+
+	// Agents endpoint
+	mux.HandleFunc("/api/v1/agents", func(w http.ResponseWriter, r *http.Request) {
+		agents := []map[string]interface{}{
+			{"id": "agent-1", "hostname": "server1.example.com", "status": "online", "lastSeenAt": "2024-01-01T12:00:00Z"},
+			{"id": "agent-2", "hostname": "server2.example.com", "status": "offline", "lastSeenAt": "2024-01-01T00:00:00Z"},
+		}
+		json.NewEncoder(w).Encode(agents)
+	})
+
+	// Agent by ID endpoint
+	mux.HandleFunc("/api/v1/agents/", func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		if strings.HasSuffix(path, "/tokens") {
+			// Agent token generation
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"token":      "reg-token-12345",
+				"expires_at": "2025-01-01T00:00:00Z",
+			})
+			return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			agent := map[string]interface{}{
+				"id":           "agent-1",
+				"hostname":     "server1.example.com",
+				"status":       "online",
+				"registeredAt": "2024-01-01T00:00:00Z",
+				"lastSeenAt":   "2024-01-01T12:00:00Z",
+				"labels":       map[string]interface{}{"env": "production", "tier": "web"},
+			}
+			json.NewEncoder(w).Encode(agent)
+		case http.MethodDelete:
+			w.WriteHeader(http.StatusOK)
+		}
+	})
+
+	// Deployments endpoint
+	mux.HandleFunc("/api/v1/deployments", func(w http.ResponseWriter, r *http.Request) {
+		deployments := []map[string]interface{}{
+			{"id": "deploy-1", "project": "webapp", "branch": "main", "status": "success", "startedAt": "2024-01-01T10:00:00Z"},
+			{"id": "deploy-2", "project": "api", "branch": "develop", "status": "running", "startedAt": "2024-01-01T11:00:00Z"},
+		}
+		json.NewEncoder(w).Encode(deployments)
+	})
+
+	// Deployment by ID endpoint
+	mux.HandleFunc("/api/v1/deployments/", func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		if strings.HasSuffix(path, "/cancel") {
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]string{"status": "cancelled"})
+			return
+		}
+		if strings.HasSuffix(path, "/logs") {
+			logs := []map[string]interface{}{
+				{"createdAt": "2024-01-01T10:00:00Z", "level": "INFO", "message": "Build started"},
+				{"createdAt": "2024-01-01T10:01:00Z", "level": "INFO", "message": "Dependencies installed"},
+				{"createdAt": "2024-01-01T10:02:00Z", "level": "INFO", "message": "Build complete"},
+			}
+			json.NewEncoder(w).Encode(logs)
+			return
+		}
+		deployment := map[string]interface{}{
+			"id":          "deploy-1",
+			"project":     "webapp",
+			"branch":      "main",
+			"target":      "production",
+			"status":      "success",
+			"startedAt":   "2024-01-01T10:00:00Z",
+			"completedAt": "2024-01-01T10:05:00Z",
+			"triggeredBy": "admin",
+		}
+		json.NewEncoder(w).Encode(deployment)
+	})
+
+	// Project deploy endpoint
+	mux.HandleFunc("/api/v1/projects/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/deploy") {
+			w.WriteHeader(http.StatusAccepted)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"id":     "deploy-new-1",
+				"status": "pending",
+			})
+		} else {
+			// Project info
+			project := map[string]interface{}{
+				"id":          1,
+				"name":        "webapp",
+				"repository":  "https://github.com/example/webapp",
+				"branch":      "main",
+				"deploy_path": "/var/www/app",
+				"type":        "nodejs",
+				"enabled":     true,
+				"created_at":  "2024-01-01T00:00:00Z",
+				"updated_at":  "2024-01-01T00:00:00Z",
+			}
+			json.NewEncoder(w).Encode(project)
+		}
+	})
+
+	// Settings/Config endpoints
+	mux.HandleFunc("/api/v1/settings/export", func(w http.ResponseWriter, r *http.Request) {
+		settings := map[string]map[string]interface{}{
+			"server": {
+				"port": 8080,
+				"host": "0.0.0.0",
+			},
+			"security": {
+				"session_timeout": "24h",
+				"max_attempts":    5,
+			},
+		}
+		json.NewEncoder(w).Encode(settings)
+	})
+
+	mux.HandleFunc("/api/v1/settings/import", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{"imported": 5})
+	})
+
+	mux.HandleFunc("/api/v1/settings/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]string{"status": "updated"})
+		}
+	})
+
+	// API keys endpoint
+	mux.HandleFunc("/api/v1/apikeys", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			keys := []map[string]interface{}{
+				{"id": 1.0, "name": "ci-deploy", "createdAt": "2024-01-01T00:00:00Z", "expiresAt": nil, "lastUsedAt": "2024-01-15T10:00:00Z"},
+				{"id": 2.0, "name": "backup-key", "createdAt": "2024-01-05T00:00:00Z", "expiresAt": "2025-01-05T00:00:00Z", "lastUsedAt": nil},
+			}
+			json.NewEncoder(w).Encode(keys)
+		case http.MethodPost:
+			w.WriteHeader(http.StatusCreated)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"id":   3.0,
+				"name": "new-key",
+				"key":  "vcd_newkey_secret123456",
+			})
+		}
+	})
+
+	// API key by ID
+	mux.HandleFunc("/api/v1/apikeys/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			w.WriteHeader(http.StatusOK)
+		}
+	})
+
+	// Audit endpoint
+	mux.HandleFunc("/api/v1/audit", func(w http.ResponseWriter, r *http.Request) {
+		entries := []map[string]interface{}{
+			{"timestamp": "2024-01-01T10:00:00Z", "user": "admin", "action": "deploy", "resource": "webapp", "result": "success"},
+			{"timestamp": "2024-01-01T09:00:00Z", "user": "admin", "action": "login", "resource": "system", "result": "success"},
+		}
+		json.NewEncoder(w).Encode(entries)
+	})
+
+	// Health endpoint
+	mux.HandleFunc("/api/v1/health", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
+	})
+
+	// Stats endpoint
+	mux.HandleFunc("/api/v1/stats", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"projects":         5.0,
+			"connected_agents": 3.0,
+		})
+	})
+
+	return httptest.NewServer(mux)
+}
+
+// createTestCommand creates a cobra command with master/token flags set to test server.
+func createTestCommand(serverURL string) *cobra.Command {
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String("master", serverURL, "")
+	cmd.Flags().String("token", "test-token", "")
+	return cmd
+}
+
+// TestRunUserList tests the runUserList function.
+func TestRunUserList(t *testing.T) {
+	server := newMockAPIServer(t)
+	defer server.Close()
+
+	cmd := createTestCommand(server.URL)
+
+	// Capture stdout
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runUserList(cmd, nil)
+
+	w.Close()
+	var stdout bytes.Buffer
+	io.Copy(&stdout, r)
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Fatalf("runUserList() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "admin") {
+		t.Errorf("output should contain 'admin', got: %s", output)
+	}
+	if !strings.Contains(output, "deployer") {
+		t.Errorf("output should contain 'deployer', got: %s", output)
+	}
+}
+
+// TestRunUserListAPIError tests runUserList when API returns an error.
+func TestRunUserListAPIError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	cmd := createTestCommand(server.URL)
+	err := runUserList(cmd, nil)
+
+	if err == nil {
+		t.Error("expected error for API error response")
+	}
+}
+
+// TestRunAgentList tests the runAgentList function.
+func TestRunAgentList(t *testing.T) {
+	server := newMockAPIServer(t)
+	defer server.Close()
+
+	cmd := createTestCommand(server.URL)
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runAgentList(cmd, nil)
+
+	w.Close()
+	var stdout bytes.Buffer
+	io.Copy(&stdout, r)
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Fatalf("runAgentList() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "agent-1") {
+		t.Errorf("output should contain 'agent-1', got: %s", output)
+	}
+	if !strings.Contains(output, "server1.example.com") {
+		t.Errorf("output should contain 'server1.example.com', got: %s", output)
+	}
+}
+
+// TestRunAgentListEmpty tests runAgentList when no agents exist.
+func TestRunAgentListEmpty(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode([]map[string]interface{}{})
+	}))
+	defer server.Close()
+
+	cmd := createTestCommand(server.URL)
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runAgentList(cmd, nil)
+
+	w.Close()
+	var stdout bytes.Buffer
+	io.Copy(&stdout, r)
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Fatalf("runAgentList() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "No agents registered") {
+		t.Errorf("output should indicate no agents, got: %s", output)
+	}
+}
+
+// TestRunAgentShow tests the runAgentShow function.
+func TestRunAgentShow(t *testing.T) {
+	server := newMockAPIServer(t)
+	defer server.Close()
+
+	cmd := createTestCommand(server.URL)
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runAgentShow(cmd, []string{"agent-1"})
+
+	w.Close()
+	var stdout bytes.Buffer
+	io.Copy(&stdout, r)
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Fatalf("runAgentShow() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "server1.example.com") {
+		t.Errorf("output should contain hostname, got: %s", output)
+	}
+	if !strings.Contains(output, "production") {
+		t.Errorf("output should contain label, got: %s", output)
+	}
+}
+
+// TestRunAgentToken tests the runAgentToken function.
+func TestRunAgentToken(t *testing.T) {
+	server := newMockAPIServer(t)
+	defer server.Close()
+
+	cmd := createTestCommand(server.URL)
+	cmd.Flags().String("label", "test-label", "")
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runAgentToken(cmd, nil)
+
+	w.Close()
+	var stdout bytes.Buffer
+	io.Copy(&stdout, r)
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Fatalf("runAgentToken() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "reg-token-12345") {
+		t.Errorf("output should contain token, got: %s", output)
+	}
+}
+
+// TestRunAgentTokenInvalidResponse tests runAgentToken with invalid API response.
+func TestRunAgentTokenInvalidResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Return response without token field
+		json.NewEncoder(w).Encode(map[string]interface{}{"other": "value"})
+	}))
+	defer server.Close()
+
+	cmd := createTestCommand(server.URL)
+	cmd.Flags().String("label", "", "")
+
+	err := runAgentToken(cmd, nil)
+
+	if err == nil {
+		t.Error("expected error for missing token in response")
+	}
+	if !strings.Contains(err.Error(), "invalid API response") {
+		t.Errorf("error should mention invalid response, got: %v", err)
+	}
+}
+
+// TestRunDeploymentList tests the runDeploymentList function.
+func TestRunDeploymentList(t *testing.T) {
+	server := newMockAPIServer(t)
+	defer server.Close()
+
+	cmd := createTestCommand(server.URL)
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runDeploymentList(cmd, nil)
+
+	w.Close()
+	var stdout bytes.Buffer
+	io.Copy(&stdout, r)
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Fatalf("runDeploymentList() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "deploy-1") {
+		t.Errorf("output should contain 'deploy-1', got: %s", output)
+	}
+	if !strings.Contains(output, "webapp") {
+		t.Errorf("output should contain 'webapp', got: %s", output)
+	}
+}
+
+// TestRunDeploymentStatus tests the runDeploymentStatus function.
+func TestRunDeploymentStatus(t *testing.T) {
+	server := newMockAPIServer(t)
+	defer server.Close()
+
+	cmd := createTestCommand(server.URL)
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runDeploymentStatus(cmd, []string{"deploy-1"})
+
+	w.Close()
+	var stdout bytes.Buffer
+	io.Copy(&stdout, r)
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Fatalf("runDeploymentStatus() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "success") {
+		t.Errorf("output should contain status, got: %s", output)
+	}
+	if !strings.Contains(output, "admin") {
+		t.Errorf("output should contain triggeredBy, got: %s", output)
+	}
+}
+
+// TestRunDeploymentCancel tests the runDeploymentCancel function.
+func TestRunDeploymentCancel(t *testing.T) {
+	server := newMockAPIServer(t)
+	defer server.Close()
+
+	cmd := createTestCommand(server.URL)
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runDeploymentCancel(cmd, []string{"deploy-1"})
+
+	w.Close()
+	var stdout bytes.Buffer
+	io.Copy(&stdout, r)
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Fatalf("runDeploymentCancel() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "cancelled") {
+		t.Errorf("output should confirm cancellation, got: %s", output)
+	}
+}
+
+// TestRunDeploymentCancelError tests runDeploymentCancel when API returns error.
+func TestRunDeploymentCancelError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "cannot cancel completed deployment", http.StatusBadRequest)
+	}))
+	defer server.Close()
+
+	cmd := createTestCommand(server.URL)
+	err := runDeploymentCancel(cmd, []string{"deploy-1"})
+
+	if err == nil {
+		t.Error("expected error for failed cancellation")
+	}
+}
+
+// TestRunDeploymentLogs tests the runDeploymentLogs function.
+func TestRunDeploymentLogs(t *testing.T) {
+	server := newMockAPIServer(t)
+	defer server.Close()
+
+	cmd := createTestCommand(server.URL)
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runDeploymentLogs(cmd, []string{"deploy-1"})
+
+	w.Close()
+	var stdout bytes.Buffer
+	io.Copy(&stdout, r)
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Fatalf("runDeploymentLogs() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "Build started") {
+		t.Errorf("output should contain log message, got: %s", output)
+	}
+	if !strings.Contains(output, "Build complete") {
+		t.Errorf("output should contain log message, got: %s", output)
+	}
+}
+
+// TestRunDeploymentLogsEmpty tests runDeploymentLogs when no logs exist.
+func TestRunDeploymentLogsEmpty(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode([]map[string]interface{}{})
+	}))
+	defer server.Close()
+
+	cmd := createTestCommand(server.URL)
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runDeploymentLogs(cmd, []string{"deploy-1"})
+
+	w.Close()
+	var stdout bytes.Buffer
+	io.Copy(&stdout, r)
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Fatalf("runDeploymentLogs() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "No logs available") {
+		t.Errorf("output should indicate no logs, got: %s", output)
+	}
+}
+
+// TestRunConfigShow tests the runConfigShow function.
+func TestRunConfigShow(t *testing.T) {
+	server := newMockAPIServer(t)
+	defer server.Close()
+
+	cmd := createTestCommand(server.URL)
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runConfigShow(cmd, nil)
+
+	w.Close()
+	var stdout bytes.Buffer
+	io.Copy(&stdout, r)
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Fatalf("runConfigShow() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "server") {
+		t.Errorf("output should contain 'server' category, got: %s", output)
+	}
+	if !strings.Contains(output, "security") {
+		t.Errorf("output should contain 'security' category, got: %s", output)
+	}
+}
+
+// TestRunConfigExport tests the runConfigExport function.
+func TestRunConfigExport(t *testing.T) {
+	server := newMockAPIServer(t)
+	defer server.Close()
+
+	cmd := createTestCommand(server.URL)
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runConfigExport(cmd, nil)
+
+	w.Close()
+	var stdout bytes.Buffer
+	io.Copy(&stdout, r)
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Fatalf("runConfigExport() error = %v", err)
+	}
+
+	output := stdout.String()
+	// Should be valid JSON
+	var result interface{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &result); err != nil {
+		t.Errorf("output should be valid JSON, got: %s, error: %v", output, err)
+	}
+}
+
+// TestRunConfigImport tests the runConfigImport function.
+func TestRunConfigImport(t *testing.T) {
+	server := newMockAPIServer(t)
+	defer server.Close()
+
+	// Create a temp file with config JSON
+	tmpFile, err := os.CreateTemp("", "config-*.json")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	configData := `{"server": {"port": 9000}}`
+	if _, err := tmpFile.WriteString(configData); err != nil {
+		t.Fatalf("failed to write temp file: %v", err)
+	}
+	tmpFile.Close()
+
+	cmd := createTestCommand(server.URL)
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err = runConfigImport(cmd, []string{tmpFile.Name()})
+
+	w.Close()
+	var stdout bytes.Buffer
+	io.Copy(&stdout, r)
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Fatalf("runConfigImport() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "Imported") {
+		t.Errorf("output should confirm import, got: %s", output)
+	}
+}
+
+// TestRunConfigImportFileNotFound tests runConfigImport with missing file.
+func TestRunConfigImportFileNotFound(t *testing.T) {
+	server := newMockAPIServer(t)
+	defer server.Close()
+
+	cmd := createTestCommand(server.URL)
+	err := runConfigImport(cmd, []string{"/nonexistent/file.json"})
+
+	if err == nil {
+		t.Error("expected error for missing file")
+	}
+	if !strings.Contains(err.Error(), "read file") {
+		t.Errorf("error should mention file reading, got: %v", err)
+	}
+}
+
+// TestRunConfigSet tests the runConfigSet function.
+func TestRunConfigSet(t *testing.T) {
+	server := newMockAPIServer(t)
+	defer server.Close()
+
+	cmd := createTestCommand(server.URL)
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runConfigSet(cmd, []string{"server.port", "9000"})
+
+	w.Close()
+	var stdout bytes.Buffer
+	io.Copy(&stdout, r)
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Fatalf("runConfigSet() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "server.port") {
+		t.Errorf("output should confirm setting, got: %s", output)
+	}
+}
+
+// TestRunConfigSetInvalidFormat tests runConfigSet with invalid key format.
+func TestRunConfigSetInvalidFormat(t *testing.T) {
+	server := newMockAPIServer(t)
+	defer server.Close()
+
+	cmd := createTestCommand(server.URL)
+	err := runConfigSet(cmd, []string{"invalidkey", "value"})
+
+	if err == nil {
+		t.Error("expected error for invalid key format")
+	}
+	if !strings.Contains(err.Error(), "category.key") {
+		t.Errorf("error should mention format, got: %v", err)
+	}
+}
+
+// TestRunAPIKeyList tests the runAPIKeyList function.
+func TestRunAPIKeyList(t *testing.T) {
+	server := newMockAPIServer(t)
+	defer server.Close()
+
+	cmd := createTestCommand(server.URL)
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runAPIKeyList(cmd, nil)
+
+	w.Close()
+	var stdout bytes.Buffer
+	io.Copy(&stdout, r)
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Fatalf("runAPIKeyList() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "ci-deploy") {
+		t.Errorf("output should contain key name, got: %s", output)
+	}
+}
+
+// TestRunAPIKeyListEmpty tests runAPIKeyList when no keys exist.
+func TestRunAPIKeyListEmpty(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode([]map[string]interface{}{})
+	}))
+	defer server.Close()
+
+	cmd := createTestCommand(server.URL)
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runAPIKeyList(cmd, nil)
+
+	w.Close()
+	var stdout bytes.Buffer
+	io.Copy(&stdout, r)
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Fatalf("runAPIKeyList() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "No API keys found") {
+		t.Errorf("output should indicate no keys, got: %s", output)
+	}
+}
+
+// TestRunAPIKeyCreate tests the runAPIKeyCreate function.
+func TestRunAPIKeyCreate(t *testing.T) {
+	server := newMockAPIServer(t)
+	defer server.Close()
+
+	cmd := createTestCommand(server.URL)
+	cmd.Flags().Int("expires", 0, "")
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runAPIKeyCreate(cmd, []string{"new-key"})
+
+	w.Close()
+	var stdout bytes.Buffer
+	io.Copy(&stdout, r)
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Fatalf("runAPIKeyCreate() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "vcd_newkey_secret") {
+		t.Errorf("output should contain the new key, got: %s", output)
+	}
+	if !strings.Contains(output, "IMPORTANT") {
+		t.Errorf("output should contain warning message, got: %s", output)
+	}
+}
+
+// TestRunDeploymentTrigger tests the runDeploymentTrigger function.
+func TestRunDeploymentTrigger(t *testing.T) {
+	server := newMockAPIServer(t)
+	defer server.Close()
+
+	cmd := createTestCommand(server.URL)
+	cmd.Flags().String("branch", "main", "")
+	cmd.Flags().String("target", "production", "")
+	cmd.Flags().String("schedule", "", "")
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runDeploymentTrigger(cmd, []string{"webapp"})
+
+	w.Close()
+	var stdout bytes.Buffer
+	io.Copy(&stdout, r)
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Fatalf("runDeploymentTrigger() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "triggered") {
+		t.Errorf("output should confirm trigger, got: %s", output)
+	}
+}
+
+// TestRunDeploymentTriggerScheduled tests scheduled deployment.
+func TestRunDeploymentTriggerScheduled(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":           "deploy-scheduled-1",
+			"status":       "scheduled",
+			"scheduled_at": "2025-01-01T00:00:00Z",
+		})
+	}))
+	defer server.Close()
+
+	cmd := createTestCommand(server.URL)
+	cmd.Flags().String("branch", "", "")
+	cmd.Flags().String("target", "", "")
+	cmd.Flags().String("schedule", "2025-01-01T00:00:00Z", "")
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runDeploymentTrigger(cmd, []string{"webapp"})
+
+	w.Close()
+	var stdout bytes.Buffer
+	io.Copy(&stdout, r)
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Fatalf("runDeploymentTrigger() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "scheduled") {
+		t.Errorf("output should mention scheduled, got: %s", output)
+	}
+}
+
+// TestNewAPIClientEnvVars tests that newAPIClient falls back to environment variables.
+func TestNewAPIClientEnvVars(t *testing.T) {
+	// Save and restore env vars
+	origMaster := os.Getenv("VCDEPLOY_MASTER")
+	origToken := os.Getenv("VCDEPLOY_TOKEN")
+	defer func() {
+		os.Setenv("VCDEPLOY_MASTER", origMaster)
+		os.Setenv("VCDEPLOY_TOKEN", origToken)
+	}()
+
+	os.Setenv("VCDEPLOY_MASTER", "http://env-master:8080")
+	os.Setenv("VCDEPLOY_TOKEN", "env-token")
+
+	cmd := &cobra.Command{}
+	cmd.Flags().String("master", "", "")
+	cmd.Flags().String("token", "", "")
+
+	client, err := newAPIClient(cmd)
+	if err != nil {
+		t.Fatalf("newAPIClient() with env vars error = %v", err)
+	}
+
+	if client.baseURL != "http://env-master:8080" {
+		t.Errorf("baseURL = %q, want %q", client.baseURL, "http://env-master:8080")
+	}
+	if client.token != "env-token" {
+		t.Errorf("token = %q, want %q", client.token, "env-token")
+	}
+}
+
+// TestAPIClientDoMethod tests the do method with various HTTP methods.
+func TestAPIClientDoMethod(t *testing.T) {
+	methods := []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete}
+
+	for _, method := range methods {
+		t.Run(method, func(t *testing.T) {
+			var receivedMethod string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				receivedMethod = r.Method
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer server.Close()
+
+			client := &apiClient{
+				baseURL: server.URL,
+				token:   "test-token",
+				client:  http.DefaultClient,
+			}
+
+			resp, err := client.do(method, "/test", nil)
+			if err != nil {
+				t.Fatalf("do(%s) error = %v", method, err)
+			}
+			resp.Body.Close()
+
+			if receivedMethod != method {
+				t.Errorf("received method = %q, want %q", receivedMethod, method)
+			}
+		})
+	}
+}
+
+// TestAPIClientInvalidURL tests apiClient with invalid URL.
+func TestAPIClientInvalidURL(t *testing.T) {
+	client := &apiClient{
+		baseURL: "://invalid-url",
+		token:   "test-token",
+		client:  http.DefaultClient,
+	}
+
+	_, err := client.do("GET", "/test", nil)
+	if err == nil {
+		t.Error("expected error for invalid URL")
+	}
+}
+
+// TestUserCmdStructure tests the user command structure.
+func TestUserCmdStructure(t *testing.T) {
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
+
+	if userCmd == nil {
+		t.Fatal("userCmd is nil")
+	}
+
+	expectedSubcmds := []string{"list", "create", "delete", "passwd"}
+	subcommands := make(map[string]bool)
+	for _, cmd := range userCmd.Commands() {
+		subcommands[cmd.Name()] = true
+	}
+
+	for _, name := range expectedSubcmds {
+		if !subcommands[name] {
+			t.Errorf("expected user subcommand %q not found", name)
+		}
+	}
+}
+
+// TestAgentCmdStructure tests the agent command structure.
+func TestAgentCmdStructure(t *testing.T) {
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
+
+	if agentCmd == nil {
+		t.Fatal("agentCmd is nil")
+	}
+
+	expectedSubcmds := []string{"list", "show", "delete", "token"}
+	subcommands := make(map[string]bool)
+	for _, cmd := range agentCmd.Commands() {
+		subcommands[cmd.Name()] = true
+	}
+
+	for _, name := range expectedSubcmds {
+		if !subcommands[name] {
+			t.Errorf("expected agent subcommand %q not found", name)
+		}
+	}
+}
+
+// TestDeploymentCmdStructure tests the deployment command structure.
+func TestDeploymentCmdStructure(t *testing.T) {
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
+
+	if deploymentCmd == nil {
+		t.Fatal("deploymentCmd is nil")
+	}
+
+	expectedSubcmds := []string{"trigger", "list", "status", "cancel", "logs"}
+	subcommands := make(map[string]bool)
+	for _, cmd := range deploymentCmd.Commands() {
+		subcommands[cmd.Name()] = true
+	}
+
+	for _, name := range expectedSubcmds {
+		if !subcommands[name] {
+			t.Errorf("expected deployment subcommand %q not found", name)
+		}
+	}
+}
+
+// TestConfigCmdStructure tests the config command structure.
+func TestConfigCmdStructure(t *testing.T) {
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
+
+	if configCmd == nil {
+		t.Fatal("configCmd is nil")
+	}
+
+	expectedSubcmds := []string{"show", "export", "import", "set"}
+	subcommands := make(map[string]bool)
+	for _, cmd := range configCmd.Commands() {
+		subcommands[cmd.Name()] = true
+	}
+
+	for _, name := range expectedSubcmds {
+		if !subcommands[name] {
+			t.Errorf("expected config subcommand %q not found", name)
+		}
+	}
+}
+
+// TestAPIKeyCmdStructure tests the apikey command structure.
+func TestAPIKeyCmdStructure(t *testing.T) {
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
+
+	if apikeyCmd == nil {
+		t.Fatal("apikeyCmd is nil")
+	}
+
+	expectedSubcmds := []string{"list", "create", "revoke"}
+	subcommands := make(map[string]bool)
+	for _, cmd := range apikeyCmd.Commands() {
+		subcommands[cmd.Name()] = true
+	}
+
+	for _, name := range expectedSubcmds {
+		if !subcommands[name] {
+			t.Errorf("expected apikey subcommand %q not found", name)
 		}
 	}
 }

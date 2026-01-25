@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -377,5 +379,96 @@ func TestAppContext_InputOutput(t *testing.T) {
 				t.Errorf("output = %q, want %q", buf.String(), tt.want)
 			}
 		})
+	}
+}
+
+// TestAppContext_WithStorage tests the WithStorage method.
+func TestAppContext_WithStorage(t *testing.T) {
+	t.Parallel()
+
+	ctx := NewAppContext()
+
+	// Note: We can't easily create a real storage.DB in tests,
+	// but we can test the method exists and sets nil
+	result := ctx.WithStorage(nil)
+
+	if result != ctx {
+		t.Error("WithStorage should return same context for chaining")
+	}
+	if ctx.Storage != nil {
+		t.Error("Storage should be nil when set to nil")
+	}
+}
+
+// TestMasterStatusRunner_SetMasterAddr tests the SetMasterAddr method.
+func TestMasterStatusRunner_SetMasterAddr(t *testing.T) {
+	t.Parallel()
+
+	ctx := NewAppContext()
+	runner := NewMasterStatusRunner(ctx)
+
+	runner.SetMasterAddr("localhost:9999")
+
+	if runner.masterAddr != "localhost:9999" {
+		t.Errorf("masterAddr = %q, want %q", runner.masterAddr, "localhost:9999")
+	}
+}
+
+// TestMasterStatusRunner_RunWithStats tests the master status runner with stats.
+func TestMasterStatusRunner_RunWithStats(t *testing.T) {
+	t.Parallel()
+
+	// Create a mock server that returns health and stats
+	server := httptest.NewServer(http.NewServeMux())
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status":"healthy"}`))
+	})
+	mux.HandleFunc("/api/v1/stats", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"projects":5,"connected_agents":3}`))
+	})
+	server.Config.Handler = mux
+	defer server.Close()
+
+	buf := &bytes.Buffer{}
+	ctx := NewAppContext().WithStdout(buf)
+	runner := NewMasterStatusRunner(ctx)
+	runner.SetMasterAddr(strings.TrimPrefix(server.URL, "http://"))
+
+	err := runner.Run()
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "ONLINE") {
+		t.Errorf("output should contain ONLINE, got: %s", output)
+	}
+}
+
+// TestMasterStatusRunner_RunUnhealthy tests master status when unhealthy.
+func TestMasterStatusRunner_RunUnhealthy(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	buf := &bytes.Buffer{}
+	ctx := NewAppContext().WithStdout(buf)
+	runner := NewMasterStatusRunner(ctx)
+	runner.SetMasterAddr(strings.TrimPrefix(server.URL, "http://"))
+
+	err := runner.Run()
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "UNHEALTHY") {
+		t.Errorf("output should contain UNHEALTHY, got: %s", output)
 	}
 }
