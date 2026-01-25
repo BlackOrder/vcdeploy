@@ -4,26 +4,42 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"time"
 
+	"go.uber.org/zap"
 	_ "modernc.org/sqlite"
 )
 
+// ErrNotFound is returned when a requested record does not exist.
+var ErrNotFound = errors.New("not found")
+
 // DB wraps the SQLite database connection.
 type DB struct {
-	conn *sql.DB
-	path string
+	conn   *sql.DB
+	path   string
+	logger *zap.Logger
 }
 
 // New creates a new database connection.
-func New(path string) (*DB, error) {
+func New(path string, logger *zap.Logger) (*DB, error) {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+
 	conn, err := sql.Open("sqlite", path+"?_journal_mode=WAL&_busy_timeout=5000")
 	if err != nil {
 		return nil, fmt.Errorf("opening database: %w", err)
 	}
+
+	// Configure connection pool
+	conn.SetMaxOpenConns(25)
+	conn.SetMaxIdleConns(5)
+	conn.SetConnMaxLifetime(5 * time.Minute)
 
 	// Test connection
 	if err := conn.Ping(); err != nil {
@@ -31,18 +47,18 @@ func New(path string) (*DB, error) {
 		return nil, fmt.Errorf("connecting to database: %w", err)
 	}
 
-	db := &DB{conn: conn, path: path}
+	db := &DB{conn: conn, path: path, logger: logger}
 
-	// Initialize schema
-	if err := db.migrate(); err != nil {
+	// Handle migration from legacy inline schema
+	if err := db.migrateFromLegacy(); err != nil {
 		conn.Close()
-		return nil, fmt.Errorf("migrating database: %w", err)
+		return nil, fmt.Errorf("legacy migration check: %w", err)
 	}
 
-	// Run additional migrations
-	if err := db.AdditionalMigrate(); err != nil {
+	// Run versioned migrations
+	if err := db.MigrateUp(context.Background()); err != nil {
 		conn.Close()
-		return nil, fmt.Errorf("additional migration: %w", err)
+		return nil, fmt.Errorf("running migrations: %w", err)
 	}
 
 	return db, nil
@@ -50,7 +66,7 @@ func New(path string) (*DB, error) {
 
 // Open is an alias for New
 func Open(path string) (*DB, error) {
-	return New(path)
+	return New(path, nil)
 }
 
 // Close closes the database connection.
@@ -58,144 +74,10 @@ func (db *DB) Close() error {
 	return db.conn.Close()
 }
 
-// migrate creates or updates the database schema.
-func (db *DB) migrate() error {
-	schema := `
-	-- Users table
-	CREATE TABLE IF NOT EXISTS users (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		username TEXT UNIQUE NOT NULL,
-		password_hash TEXT NOT NULL,
-		email TEXT,
-		role TEXT NOT NULL DEFAULT 'viewer',
-		totp_secret TEXT,
-		totp_enabled INTEGER DEFAULT 0,
-		must_change_password INTEGER DEFAULT 0,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-	);
-
-	-- Sessions table
-	CREATE TABLE IF NOT EXISTS sessions (
-		id TEXT PRIMARY KEY,
-		user_id INTEGER NOT NULL,
-		ip_address TEXT,
-		user_agent TEXT,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		expires_at DATETIME NOT NULL,
-		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-	);
-
-	-- API keys table
-	CREATE TABLE IF NOT EXISTS api_keys (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		user_id INTEGER NOT NULL,
-		name TEXT NOT NULL,
-		key_hash TEXT UNIQUE NOT NULL,
-		scopes TEXT,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		last_used_at DATETIME,
-		expires_at DATETIME,
-		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-	);
-
-	-- Agents table
-	CREATE TABLE IF NOT EXISTS agents (
-		id TEXT PRIMARY KEY,
-		hostname TEXT,
-		labels TEXT,
-		capabilities TEXT,
-		status TEXT DEFAULT 'offline',
-		last_seen_at DATETIME,
-		registered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		certificate TEXT
-	);
-
-	-- Secrets table
-	CREATE TABLE IF NOT EXISTS secrets (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		project TEXT NOT NULL,
-		scope TEXT NOT NULL,
-		key TEXT NOT NULL,
-		value_encrypted BLOB NOT NULL,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		UNIQUE(project, scope, key)
-	);
-
-	-- Deployments table
-	CREATE TABLE IF NOT EXISTS deployments (
-		id TEXT PRIMARY KEY,
-		project TEXT NOT NULL,
-		target TEXT NOT NULL,
-		branch TEXT NOT NULL,
-		commit_hash TEXT,
-		status TEXT NOT NULL,
-		release_number INTEGER,
-		started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		completed_at DATETIME,
-		triggered_by TEXT,
-		trigger_source TEXT,
-		error_message TEXT
-	);
-
-	-- Deployment logs table
-	CREATE TABLE IF NOT EXISTS deployment_logs (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		deployment_id TEXT NOT NULL,
-		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-		level TEXT NOT NULL,
-		message TEXT NOT NULL,
-		source TEXT,
-		FOREIGN KEY (deployment_id) REFERENCES deployments(id) ON DELETE CASCADE
-	);
-
-	-- Audit logs table
-	CREATE TABLE IF NOT EXISTS audit_logs (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-		source TEXT NOT NULL,
-		user TEXT NOT NULL,
-		action TEXT NOT NULL,
-		resource TEXT,
-		details TEXT,
-		ip_address TEXT,
-		result TEXT NOT NULL
-	);
-
-	-- Webhook secrets table
-	CREATE TABLE IF NOT EXISTS webhook_secrets (
-		provider TEXT PRIMARY KEY,
-		secret_encrypted BLOB NOT NULL,
-		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-	);
-
-	-- Master key metadata table
-	CREATE TABLE IF NOT EXISTS master_key_meta (
-		id INTEGER PRIMARY KEY CHECK (id = 1),
-		key_id TEXT NOT NULL,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		rotated_at DATETIME,
-		previous_key_id TEXT,
-		previous_key_expires_at DATETIME
-	);
-
-	-- Create indexes
-	CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
-	CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
-	CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys(user_id);
-	CREATE INDEX IF NOT EXISTS idx_secrets_project_scope ON secrets(project, scope);
-	CREATE INDEX IF NOT EXISTS idx_deployments_project ON deployments(project);
-	CREATE INDEX IF NOT EXISTS idx_deployments_status ON deployments(status);
-	CREATE INDEX IF NOT EXISTS idx_deployments_started_at ON deployments(started_at);
-	CREATE INDEX IF NOT EXISTS idx_deployment_logs_deployment_id ON deployment_logs(deployment_id);
-	CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp);
-	CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
-	CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON audit_logs(user);
-	`
-
-	_, err := db.conn.Exec(schema)
-	return err
+// Conn returns the underlying sql.DB connection.
+// Use this when you need direct database access (e.g., for KMS initialization).
+func (db *DB) Conn() *sql.DB {
+	return db.conn
 }
 
 // --- User operations ---
@@ -248,7 +130,7 @@ func (db *DB) GetUserByUsername(ctx context.Context, username string) (*User, er
 		&user.CreatedAt, &user.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
-		return nil, nil
+		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("querying user: %w", err)
@@ -303,7 +185,7 @@ func (db *DB) GetAgent(ctx context.Context, id string) (*Agent, error) {
 		&agent.Status, &lastSeen, &agent.RegisteredAt, &agent.Certificate,
 	)
 	if err == sql.ErrNoRows {
-		return nil, nil
+		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("querying agent: %w", err)
@@ -342,6 +224,22 @@ func (db *DB) ListAgents(ctx context.Context) ([]*Agent, error) {
 	}
 
 	return agents, rows.Err()
+}
+
+// DeleteAgent removes an agent by ID.
+func (db *DB) DeleteAgent(ctx context.Context, id string) error {
+	result, err := db.conn.ExecContext(ctx, `DELETE FROM agents WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("deleting agent: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("checking rows affected: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("agent not found: %s", id)
+	}
+	return nil
 }
 
 // --- Deployment operations ---
@@ -385,17 +283,19 @@ func (db *DB) UpdateDeployment(ctx context.Context, d *Deployment) error {
 func (db *DB) GetDeployment(ctx context.Context, id string) (*Deployment, error) {
 	var d Deployment
 	var completedAt sql.NullTime
+	var releaseNumber sql.NullInt64
+	var commitHash, triggeredBy, triggerSource, errorMessage sql.NullString
 
 	err := db.conn.QueryRowContext(ctx, `
 		SELECT id, project, target, branch, commit_hash, status, release_number,
 		       started_at, completed_at, triggered_by, trigger_source, error_message
 		FROM deployments WHERE id = ?
 	`, id).Scan(
-		&d.ID, &d.Project, &d.Target, &d.Branch, &d.CommitHash, &d.Status, &d.ReleaseNumber,
-		&d.StartedAt, &completedAt, &d.TriggeredBy, &d.TriggerSource, &d.ErrorMessage,
+		&d.ID, &d.Project, &d.Target, &d.Branch, &commitHash, &d.Status, &releaseNumber,
+		&d.StartedAt, &completedAt, &triggeredBy, &triggerSource, &errorMessage,
 	)
 	if err == sql.ErrNoRows {
-		return nil, nil
+		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("querying deployment: %w", err)
@@ -404,7 +304,80 @@ func (db *DB) GetDeployment(ctx context.Context, id string) (*Deployment, error)
 	if completedAt.Valid {
 		d.CompletedAt = &completedAt.Time
 	}
+	if releaseNumber.Valid {
+		d.ReleaseNumber = int(releaseNumber.Int64)
+	}
+	d.CommitHash = commitHash.String
+	d.TriggeredBy = triggeredBy.String
+	d.TriggerSource = triggerSource.String
+	d.ErrorMessage = errorMessage.String
 	return &d, nil
+}
+
+// --- Deployment log operations ---
+
+// DeploymentLog represents a log entry for a deployment.
+type DeploymentLog struct {
+	ID           int64
+	DeploymentID string
+	Level        string
+	Message      string
+	Source       string
+	CreatedAt    time.Time
+}
+
+// CreateDeploymentLog creates a deployment log entry.
+func (db *DB) CreateDeploymentLog(ctx context.Context, log *DeploymentLog) error {
+	_, err := db.conn.ExecContext(ctx, `
+		INSERT INTO deployment_logs (deployment_id, level, message, source, created_at)
+		VALUES (?, ?, ?, ?, ?)
+	`, log.DeploymentID, log.Level, log.Message, log.Source, log.CreatedAt)
+	return err
+}
+
+// ListDeploymentLogs returns logs for a deployment.
+func (db *DB) ListDeploymentLogs(ctx context.Context, deploymentID string) ([]*DeploymentLog, error) {
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, deployment_id, level, message, source, created_at
+		FROM deployment_logs WHERE deployment_id = ? ORDER BY created_at
+	`, deploymentID)
+	if err != nil {
+		return nil, fmt.Errorf("querying deployment logs: %w", err)
+	}
+	defer rows.Close()
+
+	var logs []*DeploymentLog
+	for rows.Next() {
+		var log DeploymentLog
+		if err := rows.Scan(&log.ID, &log.DeploymentID, &log.Level, &log.Message, &log.Source, &log.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scanning deployment log: %w", err)
+		}
+		logs = append(logs, &log)
+	}
+	return logs, rows.Err()
+}
+
+// ListDeploymentLogsAfter returns logs for a deployment after a specific log ID.
+// This is used for streaming/polling new logs.
+func (db *DB) ListDeploymentLogsAfter(ctx context.Context, deploymentID string, afterID int64) ([]*DeploymentLog, error) {
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, deployment_id, level, message, source, created_at
+		FROM deployment_logs WHERE deployment_id = ? AND id > ? ORDER BY created_at
+	`, deploymentID, afterID)
+	if err != nil {
+		return nil, fmt.Errorf("querying deployment logs: %w", err)
+	}
+	defer rows.Close()
+
+	var logs []*DeploymentLog
+	for rows.Next() {
+		var log DeploymentLog
+		if err := rows.Scan(&log.ID, &log.DeploymentID, &log.Level, &log.Message, &log.Source, &log.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scanning deployment log: %w", err)
+		}
+		logs = append(logs, &log)
+	}
+	return logs, rows.Err()
 }
 
 // --- Audit log operations ---
@@ -480,20 +453,6 @@ func (db *DB) SetSecretEncrypted(ctx context.Context, project, scope, key string
 	return err
 }
 
-// SetSecret sets a secret with plain string value (encrypts internally for CLI use).
-func (db *DB) SetSecret(scope, key, value string) error {
-	// In production, would encrypt the value
-	encrypted := []byte(value)
-	_, err := db.conn.Exec(`
-		INSERT INTO secrets (project, scope, key, value_encrypted)
-		VALUES (?, ?, ?, ?)
-		ON CONFLICT(project, scope, key) DO UPDATE SET
-			value_encrypted = excluded.value_encrypted,
-			updated_at = CURRENT_TIMESTAMP
-	`, scope, scope, key, encrypted)
-	return err
-}
-
 // GetSecret retrieves a secret.
 func (db *DB) GetSecret(ctx context.Context, project, scope, key string) (*Secret, error) {
 	var s Secret
@@ -504,7 +463,7 @@ func (db *DB) GetSecret(ctx context.Context, project, scope, key string) (*Secre
 		&s.ID, &s.Project, &s.Scope, &s.Key, &s.ValueEncrypted, &s.CreatedAt, &s.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
-		return nil, nil
+		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("querying secret: %w", err)
@@ -577,29 +536,72 @@ func (db *DB) DeleteSecretCtx(ctx context.Context, project, scope, key string) e
 	return err
 }
 
+// ListSecretsWithScope returns all secrets for a project and scope with encrypted values.
+func (db *DB) ListSecretsWithScope(ctx context.Context, project, scope string) ([]*Secret, error) {
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, project, scope, key, value_encrypted, created_at, updated_at
+		FROM secrets WHERE project = ? AND scope = ? ORDER BY key
+	`, project, scope)
+	if err != nil {
+		return nil, fmt.Errorf("querying secrets: %w", err)
+	}
+	defer rows.Close()
+
+	var secrets []*Secret
+	for rows.Next() {
+		var s Secret
+		if err := rows.Scan(&s.ID, &s.Project, &s.Scope, &s.Key, &s.ValueEncrypted, &s.CreatedAt, &s.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scanning secret: %w", err)
+		}
+		secrets = append(secrets, &s)
+	}
+	return secrets, rows.Err()
+}
+
+// ListAllSecretsCtx returns all secrets from all projects (for re-encryption).
+func (db *DB) ListAllSecretsCtx(ctx context.Context) ([]*Secret, error) {
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, project, scope, key, value_encrypted, created_at, updated_at
+		FROM secrets ORDER BY project, scope, key
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("querying all secrets: %w", err)
+	}
+	defer rows.Close()
+
+	var secrets []*Secret
+	for rows.Next() {
+		var s Secret
+		if err := rows.Scan(&s.ID, &s.Project, &s.Scope, &s.Key, &s.ValueEncrypted, &s.CreatedAt, &s.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scanning secret: %w", err)
+		}
+		secrets = append(secrets, &s)
+	}
+	return secrets, rows.Err()
+}
+
 // --- Helper functions ---
 
 func mapToJSON(m map[string]string) string {
-	if m == nil {
+	if m == nil || len(m) == 0 {
 		return "{}"
 	}
-	// Simple JSON encoding without external dependency
-	result := "{"
-	first := true
-	for k, v := range m {
-		if !first {
-			result += ","
-		}
-		result += fmt.Sprintf(`"%s":"%s"`, k, v)
-		first = false
+	data, err := json.Marshal(m)
+	if err != nil {
+		return "{}"
 	}
-	result += "}"
-	return result
+	return string(data)
 }
 
 func jsonToMap(s string) map[string]string {
-	// Simple implementation - in production use encoding/json
-	return make(map[string]string)
+	if s == "" || s == "{}" {
+		return make(map[string]string)
+	}
+	result := make(map[string]string)
+	if err := json.Unmarshal([]byte(s), &result); err != nil {
+		return make(map[string]string)
+	}
+	return result
 }
 
 // Backup creates a backup of the database
@@ -649,22 +651,26 @@ func (db *DB) CreateProject(project *Project) error {
 		return fmt.Errorf("insert project: %w", err)
 	}
 
-	id, _ := result.LastInsertId()
+	id, err := result.LastInsertId()
+	if err != nil {
+		db.logger.Warn("failed to get LastInsertId for project", zap.Error(err))
+	}
 	project.ID = id
 	return nil
 }
 
-// GetProject retrieves a project by name.
-func (db *DB) GetProject(name string) (*Project, error) {
+// GetProjectByName retrieves a project by name with context.
+func (db *DB) GetProjectByName(ctx context.Context, name string) (*Project, error) {
 	var p Project
 	var lastDeploy sql.NullTime
+	var lastDeployStatus sql.NullString
 
-	err := db.conn.QueryRow(`
+	err := db.conn.QueryRowContext(ctx, `
 		SELECT id, name, repository, branch, deploy_path, type, created_at, last_deploy_at, last_deploy_status
 		FROM projects WHERE name = ?
-	`, name).Scan(&p.ID, &p.Name, &p.Repository, &p.Branch, &p.DeployPath, &p.Type, &p.CreatedAt, &lastDeploy, &p.LastDeployStatus)
+	`, name).Scan(&p.ID, &p.Name, &p.Repository, &p.Branch, &p.DeployPath, &p.Type, &p.CreatedAt, &lastDeploy, &lastDeployStatus)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("project not found: %s", name)
+		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("query project: %w", err)
@@ -673,6 +679,7 @@ func (db *DB) GetProject(name string) (*Project, error) {
 	if lastDeploy.Valid {
 		p.LastDeployAt = &lastDeploy.Time
 	}
+	p.LastDeployStatus = lastDeployStatus.String
 	return &p, nil
 }
 
@@ -691,13 +698,15 @@ func (db *DB) ListProjects() ([]*Project, error) {
 	for rows.Next() {
 		var p Project
 		var lastDeploy sql.NullTime
+		var lastDeployStatus sql.NullString
 
-		if err := rows.Scan(&p.ID, &p.Name, &p.Repository, &p.Branch, &p.DeployPath, &p.Type, &p.CreatedAt, &lastDeploy, &p.LastDeployStatus); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Repository, &p.Branch, &p.DeployPath, &p.Type, &p.CreatedAt, &lastDeploy, &lastDeployStatus); err != nil {
 			return nil, fmt.Errorf("scan project: %w", err)
 		}
 		if lastDeploy.Valid {
 			p.LastDeployAt = &lastDeploy.Time
 		}
+		p.LastDeployStatus = lastDeployStatus.String
 		projects = append(projects, &p)
 	}
 	return projects, rows.Err()
@@ -731,7 +740,10 @@ func (db *DB) CreateProjectType(pt *ProjectType) error {
 		return fmt.Errorf("insert project type: %w", err)
 	}
 
-	id, _ := result.LastInsertId()
+	id, err := result.LastInsertId()
+	if err != nil {
+		db.logger.Warn("failed to get LastInsertId for project type", zap.Error(err))
+	}
 	pt.ID = id
 	return nil
 }
@@ -758,6 +770,33 @@ func (db *DB) ListProjectTypes() ([]*ProjectType, error) {
 		types = append(types, &pt)
 	}
 	return types, rows.Err()
+}
+
+// GetProjectTypeByName retrieves a project type by name.
+func (db *DB) GetProjectTypeByName(name string) (*ProjectType, error) {
+	var pt ProjectType
+	err := db.conn.QueryRow(`
+		SELECT pt.id, pt.name, pt.description, pt.build_cmd, 
+		       (SELECT COUNT(*) FROM projects WHERE type = pt.name) as project_count,
+		       pt.created_at
+		FROM project_types pt WHERE pt.name = ?
+	`, name).Scan(&pt.ID, &pt.Name, &pt.Description, &pt.BuildCmd, &pt.ProjectCount, &pt.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("project type not found: %s", name)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query project type: %w", err)
+	}
+	return &pt, nil
+}
+
+// UpdateProjectTypeByName updates a project type by name.
+func (db *DB) UpdateProjectTypeByName(pt *ProjectType) error {
+	_, err := db.conn.Exec(`
+		UPDATE project_types SET description = ?, build_cmd = ?
+		WHERE name = ?
+	`, pt.Description, pt.BuildCmd, pt.Name)
+	return err
 }
 
 // DeleteProjectType deletes a project type.
@@ -854,40 +893,726 @@ func (db *DB) ExportAllSecrets() (map[string]map[string]string, error) {
 	return result, rows.Err()
 }
 
-// Ensure we have the projects and project_types tables
-func init() {
-	// Additional schema for projects (will be added to migrate())
+// --- Session Management ---
+
+// Session represents a user session.
+type Session struct {
+	ID        string // TEXT primary key
+	UserID    int64
+	Token     string // Same as ID for sessions
+	IPAddress string
+	UserAgent string
+	CreatedAt time.Time
+	ExpiresAt time.Time
+	LastUsed  time.Time
 }
 
-// AdditionalMigration adds additional tables
-func (db *DB) AdditionalMigrate() error {
-	additionalSchema := `
-	-- Projects table
-	CREATE TABLE IF NOT EXISTS projects (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		name TEXT UNIQUE NOT NULL,
-		repository TEXT,
-		branch TEXT DEFAULT 'main',
-		deploy_path TEXT,
-		type TEXT,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		last_deploy_at DATETIME,
-		last_deploy_status TEXT
-	);
+// CreateSession creates a new session.
+func (db *DB) CreateSession(ctx context.Context, session *Session) error {
+	_, err := db.conn.ExecContext(ctx, `
+		INSERT INTO sessions (id, user_id, ip_address, user_agent, created_at, expires_at)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, session.ID, session.UserID, session.IPAddress, session.UserAgent,
+		session.CreatedAt, session.ExpiresAt)
+	if err != nil {
+		return fmt.Errorf("create session: %w", err)
+	}
+	return nil
+}
 
-	-- Project types table
-	CREATE TABLE IF NOT EXISTS project_types (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		name TEXT UNIQUE NOT NULL,
-		description TEXT,
-		build_cmd TEXT,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-	);
+// GetSessionByToken retrieves a session by token (ID).
+func (db *DB) GetSessionByToken(ctx context.Context, token string) (*Session, error) {
+	var session Session
+	var ipAddress, userAgent sql.NullString
+	err := db.conn.QueryRowContext(ctx, `
+		SELECT id, user_id, ip_address, user_agent, created_at, expires_at
+		FROM sessions WHERE id = ? AND expires_at > ?
+	`, token, time.Now()).Scan(
+		&session.ID, &session.UserID, &ipAddress, &userAgent,
+		&session.CreatedAt, &session.ExpiresAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get session: %w", err)
+	}
+	session.Token = session.ID
+	session.IPAddress = ipAddress.String
+	session.UserAgent = userAgent.String
+	return &session, nil
+}
 
-	CREATE INDEX IF NOT EXISTS idx_projects_name ON projects(name);
-	CREATE INDEX IF NOT EXISTS idx_projects_type ON projects(type);
-	`
-	_, err := db.conn.Exec(additionalSchema)
+// DeleteSession deletes a session by token (ID).
+func (db *DB) DeleteSession(ctx context.Context, token string) error {
+	_, err := db.conn.ExecContext(ctx, `DELETE FROM sessions WHERE id = ?`, token)
 	return err
+}
+
+// DeleteExpiredSessions removes all expired sessions.
+func (db *DB) DeleteExpiredSessions(ctx context.Context) (int64, error) {
+	result, err := db.conn.ExecContext(ctx, `DELETE FROM sessions WHERE expires_at < ?`, time.Now())
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+// DeleteUserSessions deletes all sessions for a user.
+func (db *DB) DeleteUserSessions(ctx context.Context, userID int64) error {
+	_, err := db.conn.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ?`, userID)
+	return err
+}
+
+// ListUserSessions returns all active sessions for a user.
+func (db *DB) ListUserSessions(ctx context.Context, userID int64) ([]*Session, error) {
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, user_id, ip_address, user_agent, created_at, expires_at
+		FROM sessions WHERE user_id = ? AND expires_at > ?
+		ORDER BY created_at DESC
+	`, userID, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sessions []*Session
+	for rows.Next() {
+		var s Session
+		var ipAddress, userAgent sql.NullString
+		err := rows.Scan(&s.ID, &s.UserID, &ipAddress, &userAgent,
+			&s.CreatedAt, &s.ExpiresAt)
+		if err != nil {
+			return nil, err
+		}
+		s.Token = s.ID
+		s.IPAddress = ipAddress.String
+		s.UserAgent = userAgent.String
+		sessions = append(sessions, &s)
+	}
+	return sessions, rows.Err()
+}
+
+// --- API Key Management ---
+
+// APIKey represents an API key.
+type APIKey struct {
+	ID         int64
+	UserID     int64
+	Name       string
+	KeyHash    string // SHA-256 hash of the key
+	KeyPrefix  string // First 8 characters of the key for identification
+	Scopes     string // JSON array of scopes/permissions
+	ExpiresAt  *time.Time
+	LastUsedAt *time.Time
+	CreatedAt  time.Time
+}
+
+// CreateAPIKey creates a new API key.
+func (db *DB) CreateAPIKey(ctx context.Context, key *APIKey) error {
+	result, err := db.conn.ExecContext(ctx, `
+		INSERT INTO api_keys (user_id, name, key_hash, scopes, expires_at, created_at)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, key.UserID, key.Name, key.KeyHash, key.Scopes, key.ExpiresAt, key.CreatedAt)
+	if err != nil {
+		return fmt.Errorf("create API key: %w", err)
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		db.logger.Warn("failed to get LastInsertId for API key", zap.Error(err))
+	}
+	key.ID = id
+	return nil
+}
+
+// GetAPIKeyByHash retrieves an API key by its hash.
+func (db *DB) GetAPIKeyByHash(ctx context.Context, keyHash string) (*APIKey, error) {
+	var key APIKey
+	var expiresAt, lastUsedAt sql.NullTime
+	var scopes sql.NullString
+
+	err := db.conn.QueryRowContext(ctx, `
+		SELECT id, user_id, name, key_hash, scopes, expires_at, last_used_at, created_at
+		FROM api_keys WHERE key_hash = ?
+	`, keyHash).Scan(
+		&key.ID, &key.UserID, &key.Name, &key.KeyHash,
+		&scopes, &expiresAt, &lastUsedAt, &key.CreatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get API key: %w", err)
+	}
+
+	key.Scopes = scopes.String
+	if expiresAt.Valid {
+		key.ExpiresAt = &expiresAt.Time
+	}
+	if lastUsedAt.Valid {
+		key.LastUsedAt = &lastUsedAt.Time
+	}
+
+	return &key, nil
+}
+
+// UpdateAPIKeyUsage updates the last used timestamp for an API key.
+func (db *DB) UpdateAPIKeyUsage(ctx context.Context, keyID int64) error {
+	_, err := db.conn.ExecContext(ctx, `
+		UPDATE api_keys SET last_used_at = ? WHERE id = ?
+	`, time.Now(), keyID)
+	return err
+}
+
+// DeleteAPIKey permanently deletes an API key.
+func (db *DB) DeleteAPIKey(ctx context.Context, keyID int64) error {
+	_, err := db.conn.ExecContext(ctx, `DELETE FROM api_keys WHERE id = ?`, keyID)
+	return err
+}
+
+// ListAPIKeys returns all API keys for a user.
+func (db *DB) ListAPIKeys(ctx context.Context, userID int64) ([]*APIKey, error) {
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, user_id, name, key_hash, scopes, expires_at, last_used_at, created_at
+		FROM api_keys WHERE user_id = ?
+		ORDER BY created_at DESC
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var keys []*APIKey
+	for rows.Next() {
+		var key APIKey
+		var expiresAt, lastUsedAt sql.NullTime
+		var scopes sql.NullString
+
+		err := rows.Scan(&key.ID, &key.UserID, &key.Name, &key.KeyHash,
+			&scopes, &expiresAt, &lastUsedAt, &key.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+
+		key.Scopes = scopes.String
+		if expiresAt.Valid {
+			key.ExpiresAt = &expiresAt.Time
+		}
+		if lastUsedAt.Valid {
+			key.LastUsedAt = &lastUsedAt.Time
+		}
+
+		keys = append(keys, &key)
+	}
+	return keys, rows.Err()
+}
+
+// IsAPIKeyValid checks if an API key is valid (not expired).
+func (key *APIKey) IsValid() bool {
+	if key == nil {
+		return false
+	}
+	if key.ExpiresAt != nil && time.Now().After(*key.ExpiresAt) {
+		return false
+	}
+	return true
+}
+
+// --- Settings operations ---
+
+// Setting represents a configuration setting.
+type Setting struct {
+	ID          int64
+	Category    string
+	Key         string
+	Value       string
+	ValueType   string
+	Encrypted   bool
+	Description string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+// GetSetting retrieves a single setting.
+func (db *DB) GetSetting(ctx context.Context, category, key string) (*Setting, error) {
+	var s Setting
+	var encrypted int
+	var description sql.NullString
+	err := db.conn.QueryRowContext(ctx, `
+		SELECT id, category, key, value, value_type, encrypted, description, created_at, updated_at
+		FROM settings WHERE category = ? AND key = ?
+	`, category, key).Scan(
+		&s.ID, &s.Category, &s.Key, &s.Value, &s.ValueType, &encrypted, &description, &s.CreatedAt, &s.UpdatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("querying setting: %w", err)
+	}
+	s.Encrypted = encrypted == 1
+	s.Description = description.String
+	return &s, nil
+}
+
+// SetSetting creates or updates a setting.
+func (db *DB) SetSetting(ctx context.Context, category, key, value, valueType string, encrypted bool) error {
+	encVal := 0
+	if encrypted {
+		encVal = 1
+	}
+	_, err := db.conn.ExecContext(ctx, `
+		INSERT INTO settings (category, key, value, value_type, encrypted)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(category, key) DO UPDATE SET
+			value = excluded.value,
+			value_type = excluded.value_type,
+			encrypted = excluded.encrypted,
+			updated_at = CURRENT_TIMESTAMP
+	`, category, key, value, valueType, encVal)
+	return err
+}
+
+// ListSettingsByCategory retrieves all settings in a category.
+func (db *DB) ListSettingsByCategory(ctx context.Context, category string) ([]*Setting, error) {
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, category, key, value, value_type, encrypted, description, created_at, updated_at
+		FROM settings WHERE category = ? ORDER BY key
+	`, category)
+	if err != nil {
+		return nil, fmt.Errorf("querying settings: %w", err)
+	}
+	defer rows.Close()
+
+	var settings []*Setting
+	for rows.Next() {
+		var s Setting
+		var encrypted int
+		var description sql.NullString
+		if err := rows.Scan(&s.ID, &s.Category, &s.Key, &s.Value, &s.ValueType, &encrypted, &description, &s.CreatedAt, &s.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scanning setting: %w", err)
+		}
+		s.Encrypted = encrypted == 1
+		s.Description = description.String
+		settings = append(settings, &s)
+	}
+	return settings, rows.Err()
+}
+
+// ListAllSettings retrieves all settings.
+func (db *DB) ListAllSettings(ctx context.Context) ([]*Setting, error) {
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, category, key, value, value_type, encrypted, description, created_at, updated_at
+		FROM settings ORDER BY category, key
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("querying settings: %w", err)
+	}
+	defer rows.Close()
+
+	var settings []*Setting
+	for rows.Next() {
+		var s Setting
+		var encrypted int
+		var description sql.NullString
+		if err := rows.Scan(&s.ID, &s.Category, &s.Key, &s.Value, &s.ValueType, &encrypted, &description, &s.CreatedAt, &s.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scanning setting: %w", err)
+		}
+		s.Encrypted = encrypted == 1
+		s.Description = description.String
+		settings = append(settings, &s)
+	}
+	return settings, rows.Err()
+}
+
+// DeleteSetting deletes a setting.
+func (db *DB) DeleteSetting(ctx context.Context, category, key string) error {
+	_, err := db.conn.ExecContext(ctx, `DELETE FROM settings WHERE category = ? AND key = ?`, category, key)
+	return err
+}
+
+// HasSettings checks if any settings exist (for init detection).
+func (db *DB) HasSettings(ctx context.Context) (bool, error) {
+	var count int
+	err := db.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM settings`).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// --- Project Webhook operations ---
+
+// ProjectWebhook represents a project-specific webhook configuration.
+type ProjectWebhook struct {
+	ID              int64
+	ProjectID       int64
+	Provider        string
+	SecretEncrypted []byte
+	Enabled         bool
+	RequireSecret   bool
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
+// GetProjectWebhook retrieves a webhook config for a project and provider.
+func (db *DB) GetProjectWebhook(ctx context.Context, projectID int64, provider string) (*ProjectWebhook, error) {
+	var w ProjectWebhook
+	var enabled, requireSecret int
+	err := db.conn.QueryRowContext(ctx, `
+		SELECT id, project_id, provider, secret_encrypted, enabled, COALESCE(require_secret, 0), created_at, updated_at
+		FROM project_webhooks WHERE project_id = ? AND provider = ?
+	`, projectID, provider).Scan(
+		&w.ID, &w.ProjectID, &w.Provider, &w.SecretEncrypted, &enabled, &requireSecret, &w.CreatedAt, &w.UpdatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("querying project webhook: %w", err)
+	}
+	w.Enabled = enabled == 1
+	w.RequireSecret = requireSecret == 1
+	return &w, nil
+}
+
+// SetProjectWebhook creates or updates a webhook config.
+func (db *DB) SetProjectWebhook(ctx context.Context, projectID int64, provider string, secretEncrypted []byte, enabled, requireSecret bool) error {
+	enabledVal := 0
+	if enabled {
+		enabledVal = 1
+	}
+	requireSecretVal := 0
+	if requireSecret {
+		requireSecretVal = 1
+	}
+	_, err := db.conn.ExecContext(ctx, `
+		INSERT INTO project_webhooks (project_id, provider, secret_encrypted, enabled, require_secret)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(project_id, provider) DO UPDATE SET
+			secret_encrypted = excluded.secret_encrypted,
+			enabled = excluded.enabled,
+			require_secret = excluded.require_secret,
+			updated_at = CURRENT_TIMESTAMP
+	`, projectID, provider, secretEncrypted, enabledVal, requireSecretVal)
+	return err
+}
+
+// ListProjectWebhooks retrieves all webhooks for a project.
+func (db *DB) ListProjectWebhooks(ctx context.Context, projectID int64) ([]*ProjectWebhook, error) {
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, project_id, provider, secret_encrypted, enabled, COALESCE(require_secret, 0), created_at, updated_at
+		FROM project_webhooks WHERE project_id = ? ORDER BY provider
+	`, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("querying project webhooks: %w", err)
+	}
+	defer rows.Close()
+
+	var webhooks []*ProjectWebhook
+	for rows.Next() {
+		var w ProjectWebhook
+		var enabled, requireSecret int
+		if err := rows.Scan(&w.ID, &w.ProjectID, &w.Provider, &w.SecretEncrypted, &enabled, &requireSecret, &w.CreatedAt, &w.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scanning webhook: %w", err)
+		}
+		w.Enabled = enabled == 1
+		w.RequireSecret = requireSecret == 1
+		webhooks = append(webhooks, &w)
+	}
+	return webhooks, rows.Err()
+}
+
+// DeleteProjectWebhook deletes a webhook config.
+func (db *DB) DeleteProjectWebhook(ctx context.Context, projectID int64, provider string) error {
+	_, err := db.conn.ExecContext(ctx, `DELETE FROM project_webhooks WHERE project_id = ? AND provider = ?`, projectID, provider)
+	return err
+}
+
+// --- Scheduled Deployment operations ---
+
+// ScheduledDeployment represents a deployment scheduled for future execution.
+type ScheduledDeployment struct {
+	ID          string
+	Project     string
+	Target      string
+	Branch      string
+	ScheduledAt time.Time
+	ScheduledBy string
+	Status      string
+}
+
+// CreateScheduledDeployment creates a scheduled deployment.
+func (db *DB) CreateScheduledDeployment(ctx context.Context, id, project, target, branch string, scheduledAt time.Time, scheduledBy string) error {
+	_, err := db.conn.ExecContext(ctx, `
+		INSERT INTO deployments (id, project, target, branch, status, scheduled_at, scheduled_by, triggered_by)
+		VALUES (?, ?, ?, ?, 'scheduled', ?, ?, ?)
+	`, id, project, target, branch, scheduledAt, scheduledBy, scheduledBy)
+	return err
+}
+
+// ListPendingScheduledDeployments returns deployments that are due to run.
+func (db *DB) ListPendingScheduledDeployments(ctx context.Context) ([]*ScheduledDeployment, error) {
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, project, target, branch, scheduled_at, scheduled_by, status
+		FROM deployments 
+		WHERE scheduled_at IS NOT NULL 
+		  AND scheduled_at <= datetime('now') 
+		  AND status = 'scheduled'
+		ORDER BY scheduled_at
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("querying scheduled deployments: %w", err)
+	}
+	defer rows.Close()
+
+	var deployments []*ScheduledDeployment
+	for rows.Next() {
+		var d ScheduledDeployment
+		if err := rows.Scan(&d.ID, &d.Project, &d.Target, &d.Branch, &d.ScheduledAt, &d.ScheduledBy, &d.Status); err != nil {
+			return nil, fmt.Errorf("scanning deployment: %w", err)
+		}
+		deployments = append(deployments, &d)
+	}
+	return deployments, rows.Err()
+}
+
+// CancelScheduledDeployment cancels a scheduled deployment.
+func (db *DB) CancelScheduledDeployment(ctx context.Context, id string) error {
+	result, err := db.conn.ExecContext(ctx, `
+		UPDATE deployments SET status = 'cancelled', completed_at = datetime('now')
+		WHERE id = ? AND status = 'scheduled'
+	`, id)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		db.logger.Warn("failed to get RowsAffected for cancel deployment", zap.Error(err))
+	}
+	if rows == 0 {
+		return fmt.Errorf("deployment not found or not in scheduled status")
+	}
+	return nil
+}
+
+// --- Additional User operations ---
+
+// ListUsers returns all users.
+func (db *DB) ListUsers(ctx context.Context) ([]*User, error) {
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, username, password_hash, email, role, totp_secret, totp_enabled, 
+		       must_change_password, created_at, updated_at
+		FROM users ORDER BY username
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("querying users: %w", err)
+	}
+	defer rows.Close()
+
+	var users []*User
+	for rows.Next() {
+		var user User
+		var totpSecret sql.NullString
+		if err := rows.Scan(
+			&user.ID, &user.Username, &user.PasswordHash, &user.Email, &user.Role,
+			&totpSecret, &user.TOTPEnabled, &user.MustChangePassword,
+			&user.CreatedAt, &user.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scanning user: %w", err)
+		}
+		user.TOTPSecret = totpSecret.String
+		users = append(users, &user)
+	}
+	return users, rows.Err()
+}
+
+// GetUserByID retrieves a user by ID.
+func (db *DB) GetUserByID(ctx context.Context, id int64) (*User, error) {
+	var user User
+	var totpSecret sql.NullString
+
+	err := db.conn.QueryRowContext(ctx, `
+		SELECT id, username, password_hash, email, role, totp_secret, totp_enabled,
+		       must_change_password, created_at, updated_at
+		FROM users WHERE id = ?
+	`, id).Scan(
+		&user.ID, &user.Username, &user.PasswordHash, &user.Email, &user.Role,
+		&totpSecret, &user.TOTPEnabled, &user.MustChangePassword,
+		&user.CreatedAt, &user.UpdatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("querying user: %w", err)
+	}
+
+	user.TOTPSecret = totpSecret.String
+	return &user, nil
+}
+
+// UpdateUserByID updates a user's information.
+func (db *DB) UpdateUserByID(ctx context.Context, user *User) error {
+	_, err := db.conn.ExecContext(ctx, `
+		UPDATE users SET email = ?, role = ?, password_hash = ?, updated_at = datetime('now')
+		WHERE id = ?
+	`, user.Email, user.Role, user.PasswordHash, user.ID)
+	return err
+}
+
+// DeleteUser deletes a user by ID.
+func (db *DB) DeleteUser(ctx context.Context, id int64) error {
+	// Also delete associated sessions and API keys
+	if _, err := db.conn.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ?`, id); err != nil {
+		db.logger.Warn("failed to delete user sessions", zap.Int64("userID", id), zap.Error(err))
+	}
+	if _, err := db.conn.ExecContext(ctx, `DELETE FROM api_keys WHERE user_id = ?`, id); err != nil {
+		db.logger.Warn("failed to delete user API keys", zap.Int64("userID", id), zap.Error(err))
+	}
+	_, err := db.conn.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, id)
+	return err
+}
+
+// --- Additional Deployment operations ---
+
+// ListDeploymentsRecent returns recent deployments.
+func (db *DB) ListDeploymentsRecent(ctx context.Context, limit int) ([]*Deployment, error) {
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, project, target, branch, commit_hash, status, release_number,
+		       started_at, completed_at, triggered_by, trigger_source, error_message
+		FROM deployments
+		ORDER BY started_at DESC
+		LIMIT ?
+	`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("querying deployments: %w", err)
+	}
+	defer rows.Close()
+
+	var deployments []*Deployment
+	for rows.Next() {
+		var d Deployment
+		var completedAt sql.NullTime
+		var releaseNumber sql.NullInt64
+		var commitHash, triggeredBy, triggerSource, errorMessage sql.NullString
+
+		if err := rows.Scan(
+			&d.ID, &d.Project, &d.Target, &d.Branch, &commitHash, &d.Status, &releaseNumber,
+			&d.StartedAt, &completedAt, &triggeredBy, &triggerSource, &errorMessage,
+		); err != nil {
+			return nil, fmt.Errorf("scanning deployment: %w", err)
+		}
+
+		if completedAt.Valid {
+			d.CompletedAt = &completedAt.Time
+		}
+		if releaseNumber.Valid {
+			d.ReleaseNumber = int(releaseNumber.Int64)
+		}
+		d.CommitHash = commitHash.String
+		d.TriggeredBy = triggeredBy.String
+		d.TriggerSource = triggerSource.String
+		d.ErrorMessage = errorMessage.String
+		deployments = append(deployments, &d)
+	}
+	return deployments, rows.Err()
+}
+
+// --- Additional Project operations ---
+
+// UpdateProjectByName updates a project by name.
+func (db *DB) UpdateProjectByName(ctx context.Context, p *Project) error {
+	_, err := db.conn.ExecContext(ctx, `
+		UPDATE projects SET repository = ?, branch = ?, deploy_path = ?, type = ?
+		WHERE name = ?
+	`, p.Repository, p.Branch, p.DeployPath, p.Type, p.Name)
+	return err
+}
+
+// --- Cleanup operations ---
+
+// CleanupExpiredSessions removes sessions that expired before the cutoff time.
+func (db *DB) CleanupExpiredSessions(ctx context.Context, cutoff time.Time) (int64, error) {
+	result, err := db.conn.ExecContext(ctx, `
+		DELETE FROM sessions WHERE expires_at < ?
+	`, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+// CleanupOldDeployments removes completed deployment records older than the cutoff.
+func (db *DB) CleanupOldDeployments(ctx context.Context, cutoff time.Time) (int64, error) {
+	result, err := db.conn.ExecContext(ctx, `
+		DELETE FROM deployments 
+		WHERE completed_at IS NOT NULL 
+		  AND completed_at < ?
+		  AND status IN ('success', 'failed', 'cancelled')
+	`, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+// CleanupOldDeploymentLogs removes deployment logs older than the cutoff.
+func (db *DB) CleanupOldDeploymentLogs(ctx context.Context, cutoff time.Time) (int64, error) {
+	result, err := db.conn.ExecContext(ctx, `
+		DELETE FROM deployment_logs 
+		WHERE created_at < ?
+	`, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+// CleanupOldAuditLogs removes audit log entries older than the cutoff.
+func (db *DB) CleanupOldAuditLogs(ctx context.Context, cutoff time.Time) (int64, error) {
+	result, err := db.conn.ExecContext(ctx, `
+		DELETE FROM audit_log WHERE timestamp < ?
+	`, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+// MarkStaleAgents marks agents that haven't been seen since the cutoff as disconnected.
+func (db *DB) MarkStaleAgents(ctx context.Context, cutoff time.Time) (int64, error) {
+	result, err := db.conn.ExecContext(ctx, `
+		UPDATE agents SET status = 'disconnected'
+		WHERE status = 'connected' AND last_seen_at < ?
+	`, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+// CleanupExpiredAPIKeys removes API keys that have expired before now.
+func (db *DB) CleanupExpiredAPIKeys(ctx context.Context, now time.Time) (int64, error) {
+	result, err := db.conn.ExecContext(ctx, `
+		DELETE FROM api_keys 
+		WHERE expires_at IS NOT NULL AND expires_at < ?
+	`, now)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+// CleanupOrphanedWebhooks removes webhook configs for projects that no longer exist.
+func (db *DB) CleanupOrphanedWebhooks(ctx context.Context) (int64, error) {
+	result, err := db.conn.ExecContext(ctx, `
+		DELETE FROM project_webhooks 
+		WHERE project_id NOT IN (SELECT id FROM projects)
+	`)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }

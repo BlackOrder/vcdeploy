@@ -3,6 +3,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -14,7 +15,7 @@ func TestNew(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	db, err := New(dbPath)
+	db, err := New(dbPath, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -45,7 +46,7 @@ func TestOpen(t *testing.T) {
 func TestNewInvalidPath(t *testing.T) {
 	// Try to create database in non-existent directory
 	dbPath := "/nonexistent/path/test.db"
-	_, err := New(dbPath)
+	_, err := New(dbPath, nil)
 	if err == nil {
 		t.Error("New() expected error for invalid path, got nil")
 	}
@@ -57,7 +58,7 @@ func setupTestDB(t *testing.T) (*DB, func()) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	db, err := New(dbPath)
+	db, err := New(dbPath, nil)
 	if err != nil {
 		t.Fatalf("failed to create test database: %v", err)
 	}
@@ -180,8 +181,8 @@ func TestGetUserByUsernameNotFound(t *testing.T) {
 	ctx := context.Background()
 
 	user, err := db.GetUserByUsername(ctx, "nonexistent")
-	if err != nil {
-		t.Fatalf("GetUserByUsername() error = %v, want nil", err)
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("GetUserByUsername() error = %v, want ErrNotFound", err)
 	}
 
 	if user != nil {
@@ -280,8 +281,8 @@ func TestGetAgentNotFound(t *testing.T) {
 	ctx := context.Background()
 
 	agent, err := db.GetAgent(ctx, "nonexistent-agent")
-	if err != nil {
-		t.Fatalf("GetAgent() error = %v, want nil", err)
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("GetAgent() error = %v, want ErrNotFound", err)
 	}
 
 	if agent != nil {
@@ -405,8 +406,8 @@ func TestGetDeploymentNotFound(t *testing.T) {
 	ctx := context.Background()
 
 	deployment, err := db.GetDeployment(ctx, "nonexistent")
-	if err != nil {
-		t.Fatalf("GetDeployment() error = %v, want nil", err)
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("GetDeployment() error = %v, want ErrNotFound", err)
 	}
 
 	if deployment != nil {
@@ -607,8 +608,8 @@ func TestGetSecretNotFound(t *testing.T) {
 	ctx := context.Background()
 
 	secret, err := db.GetSecret(ctx, "nonexistent", "scope", "key")
-	if err != nil {
-		t.Fatalf("GetSecret() error = %v, want nil", err)
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("GetSecret() error = %v, want ErrNotFound", err)
 	}
 
 	if secret != nil {
@@ -665,8 +666,8 @@ func TestDeleteSecretCtx(t *testing.T) {
 
 	// Verify deleted
 	secret, err := db.GetSecret(ctx, "project", "scope", "todelete")
-	if err != nil {
-		t.Fatalf("GetSecret() error = %v", err)
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("GetSecret() error = %v, want ErrNotFound after deletion", err)
 	}
 
 	if secret != nil {
@@ -709,13 +710,14 @@ func TestListSecretsCtx(t *testing.T) {
 
 // --- CLI-style Secret Tests ---
 
-func TestSetSecret(t *testing.T) {
+func TestSetSecretEncryptedCLI(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	err := db.SetSecret("myscope", "mykey", "myvalue")
+	ctx := context.Background()
+	err := db.SetSecretEncrypted(ctx, "myscope", "myscope", "mykey", []byte("myvalue"))
 	if err != nil {
-		t.Fatalf("SetSecret() error = %v", err)
+		t.Fatalf("SetSecretEncrypted() error = %v", err)
 	}
 }
 
@@ -724,8 +726,9 @@ func TestListSecrets(t *testing.T) {
 	defer cleanup()
 
 	// Create secrets
-	_ = db.SetSecret("scope1", "key1", "val1")
-	_ = db.SetSecret("scope1", "key2", "val2")
+	ctx := context.Background()
+	_ = db.SetSecretEncrypted(ctx, "scope1", "scope1", "key1", []byte("val1"))
+	_ = db.SetSecretEncrypted(ctx, "scope1", "scope1", "key2", []byte("val2"))
 
 	list, err := db.ListSecrets("scope1")
 	if err != nil {
@@ -742,7 +745,8 @@ func TestDeleteSecret(t *testing.T) {
 	defer cleanup()
 
 	// Create and delete secret
-	_ = db.SetSecret("scope", "todelete", "val")
+	ctx := context.Background()
+	_ = db.SetSecretEncrypted(ctx, "scope", "scope", "todelete", []byte("val"))
 	err := db.DeleteSecret("scope", "todelete")
 	if err != nil {
 		t.Fatalf("DeleteSecret() error = %v", err)
@@ -807,9 +811,12 @@ func TestGetProjectNotFound(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	_, err := db.GetProject("nonexistent")
+	_, err := db.GetProjectByName(context.Background(), "nonexistent")
 	if err == nil {
-		t.Error("GetProject() expected error for nonexistent project, got nil")
+		t.Error("GetProjectByName() expected error for nonexistent project, got nil")
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("GetProjectByName() expected ErrNotFound, got %v", err)
 	}
 }
 
@@ -850,9 +857,9 @@ func TestDeleteProject(t *testing.T) {
 	}
 
 	// Verify deleted
-	_, err = db.GetProject("todelete")
+	_, err = db.GetProjectByName(context.Background(), "todelete")
 	if err == nil {
-		t.Error("GetProject() expected error after deletion, got nil")
+		t.Error("GetProjectByName() expected error after deletion, got nil")
 	}
 }
 
@@ -1051,7 +1058,7 @@ func TestBackup(t *testing.T) {
 	}
 
 	// Open backup and verify data
-	backupDB, err := New(backupPath)
+	backupDB, err := New(backupPath, nil)
 	if err != nil {
 		t.Fatalf("Failed to open backup: %v", err)
 	}
@@ -1074,9 +1081,10 @@ func TestExportAllSecrets(t *testing.T) {
 	defer cleanup()
 
 	// Create secrets
-	_ = db.SetSecret("project1", "key1", "val1")
-	_ = db.SetSecret("project1", "key2", "val2")
-	_ = db.SetSecret("project2", "key3", "val3")
+	ctx := context.Background()
+	_ = db.SetSecretEncrypted(ctx, "project1", "project1", "key1", []byte("val1"))
+	_ = db.SetSecretEncrypted(ctx, "project1", "project1", "key2", []byte("val2"))
+	_ = db.SetSecretEncrypted(ctx, "project2", "project2", "key3", []byte("val3"))
 
 	// Export
 	exported, err := db.ExportAllSecrets()
@@ -1119,7 +1127,7 @@ func BenchmarkCreateUser(b *testing.B) {
 	tmpDir := b.TempDir()
 	dbPath := filepath.Join(tmpDir, "bench.db")
 
-	db, err := New(dbPath)
+	db, err := New(dbPath, nil)
 	if err != nil {
 		b.Fatalf("failed to create database: %v", err)
 	}
@@ -1142,7 +1150,7 @@ func BenchmarkGetUserByUsername(b *testing.B) {
 	tmpDir := b.TempDir()
 	dbPath := filepath.Join(tmpDir, "bench.db")
 
-	db, err := New(dbPath)
+	db, err := New(dbPath, nil)
 	if err != nil {
 		b.Fatalf("failed to create database: %v", err)
 	}
@@ -1168,7 +1176,7 @@ func BenchmarkUpsertAgent(b *testing.B) {
 	tmpDir := b.TempDir()
 	dbPath := filepath.Join(tmpDir, "bench.db")
 
-	db, err := New(dbPath)
+	db, err := New(dbPath, nil)
 	if err != nil {
 		b.Fatalf("failed to create database: %v", err)
 	}
@@ -1191,7 +1199,7 @@ func BenchmarkLogAudit(b *testing.B) {
 	tmpDir := b.TempDir()
 	dbPath := filepath.Join(tmpDir, "bench.db")
 
-	db, err := New(dbPath)
+	db, err := New(dbPath, nil)
 	if err != nil {
 		b.Fatalf("failed to create database: %v", err)
 	}
