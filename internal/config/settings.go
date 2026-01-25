@@ -189,9 +189,80 @@ func (s *SettingsService) SetDuration(ctx context.Context, category, key string,
 	return s.db.SetSetting(ctx, category, key, value.String(), "duration", false)
 }
 
+// SetRaw stores a setting with explicit value type (for import scenarios).
+func (s *SettingsService) SetRaw(ctx context.Context, category, key, value, valueType string, encrypted bool) error {
+	storeValue := value
+
+	// Encrypt if needed
+	if encrypted && s.kms != nil {
+		encryptedVal, err := s.kms.EncryptString(ctx, value)
+		if err != nil {
+			return fmt.Errorf("encrypting setting: %w", err)
+		}
+		storeValue = encryptedVal
+	}
+
+	return s.db.SetSetting(ctx, category, key, storeValue, valueType, encrypted)
+}
+
 // Delete removes a setting.
 func (s *SettingsService) Delete(ctx context.Context, category, key string) error {
 	return s.db.DeleteSetting(ctx, category, key)
+}
+
+// SettingMetadata represents setting info returned by list operations.
+type SettingMetadata struct {
+	ID          int64
+	Category    string
+	Key         string
+	Value       string
+	ValueType   string
+	Encrypted   bool
+	Description string
+}
+
+// ListByCategory returns all settings in a category.
+func (s *SettingsService) ListByCategory(ctx context.Context, category string) ([]*SettingMetadata, error) {
+	settings, err := s.db.ListSettingsByCategory(ctx, category)
+	if err != nil {
+		return nil, fmt.Errorf("listing settings: %w", err)
+	}
+
+	result := make([]*SettingMetadata, len(settings))
+	for i, setting := range settings {
+		result[i] = &SettingMetadata{
+			ID:          setting.ID,
+			Category:    setting.Category,
+			Key:         setting.Key,
+			Value:       setting.Value,
+			ValueType:   setting.ValueType,
+			Encrypted:   setting.Encrypted,
+			Description: setting.Description,
+		}
+	}
+	return result, nil
+}
+
+// ListAll returns all settings across all categories.
+func (s *SettingsService) ListAll(ctx context.Context) ([]*SettingMetadata, error) {
+	settings, err := s.db.ListAllSettings(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("listing settings: %w", err)
+	}
+
+	result := make([]*SettingMetadata, len(settings))
+	for i, setting := range settings {
+		result[i] = &SettingMetadata{
+			ID:          setting.ID,
+			Category:    setting.Category,
+			Key:         setting.Key,
+			Value:       setting.Value,
+			ValueType:   setting.ValueType,
+			Encrypted:   setting.Encrypted,
+			Description: setting.Description,
+		}
+	}
+	return result, nil
 }
 
 // GetCategory retrieves all settings in a category as a map.
