@@ -1081,3 +1081,47 @@ func TestUIAuditPage(t *testing.T) {
 		t.Error("response should contain 'Audit' title")
 	}
 }
+
+func TestUISettingsPage(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/settings", nil)
+	rec := httptest.NewRecorder()
+
+	server.handleSettingsUI(rec, req)
+
+	skipIfNoTemplates(t, rec)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "Settings") {
+		t.Error("response should contain 'Settings' title")
+	}
+}
+
+func TestUIAPIKeysPage(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/apikeys", nil)
+	rec := httptest.NewRecorder()
+
+	server.handleAPIKeysUI(rec, req)
+
+	skipIfNoTemplates(t, rec)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "API Keys") {
+		t.Error("response should contain 'API Keys' title")
+	}
+}
