@@ -129,8 +129,14 @@ func TestGetSystemConfigSingleton(t *testing.T) {
 	ResetSystemConfig()
 	defer ResetSystemConfig()
 
-	cfg1, _ := GetSystemConfig()
-	cfg2, _ := GetSystemConfig()
+	cfg1, err := GetSystemConfig()
+	if err != nil {
+		t.Fatalf("GetSystemConfig() first call error = %v", err)
+	}
+	cfg2, err := GetSystemConfig()
+	if err != nil {
+		t.Fatalf("GetSystemConfig() second call error = %v", err)
+	}
 
 	if cfg1 != cfg2 {
 		t.Error("GetSystemConfig() should return same instance")

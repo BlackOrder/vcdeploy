@@ -322,7 +322,10 @@ func TestTypeHooks(t *testing.T) {
 
 // Benchmark tests
 func BenchmarkLoadTypeConfig(b *testing.B) {
-	tmpDir, _ := os.MkdirTemp("", "vcdeploy-bench-*")
+	tmpDir, err := os.MkdirTemp("", "vcdeploy-bench-*")
+	if err != nil {
+		b.Fatalf("Failed to create temp dir: %v", err)
+	}
 	defer os.RemoveAll(tmpDir)
 
 	configPath := filepath.Join(tmpDir, "bench.yaml")
@@ -347,7 +350,10 @@ hooks:
 }
 
 func BenchmarkSaveTypeConfig(b *testing.B) {
-	tmpDir, _ := os.MkdirTemp("", "vcdeploy-bench-*")
+	tmpDir, err := os.MkdirTemp("", "vcdeploy-bench-*")
+	if err != nil {
+		b.Fatalf("Failed to create temp dir: %v", err)
+	}
 	defer os.RemoveAll(tmpDir)
 
 	cfg := &TypeConfig{

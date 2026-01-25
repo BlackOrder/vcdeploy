@@ -172,7 +172,10 @@ func TestHandleUser_Get(t *testing.T) {
 
 	// Get test user ID
 	ctx := context.Background()
-	user, _ := server.db.GetUserByUsername(ctx, "testuser")
+	user, err := server.db.GetUserByUsername(ctx, "testuser")
+	if err != nil {
+		t.Fatalf("failed to get test user: %v", err)
+	}
 
 	req := httptest.NewRequest("GET", "/api/v1/users/"+string(rune(user.ID+'0')), nil)
 	req.Header.Set("X-API-Key", apiKey)

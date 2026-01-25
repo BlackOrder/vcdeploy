@@ -263,8 +263,14 @@ func TestKMSReEncrypt(t *testing.T) {
 	}
 
 	// Both should decrypt to same plaintext
-	decrypted1, _ := kms.Decrypt(ctx, ciphertext1)
-	decrypted2, _ := kms.Decrypt(ctx, ciphertext2)
+	decrypted1, err := kms.Decrypt(ctx, ciphertext1)
+	if err != nil {
+		t.Fatalf("Decrypt(ciphertext1): %v", err)
+	}
+	decrypted2, err := kms.Decrypt(ctx, ciphertext2)
+	if err != nil {
+		t.Fatalf("Decrypt(ciphertext2): %v", err)
+	}
 
 	if string(decrypted1) != string(decrypted2) {
 		t.Error("both ciphertexts should decrypt to same plaintext")
@@ -303,7 +309,10 @@ func TestKMSKeyDeletionScheduling(t *testing.T) {
 	}
 
 	// Verify status changed
-	key, _ := kms.getKey(ctx, oldKeyID)
+	key, err := kms.getKey(ctx, oldKeyID)
+	if err != nil {
+		t.Fatalf("getKey(): %v", err)
+	}
 	if key.Status != KeyStatusScheduled {
 		t.Errorf("key.Status = %v, want %v", key.Status, KeyStatusScheduled)
 	}
@@ -340,7 +349,10 @@ func TestKMSCancelKeyDeletion(t *testing.T) {
 	}
 
 	// Verify status changed back
-	key, _ := kms.getKey(ctx, oldKeyID)
+	key, err := kms.getKey(ctx, oldKeyID)
+	if err != nil {
+		t.Fatalf("getKey(): %v", err)
+	}
 	if key.Status != KeyStatusInactive {
 		t.Errorf("key.Status = %v, want %v", key.Status, KeyStatusInactive)
 	}
@@ -362,7 +374,10 @@ func TestKMSDeleteKeyNow(t *testing.T) {
 
 	// Encrypt some data
 	plaintext := []byte("will be inaccessible")
-	ciphertext, _ := kms.Encrypt(ctx, plaintext)
+	ciphertext, err := kms.Encrypt(ctx, plaintext)
+	if err != nil {
+		t.Fatalf("Encrypt(): %v", err)
+	}
 
 	oldKeyID := kms.GetCurrentKey().ID
 
@@ -403,8 +418,12 @@ func TestKMSListKeys(t *testing.T) {
 	}
 
 	// Rotate a few times
-	kms.RotateKey(ctx)
-	kms.RotateKey(ctx)
+	if _, err := kms.RotateKey(ctx); err != nil {
+		t.Fatalf("RotateKey() first: %v", err)
+	}
+	if _, err := kms.RotateKey(ctx); err != nil {
+		t.Fatalf("RotateKey() second: %v", err)
+	}
 
 	keys, err := kms.ListKeys(ctx)
 	if err != nil {
@@ -457,7 +476,10 @@ func TestKMSProcessScheduledDeletions(t *testing.T) {
 	}
 
 	// Key should be deleted
-	key, _ := kms.getKey(ctx, oldKeyID)
+	key, err := kms.getKey(ctx, oldKeyID)
+	if err != nil {
+		t.Fatalf("getKey(): %v", err)
+	}
 	if key.Status != KeyStatusDeleted {
 		t.Errorf("key.Status = %v, want %v", key.Status, KeyStatusDeleted)
 	}
@@ -599,8 +621,11 @@ func TestKMSPersistence(t *testing.T) {
 	dbPath := filepath.Join(tmpDir, "test.db")
 
 	// Create and initialize
-	db1, _ := sql.Open("sqlite", dbPath+"?_journal_mode=WAL")
-	db1.Exec(`
+	db1, err := sql.Open("sqlite", dbPath+"?_journal_mode=WAL")
+	if err != nil {
+		t.Fatalf("sql.Open() for db1: %v", err)
+	}
+	if _, err := db1.Exec(`
 		CREATE TABLE encryption_keys (
 			id TEXT PRIMARY KEY, version INTEGER NOT NULL, key_material_encrypted BLOB NOT NULL,
 			algorithm TEXT NOT NULL DEFAULT 'AES-256-GCM', status TEXT NOT NULL DEFAULT 'active',
@@ -611,20 +636,33 @@ func TestKMSPersistence(t *testing.T) {
 			id INTEGER PRIMARY KEY AUTOINCREMENT, key_id TEXT NOT NULL, operation TEXT NOT NULL,
 			resource_type TEXT, resource_id TEXT, timestamp DATETIME
 		);
-	`)
+	`); err != nil {
+		t.Fatalf("db1.Exec(): %v", err)
+	}
 
-	kms1, _ := NewKMS(db1, nil)
+	kms1, err := NewKMS(db1, nil)
+	if err != nil {
+		t.Fatalf("NewKMS() for kms1: %v", err)
+	}
 	ctx := context.Background()
-	kms1.Initialize(ctx)
+	if err := kms1.Initialize(ctx); err != nil {
+		t.Fatalf("kms1.Initialize(): %v", err)
+	}
 
 	plaintext := []byte("persistent data")
-	ciphertext, _ := kms1.Encrypt(ctx, plaintext)
+	ciphertext, err := kms1.Encrypt(ctx, plaintext)
+	if err != nil {
+		t.Fatalf("kms1.Encrypt(): %v", err)
+	}
 
 	keyID := kms1.GetCurrentKey().ID
 	db1.Close()
 
 	// Reopen
-	db2, _ := sql.Open("sqlite", dbPath+"?_journal_mode=WAL")
+	db2, err := sql.Open("sqlite", dbPath+"?_journal_mode=WAL")
+	if err != nil {
+		t.Fatalf("sql.Open() for db2: %v", err)
+	}
 	defer db2.Close()
 
 	kms2, err := NewKMS(db2, nil)

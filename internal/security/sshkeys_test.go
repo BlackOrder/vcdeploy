@@ -142,7 +142,9 @@ func TestSSHKeyManagerGenerateKeyDuplicate(t *testing.T) {
 	mgr := NewSSHKeyManager(db, kms)
 	ctx := context.Background()
 
-	mgr.GenerateKey(ctx, "test-key")
+	if _, err := mgr.GenerateKey(ctx, "test-key"); err != nil {
+		t.Fatalf("GenerateKey() first: %v", err)
+	}
 
 	// Second key with same name should fail
 	_, err := mgr.GenerateKey(ctx, "test-key")
@@ -168,7 +170,10 @@ func TestSSHKeyManagerGetKey(t *testing.T) {
 	}
 
 	// Create and retrieve
-	created, _ := mgr.GenerateKey(ctx, "test-key")
+	created, err := mgr.GenerateKey(ctx, "test-key")
+	if err != nil {
+		t.Fatalf("GenerateKey(): %v", err)
+	}
 
 	key, err = mgr.GetKey(ctx, "test-key")
 	if err != nil {
@@ -190,7 +195,10 @@ func TestSSHKeyManagerGetKeyByID(t *testing.T) {
 	mgr := NewSSHKeyManager(db, kms)
 	ctx := context.Background()
 
-	created, _ := mgr.GenerateKey(ctx, "test-key")
+	created, err := mgr.GenerateKey(ctx, "test-key")
+	if err != nil {
+		t.Fatalf("GenerateKey(): %v", err)
+	}
 
 	key, err := mgr.GetKeyByID(ctx, created.ID)
 	if err != nil {
@@ -212,9 +220,15 @@ func TestSSHKeyManagerListKeys(t *testing.T) {
 	mgr := NewSSHKeyManager(db, kms)
 	ctx := context.Background()
 
-	mgr.GenerateKey(ctx, "key-a")
-	mgr.GenerateKey(ctx, "key-b")
-	mgr.GenerateKey(ctx, "key-c")
+	if _, err := mgr.GenerateKey(ctx, "key-a"); err != nil {
+		t.Fatalf("GenerateKey(key-a): %v", err)
+	}
+	if _, err := mgr.GenerateKey(ctx, "key-b"); err != nil {
+		t.Fatalf("GenerateKey(key-b): %v", err)
+	}
+	if _, err := mgr.GenerateKey(ctx, "key-c"); err != nil {
+		t.Fatalf("GenerateKey(key-c): %v", err)
+	}
 
 	keys, err := mgr.ListKeys(ctx)
 	if err != nil {
@@ -238,13 +252,18 @@ func TestSSHKeyManagerDeleteKey(t *testing.T) {
 	mgr := NewSSHKeyManager(db, kms)
 	ctx := context.Background()
 
-	mgr.GenerateKey(ctx, "test-key")
+	if _, err := mgr.GenerateKey(ctx, "test-key"); err != nil {
+		t.Fatalf("GenerateKey(): %v", err)
+	}
 
 	if err := mgr.DeleteKey(ctx, "test-key"); err != nil {
 		t.Fatalf("DeleteKey() error: %v", err)
 	}
 
-	key, _ := mgr.GetKey(ctx, "test-key")
+	key, err := mgr.GetKey(ctx, "test-key")
+	if err != nil {
+		t.Fatalf("GetKey(): %v", err)
+	}
 	if key != nil {
 		t.Error("key should be deleted")
 	}
@@ -257,7 +276,9 @@ func TestSSHKeyManagerGetSigner(t *testing.T) {
 	mgr := NewSSHKeyManager(db, kms)
 	ctx := context.Background()
 
-	mgr.GenerateKey(ctx, "test-key")
+	if _, err := mgr.GenerateKey(ctx, "test-key"); err != nil {
+		t.Fatalf("GenerateKey(): %v", err)
+	}
 
 	signer, err := mgr.GetSigner(ctx, "test-key")
 	if err != nil {
@@ -301,7 +322,10 @@ func TestSSHKeyManagerKnownHosts(t *testing.T) {
 	ctx := context.Background()
 
 	// Generate a test host key
-	key, _ := mgr.GenerateKey(ctx, "host-key")
+	key, err := mgr.GenerateKey(ctx, "host-key")
+	if err != nil {
+		t.Fatalf("GenerateKey(): %v", err)
+	}
 	pubKey, _, _, _, err := ssh.ParseAuthorizedKey([]byte(key.PublicKey))
 	if err != nil {
 		t.Fatalf("parse public key: %v", err)
@@ -335,17 +359,31 @@ func TestSSHKeyManagerVerifyHostKey(t *testing.T) {
 	ctx := context.Background()
 
 	// Generate test keys
-	key1, _ := mgr.GenerateKey(ctx, "host-key-1")
-	pubKey1, _, _, _, _ := ssh.ParseAuthorizedKey([]byte(key1.PublicKey))
+	key1, err := mgr.GenerateKey(ctx, "host-key-1")
+	if err != nil {
+		t.Fatalf("GenerateKey(host-key-1): %v", err)
+	}
+	pubKey1, _, _, _, err := ssh.ParseAuthorizedKey([]byte(key1.PublicKey))
+	if err != nil {
+		t.Fatalf("ParseAuthorizedKey(key1): %v", err)
+	}
 
-	key2, _ := mgr.GenerateKey(ctx, "host-key-2")
-	pubKey2, _, _, _, _ := ssh.ParseAuthorizedKey([]byte(key2.PublicKey))
+	key2, err := mgr.GenerateKey(ctx, "host-key-2")
+	if err != nil {
+		t.Fatalf("GenerateKey(host-key-2): %v", err)
+	}
+	pubKey2, _, _, _, err := ssh.ParseAuthorizedKey([]byte(key2.PublicKey))
+	if err != nil {
+		t.Fatalf("ParseAuthorizedKey(key2): %v", err)
+	}
 
 	// Add host with key1
-	mgr.AddKnownHost(ctx, "example.com", 22, pubKey1)
+	if err := mgr.AddKnownHost(ctx, "example.com", 22, pubKey1); err != nil {
+		t.Fatalf("AddKnownHost(): %v", err)
+	}
 
 	// Verify with correct key
-	err := mgr.VerifyHostKey(ctx, "example.com", 22, pubKey1)
+	err = mgr.VerifyHostKey(ctx, "example.com", 22, pubKey1)
 	if err != nil {
 		t.Errorf("VerifyHostKey() with correct key should succeed: %v", err)
 	}
@@ -379,12 +417,24 @@ func TestSSHKeyManagerListKnownHosts(t *testing.T) {
 	mgr := NewSSHKeyManager(db, kms)
 	ctx := context.Background()
 
-	key, _ := mgr.GenerateKey(ctx, "host-key")
-	pubKey, _, _, _, _ := ssh.ParseAuthorizedKey([]byte(key.PublicKey))
+	key, err := mgr.GenerateKey(ctx, "host-key")
+	if err != nil {
+		t.Fatalf("GenerateKey(): %v", err)
+	}
+	pubKey, _, _, _, err := ssh.ParseAuthorizedKey([]byte(key.PublicKey))
+	if err != nil {
+		t.Fatalf("ParseAuthorizedKey(): %v", err)
+	}
 
-	mgr.AddKnownHost(ctx, "host1.example.com", 22, pubKey)
-	mgr.AddKnownHost(ctx, "host2.example.com", 22, pubKey)
-	mgr.AddKnownHost(ctx, "host3.example.com", 2222, pubKey)
+	if err := mgr.AddKnownHost(ctx, "host1.example.com", 22, pubKey); err != nil {
+		t.Fatalf("AddKnownHost(host1): %v", err)
+	}
+	if err := mgr.AddKnownHost(ctx, "host2.example.com", 22, pubKey); err != nil {
+		t.Fatalf("AddKnownHost(host2): %v", err)
+	}
+	if err := mgr.AddKnownHost(ctx, "host3.example.com", 2222, pubKey); err != nil {
+		t.Fatalf("AddKnownHost(host3): %v", err)
+	}
 
 	hosts, err := mgr.ListKnownHosts(ctx)
 	if err != nil {
@@ -403,16 +453,27 @@ func TestSSHKeyManagerDeleteKnownHost(t *testing.T) {
 	mgr := NewSSHKeyManager(db, kms)
 	ctx := context.Background()
 
-	key, _ := mgr.GenerateKey(ctx, "host-key")
-	pubKey, _, _, _, _ := ssh.ParseAuthorizedKey([]byte(key.PublicKey))
+	key, err := mgr.GenerateKey(ctx, "host-key")
+	if err != nil {
+		t.Fatalf("GenerateKey(): %v", err)
+	}
+	pubKey, _, _, _, err := ssh.ParseAuthorizedKey([]byte(key.PublicKey))
+	if err != nil {
+		t.Fatalf("ParseAuthorizedKey(): %v", err)
+	}
 
-	mgr.AddKnownHost(ctx, "example.com", 22, pubKey)
+	if err := mgr.AddKnownHost(ctx, "example.com", 22, pubKey); err != nil {
+		t.Fatalf("AddKnownHost(): %v", err)
+	}
 
 	if err := mgr.DeleteKnownHost(ctx, "example.com", 22); err != nil {
 		t.Fatalf("DeleteKnownHost() error: %v", err)
 	}
 
-	hosts, _ := mgr.GetKnownHost(ctx, "example.com", 22)
+	hosts, err := mgr.GetKnownHost(ctx, "example.com", 22)
+	if err != nil {
+		t.Fatalf("GetKnownHost(): %v", err)
+	}
 	if len(hosts) != 0 {
 		t.Error("known host should be deleted")
 	}
@@ -425,19 +486,28 @@ func TestSSHKeyManagerTrustOnFirstUse(t *testing.T) {
 	mgr := NewSSHKeyManager(db, kms)
 	ctx := context.Background()
 
-	key, _ := mgr.GenerateKey(ctx, "host-key")
-	pubKey, _, _, _, _ := ssh.ParseAuthorizedKey([]byte(key.PublicKey))
+	key, err := mgr.GenerateKey(ctx, "host-key")
+	if err != nil {
+		t.Fatalf("GenerateKey(): %v", err)
+	}
+	pubKey, _, _, _, err := ssh.ParseAuthorizedKey([]byte(key.PublicKey))
+	if err != nil {
+		t.Fatalf("ParseAuthorizedKey(): %v", err)
+	}
 
 	callback := mgr.TrustOnFirstUse(ctx)
 
 	// First connection - should add to known hosts
-	err := callback("example.com:22", nil, pubKey)
+	err = callback("example.com:22", nil, pubKey)
 	if err != nil {
 		t.Errorf("TrustOnFirstUse first call should succeed: %v", err)
 	}
 
 	// Verify it was added
-	hosts, _ := mgr.GetKnownHost(ctx, "example.com", 22)
+	hosts, err := mgr.GetKnownHost(ctx, "example.com", 22)
+	if err != nil {
+		t.Fatalf("GetKnownHost(): %v", err)
+	}
 	if len(hosts) != 1 {
 		t.Error("host should have been added")
 	}
@@ -456,7 +526,10 @@ func TestGetSSHPublicKeyFingerprint(t *testing.T) {
 	mgr := NewSSHKeyManager(db, kms)
 	ctx := context.Background()
 
-	key, _ := mgr.GenerateKey(ctx, "test-key")
+	key, err := mgr.GenerateKey(ctx, "test-key")
+	if err != nil {
+		t.Fatalf("GenerateKey(): %v", err)
+	}
 
 	fingerprint, err := GetSSHPublicKeyFingerprint(key.PublicKey)
 	if err != nil {
