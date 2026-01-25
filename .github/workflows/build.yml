@@ -9,7 +9,7 @@ on:
     branches: [main]
 
 env:
-  GO_VERSION: '1.24'
+  GO_VERSION: '1.25'
 
 jobs:
   lint:
@@ -24,7 +24,7 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v4
+        uses: golangci/golangci-lint-action@v6
         with:
           version: latest
           args: --timeout=5m
@@ -172,16 +172,27 @@ jobs:
         with:
           fetch-depth: 0
           
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
           
+      - name: Generate SBOM
+        run: |
+          go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
+          cyclonedx-gomod mod -json -output dist/sbom.json
+          cyclonedx-gomod mod -output dist/sbom.xml
+          
       - name: Create checksums
         run: |
           cd dist
-          sha256sum vcdeploy-* > checksums.txt
+          sha256sum vcdeploy-* sbom.* > checksums.txt
           
       - name: Generate changelog
         id: changelog
@@ -199,5 +210,7 @@ jobs:
           files: |
             dist/vcdeploy-*
             dist/checksums.txt
+            dist/sbom.json
+            dist/sbom.xml
           draft: false
           prerelease: ${{ contains(github.ref, '-rc') || contains(github.ref, '-beta') || contains(github.ref, '-alpha') }}
