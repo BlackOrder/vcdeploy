@@ -1302,7 +1302,7 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Generate secure API key
-		rawKey, err := generateSecureToken(32)
+		rawKey, err := security.GenerateSecureToken(32)
 		if err != nil {
 			s.logger.Error("Failed to generate API key", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/BlackOrder/vcdeploy/internal/security"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"go.uber.org/zap"
 )
@@ -418,9 +419,9 @@ func TestGenerateSecureToken(t *testing.T) {
 	// Generate multiple tokens
 	tokens := make(map[string]bool)
 	for i := 0; i < 100; i++ {
-		token, err := generateSecureToken(32)
+		token, err := security.GenerateSecureToken(32)
 		if err != nil {
-			t.Fatalf("generateSecureToken failed: %v", err)
+			t.Fatalf("GenerateSecureToken failed: %v", err)
 		}
 		if len(token) != 64 { // 32 bytes = 64 hex chars
 			t.Errorf("Expected 64-char token, got %d chars", len(token))
