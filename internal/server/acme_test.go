@@ -3,57 +3,17 @@ package server
 import (
 	"context"
 	"crypto/tls"
-	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
-
-	_ "modernc.org/sqlite"
 )
 
-func setupACMETestDB(t *testing.T) *sql.DB {
-	db, err := sql.Open("sqlite", ":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Create required tables
-	schema := `
-		CREATE TABLE IF NOT EXISTS acme_accounts (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			email TEXT NOT NULL,
-			directory_url TEXT NOT NULL,
-			account_url TEXT DEFAULT '',
-			private_key BLOB NOT NULL,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			last_used_at DATETIME,
-			UNIQUE(email, directory_url)
-		);
-		
-		CREATE TABLE IF NOT EXISTS acme_certificates (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			domains TEXT NOT NULL,
-			cert_pem BLOB NOT NULL,
-			private_key_pem BLOB NOT NULL,
-			not_before DATETIME NOT NULL,
-			not_after DATETIME NOT NULL,
-			issuer TEXT DEFAULT '',
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			renewed_at DATETIME
-		);
-	`
-	if _, err := db.Exec(schema); err != nil {
-		t.Fatal(err)
-	}
-
-	return db
-}
-
 func TestNewACMEClient(t *testing.T) {
-	db := setupACMETestDB(t)
-	defer db.Close()
+	tmpDir := t.TempDir()
 
 	tests := []struct {
 		name    string
@@ -61,47 +21,48 @@ func TestNewACMEClient(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "valid config",
-			cfg: ACMEClientConfig{
-				DB:      db,
-				Email:   "admin@example.com",
-				Domains: []string{"example.com"},
-			},
-			wantErr: false,
-		},
-		{
 			name: "valid config with test mode",
 			cfg: ACMEClientConfig{
-				DB:       db,
 				Email:    "admin@example.com",
 				Domains:  []string{"example.com", "www.example.com"},
+				CacheDir: tmpDir,
 				TestMode: true,
 			},
 			wantErr: false,
 		},
 		{
-			name: "missing database",
+			name: "valid config production",
 			cfg: ACMEClientConfig{
-				Email:   "admin@example.com",
-				Domains: []string{"example.com"},
+				Email:    "admin@example.com",
+				Domains:  []string{"example.com"},
+				CacheDir: tmpDir,
 			},
-			wantErr: true,
+			wantErr: false,
 		},
 		{
 			name: "missing domains",
 			cfg: ACMEClientConfig{
-				DB:    db,
-				Email: "admin@example.com",
+				Email:    "admin@example.com",
+				CacheDir: tmpDir,
 			},
 			wantErr: true,
 		},
 		{
-			name: "missing email",
+			name: "missing email in production mode",
 			cfg: ACMEClientConfig{
-				DB:      db,
-				Domains: []string{"example.com"},
+				Domains:  []string{"example.com"},
+				CacheDir: tmpDir,
 			},
 			wantErr: true,
+		},
+		{
+			name: "test mode allows missing email",
+			cfg: ACMEClientConfig{
+				Domains:  []string{"example.com"},
+				CacheDir: tmpDir,
+				TestMode: true,
+			},
+			wantErr: false,
 		},
 	}
 
@@ -120,14 +81,13 @@ func TestNewACMEClient(t *testing.T) {
 }
 
 func TestACMEClientDirectoryURLs(t *testing.T) {
-	db := setupACMETestDB(t)
-	defer db.Close()
+	tmpDir := t.TempDir()
 
-	// Test production URL
+	// Test production URL (default)
 	client, err := NewACMEClient(ACMEClientConfig{
-		DB:      db,
-		Email:   "admin@example.com",
-		Domains: []string{"example.com"},
+		Email:    "admin@example.com",
+		Domains:  []string{"example.com"},
+		CacheDir: tmpDir,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -136,26 +96,12 @@ func TestACMEClientDirectoryURLs(t *testing.T) {
 		t.Errorf("Expected production URL, got %s", client.directoryURL)
 	}
 
-	// Test staging URL
-	client, err = NewACMEClient(ACMEClientConfig{
-		DB:       db,
-		Email:    "admin@example.com",
-		Domains:  []string{"example.com"},
-		TestMode: true,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if client.directoryURL != LetsEncryptStaging {
-		t.Errorf("Expected staging URL, got %s", client.directoryURL)
-	}
-
 	// Test custom URL
 	customURL := "https://custom-acme.example.com/directory"
 	client, err = NewACMEClient(ACMEClientConfig{
-		DB:           db,
 		Email:        "admin@example.com",
 		Domains:      []string{"example.com"},
+		CacheDir:     tmpDir,
 		DirectoryURL: customURL,
 	})
 	if err != nil {
@@ -167,13 +113,12 @@ func TestACMEClientDirectoryURLs(t *testing.T) {
 }
 
 func TestACMEClientGetTLSConfig(t *testing.T) {
-	db := setupACMETestDB(t)
-	defer db.Close()
+	tmpDir := t.TempDir()
 
 	client, err := NewACMEClient(ACMEClientConfig{
-		DB:       db,
 		Email:    "admin@example.com",
 		Domains:  []string{"example.com"},
+		CacheDir: tmpDir,
 		TestMode: true,
 	})
 	if err != nil {
@@ -195,13 +140,12 @@ func TestACMEClientGetTLSConfig(t *testing.T) {
 }
 
 func TestACMEClientSelfSignedCertificate(t *testing.T) {
-	db := setupACMETestDB(t)
-	defer db.Close()
+	tmpDir := t.TempDir()
 
 	client, err := NewACMEClient(ACMEClientConfig{
-		DB:       db,
 		Email:    "admin@example.com",
 		Domains:  []string{"test.example.com"},
+		CacheDir: tmpDir,
 		TestMode: true,
 	})
 	if err != nil {
@@ -218,14 +162,15 @@ func TestACMEClientSelfSignedCertificate(t *testing.T) {
 		t.Fatal("Certificate is nil")
 	}
 
-	// Verify certificate was saved to database
-	var count int
-	err = db.QueryRow("SELECT COUNT(*) FROM acme_certificates").Scan(&count)
-	if err != nil {
-		t.Fatal(err)
+	// Verify certificate was saved to cache directory
+	certPath := filepath.Join(tmpDir, "self-signed.crt")
+	keyPath := filepath.Join(tmpDir, "self-signed.key")
+
+	if _, err := os.Stat(certPath); os.IsNotExist(err) {
+		t.Error("Certificate file not created")
 	}
-	if count != 1 {
-		t.Errorf("Expected 1 certificate in database, got %d", count)
+	if _, err := os.Stat(keyPath); os.IsNotExist(err) {
+		t.Error("Key file not created")
 	}
 
 	// Verify client state was updated
@@ -238,13 +183,12 @@ func TestACMEClientSelfSignedCertificate(t *testing.T) {
 }
 
 func TestACMEClientGetCertificate(t *testing.T) {
-	db := setupACMETestDB(t)
-	defer db.Close()
+	tmpDir := t.TempDir()
 
 	client, err := NewACMEClient(ACMEClientConfig{
-		DB:       db,
 		Email:    "admin@example.com",
 		Domains:  []string{"test.example.com"},
+		CacheDir: tmpDir,
 		TestMode: true,
 	})
 	if err != nil {
@@ -253,7 +197,7 @@ func TestACMEClientGetCertificate(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Generate cert directly first (GetCertificate uses hello.Context() which may be nil)
+	// Generate cert directly first
 	_, err = client.generateSelfSignedCertificate(ctx)
 	if err != nil {
 		t.Fatalf("generateSelfSignedCertificate() error: %v", err)
@@ -282,13 +226,12 @@ func TestACMEClientGetCertificate(t *testing.T) {
 }
 
 func TestACMEClientGetStatus(t *testing.T) {
-	db := setupACMETestDB(t)
-	defer db.Close()
+	tmpDir := t.TempDir()
 
 	client, err := NewACMEClient(ACMEClientConfig{
-		DB:       db,
 		Email:    "admin@example.com",
 		Domains:  []string{"test.example.com"},
+		CacheDir: tmpDir,
 		TestMode: true,
 	})
 	if err != nil {
@@ -299,6 +242,9 @@ func TestACMEClientGetStatus(t *testing.T) {
 	status := client.GetStatus()
 	if status.HasCertificate {
 		t.Error("Expected HasCertificate = false initially")
+	}
+	if !status.TestMode {
+		t.Error("Expected TestMode = true")
 	}
 
 	// Generate certificate
@@ -321,178 +267,46 @@ func TestACMEClientGetStatus(t *testing.T) {
 	}
 }
 
-func TestACMEClientAccountCreation(t *testing.T) {
-	db := setupACMETestDB(t)
-	defer db.Close()
+func TestACMEClientHTTPHandler(t *testing.T) {
+	tmpDir := t.TempDir()
 
-	client, err := NewACMEClient(ACMEClientConfig{
-		DB:       db,
+	// Test mode - should return fallback
+	testClient, err := NewACMEClient(ACMEClientConfig{
 		Email:    "admin@example.com",
 		Domains:  []string{"example.com"},
+		CacheDir: tmpDir,
 		TestMode: true,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	ctx := context.Background()
-	account, key, err := client.getOrCreateAccount(ctx)
-	if err != nil {
-		t.Fatalf("getOrCreateAccount() error: %v", err)
-	}
-	if account == nil {
-		t.Fatal("Account is nil")
-	}
-	if key == nil {
-		t.Fatal("Key is nil")
-	}
-	if account.Email != "admin@example.com" {
-		t.Errorf("Expected email admin@example.com, got %s", account.Email)
-	}
-
-	// Verify saved to database
-	var count int
-	err = db.QueryRow("SELECT COUNT(*) FROM acme_accounts").Scan(&count)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if count != 1 {
-		t.Errorf("Expected 1 account in database, got %d", count)
-	}
-
-	// Second call should return same account
-	account2, _, err := client.getOrCreateAccount(ctx)
-	if err != nil {
-		t.Fatalf("getOrCreateAccount() second call error: %v", err)
-	}
-	if account2.ID != account.ID {
-		t.Error("Expected same account to be returned")
-	}
-}
-
-func TestACMEClientLoadCertificateFromDB(t *testing.T) {
-	db := setupACMETestDB(t)
-	defer db.Close()
-
-	client, err := NewACMEClient(ACMEClientConfig{
-		DB:       db,
-		Email:    "admin@example.com",
-		Domains:  []string{"test.example.com"},
-		TestMode: true,
+	fallback := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTeapot)
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 
-	ctx := context.Background()
-
-	// Generate and save certificate
-	_, err = client.generateSelfSignedCertificate(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Clear in-memory state
-	client.currentCert = nil
-	client.certExpiry = time.Time{}
-
-	// Load from database
-	stored, err := client.loadCertificate(ctx)
-	if err != nil {
-		t.Fatalf("loadCertificate() error: %v", err)
-	}
-	if stored == nil {
-		t.Fatal("Stored certificate is nil")
-	}
-
-	// Parse the stored certificate
-	cert, err := client.parseCertificate(stored)
-	if err != nil {
-		t.Fatalf("parseCertificate() error: %v", err)
-	}
-	if cert == nil {
-		t.Fatal("Parsed certificate is nil")
-	}
-}
-
-func TestHTTPChallengeHandler(t *testing.T) {
-	handler := NewHTTPChallengeHandler()
-
-	// Set a challenge
-	handler.SetChallenge("test-token", "test-key-auth")
-
-	// Verify challenge is set
-	keyAuth, ok := handler.GetChallenge("test-token")
-	if !ok {
-		t.Error("Expected challenge to be found")
-	}
-	if keyAuth != "test-key-auth" {
-		t.Errorf("Expected keyAuth 'test-key-auth', got %s", keyAuth)
-	}
-
-	// Test HTTP handler
-	req := httptest.NewRequest("GET", "/.well-known/acme-challenge/test-token", nil)
+	handler := testClient.HTTPHandler(fallback)
+	req := httptest.NewRequest("GET", "/test", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Errorf("Expected status 200, got %d", rec.Code)
-	}
-	if rec.Body.String() != "test-key-auth" {
-		t.Errorf("Expected body 'test-key-auth', got %s", rec.Body.String())
+	if rec.Code != http.StatusTeapot {
+		t.Errorf("Expected fallback handler (418), got %d", rec.Code)
 	}
 
-	// Test missing token
-	req = httptest.NewRequest("GET", "/.well-known/acme-challenge/missing-token", nil)
-	rec = httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusNotFound {
-		t.Errorf("Expected status 404, got %d", rec.Code)
+	// Production mode - should return autocert handler
+	prodClient, err := NewACMEClient(ACMEClientConfig{
+		Email:    "admin@example.com",
+		Domains:  []string{"example.com"},
+		CacheDir: tmpDir,
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	// Test wrong method
-	req = httptest.NewRequest("POST", "/.well-known/acme-challenge/test-token", nil)
-	rec = httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusMethodNotAllowed {
-		t.Errorf("Expected status 405, got %d", rec.Code)
-	}
-
-	// Clear challenge
-	handler.ClearChallenge("test-token")
-	_, ok = handler.GetChallenge("test-token")
-	if ok {
-		t.Error("Expected challenge to be cleared")
-	}
-}
-
-func TestHTTPChallengeHandlerPathValidation(t *testing.T) {
-	handler := NewHTTPChallengeHandler()
-	handler.SetChallenge("valid-token", "valid-auth")
-
-	tests := []struct {
-		path       string
-		wantStatus int
-	}{
-		{"/.well-known/acme-challenge/valid-token", http.StatusOK},
-		{"/.well-known/acme-challenge/", http.StatusNotFound},
-		{"/.well-known/acme-challenge", http.StatusNotFound},
-		{"/other/path", http.StatusNotFound},
-		{"/", http.StatusNotFound},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.path, func(t *testing.T) {
-			req := httptest.NewRequest("GET", tt.path, nil)
-			rec := httptest.NewRecorder()
-			handler.ServeHTTP(rec, req)
-
-			if rec.Code != tt.wantStatus {
-				t.Errorf("Path %s: expected status %d, got %d", tt.path, tt.wantStatus, rec.Code)
-			}
-		})
+	handler = prodClient.HTTPHandler(fallback)
+	if handler == nil {
+		t.Error("HTTPHandler returned nil")
 	}
 }
 
@@ -506,6 +320,7 @@ func TestCertificateStatus(t *testing.T) {
 		Issuer:         "Let's Encrypt",
 		DaysRemaining:  89,
 		NeedsRenewal:   false,
+		TestMode:       false,
 	}
 
 	data, err := json.Marshal(status)
@@ -524,6 +339,9 @@ func TestCertificateStatus(t *testing.T) {
 	if len(parsed.Domains) != len(status.Domains) {
 		t.Errorf("Domains count mismatch: %d != %d", len(parsed.Domains), len(status.Domains))
 	}
+	if parsed.TestMode != status.TestMode {
+		t.Error("TestMode mismatch")
+	}
 }
 
 func TestACMEConstants(t *testing.T) {
@@ -532,5 +350,140 @@ func TestACMEConstants(t *testing.T) {
 	}
 	if LetsEncryptStaging != "https://acme-staging-v02.api.letsencrypt.org/directory" {
 		t.Errorf("Unexpected staging URL: %s", LetsEncryptStaging)
+	}
+}
+
+func TestRandomSerialNumber(t *testing.T) {
+	serial1, err := randomSerialNumber()
+	if err != nil {
+		t.Fatalf("randomSerialNumber() error: %v", err)
+	}
+	if serial1 == nil {
+		t.Fatal("Serial number is nil")
+	}
+
+	serial2, err := randomSerialNumber()
+	if err != nil {
+		t.Fatalf("randomSerialNumber() error: %v", err)
+	}
+
+	// Two random serial numbers should be different
+	if serial1.Cmp(serial2) == 0 {
+		t.Error("Two serial numbers should be different")
+	}
+}
+
+func TestPkixName(t *testing.T) {
+	name := pkixName("Test Certificate")
+	if name.CommonName != "Test Certificate" {
+		t.Errorf("Expected CommonName 'Test Certificate', got %s", name.CommonName)
+	}
+	if len(name.Organization) != 1 || name.Organization[0] != "VCDeploy" {
+		t.Errorf("Expected Organization ['VCDeploy'], got %v", name.Organization)
+	}
+}
+
+func TestACMEClientCacheDirCreation(t *testing.T) {
+	tmpDir := t.TempDir()
+	cacheDir := filepath.Join(tmpDir, "nested", "cache", "dir")
+
+	client, err := NewACMEClient(ACMEClientConfig{
+		Email:    "admin@example.com",
+		Domains:  []string{"example.com"},
+		CacheDir: cacheDir,
+		TestMode: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify directory was created
+	if _, err := os.Stat(cacheDir); os.IsNotExist(err) {
+		t.Error("Cache directory was not created")
+	}
+
+	if client.cacheDir != cacheDir {
+		t.Errorf("Expected cacheDir %s, got %s", cacheDir, client.cacheDir)
+	}
+}
+
+func TestACMEClientDefaultCacheDir(t *testing.T) {
+	// Create client without specifying cache dir
+	client, err := NewACMEClient(ACMEClientConfig{
+		Email:    "admin@example.com",
+		Domains:  []string{"example.com"},
+		TestMode: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Should have a default cache dir
+	if client.cacheDir == "" {
+		t.Error("Expected default cache directory to be set")
+	}
+}
+
+func TestStartRenewalLoop(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	client, err := NewACMEClient(ACMEClientConfig{
+		Email:    "admin@example.com",
+		Domains:  []string{"example.com"},
+		CacheDir: tmpDir,
+		TestMode: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Start the loop
+	client.StartRenewalLoop(ctx)
+
+	// Give it a moment to start
+	time.Sleep(10 * time.Millisecond)
+
+	// Cancel to stop the loop
+	cancel()
+
+	// Give it a moment to stop
+	time.Sleep(10 * time.Millisecond)
+
+	// If we get here without deadlock, the test passes
+}
+
+func TestGetSelfSignedCertificateDoubleCheck(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	client, err := NewACMEClient(ACMEClientConfig{
+		Email:    "admin@example.com",
+		Domains:  []string{"test.example.com"},
+		CacheDir: tmpDir,
+		TestMode: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	hello := &tls.ClientHelloInfo{
+		ServerName: "test.example.com",
+	}
+
+	// First call generates cert
+	cert1, err := client.getSelfSignedCertificate(hello)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Second call should return cached
+	cert2, err := client.getSelfSignedCertificate(hello)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if cert1 != cert2 {
+		t.Error("Expected same cached certificate")
 	}
 }
