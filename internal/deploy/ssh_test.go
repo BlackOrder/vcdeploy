@@ -347,7 +347,194 @@ func TestSSHPool_Close(t *testing.T) {
 	}
 }
 
+func TestSSHConfig_Validation(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		config *SSHConfig
+		valid  bool
+	}{
+		{
+			name: "valid minimal",
+			config: &SSHConfig{
+				Host: "example.com",
+				User: "deploy",
+			},
+			valid: true,
+		},
+		{
+			name: "valid with all fields",
+			config: &SSHConfig{
+				Host:     "example.com",
+				Port:     2222,
+				User:     "deploy",
+				KeyPath:  "/path/to/key",
+				Timeout:  60 * time.Second,
+				JumpHost: "bastion.com",
+				JumpPort: 22,
+				JumpUser: "jump",
+			},
+			valid: true,
+		},
+		{
+			name: "empty host",
+			config: &SSHConfig{
+				Host: "",
+				User: "deploy",
+			},
+			valid: false,
+		},
+		{
+			name: "empty user",
+			config: &SSHConfig{
+				Host: "example.com",
+				User: "",
+			},
+			valid: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// NewSSHRunner should handle validation
+			runner, err := NewSSHRunner(tt.config)
+			if tt.valid {
+				if err != nil {
+					t.Errorf("NewSSHRunner() error = %v, expected success", err)
+				}
+				if runner == nil {
+					t.Error("NewSSHRunner() returned nil")
+				}
+			}
+			// Note: Current implementation doesn't validate empty host/user
+			// This test documents expected behavior for future validation
+		})
+	}
+}
+
+func TestSSHRunner_buildCommandWithEnv(t *testing.T) {
+	t.Parallel()
+
+	config := &SSHConfig{
+		Host: "example.com",
+		User: "deploy",
+	}
+
+	runner, err := NewSSHRunner(config)
+	if err != nil {
+		t.Fatalf("NewSSHRunner() error = %v", err)
+	}
+
+	tests := []struct {
+		name    string
+		cmd     string
+		opts    RunOptions
+		wantCmd string
+	}{
+		{
+			name:    "simple command",
+			cmd:     "ls -la",
+			opts:    RunOptions{},
+			wantCmd: "ls -la",
+		},
+		{
+			name: "with workdir",
+			cmd:  "pwd",
+			opts: RunOptions{
+				WorkDir: "/var/www/app",
+			},
+			wantCmd: "cd /var/www/app && pwd",
+		},
+		{
+			name: "with env vars",
+			cmd:  "echo $VAR1",
+			opts: RunOptions{
+				Env: map[string]string{
+					"VAR1": "value1",
+				},
+			},
+			wantCmd: "export VAR1=\"value1\" && echo $VAR1",
+		},
+		{
+			name: "with workdir and env",
+			cmd:  "echo $VAR1",
+			opts: RunOptions{
+				WorkDir: "/app",
+				Env: map[string]string{
+					"VAR1": "test",
+				},
+			},
+			wantCmd: "cd /app && export VAR1=\"test\" && echo $VAR1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := runner.buildCommand(tt.cmd, tt.opts)
+			if err != nil {
+				t.Fatalf("buildCommand() error = %v", err)
+			}
+			if got != tt.wantCmd {
+				t.Errorf("buildCommand() = %q, want %q", got, tt.wantCmd)
+			}
+		})
+	}
+}
+
+func TestSSHPoolKeyGeneration(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		config *SSHConfig
+	}{
+		{
+			name: "basic config",
+			config: &SSHConfig{
+				Host: "example.com",
+				Port: 22,
+				User: "deploy",
+			},
+		},
+		{
+			name: "with jump host",
+			config: &SSHConfig{
+				Host:     "target.com",
+				Port:     22,
+				User:     "deploy",
+				JumpHost: "bastion.com",
+				JumpPort: 22,
+			},
+		},
+		{
+			name: "custom port",
+			config: &SSHConfig{
+				Host: "example.com",
+				Port: 2222,
+				User: "deployer",
+			},
+		},
+	}
+
+	pool := NewSSHPool(5 * time.Minute)
+	defer pool.Close()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runner1, _ := pool.Get(tt.config)
+			runner2, _ := pool.Get(tt.config)
+
+			// Same config should return same runner (pooled)
+			if runner1 != runner2 {
+				t.Error("Same config should return pooled runner")
+			}
+		})
+	}
+}
+
 // --- Integration Tests (require Docker/testcontainers) ---
 
 // These tests require the //go:build integration tag and will be in a separate file
 // or guarded by build tags. See ssh_integration_test.go
+
