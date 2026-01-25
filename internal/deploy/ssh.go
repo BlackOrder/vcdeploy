@@ -46,10 +46,10 @@ type SSHConfig struct {
 	JumpKeyPath string
 
 	// Host key verification settings
-	KnownHostsPath       string // Path to known_hosts file (default: ~/.ssh/known_hosts)
-	TrustOnFirstUse      bool   // TOFU mode: automatically add unknown hosts
-	StrictHostKey        bool   // If true, reject unknown hosts even in TOFU mode
-	InsecureIgnoreHostKey bool  // If true, skip host key verification (for testing only)
+	KnownHostsPath        string // Path to known_hosts file (default: ~/.ssh/known_hosts)
+	TrustOnFirstUse       bool   // TOFU mode: automatically add unknown hosts
+	StrictHostKey         bool   // If true, reject unknown hosts even in TOFU mode
+	InsecureIgnoreHostKey bool   // If true, skip host key verification (for testing only)
 }
 
 // NewSSHRunner creates a new SSH runner.

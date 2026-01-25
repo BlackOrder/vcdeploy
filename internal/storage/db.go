@@ -82,20 +82,6 @@ func (db *DB) Conn() *sql.DB {
 
 // --- User operations ---
 
-// User represents a user in the system.
-type User struct {
-	ID                 int64
-	Username           string
-	PasswordHash       string
-	Email              string
-	Role               string
-	TOTPSecret         string
-	TOTPEnabled        bool
-	MustChangePassword bool
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
-}
-
 // CreateUser creates a new user.
 func (db *DB) CreateUser(ctx context.Context, user *User) error {
 	result, err := db.conn.ExecContext(ctx, `
@@ -141,18 +127,6 @@ func (db *DB) GetUserByUsername(ctx context.Context, username string) (*User, er
 }
 
 // --- Agent operations ---
-
-// Agent represents a connected agent.
-type Agent struct {
-	ID           string
-	Hostname     string
-	Labels       map[string]string
-	Capabilities string // JSON string
-	Status       string
-	LastSeenAt   time.Time
-	RegisteredAt time.Time
-	Certificate  string
-}
 
 // UpsertAgent creates or updates an agent.
 func (db *DB) UpsertAgent(ctx context.Context, agent *Agent) error {
@@ -244,22 +218,6 @@ func (db *DB) DeleteAgent(ctx context.Context, id string) error {
 
 // --- Deployment operations ---
 
-// Deployment represents a deployment record.
-type Deployment struct {
-	ID            string
-	Project       string
-	Target        string
-	Branch        string
-	CommitHash    string
-	Status        string
-	ReleaseNumber int
-	StartedAt     time.Time
-	CompletedAt   *time.Time
-	TriggeredBy   string
-	TriggerSource string
-	ErrorMessage  string
-}
-
 // CreateDeployment creates a new deployment record.
 func (db *DB) CreateDeployment(ctx context.Context, d *Deployment) error {
 	_, err := db.conn.ExecContext(ctx, `
@@ -315,16 +273,6 @@ func (db *DB) GetDeployment(ctx context.Context, id string) (*Deployment, error)
 }
 
 // --- Deployment log operations ---
-
-// DeploymentLog represents a log entry for a deployment.
-type DeploymentLog struct {
-	ID           int64
-	DeploymentID string
-	Level        string
-	Message      string
-	Source       string
-	CreatedAt    time.Time
-}
 
 // CreateDeploymentLog creates a deployment log entry.
 func (db *DB) CreateDeploymentLog(ctx context.Context, log *DeploymentLog) error {
@@ -382,19 +330,6 @@ func (db *DB) ListDeploymentLogsAfter(ctx context.Context, deploymentID string, 
 
 // --- Audit log operations ---
 
-// AuditEntry represents an audit log entry.
-type AuditEntry struct {
-	ID        int64
-	Timestamp time.Time
-	Source    string
-	User      string
-	Action    string
-	Resource  string
-	Details   string
-	IPAddress string
-	Result    string
-}
-
 // LogAudit creates an audit log entry.
 func (db *DB) LogAudit(ctx context.Context, entry *AuditEntry) error {
 	_, err := db.conn.ExecContext(ctx, `
@@ -430,17 +365,6 @@ func (db *DB) ListAuditLogs(ctx context.Context, limit int, offset int) ([]*Audi
 
 // --- Secret operations ---
 
-// Secret represents an encrypted secret.
-type Secret struct {
-	ID             int64
-	Project        string
-	Scope          string
-	Key            string
-	ValueEncrypted []byte
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-}
-
 // SetSecretEncrypted creates or updates a secret with pre-encrypted value.
 func (db *DB) SetSecretEncrypted(ctx context.Context, project, scope, key string, valueEncrypted []byte) error {
 	_, err := db.conn.ExecContext(ctx, `
@@ -469,13 +393,6 @@ func (db *DB) GetSecret(ctx context.Context, project, scope, key string) (*Secre
 		return nil, fmt.Errorf("querying secret: %w", err)
 	}
 	return &s, nil
-}
-
-// SecretInfo represents secret metadata
-type SecretInfo struct {
-	Key       string
-	Scope     string
-	UpdatedAt time.Time
 }
 
 // ListSecrets returns secret metadata for a scope (CLI version)
@@ -627,20 +544,6 @@ func (db *DB) Backup(destPath string) error {
 
 // --- Project operations ---
 
-// Project represents a deployment project.
-type Project struct {
-	ID               int64
-	Name             string
-	Repository       string
-	Branch           string
-	DeployPath       string
-	Type             string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-	LastDeployAt     *time.Time
-	LastDeployStatus string
-}
-
 // CreateProject creates a new project.
 func (db *DB) CreateProject(project *Project) error {
 	result, err := db.conn.Exec(`
@@ -720,16 +623,6 @@ func (db *DB) DeleteProject(name string) error {
 
 // --- Project Type operations ---
 
-// ProjectType represents a project type template.
-type ProjectType struct {
-	ID           int64
-	Name         string
-	Description  string
-	BuildCmd     string
-	ProjectCount int
-	CreatedAt    time.Time
-}
-
 // CreateProjectType creates a new project type.
 func (db *DB) CreateProjectType(pt *ProjectType) error {
 	result, err := db.conn.Exec(`
@@ -807,18 +700,6 @@ func (db *DB) DeleteProjectType(name string) error {
 
 // --- Extended Deployment operations for CLI ---
 
-// DeploymentCLI is a simplified deployment struct for CLI use
-type DeploymentCLI struct {
-	ID          string
-	ProjectID   int64
-	ProjectName string
-	Target      string
-	Status      string
-	TriggeredBy string
-	StartedAt   time.Time
-	FinishedAt  *time.Time
-}
-
 // InsertDeployment creates a deployment record (CLI version - alternate method)
 func (db *DB) InsertDeployment(d *DeploymentCLI) error {
 	if d.ID == "" {
@@ -863,18 +744,6 @@ func (db *DB) ExportAllSecrets() (map[string]map[string]string, error) {
 }
 
 // --- Session Management ---
-
-// Session represents a user session.
-type Session struct {
-	ID        string // TEXT primary key
-	UserID    int64
-	Token     string // Same as ID for sessions
-	IPAddress string
-	UserAgent string
-	CreatedAt time.Time
-	ExpiresAt time.Time
-	LastUsed  time.Time
-}
 
 // CreateSession creates a new session.
 func (db *DB) CreateSession(ctx context.Context, session *Session) error {
@@ -963,19 +832,6 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64) ([]*Session, e
 }
 
 // --- API Key Management ---
-
-// APIKey represents an API key.
-type APIKey struct {
-	ID         int64
-	UserID     int64
-	Name       string
-	KeyHash    string // SHA-256 hash of the key
-	KeyPrefix  string // First 8 characters of the key for identification
-	Scopes     string // JSON array of scopes/permissions
-	ExpiresAt  *time.Time
-	LastUsedAt *time.Time
-	CreatedAt  time.Time
-}
 
 // CreateAPIKey creates a new API key.
 func (db *DB) CreateAPIKey(ctx context.Context, key *APIKey) error {
@@ -1077,31 +933,7 @@ func (db *DB) ListAPIKeys(ctx context.Context, userID int64) ([]*APIKey, error) 
 	return keys, rows.Err()
 }
 
-// IsAPIKeyValid checks if an API key is valid (not expired).
-func (key *APIKey) IsValid() bool {
-	if key == nil {
-		return false
-	}
-	if key.ExpiresAt != nil && time.Now().After(*key.ExpiresAt) {
-		return false
-	}
-	return true
-}
-
 // --- Settings operations ---
-
-// Setting represents a configuration setting.
-type Setting struct {
-	ID          int64
-	Category    string
-	Key         string
-	Value       string
-	ValueType   string
-	Encrypted   bool
-	Description string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-}
 
 // GetSetting retrieves a single setting.
 func (db *DB) GetSetting(ctx context.Context, category, key string) (*Setting, error) {
@@ -1213,18 +1045,6 @@ func (db *DB) HasSettings(ctx context.Context) (bool, error) {
 
 // --- Project Webhook operations ---
 
-// ProjectWebhook represents a project-specific webhook configuration.
-type ProjectWebhook struct {
-	ID              int64
-	ProjectID       int64
-	Provider        string
-	SecretEncrypted []byte
-	Enabled         bool
-	RequireSecret   bool
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
-}
-
 // GetProjectWebhook retrieves a webhook config for a project and provider.
 func (db *DB) GetProjectWebhook(ctx context.Context, projectID int64, provider string) (*ProjectWebhook, error) {
 	var w ProjectWebhook
@@ -1300,17 +1120,6 @@ func (db *DB) DeleteProjectWebhook(ctx context.Context, projectID int64, provide
 }
 
 // --- Scheduled Deployment operations ---
-
-// ScheduledDeployment represents a deployment scheduled for future execution.
-type ScheduledDeployment struct {
-	ID          string
-	Project     string
-	Target      string
-	Branch      string
-	ScheduledAt time.Time
-	ScheduledBy string
-	Status      string
-}
 
 // CreateScheduledDeployment creates a scheduled deployment.
 func (db *DB) CreateScheduledDeployment(ctx context.Context, id, project, target, branch string, scheduledAt time.Time, scheduledBy string) error {
@@ -1587,21 +1396,6 @@ func (db *DB) CleanupOrphanedWebhooks(ctx context.Context) (int64, error) {
 }
 
 // --- SSH Host Key operations ---
-
-// SSHHostKey represents a stored SSH host key.
-type SSHHostKey struct {
-	ID          int64
-	Hostname    string
-	Port        int
-	KeyType     string
-	PublicKey   string // Base64 encoded public key
-	Fingerprint string // SHA256 fingerprint
-	Trusted     bool
-	AddedBy     string
-	VerifiedAt  *time.Time
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-}
 
 // CreateSSHHostKey creates a new SSH host key record.
 func (db *DB) CreateSSHHostKey(ctx context.Context, key *SSHHostKey) error {
