@@ -749,11 +749,11 @@ func TestIsValidServiceName(t *testing.T) {
 
 func TestParseAndValidateJSON(t *testing.T) {
 	tests := []struct {
-		name        string
-		body        string
-		contentLen  int64
-		maxSize     int64
-		wantError   bool
+		name          string
+		body          string
+		contentLen    int64
+		maxSize       int64
+		wantError     bool
 		errorContains string
 	}{
 		{
@@ -764,27 +764,27 @@ func TestParseAndValidateJSON(t *testing.T) {
 			wantError:  false,
 		},
 		{
-			name:        "content too large",
-			body:        `{"name":"test"}`,
-			contentLen:  2000,
-			maxSize:     100,
-			wantError:   true,
+			name:          "content too large",
+			body:          `{"name":"test"}`,
+			contentLen:    2000,
+			maxSize:       100,
+			wantError:     true,
 			errorContains: "too large",
 		},
 		{
-			name:        "invalid JSON",
-			body:        `{invalid}`,
-			contentLen:  9,
-			maxSize:     1024,
-			wantError:   true,
+			name:          "invalid JSON",
+			body:          `{invalid}`,
+			contentLen:    9,
+			maxSize:       1024,
+			wantError:     true,
 			errorContains: "invalid JSON",
 		},
 		{
-			name:        "unknown field",
-			body:        `{"name":"test","unknown":"field"}`,
-			contentLen:  33,
-			maxSize:     1024,
-			wantError:   true,
+			name:          "unknown field",
+			body:          `{"name":"test","unknown":"field"}`,
+			contentLen:    33,
+			maxSize:       1024,
+			wantError:     true,
 			errorContains: "invalid JSON",
 		},
 	}

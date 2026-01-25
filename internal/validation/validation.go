@@ -46,7 +46,7 @@ func (v *ValidationErrors) Add(field, message string) {
 func (v *ValidationErrors) WriteJSON(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusBadRequest)
-	json.NewEncoder(w).Encode(v)
+	_ = json.NewEncoder(w).Encode(v)
 }
 
 // NewValidationErrors creates a new ValidationErrors.

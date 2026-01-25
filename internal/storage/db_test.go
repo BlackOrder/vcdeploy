@@ -2309,7 +2309,9 @@ func TestListDeploymentsRecent(t *testing.T) {
 		Target:      "production",
 		Status:      "completed",
 	}
-	db.InsertDeployment(deployment)
+	if err := db.InsertDeployment(deployment); err != nil {
+		t.Fatalf("InsertDeployment() error = %v", err)
+	}
 
 	// List recent deployments
 	deployments, err := db.ListDeploymentsRecent(ctx, 10)
@@ -2333,7 +2335,9 @@ func TestUpdateProjectByName(t *testing.T) {
 		Repository: "https://github.com/test/repo",
 		Branch:     "main",
 	}
-	db.CreateProject(project)
+	if err := db.CreateProject(project); err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
 
 	// Update project
 	updated := &Project{
@@ -2495,7 +2499,9 @@ func TestDeleteSSHHostKeysByHost(t *testing.T) {
 		Trusted:     true,
 		AddedBy:     "testuser",
 	}
-	db.CreateSSHHostKey(ctx, key1)
+	if err := db.CreateSSHHostKey(ctx, key1); err != nil {
+		t.Fatalf("CreateSSHHostKey(key1) error = %v", err)
+	}
 
 	key2 := &SSHHostKey{
 		Hostname:    "deletehost.example.com",
@@ -2506,7 +2512,9 @@ func TestDeleteSSHHostKeysByHost(t *testing.T) {
 		Trusted:     true,
 		AddedBy:     "testuser",
 	}
-	db.CreateSSHHostKey(ctx, key2)
+	if err := db.CreateSSHHostKey(ctx, key2); err != nil {
+		t.Fatalf("CreateSSHHostKey(key2) error = %v", err)
+	}
 
 	// Delete all keys for host
 	_, err := db.DeleteSSHHostKeysByHost(ctx, "deletehost.example.com", 22)

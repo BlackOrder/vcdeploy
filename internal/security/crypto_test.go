@@ -504,8 +504,8 @@ func TestGenerateSecureTokenLength(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
-		length  int
-		hexLen  int
+		length int
+		hexLen int
 	}{
 		{16, 32},
 		{32, 64},

@@ -699,7 +699,7 @@ func TestWebhookNotifierSend(t *testing.T) {
 	var receivedPayload map[string]interface{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		decoder := json.NewDecoder(r.Body)
-		decoder.Decode(&receivedPayload)
+		_ = decoder.Decode(&receivedPayload)
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -751,7 +751,7 @@ func TestWebhookNotifierWithSignature(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	notifier.Send(ctx, event)
+	_ = notifier.Send(ctx, event)
 
 	if receivedSignature == "" {
 		t.Error("Expected X-VCDeploy-Signature header")
@@ -783,7 +783,7 @@ func TestWebhookNotifierWithCustomHeaders(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	notifier.Send(ctx, event)
+	_ = notifier.Send(ctx, event)
 
 	if receivedHeader != "custom-value" {
 		t.Errorf("Custom header = %v, want custom-value", receivedHeader)
@@ -905,7 +905,7 @@ func BenchmarkEventMarshal(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		json.Marshal(event)
+		_, _ = json.Marshal(event)
 	}
 }
 

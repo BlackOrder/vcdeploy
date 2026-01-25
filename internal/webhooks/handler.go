@@ -136,7 +136,7 @@ func (h *Handler) HandleGitHub(w http.ResponseWriter, r *http.Request) {
 		h.handleGitHubTag(w, body, projectID, eventType == "delete")
 	case "ping":
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("pong"))
+		_, _ = w.Write([]byte("pong"))
 	default:
 		h.logger.Debug("Ignoring GitHub event", zap.String("event", eventType))
 		w.WriteHeader(http.StatusOK)
