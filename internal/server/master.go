@@ -48,6 +48,9 @@ type MasterServer struct {
 	// Secret management service
 	secretService *security.SecretService
 
+	// Settings management service
+	settingsService *config.SettingsService
+
 	// Webhook handling
 	webhookHandler *webhookHandlerAdapter
 
@@ -206,6 +209,7 @@ func (s *MasterServer) SetWebhookHandler(kms *security.KMS, processor webhooks.E
 	// Also set KMS on the server for secrets API
 	s.kms = kms
 	s.secretService = security.NewSecretService(s.db, kms)
+	s.settingsService = config.NewSettingsService(s.db, kms)
 
 	secretStore := &webhookSecretStoreAdapter{
 		db:     s.db,

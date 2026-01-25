@@ -41,13 +41,14 @@ func newTestServer(t *testing.T) *MasterServer {
 		t.Fatalf("failed to create server: %v", err)
 	}
 
-	// Set up KMS and SecretService for tests
+	// Set up KMS, SecretService, and SettingsService for tests
 	kms, err := security.NewKMS(db.Conn(), nil)
 	if err != nil {
 		t.Fatalf("failed to create KMS: %v", err)
 	}
 	server.kms = kms
 	server.secretService = security.NewSecretService(db, kms)
+	server.settingsService = config.NewSettingsService(db, kms)
 
 	return server
 }
