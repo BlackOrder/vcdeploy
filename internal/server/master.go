@@ -1344,7 +1344,12 @@ func (s *MasterServer) handleSettingsUI(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *MasterServer) handleSecretsUI(w http.ResponseWriter, r *http.Request) {
-	projects, _ := s.db.ListProjects()
+	projects, err := s.db.ListProjects()
+	if err != nil {
+		s.logger.Error("Failed to list projects for secrets UI", zap.Error(err))
+		// Continue with empty list rather than failing completely
+		projects = nil
+	}
 	s.renderTemplate(w, "secrets", map[string]interface{}{
 		"Title":    "Secrets",
 		"Active":   "secrets",
