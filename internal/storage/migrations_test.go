@@ -80,7 +80,10 @@ func TestMigrateTo(t *testing.T) {
 	ctx := context.Background()
 
 	// Get current version (should be fully migrated)
-	status, _ := db.GetMigrationStatus()
+	status, err := db.GetMigrationStatus()
+	if err != nil {
+		t.Fatalf("GetMigrationStatus() failed: %v", err)
+	}
 	maxVersion := 0
 	for _, s := range status {
 		if s.Version > maxVersion && s.Applied {
@@ -107,7 +110,10 @@ func TestMigrateDown(t *testing.T) {
 	ctx := context.Background()
 
 	// Get current state
-	statusBefore, _ := db.GetMigrationStatus()
+	statusBefore, err := db.GetMigrationStatus()
+	if err != nil {
+		t.Fatalf("GetMigrationStatus() failed: %v", err)
+	}
 	appliedBefore := 0
 	for _, s := range statusBefore {
 		if s.Applied {
@@ -121,7 +127,10 @@ func TestMigrateDown(t *testing.T) {
 	}
 
 	// Check that one migration was rolled back
-	statusAfter, _ := db.GetMigrationStatus()
+	statusAfter, err := db.GetMigrationStatus()
+	if err != nil {
+		t.Fatalf("GetMigrationStatus() after rollback failed: %v", err)
+	}
 	appliedAfter := 0
 	for _, s := range statusAfter {
 		if s.Applied {
@@ -139,7 +148,10 @@ func TestMigrateDown(t *testing.T) {
 	}
 
 	// Should be back to original state
-	statusFinal, _ := db.GetMigrationStatus()
+	statusFinal, err := db.GetMigrationStatus()
+	if err != nil {
+		t.Fatalf("GetMigrationStatus() after re-migrate failed: %v", err)
+	}
 	appliedFinal := 0
 	for _, s := range statusFinal {
 		if s.Applied {

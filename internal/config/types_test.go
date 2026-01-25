@@ -120,13 +120,18 @@ hooks:
 }
 
 func TestLoadTypeConfigDefaults(t *testing.T) {
-	tmpDir, _ := os.MkdirTemp("", "vcdeploy-test-*")
+	tmpDir, err := os.MkdirTemp("", "vcdeploy-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
 	defer os.RemoveAll(tmpDir)
 
 	// Config without keep_releases
 	configPath := filepath.Join(tmpDir, "minimal.yaml")
 	configContent := `name: minimal`
-	os.WriteFile(configPath, []byte(configContent), 0644)
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to write config: %v", err)
+	}
 
 	cfg, err := LoadTypeConfig(configPath)
 	if err != nil {
@@ -147,20 +152,28 @@ func TestLoadTypeConfigNotFound(t *testing.T) {
 }
 
 func TestLoadTypeConfigInvalid(t *testing.T) {
-	tmpDir, _ := os.MkdirTemp("", "vcdeploy-test-*")
+	tmpDir, err := os.MkdirTemp("", "vcdeploy-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
 	defer os.RemoveAll(tmpDir)
 
 	configPath := filepath.Join(tmpDir, "invalid.yaml")
-	os.WriteFile(configPath, []byte("invalid: [yaml: content"), 0644)
+	if err := os.WriteFile(configPath, []byte("invalid: [yaml: content"), 0644); err != nil {
+		t.Fatalf("Failed to write config: %v", err)
+	}
 
-	_, err := LoadTypeConfig(configPath)
+	_, err = LoadTypeConfig(configPath)
 	if err == nil {
 		t.Error("LoadTypeConfig() should return error for invalid YAML")
 	}
 }
 
 func TestSaveTypeConfig(t *testing.T) {
-	tmpDir, _ := os.MkdirTemp("", "vcdeploy-test-*")
+	tmpDir, err := os.MkdirTemp("", "vcdeploy-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
 	defer os.RemoveAll(tmpDir)
 
 	cfg := &TypeConfig{
@@ -171,7 +184,7 @@ func TestSaveTypeConfig(t *testing.T) {
 
 	savePath := filepath.Join(tmpDir, "nested", "saved.yaml")
 
-	err := SaveTypeConfig(cfg, savePath)
+	err = SaveTypeConfig(cfg, savePath)
 	if err != nil {
 		t.Fatalf("SaveTypeConfig() error = %v", err)
 	}

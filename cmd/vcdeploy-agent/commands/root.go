@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -145,6 +146,28 @@ func runStart(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("creating agent: %w", err)
 	}
+
+	// Write PID file for status checks and process management
+	sysCfg := config.MustGetSystemConfig()
+	pidFile := sysCfg.AgentPIDPath()
+
+	// Ensure PID directory exists
+	pidDir := filepath.Dir(pidFile)
+	if err := os.MkdirAll(pidDir, 0755); err != nil {
+		logger.Warn("Failed to create PID directory", zap.String("dir", pidDir), zap.Error(err))
+	}
+
+	// Write current PID
+	if err := os.WriteFile(pidFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0644); err != nil {
+		logger.Warn("Failed to write PID file", zap.String("path", pidFile), zap.Error(err))
+	}
+
+	// Defer cleanup of PID file
+	defer func() {
+		if err := os.Remove(pidFile); err != nil && !os.IsNotExist(err) {
+			logger.Warn("Failed to remove PID file", zap.String("path", pidFile), zap.Error(err))
+		}
+	}()
 
 	// Setup signal handling
 	ctx, cancel := context.WithCancel(context.Background())

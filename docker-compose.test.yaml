@@ -29,32 +29,29 @@ services:
       retries: 10
       start_period: 5s
 
-  # NOTE: Agent is not included because the start command is a stub.
-  # When the agent is fully implemented, uncomment this section.
-  #
-  # # VCDeploy Agent for testing
-  # agent:
-  #   build:
-  #     context: .
-  #     dockerfile: docker/Dockerfile.agent
-  #     args:
-  #       VERSION: test
-  #   image: vcdeploy-test-agent:latest
-  #   container_name: vcdeploy-test-agent
-  #   command: ["start", "--config", "/etc/vcdeploy/agent.yaml"]
-  #   depends_on:
-  #     master:
-  #       condition: service_healthy
-  #   volumes:
-  #     - ./tests/e2e/config/agent.yaml:/etc/vcdeploy/agent.yaml:ro
-  #     - agent-data:/var/lib/vcdeploy-agent
-  #     - deploy-target:/deploy
-  #   environment:
-  #     - TZ=UTC
-  #     - VCDEPLOY_MASTER_ADDR=master:9090
-  #     - VCDEPLOY_LOG_LEVEL=debug
-  #   networks:
-  #     - vcdeploy-test
+  # VCDeploy Agent for testing
+  agent:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.agent
+      args:
+        VERSION: test
+    image: vcdeploy-test-agent:latest
+    container_name: vcdeploy-test-agent
+    command: ["start", "--config", "/etc/vcdeploy/agent.yaml"]
+    depends_on:
+      master:
+        condition: service_healthy
+    volumes:
+      - ./tests/e2e/config/agent.yaml:/etc/vcdeploy/agent.yaml:ro
+      - agent-data:/var/lib/vcdeploy-agent
+      - deploy-target:/deploy
+    environment:
+      - TZ=UTC
+      - VCDEPLOY_MASTER_ADDR=master:9090
+      - VCDEPLOY_LOG_LEVEL=debug
+    networks:
+      - vcdeploy-test
 
   # Target SSH server for deployment testing
   target:
