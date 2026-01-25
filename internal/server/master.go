@@ -22,8 +22,20 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/config"
 	"github.com/BlackOrder/vcdeploy/internal/proto"
 	"github.com/BlackOrder/vcdeploy/internal/security"
+	"github.com/BlackOrder/vcdeploy/internal/services"
+	"github.com/BlackOrder/vcdeploy/internal/services/agents"
+	"github.com/BlackOrder/vcdeploy/internal/services/apikeys"
+	"github.com/BlackOrder/vcdeploy/internal/services/audit"
+	"github.com/BlackOrder/vcdeploy/internal/services/deployments"
+	"github.com/BlackOrder/vcdeploy/internal/services/hostkeys"
+	"github.com/BlackOrder/vcdeploy/internal/services/projects"
+	"github.com/BlackOrder/vcdeploy/internal/services/secrets"
+	"github.com/BlackOrder/vcdeploy/internal/services/sessions"
+	"github.com/BlackOrder/vcdeploy/internal/services/settings"
+	"github.com/BlackOrder/vcdeploy/internal/services/users"
+	"github.com/BlackOrder/vcdeploy/internal/services/webhooks"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
-	"github.com/BlackOrder/vcdeploy/internal/webhooks"
+	webhookshandler "github.com/BlackOrder/vcdeploy/internal/webhooks"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/grpc"
@@ -45,11 +57,22 @@ type MasterServer struct {
 	// KMS for secret encryption/decryption
 	kms *security.KMS
 
-	// Secret management service
-	secretService *security.SecretService
+	// Service layer - new architecture
+	secretService     services.SecretServicer
+	settingsSvc       services.SettingsServicer
+	userService       services.UserServicer
+	sessionService    services.SessionServicer
+	apiKeyService     services.APIKeyServicer
+	projectService    services.ProjectServicer
+	webhookService    services.WebhookServicer
+	deploymentService services.DeploymentServicer
+	agentService      services.AgentServicer
+	auditService      services.AuditServicer
+	hostKeyService    services.HostKeyServicer
 
-	// Settings management service
-	settingsService *config.SettingsService
+	// Legacy services (to be deprecated)
+	legacySecretService  *security.SecretService
+	legacySettingsService *config.SettingsService
 
 	// Webhook handling
 	webhookHandler *webhookHandlerAdapter
@@ -84,7 +107,7 @@ type AgentConnection struct {
 
 // webhookHandlerAdapter wraps the webhooks.Handler for MasterServer.
 type webhookHandlerAdapter struct {
-	handler *webhooks.Handler
+	handler *webhookshandler.Handler
 }
 
 // webhookSecretStoreAdapter implements webhooks.SecretStore using the DB.
@@ -205,11 +228,26 @@ func (s *MasterServer) SetKMS(kms *security.KMS) {
 }
 
 // SetWebhookHandler configures the webhook handler with KMS for secret decryption.
-func (s *MasterServer) SetWebhookHandler(kms *security.KMS, processor webhooks.EventProcessor) {
+func (s *MasterServer) SetWebhookHandler(kms *security.KMS, processor webhookshandler.EventProcessor) {
 	// Also set KMS on the server for secrets API
 	s.kms = kms
-	s.secretService = security.NewSecretService(s.db, kms)
-	s.settingsService = config.NewSettingsService(s.db, kms)
+
+	// Initialize legacy services (for backward compatibility during transition)
+	s.legacySecretService = security.NewSecretService(s.db, kms)
+	s.legacySettingsService = config.NewSettingsService(s.db, kms)
+
+	// Initialize new service layer
+	s.secretService = secrets.New(s.db, kms)
+	s.settingsSvc = settings.New(s.db, kms)
+	s.userService = users.New(s.db)
+	s.sessionService = sessions.New(s.db)
+	s.apiKeyService = apikeys.New(s.db)
+	s.projectService = projects.New(s.db)
+	s.webhookService = webhooks.New(s.db, kms)
+	s.deploymentService = deployments.New(s.db)
+	s.agentService = agents.New(s.db)
+	s.auditService = audit.New(s.db)
+	s.hostKeyService = hostkeys.New(s.db)
 
 	secretStore := &webhookSecretStoreAdapter{
 		db:     s.db,
@@ -218,7 +256,7 @@ func (s *MasterServer) SetWebhookHandler(kms *security.KMS, processor webhooks.E
 	}
 
 	s.webhookHandler = &webhookHandlerAdapter{
-		handler: webhooks.NewHandler(s.logger, secretStore, processor),
+		handler: webhookshandler.NewHandler(s.logger, secretStore, processor),
 	}
 }
 
@@ -795,18 +833,18 @@ func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		var secrets []*security.SecretMetadata
+		var secretsList []services.SecretMetadata
 		var err error
 
 		if projectFilter != "" && scopeFilter != "" {
 			// Get secrets for specific project/scope
-			secrets, err = s.secretService.List(ctx, projectFilter, scopeFilter)
+			secretsList, err = s.secretService.List(ctx, projectFilter, scopeFilter)
 		} else if projectFilter != "" {
 			// Get all secrets for a project
-			secrets, err = s.secretService.ListByProject(ctx, projectFilter)
+			secretsList, err = s.secretService.ListByProject(ctx, projectFilter)
 		} else {
 			// Get all secrets (admin only)
-			secrets, err = s.secretService.ListAll(ctx)
+			secretsList, err = s.secretService.ListAll(ctx)
 		}
 
 		if err != nil {
@@ -825,8 +863,8 @@ func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
 			UpdatedAt time.Time `json:"updated_at"`
 		}
 
-		result := make([]secretResponse, 0, len(secrets))
-		for _, sec := range secrets {
+		result := make([]secretResponse, 0, len(secretsList))
+		for _, sec := range secretsList {
 			result = append(result, secretResponse{
 				ID:        sec.ID,
 				Project:   sec.Project,

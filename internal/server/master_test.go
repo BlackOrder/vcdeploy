@@ -14,6 +14,17 @@ import (
 
 	"github.com/BlackOrder/vcdeploy/internal/config"
 	"github.com/BlackOrder/vcdeploy/internal/security"
+	"github.com/BlackOrder/vcdeploy/internal/services/agents"
+	"github.com/BlackOrder/vcdeploy/internal/services/apikeys"
+	"github.com/BlackOrder/vcdeploy/internal/services/audit"
+	"github.com/BlackOrder/vcdeploy/internal/services/deployments"
+	"github.com/BlackOrder/vcdeploy/internal/services/hostkeys"
+	"github.com/BlackOrder/vcdeploy/internal/services/projects"
+	"github.com/BlackOrder/vcdeploy/internal/services/secrets"
+	"github.com/BlackOrder/vcdeploy/internal/services/sessions"
+	"github.com/BlackOrder/vcdeploy/internal/services/settings"
+	"github.com/BlackOrder/vcdeploy/internal/services/users"
+	"github.com/BlackOrder/vcdeploy/internal/services/webhooks"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"go.uber.org/zap"
 )
@@ -41,14 +52,29 @@ func newTestServer(t *testing.T) *MasterServer {
 		t.Fatalf("failed to create server: %v", err)
 	}
 
-	// Set up KMS, SecretService, and SettingsService for tests
+	// Set up KMS for tests
 	kms, err := security.NewKMS(db.Conn(), nil)
 	if err != nil {
 		t.Fatalf("failed to create KMS: %v", err)
 	}
 	server.kms = kms
-	server.secretService = security.NewSecretService(db, kms)
-	server.settingsService = config.NewSettingsService(db, kms)
+
+	// Initialize all services for tests
+	server.secretService = secrets.New(db, kms)
+	server.settingsSvc = settings.New(db, kms)
+	server.userService = users.New(db)
+	server.sessionService = sessions.New(db)
+	server.apiKeyService = apikeys.New(db)
+	server.projectService = projects.New(db)
+	server.webhookService = webhooks.New(db, kms)
+	server.deploymentService = deployments.New(db)
+	server.agentService = agents.New(db)
+	server.auditService = audit.New(db)
+	server.hostKeyService = hostkeys.New(db)
+
+	// Legacy services (for backward compatibility during transition)
+	server.legacySecretService = security.NewSecretService(db, kms)
+	server.legacySettingsService = config.NewSettingsService(db, kms)
 
 	return server
 }
