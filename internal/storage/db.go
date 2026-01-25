@@ -583,7 +583,7 @@ func (db *DB) ListAllSecretsCtx(ctx context.Context) ([]*Secret, error) {
 // --- Helper functions ---
 
 func mapToJSON(m map[string]string) string {
-	if m == nil || len(m) == 0 {
+	if len(m) == 0 { // nil map has len 0
 		return "{}"
 	}
 	data, err := json.Marshal(m)
