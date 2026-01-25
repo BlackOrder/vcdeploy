@@ -439,3 +439,36 @@ func TestValidateProjectName(t *testing.T) {
 		})
 	}
 }
+
+func TestSecretServiceReEncryptAll(t *testing.T) {
+	svc, cleanup := setupTestSecretService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Set some secrets
+	err := svc.Set(ctx, "project1", "production", "API_KEY", "secret-value-1")
+	if err != nil {
+		t.Fatalf("Set() error = %v", err)
+	}
+
+	err = svc.Set(ctx, "project2", "staging", "DB_PASSWORD", "secret-value-2")
+	if err != nil {
+		t.Fatalf("Set() error = %v", err)
+	}
+
+	// Re-encrypt all secrets
+	err = svc.ReEncryptAll(ctx)
+	if err != nil {
+		t.Fatalf("ReEncryptAll() error = %v", err)
+	}
+
+	// Verify secrets are still accessible
+	entry, err := svc.Get(ctx, "project1", "production", "API_KEY")
+	if err != nil {
+		t.Fatalf("Get() after ReEncryptAll error = %v", err)
+	}
+	if entry.Value != "secret-value-1" {
+		t.Errorf("Get() after ReEncryptAll = %v, want %v", entry.Value, "secret-value-1")
+	}
+}

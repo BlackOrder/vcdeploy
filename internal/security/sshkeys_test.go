@@ -576,3 +576,35 @@ func TestHostKeyMismatchError(t *testing.T) {
 		t.Error("error message should warn about MITM")
 	}
 }
+
+func TestHashPublicKey(t *testing.T) {
+	db, kms := setupTestSSHDB(t)
+	defer db.Close()
+
+	mgr := NewSSHKeyManager(db, kms)
+	ctx := context.Background()
+
+	// Generate a key to get a valid public key
+	key, err := mgr.GenerateKey(ctx, "hashkey-test")
+	if err != nil {
+		t.Fatalf("GenerateKey(): %v", err)
+	}
+
+	// Parse the public key
+	pubKey, _, _, _, err := ssh.ParseAuthorizedKey([]byte(key.PublicKey))
+	if err != nil {
+		t.Fatalf("ParseAuthorizedKey(): %v", err)
+	}
+
+	// Test HashPublicKey
+	hash := HashPublicKey(pubKey)
+	if hash == "" {
+		t.Error("HashPublicKey() returned empty string")
+	}
+
+	// Hash should be consistent
+	hash2 := HashPublicKey(pubKey)
+	if hash != hash2 {
+		t.Errorf("HashPublicKey() not consistent: %s != %s", hash, hash2)
+	}
+}
