@@ -7,7 +7,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/BlackOrder/vcdeploy/internal/storage"
 )
 
 // requestWithUserContext creates a new request with user ID set in context.
@@ -636,5 +640,815 @@ func TestHandleUser_UpdateWeakPassword(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected weak password update to be rejected with status %d, got %d: %s",
 			http.StatusBadRequest, w.Code, w.Body.String())
+	}
+}
+
+// --- Project API Tests ---
+
+func TestHandleProjectAPI_Get(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	// Create a project first
+	project := &storage.Project{
+		Name:       "test-project",
+		Repository: "https://github.com/test/repo",
+		Branch:     "main",
+		DeployPath: "/var/www/test",
+		Type:       "static",
+	}
+	_ = server.db.CreateProject(project)
+
+	// GET specific project
+	req := httptest.NewRequest("GET", "/api/v1/projects/test-project", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleProjectAPI(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleProjectAPI_GetNotFound(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	req := httptest.NewRequest("GET", "/api/v1/projects/nonexistent", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleProjectAPI(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status %d, got %d", http.StatusNotFound, w.Code)
+	}
+}
+
+func TestHandleProjectAPI_Update(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	// Create a project first
+	project := &storage.Project{
+		Name:       "update-project",
+		Repository: "https://github.com/test/repo",
+		Branch:     "main",
+		DeployPath: "/var/www/test",
+		Type:       "static",
+	}
+	_ = server.db.CreateProject(project)
+
+	// Update the project
+	updateBody := bytes.NewBufferString(`{"branch": "develop", "deploy_path": "/var/www/new"}`)
+	req := httptest.NewRequest("PUT", "/api/v1/projects/update-project", updateBody)
+	req.Header.Set("X-API-Key", apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	server.handleProjectAPI(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleProjectAPI_Delete(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	// Create a project first
+	project := &storage.Project{
+		Name:       "delete-project",
+		Repository: "https://github.com/test/repo",
+		Branch:     "main",
+		DeployPath: "/var/www/test",
+		Type:       "static",
+	}
+	_ = server.db.CreateProject(project)
+
+	// Delete the project
+	req := httptest.NewRequest("DELETE", "/api/v1/projects/delete-project", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleProjectAPI(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleProjectAPI_EmptyName(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	// Empty project name
+	req := httptest.NewRequest("GET", "/api/v1/projects/", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleProjectAPI(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestHandleProjectAPI_MethodNotAllowed(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	req := httptest.NewRequest("PATCH", "/api/v1/projects/test-project", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleProjectAPI(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected status %d, got %d", http.StatusMethodNotAllowed, w.Code)
+	}
+}
+
+// --- Agent API Tests ---
+
+func TestHandleAgentAPI_Get(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	ctx := context.Background()
+
+	// Create an agent first
+	agent := &storage.Agent{
+		ID:       "test-agent-1",
+		Hostname: "agent.example.com",
+		Status:   "online",
+	}
+	_ = server.db.UpsertAgent(ctx, agent)
+
+	// GET specific agent
+	req := httptest.NewRequest("GET", "/api/v1/agents/test-agent-1", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleAgentAPI(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleAgentAPI_GetNotFound(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	req := httptest.NewRequest("GET", "/api/v1/agents/nonexistent", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleAgentAPI(w, req)
+
+	// Handler returns 500 for db errors, not 404
+	if w.Code != http.StatusInternalServerError && w.Code != http.StatusNotFound {
+		t.Errorf("expected status %d or %d, got %d", http.StatusInternalServerError, http.StatusNotFound, w.Code)
+	}
+}
+
+func TestHandleAgentAPI_Delete(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	ctx := context.Background()
+
+	// Create an agent first
+	agent := &storage.Agent{
+		ID:       "delete-agent-1",
+		Hostname: "delete.example.com",
+		Status:   "online",
+	}
+	_ = server.db.UpsertAgent(ctx, agent)
+
+	// Delete the agent
+	req := httptest.NewRequest("DELETE", "/api/v1/agents/delete-agent-1", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleAgentAPI(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleAgentAPI_EmptyID(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	req := httptest.NewRequest("GET", "/api/v1/agents/", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleAgentAPI(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestHandleAgentAPI_MethodNotAllowed(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	req := httptest.NewRequest("POST", "/api/v1/agents/test-agent", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleAgentAPI(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected status %d, got %d", http.StatusMethodNotAllowed, w.Code)
+	}
+}
+
+// --- Deployment API Tests ---
+
+func TestHandleDeploymentsAPI_ListWithDeployment(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	ctx := context.Background()
+
+	// Create a deployment
+	deployment := &storage.Deployment{
+		ID:      "test-deploy-1",
+		Project: "test-project",
+		Target:  "production",
+		Branch:  "main",
+		Status:  "completed",
+	}
+	_ = server.db.CreateDeployment(ctx, deployment)
+
+	// List deployments
+	req := httptest.NewRequest("GET", "/api/v1/deployments", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleDeploymentsAPI(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleDeploymentsAPI_MethodNotAllowed(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	req := httptest.NewRequest("PUT", "/api/v1/deployments", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleDeploymentsAPI(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected status %d, got %d", http.StatusMethodNotAllowed, w.Code)
+	}
+}
+
+func TestHandleDeploymentAPI_Get(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	ctx := context.Background()
+
+	// Create a deployment
+	deployment := &storage.Deployment{
+		ID:      "get-deploy-1",
+		Project: "test-project",
+		Target:  "production",
+		Branch:  "main",
+		Status:  "completed",
+	}
+	_ = server.db.CreateDeployment(ctx, deployment)
+
+	// Get specific deployment
+	req := httptest.NewRequest("GET", "/api/v1/deployments/get-deploy-1", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleDeploymentAPI(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleDeploymentAPI_GetNotFound(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	req := httptest.NewRequest("GET", "/api/v1/deployments/nonexistent", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleDeploymentAPI(w, req)
+
+	// Handler returns 500 for db errors when deployment not found
+	if w.Code != http.StatusInternalServerError && w.Code != http.StatusNotFound {
+		t.Errorf("expected status %d or %d, got %d", http.StatusInternalServerError, http.StatusNotFound, w.Code)
+	}
+}
+
+func TestHandleDeploymentAPI_EmptyID(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	req := httptest.NewRequest("GET", "/api/v1/deployments/", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleDeploymentAPI(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestHandleDeploymentAPI_MethodNotAllowed(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	req := httptest.NewRequest("PUT", "/api/v1/deployments/test-deploy", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleDeploymentAPI(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected status %d, got %d", http.StatusMethodNotAllowed, w.Code)
+	}
+}
+
+// --- API Key Tests ---
+
+func TestHandleAPIKey_Delete(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	ctx := context.Background()
+
+	// Create another API key to delete
+	newKey := &storage.APIKey{
+		UserID:  1,
+		Name:    "delete-key",
+		KeyHash: "delete-hash",
+	}
+	_ = server.db.CreateAPIKey(ctx, newKey)
+
+	// Delete the API key - note the correct path is /api/v1/apikeys/
+	req := httptest.NewRequest("DELETE", fmt.Sprintf("/api/v1/apikeys/%d", newKey.ID), nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleAPIKey(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleAPIKey_EmptyID(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	req := httptest.NewRequest("DELETE", "/api/v1/apikeys/", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleAPIKey(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestHandleAPIKey_InvalidID(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	req := httptest.NewRequest("DELETE", "/api/v1/apikeys/invalid", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleAPIKey(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestHandleAPIKey_MethodNotAllowed(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	req := httptest.NewRequest("GET", "/api/v1/apikeys/1", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleAPIKey(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected status %d, got %d", http.StatusMethodNotAllowed, w.Code)
+	}
+}
+
+// --- Project Webhooks Tests ---
+
+func TestHandleProjectWebhooks_Get(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	// Create a project first
+	project := &storage.Project{
+		Name:       "webhook-project",
+		Repository: "https://github.com/test/repo",
+		Branch:     "main",
+		DeployPath: "/var/www/test",
+		Type:       "static",
+	}
+	_ = server.db.CreateProject(project)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/v1/projects/webhook-project/webhooks", nil)
+	req.Header.Set("X-API-Key", apiKey)
+
+	server.handleProjectWebhooks(w, req, "webhook-project")
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleProjectWebhooks_Post(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	// Create a project first
+	project := &storage.Project{
+		Name:       "webhook-post-project",
+		Repository: "https://github.com/test/repo",
+		Branch:     "main",
+		DeployPath: "/var/www/test",
+		Type:       "static",
+	}
+	_ = server.db.CreateProject(project)
+
+	body := strings.NewReader(`{"provider":"github","secret":"test-secret","enabled":true}`)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/v1/projects/webhook-post-project/webhooks", body)
+	req.Header.Set("X-API-Key", apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	server.handleProjectWebhooks(w, req, "webhook-post-project")
+
+	if w.Code != http.StatusCreated {
+		t.Errorf("expected status %d, got %d: %s", http.StatusCreated, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleProjectWebhooks_PostMissingFields(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	// Create a project first
+	project := &storage.Project{
+		Name:       "webhook-missing-project",
+		Repository: "https://github.com/test/repo",
+		Branch:     "main",
+		DeployPath: "/var/www/test",
+		Type:       "static",
+	}
+	_ = server.db.CreateProject(project)
+
+	body := strings.NewReader(`{"provider":"github"}`)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/v1/projects/webhook-missing-project/webhooks", body)
+	req.Header.Set("X-API-Key", apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	server.handleProjectWebhooks(w, req, "webhook-missing-project")
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleProjectWebhooks_NotFound(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/v1/projects/nonexistent/webhooks", nil)
+	req.Header.Set("X-API-Key", apiKey)
+
+	server.handleProjectWebhooks(w, req, "nonexistent")
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status %d, got %d", http.StatusNotFound, w.Code)
+	}
+}
+
+func TestHandleProjectWebhooks_MethodNotAllowed(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	// Create a project first
+	project := &storage.Project{
+		Name:       "webhook-method-project",
+		Repository: "https://github.com/test/repo",
+		Branch:     "main",
+		DeployPath: "/var/www/test",
+		Type:       "static",
+	}
+	_ = server.db.CreateProject(project)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("DELETE", "/api/v1/projects/webhook-method-project/webhooks", nil)
+	req.Header.Set("X-API-Key", apiKey)
+
+	server.handleProjectWebhooks(w, req, "webhook-method-project")
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected status %d, got %d", http.StatusMethodNotAllowed, w.Code)
+	}
+}
+
+// --- Project Deploy Tests ---
+
+func TestHandleProjectDeploy_Success(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	// Create a project first
+	project := &storage.Project{
+		Name:       "deploy-project",
+		Repository: "https://github.com/test/repo",
+		Branch:     "main",
+		DeployPath: "/var/www/test",
+		Type:       "static",
+	}
+	_ = server.db.CreateProject(project)
+
+	body := strings.NewReader(`{"branch":"main","target":"production"}`)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/v1/projects/deploy-project/deploy", body)
+	req.Header.Set("X-API-Key", apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	server.handleProjectDeploy(w, req, "deploy-project")
+
+	if w.Code != http.StatusAccepted {
+		t.Errorf("expected status %d, got %d: %s", http.StatusAccepted, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleProjectDeploy_NotFound(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	body := strings.NewReader(`{}`)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/v1/projects/nonexistent/deploy", body)
+	req.Header.Set("X-API-Key", apiKey)
+
+	server.handleProjectDeploy(w, req, "nonexistent")
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status %d, got %d", http.StatusNotFound, w.Code)
+	}
+}
+
+func TestHandleProjectDeploy_MethodNotAllowed(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/v1/projects/test/deploy", nil)
+	req.Header.Set("X-API-Key", apiKey)
+
+	server.handleProjectDeploy(w, req, "test")
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected status %d, got %d", http.StatusMethodNotAllowed, w.Code)
+	}
+}
+
+func TestHandleProjectDeploy_ScheduledDeployment(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	// Create a project first
+	project := &storage.Project{
+		Name:       "scheduled-project",
+		Repository: "https://github.com/test/repo",
+		Branch:     "main",
+		DeployPath: "/var/www/test",
+		Type:       "static",
+	}
+	_ = server.db.CreateProject(project)
+
+	scheduledTime := time.Now().Add(1 * time.Hour).Format(time.RFC3339)
+	body := strings.NewReader(fmt.Sprintf(`{"branch":"main","target":"production","scheduled_at":"%s"}`, scheduledTime))
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/v1/projects/scheduled-project/deploy", body)
+	req.Header.Set("X-API-Key", apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	server.handleProjectDeploy(w, req, "scheduled-project")
+
+	if w.Code != http.StatusAccepted {
+		t.Errorf("expected status %d, got %d: %s", http.StatusAccepted, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleProjectDeploy_InvalidScheduledTime(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	// Create a project first
+	project := &storage.Project{
+		Name:       "invalid-schedule-project",
+		Repository: "https://github.com/test/repo",
+		Branch:     "main",
+		DeployPath: "/var/www/test",
+		Type:       "static",
+	}
+	_ = server.db.CreateProject(project)
+
+	body := strings.NewReader(`{"branch":"main","target":"production","scheduled_at":"invalid-time"}`)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/v1/projects/invalid-schedule-project/deploy", body)
+	req.Header.Set("X-API-Key", apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	server.handleProjectDeploy(w, req, "invalid-schedule-project")
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
+	}
+}
+
+// --- Agent Token Tests ---
+
+func TestHandleAgentToken_Success(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	ctx := context.Background()
+
+	// Create an agent first
+	agent := &storage.Agent{
+		ID:       "token-agent-1",
+		Hostname: "agent.example.com",
+		Status:   "online",
+	}
+	_ = server.db.UpsertAgent(ctx, agent)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/v1/agents/token-agent-1/token", nil)
+	req.Header.Set("X-API-Key", apiKey)
+
+	server.handleAgentToken(w, req, "token-agent-1")
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+	if resp["agent_id"] != "token-agent-1" {
+		t.Errorf("expected agent_id 'token-agent-1', got %v", resp["agent_id"])
+	}
+	if resp["token"] == nil || resp["token"] == "" {
+		t.Error("expected non-empty token in response")
+	}
+}
+
+func TestHandleAgentToken_MethodNotAllowed(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/v1/agents/test-agent/token", nil)
+	req.Header.Set("X-API-Key", apiKey)
+
+	server.handleAgentToken(w, req, "test-agent")
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected status %d, got %d", http.StatusMethodNotAllowed, w.Code)
+	}
+}
+
+// --- Deployment Logs Tests ---
+
+func TestHandleDeploymentLogs_GetNotFound(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/v1/deployments/nonexistent/logs", nil)
+	req.Header.Set("X-API-Key", apiKey)
+
+	server.handleDeploymentLogs(w, req, "nonexistent")
+
+	// Handler returns 500 or 404 for non-existent deployment
+	if w.Code != http.StatusInternalServerError && w.Code != http.StatusNotFound {
+		t.Errorf("expected status %d or %d, got %d", http.StatusInternalServerError, http.StatusNotFound, w.Code)
+	}
+}
+
+func TestHandleDeploymentLogs_MethodNotAllowed(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/v1/deployments/test/logs", nil)
+	req.Header.Set("X-API-Key", apiKey)
+
+	server.handleDeploymentLogs(w, req, "test")
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected status %d, got %d", http.StatusMethodNotAllowed, w.Code)
 	}
 }
