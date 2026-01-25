@@ -143,10 +143,12 @@ func (h *Handler) HandleGitHub(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) validateGitHubSignature(payload []byte, signature, secret string, requireSecret bool) bool {
 	if secret == "" {
 		if requireSecret {
-			h.logger.Warn("Webhook secret required but not configured")
+			h.logger.Warn("Webhook secret required but not configured - rejecting request")
 			return false
 		}
-		h.logger.Debug("No webhook secret configured, allowing request")
+		// Warn about missing secret even if not strictly required (security best practice)
+		h.logger.Warn("No webhook secret configured - request allowed but signature verification skipped. " +
+			"Consider configuring a webhook secret for improved security.")
 		return true
 	}
 
@@ -342,9 +344,14 @@ func (h *Handler) HandleGitLab(w http.ResponseWriter, r *http.Request) {
 	token := r.Header.Get("X-Gitlab-Token")
 	requireSecret := h.secrets.IsSecretRequired(projectID)
 	if secret == "" && requireSecret {
-		h.logger.Warn("Webhook secret required but not configured", zap.String("project", projectID))
+		h.logger.Warn("Webhook secret required but not configured - rejecting request", zap.String("project", projectID))
 		http.Error(w, "Webhook secret required", http.StatusUnauthorized)
 		return
+	}
+	if secret == "" && !requireSecret {
+		// Warn about missing secret even if not strictly required (security best practice)
+		h.logger.Warn("No webhook secret configured - request allowed but token verification skipped. "+
+			"Consider configuring a webhook secret for improved security.", zap.String("project", projectID))
 	}
 	if secret != "" && token != secret {
 		h.logger.Warn("Invalid GitLab token", zap.String("project", projectID))
