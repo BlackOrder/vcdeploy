@@ -1,0 +1,299 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold">Project Types</h1>
+        <button onclick="openNewTypeModal()"
+            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700">
+            <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+            </svg>
+            Add Project Type
+        </button>
+    </div>
+
+    <p class="text-dark-muted">
+        Project types define templates for different kinds of projects, including default build commands and deployment scripts.
+    </p>
+
+    <!-- Project Types Grid -->
+    <div id="types-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div class="text-center text-dark-muted py-12">Loading project types...</div>
+    </div>
+</div>
+
+<!-- New/Edit Project Type Modal -->
+<div id="type-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-dark-card border border-dark-border rounded-lg max-w-2xl w-full mx-4">
+        <div class="px-6 py-4 border-b border-dark-border flex items-center justify-between">
+            <h3 class="text-lg font-medium" id="type-modal-title">Add Project Type</h3>
+            <button onclick="closeTypeModal()" class="text-dark-muted hover:text-white">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        <form id="type-form" onsubmit="saveType(event)">
+            <input type="hidden" id="type-edit-name" value="">
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-dark-muted mb-1">Name</label>
+                    <input type="text" id="type-name" required pattern="[a-z0-9-]+"
+                        placeholder="nodejs, golang, python"
+                        class="w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text focus:outline-none focus:ring-2 focus:ring-green-500">
+                    <p class="mt-1 text-xs text-dark-muted">Use lowercase letters, numbers, and hyphens only</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-dark-muted mb-1">Description</label>
+                    <input type="text" id="type-description"
+                        placeholder="Node.js application with npm"
+                        class="w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text focus:outline-none focus:ring-2 focus:ring-green-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-dark-muted mb-1">Build Command</label>
+                    <textarea id="type-build-cmd" rows="4"
+                        placeholder="npm install&#10;npm run build"
+                        class="w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text font-mono text-sm focus:outline-none focus:ring-2 focus:ring-green-500"></textarea>
+                    <p class="mt-1 text-xs text-dark-muted">Commands to run during the build phase (one per line)</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-dark-muted mb-1">Deploy Command (optional)</label>
+                    <textarea id="type-deploy-cmd" rows="3"
+                        placeholder="systemctl restart myapp"
+                        class="w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text font-mono text-sm focus:outline-none focus:ring-2 focus:ring-green-500"></textarea>
+                    <p class="mt-1 text-xs text-dark-muted">Commands to run after deployment (one per line)</p>
+                </div>
+            </div>
+            <div class="px-6 py-4 border-t border-dark-border flex justify-end space-x-3">
+                <button type="button" onclick="closeTypeModal()"
+                    class="px-4 py-2 text-sm font-medium text-dark-muted hover:text-white border border-dark-border rounded-md">
+                    Cancel
+                </button>
+                <button type="submit"
+                    class="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-md">
+                    Save
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div id="delete-type-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-dark-card border border-dark-border rounded-lg max-w-md w-full mx-4">
+        <div class="px-6 py-4 border-b border-dark-border">
+            <h3 class="text-lg font-medium text-red-400">Delete Project Type</h3>
+        </div>
+        <div class="p-6">
+            <p class="text-dark-text">Are you sure you want to delete the project type <strong id="delete-type-name"></strong>?</p>
+            <p class="mt-2 text-sm text-dark-muted">Projects using this type will not be affected, but you won't be able to create new projects with this type.</p>
+        </div>
+        <div class="px-6 py-4 border-t border-dark-border flex justify-end space-x-3">
+            <button type="button" onclick="closeDeleteModal()"
+                class="px-4 py-2 text-sm font-medium text-dark-muted hover:text-white border border-dark-border rounded-md">
+                Cancel
+            </button>
+            <button type="button" onclick="confirmDeleteType()"
+                class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md">
+                Delete
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+let deleteTypeName = null;
+
+// Load types on page load
+document.addEventListener('DOMContentLoaded', () => loadTypes());
+
+function loadTypes() {
+    fetch('/api/v1/project-types')
+        .then(response => response.json())
+        .then(types => renderTypes(types))
+        .catch(err => {
+            console.error('Failed to load project types:', err);
+            document.getElementById('types-list').innerHTML = 
+                '<div class="text-center text-red-400 py-12">Failed to load project types</div>';
+        });
+}
+
+function renderTypes(types) {
+    const container = document.getElementById('types-list');
+    if (!types || types.length === 0) {
+        container.innerHTML = `
+            <div class="col-span-full text-center py-12">
+                <svg class="mx-auto h-12 w-12 text-dark-muted mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                </svg>
+                <p class="text-dark-muted">No project types defined.</p>
+                <p class="text-dark-muted text-sm mt-1">Click "Add Project Type" to create one.</p>
+            </div>`;
+        return;
+    }
+
+    container.innerHTML = types.map(t => `
+        <div class="bg-dark-card border border-dark-border rounded-lg overflow-hidden hover:border-green-500/50 transition-colors">
+            <div class="p-6">
+                <div class="flex items-start justify-between">
+                    <div>
+                        <h3 class="text-lg font-medium">${escapeHtml(t.name)}</h3>
+                        <p class="text-sm text-dark-muted mt-1">${escapeHtml(t.description) || 'No description'}</p>
+                    </div>
+                    <span class="px-2 py-1 text-xs rounded-full ${getTypeColor(t.name)}">
+                        ${getTypeIcon(t.name)}
+                    </span>
+                </div>
+                ${t.build_cmd ? `
+                <div class="mt-4">
+                    <p class="text-xs text-dark-muted mb-1">Build Command:</p>
+                    <pre class="bg-dark-bg rounded p-2 text-xs font-mono overflow-x-auto">${escapeHtml(t.build_cmd)}</pre>
+                </div>
+                ` : ''}
+            </div>
+            <div class="px-6 py-3 border-t border-dark-border bg-dark-bg flex justify-end space-x-3">
+                <button onclick="editType('${escapeHtml(t.name)}')"
+                    class="text-sm text-blue-400 hover:text-blue-300">
+                    Edit
+                </button>
+                <button onclick="deleteType('${escapeHtml(t.name)}')"
+                    class="text-sm text-red-400 hover:text-red-300">
+                    Delete
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function getTypeIcon(name) {
+    const icons = {
+        'nodejs': '⬢',
+        'node': '⬢',
+        'python': '🐍',
+        'golang': '🐹',
+        'go': '🐹',
+        'rust': '🦀',
+        'php': '🐘',
+        'ruby': '💎',
+        'java': '☕',
+        'static': '📄'
+    };
+    return icons[name.toLowerCase()] || '📦';
+}
+
+function getTypeColor(name) {
+    const colors = {
+        'nodejs': 'bg-green-900/50 text-green-300',
+        'node': 'bg-green-900/50 text-green-300',
+        'python': 'bg-yellow-900/50 text-yellow-300',
+        'golang': 'bg-cyan-900/50 text-cyan-300',
+        'go': 'bg-cyan-900/50 text-cyan-300',
+        'rust': 'bg-orange-900/50 text-orange-300',
+        'php': 'bg-purple-900/50 text-purple-300',
+        'ruby': 'bg-red-900/50 text-red-300',
+        'java': 'bg-orange-900/50 text-orange-300',
+        'static': 'bg-gray-900/50 text-gray-300'
+    };
+    return colors[name.toLowerCase()] || 'bg-blue-900/50 text-blue-300';
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+function openNewTypeModal() {
+    document.getElementById('type-modal-title').textContent = 'Add Project Type';
+    document.getElementById('type-form').reset();
+    document.getElementById('type-edit-name').value = '';
+    document.getElementById('type-name').disabled = false;
+    document.getElementById('type-modal').classList.remove('hidden');
+}
+
+function editType(name) {
+    fetch('/api/v1/project-types/' + encodeURIComponent(name))
+        .then(response => {
+            if (!response.ok) throw new Error('Type not found');
+            return response.json();
+        })
+        .then(type => {
+            document.getElementById('type-modal-title').textContent = 'Edit Project Type';
+            document.getElementById('type-edit-name').value = name;
+            document.getElementById('type-name').value = type.name;
+            document.getElementById('type-name').disabled = true;
+            document.getElementById('type-description').value = type.description || '';
+            document.getElementById('type-build-cmd').value = type.build_cmd || '';
+            document.getElementById('type-deploy-cmd').value = type.deploy_cmd || '';
+            document.getElementById('type-modal').classList.remove('hidden');
+        })
+        .catch(err => {
+            alert('Error loading project type: ' + err.message);
+        });
+}
+
+function closeTypeModal() {
+    document.getElementById('type-modal').classList.add('hidden');
+}
+
+function saveType(event) {
+    event.preventDefault();
+    
+    const isEdit = document.getElementById('type-edit-name').value !== '';
+    const name = document.getElementById('type-name').value;
+    const data = {
+        name: name,
+        description: document.getElementById('type-description').value,
+        build_cmd: document.getElementById('type-build-cmd').value,
+        deploy_cmd: document.getElementById('type-deploy-cmd').value
+    };
+
+    const url = isEdit ? '/api/v1/project-types/' + encodeURIComponent(name) : '/api/v1/project-types';
+    const method = isEdit ? 'PUT' : 'POST';
+
+    fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(response => {
+        if (!response.ok) throw new Error('Failed to save project type');
+        return response.json();
+    })
+    .then(() => {
+        closeTypeModal();
+        loadTypes();
+    })
+    .catch(err => {
+        alert('Error: ' + err.message);
+    });
+}
+
+function deleteType(name) {
+    deleteTypeName = name;
+    document.getElementById('delete-type-name').textContent = name;
+    document.getElementById('delete-type-modal').classList.remove('hidden');
+}
+
+function closeDeleteModal() {
+    document.getElementById('delete-type-modal').classList.add('hidden');
+    deleteTypeName = null;
+}
+
+function confirmDeleteType() {
+    if (!deleteTypeName) return;
+    
+    fetch('/api/v1/project-types/' + encodeURIComponent(deleteTypeName), { method: 'DELETE' })
+        .then(response => {
+            if (!response.ok) throw new Error('Failed to delete project type');
+            closeDeleteModal();
+            loadTypes();
+        })
+        .catch(err => {
+            alert('Error: ' + err.message);
+        });
+}
+</script>
+{{end}}
