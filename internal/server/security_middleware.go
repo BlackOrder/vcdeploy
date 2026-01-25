@@ -100,11 +100,15 @@ func DefaultSecurityConfig() SecurityConfig {
 }
 
 // defaultCSPDirectives returns default Content Security Policy directives.
+// Note: 'unsafe-inline' is required for script-src and style-src because the dashboard
+// templates use inline event handlers and style attributes. A future enhancement would
+// be to migrate to CSP nonces (script-src 'nonce-xxx') for stronger XSS protection,
+// which requires generating unique nonces per request and injecting them into templates.
 func defaultCSPDirectives() map[string]string {
 	return map[string]string{
 		"default-src": "'self'",
-		"script-src":  "'self' 'unsafe-inline'", // Allow inline scripts for templates
-		"style-src":   "'self' 'unsafe-inline'", // Allow inline styles
+		"script-src":  "'self' 'unsafe-inline'", // Required for template inline handlers; consider nonce migration
+		"style-src":   "'self' 'unsafe-inline'", // Required for template inline styles; consider nonce migration
 		"img-src":     "'self' data:",           // Allow data URIs for images
 		"font-src":    "'self'",
 		"connect-src": "'self'",

@@ -47,6 +47,7 @@ type GRPCAgentConnection struct {
 	ConnectedAt time.Time
 	LastMessage time.Time
 	Cancel      context.CancelFunc
+	CleanupDone chan struct{} // Closed when connection cleanup completes
 }
 
 // NewAgentServer creates a new agent gRPC server.
@@ -211,6 +212,7 @@ func (s *AgentServer) Connect(stream proto.AgentService_ConnectServer) error {
 		ConnectedAt: time.Now(),
 		LastMessage: time.Now(),
 		Cancel:      cancel,
+		CleanupDone: make(chan struct{}),
 	}
 
 	s.connectionMutex.Lock()
@@ -221,10 +223,17 @@ func (s *AgentServer) Connect(stream proto.AgentService_ConnectServer) error {
 			zap.Time("old_connected_at", existing.ConnectedAt),
 		)
 		existing.Cancel()
-		// Brief delay to allow old connection to start cleanup
+		cleanupChan := existing.CleanupDone
+		// Wait for old connection cleanup to complete (with timeout)
 		// This prevents command channel conflicts
 		s.connectionMutex.Unlock()
-		time.Sleep(100 * time.Millisecond)
+		select {
+		case <-cleanupChan:
+			// Cleanup completed
+		case <-time.After(500 * time.Millisecond):
+			s.logger.Warn("Timeout waiting for old connection cleanup",
+				zap.String("agent_id", agentID))
+		}
 		s.connectionMutex.Lock()
 	}
 	s.connections[agentID] = conn
@@ -448,8 +457,14 @@ func (s *AgentServer) sendCommands(ctx context.Context, agentID string, stream p
 // cleanupConnection removes an agent connection and updates status.
 func (s *AgentServer) cleanupConnection(agentID string) {
 	s.connectionMutex.Lock()
+	conn := s.connections[agentID]
 	delete(s.connections, agentID)
 	s.connectionMutex.Unlock()
+
+	// Signal that cleanup is complete (for connection replacement)
+	if conn != nil && conn.CleanupDone != nil {
+		close(conn.CleanupDone)
+	}
 
 	s.pendingCommandMutex.Lock()
 	if ch, ok := s.pendingCommands[agentID]; ok {
