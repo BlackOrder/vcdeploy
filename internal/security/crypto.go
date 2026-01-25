@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 
+	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -173,4 +174,76 @@ func GenerateToken(length int) (string, error) {
 // GenerateSessionID generates a session ID.
 func GenerateSessionID() (string, error) {
 	return GenerateToken(32)
+}
+
+// --- Passphrase-based encryption ---
+
+// EncryptWithPassphrase encrypts data using a passphrase with Argon2 key derivation.
+func EncryptWithPassphrase(plaintext, passphrase []byte) ([]byte, error) {
+	// Generate a random salt
+	salt := make([]byte, 16)
+	if _, err := rand.Read(salt); err != nil {
+		return nil, fmt.Errorf("generating salt: %w", err)
+	}
+
+	// Derive key from passphrase using Argon2id
+	key := argon2.IDKey(passphrase, salt, 1, 64*1024, 4, 32)
+
+	// Encrypt with AES-256-GCM
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("creating cipher: %w", err)
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("creating GCM: %w", err)
+	}
+
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, fmt.Errorf("generating nonce: %w", err)
+	}
+
+	// Format: salt (16 bytes) + nonce (12 bytes) + ciphertext
+	ciphertext := gcm.Seal(nil, nonce, plaintext, nil)
+	result := make([]byte, len(salt)+len(nonce)+len(ciphertext))
+	copy(result, salt)
+	copy(result[len(salt):], nonce)
+	copy(result[len(salt)+len(nonce):], ciphertext)
+
+	return result, nil
+}
+
+// DecryptWithPassphrase decrypts data using a passphrase.
+func DecryptWithPassphrase(ciphertext, passphrase []byte) ([]byte, error) {
+	if len(ciphertext) < 28 { // 16 (salt) + 12 (nonce)
+		return nil, fmt.Errorf("ciphertext too short")
+	}
+
+	// Extract salt, nonce, and encrypted data
+	salt := ciphertext[:16]
+	nonce := ciphertext[16:28]
+	encryptedData := ciphertext[28:]
+
+	// Derive key from passphrase using same parameters
+	key := argon2.IDKey(passphrase, salt, 1, 64*1024, 4, 32)
+
+	// Decrypt with AES-256-GCM
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("creating cipher: %w", err)
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("creating GCM: %w", err)
+	}
+
+	plaintext, err := gcm.Open(nil, nonce, encryptedData, nil)
+	if err != nil {
+		return nil, fmt.Errorf("decrypting (wrong passphrase?): %w", err)
+	}
+
+	return plaintext, nil
 }
