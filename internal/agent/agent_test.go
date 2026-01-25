@@ -3,6 +3,8 @@ package agent
 import (
 	"bytes"
 	"context"
+	"os"
+	"os/exec"
 	"testing"
 	"time"
 
@@ -519,4 +521,378 @@ func BenchmarkLocalRunnerSimpleCommand(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		runner.Run(ctx, "true", deploy.RunOptions{})
 	}
+}
+
+// TestLookupUserNumeric tests lookupUser with numeric UID.
+func TestLookupUserNumeric(t *testing.T) {
+	t.Parallel()
+
+	uid, err := lookupUser("0")
+	if err != nil {
+		t.Fatalf("lookupUser() error = %v", err)
+	}
+
+	if uid != 0 {
+		t.Errorf("lookupUser('0') = %d, want 0", uid)
+	}
+}
+
+// TestLookupUserRoot tests lookupUser with the root user.
+func TestLookupUserRoot(t *testing.T) {
+	t.Parallel()
+
+	uid, err := lookupUser("root")
+	if err != nil {
+		t.Fatalf("lookupUser('root') error = %v", err)
+	}
+
+	if uid != 0 {
+		t.Errorf("lookupUser('root') = %d, want 0", uid)
+	}
+}
+
+// TestLookupUserNotFound tests lookupUser with nonexistent user.
+func TestLookupUserNotFound(t *testing.T) {
+	t.Parallel()
+
+	_, err := lookupUser("nonexistent_user_12345")
+	if err == nil {
+		t.Error("lookupUser() expected error for nonexistent user")
+	}
+}
+
+// TestLookupGroupNumeric tests lookupGroup with numeric GID.
+func TestLookupGroupNumeric(t *testing.T) {
+	t.Parallel()
+
+	gid, err := lookupGroup("0")
+	if err != nil {
+		t.Fatalf("lookupGroup() error = %v", err)
+	}
+
+	if gid != 0 {
+		t.Errorf("lookupGroup('0') = %d, want 0", gid)
+	}
+}
+
+// TestLookupGroupRoot tests lookupGroup with the root group.
+func TestLookupGroupRoot(t *testing.T) {
+	t.Parallel()
+
+	gid, err := lookupGroup("root")
+	if err != nil {
+		t.Fatalf("lookupGroup('root') error = %v", err)
+	}
+
+	if gid != 0 {
+		t.Errorf("lookupGroup('root') = %d, want 0", gid)
+	}
+}
+
+// TestLookupGroupNotFound tests lookupGroup with nonexistent group.
+func TestLookupGroupNotFound(t *testing.T) {
+	t.Parallel()
+
+	_, err := lookupGroup("nonexistent_group_12345")
+	if err == nil {
+		t.Error("lookupGroup() expected error for nonexistent group")
+	}
+}
+
+// TestLookupUserPrimaryGroupRoot tests lookupUserPrimaryGroup for root.
+func TestLookupUserPrimaryGroupRoot(t *testing.T) {
+	t.Parallel()
+
+	gid, err := lookupUserPrimaryGroup("root")
+	if err != nil {
+		t.Fatalf("lookupUserPrimaryGroup('root') error = %v", err)
+	}
+
+	if gid != 0 {
+		t.Errorf("lookupUserPrimaryGroup('root') = %d, want 0", gid)
+	}
+}
+
+// TestLookupUserPrimaryGroupNotFound tests lookupUserPrimaryGroup for nonexistent user.
+func TestLookupUserPrimaryGroupNotFound(t *testing.T) {
+	t.Parallel()
+
+	_, err := lookupUserPrimaryGroup("nonexistent_user_12345")
+	if err == nil {
+		t.Error("lookupUserPrimaryGroup() expected error for nonexistent user")
+	}
+}
+
+// TestLocalRunnerSetUserGroupRoot tests setUserGroup with root.
+func TestLocalRunnerSetUserGroupRoot(t *testing.T) {
+	t.Parallel()
+
+	logger := zap.NewNop()
+	runner := NewLocalRunner(logger)
+
+	// We can't actually run as root in tests, but we can test the lookup logic
+	cmd := exec.Command("true")
+	err := runner.setUserGroup(cmd, "root", "root")
+
+	if err != nil {
+		t.Fatalf("setUserGroup() error = %v", err)
+	}
+
+	if cmd.SysProcAttr == nil {
+		t.Fatal("setUserGroup() should set SysProcAttr")
+	}
+
+	if cmd.SysProcAttr.Credential == nil {
+		t.Fatal("setUserGroup() should set Credential")
+	}
+
+	if cmd.SysProcAttr.Credential.Uid != 0 {
+		t.Errorf("Uid = %d, want 0", cmd.SysProcAttr.Credential.Uid)
+	}
+
+	if cmd.SysProcAttr.Credential.Gid != 0 {
+		t.Errorf("Gid = %d, want 0", cmd.SysProcAttr.Credential.Gid)
+	}
+}
+
+// TestLocalRunnerSetUserGroupNumeric tests setUserGroup with numeric IDs.
+func TestLocalRunnerSetUserGroupNumeric(t *testing.T) {
+	t.Parallel()
+
+	logger := zap.NewNop()
+	runner := NewLocalRunner(logger)
+
+	cmd := exec.Command("true")
+	err := runner.setUserGroup(cmd, "1000", "1000")
+
+	if err != nil {
+		t.Fatalf("setUserGroup() error = %v", err)
+	}
+
+	if cmd.SysProcAttr.Credential.Uid != 1000 {
+		t.Errorf("Uid = %d, want 1000", cmd.SysProcAttr.Credential.Uid)
+	}
+
+	if cmd.SysProcAttr.Credential.Gid != 1000 {
+		t.Errorf("Gid = %d, want 1000", cmd.SysProcAttr.Credential.Gid)
+	}
+}
+
+// TestLocalRunnerSetUserGroupFailClosed tests setUserGroup fails with unknown user.
+func TestLocalRunnerSetUserGroupFailClosed(t *testing.T) {
+	t.Parallel()
+
+	logger := zap.NewNop()
+	runner := NewLocalRunner(logger)
+
+	cmd := exec.Command("true")
+	err := runner.setUserGroup(cmd, "nonexistent_user_12345", "")
+
+	if err == nil {
+		t.Error("setUserGroup() expected error for unknown user (fail-closed)")
+	}
+}
+
+// TestLocalRunnerSetUserGroupFailOpen tests setUserGroup with FailOpenOnUserLookup.
+func TestLocalRunnerSetUserGroupFailOpen(t *testing.T) {
+	t.Parallel()
+
+	logger := zap.NewNop()
+	runner := NewLocalRunner(logger)
+	runner.FailOpenOnUserLookup = true
+
+	cmd := exec.Command("true")
+	err := runner.setUserGroup(cmd, "nonexistent_user_12345", "")
+
+	if err != nil {
+		t.Errorf("setUserGroup() with FailOpenOnUserLookup should not error: %v", err)
+	}
+
+	// SysProcAttr should NOT be set when failing open
+	if cmd.SysProcAttr != nil && cmd.SysProcAttr.Credential != nil {
+		t.Error("setUserGroup() should not set credentials when failing open")
+	}
+}
+
+// TestLocalRunnerSetUserGroupWithPrimaryGroup tests setUserGroup uses primary group.
+func TestLocalRunnerSetUserGroupWithPrimaryGroup(t *testing.T) {
+	t.Parallel()
+
+	logger := zap.NewNop()
+	runner := NewLocalRunner(logger)
+
+	cmd := exec.Command("true")
+	// Use root with empty group to trigger primary group lookup
+	err := runner.setUserGroup(cmd, "root", "")
+
+	if err != nil {
+		t.Fatalf("setUserGroup() error = %v", err)
+	}
+
+	if cmd.SysProcAttr == nil || cmd.SysProcAttr.Credential == nil {
+		t.Fatal("setUserGroup() should set credentials")
+	}
+
+	// Root's primary group should be 0
+	if cmd.SysProcAttr.Credential.Gid != 0 {
+		t.Errorf("Gid = %d, want 0 (root's primary group)", cmd.SysProcAttr.Credential.Gid)
+	}
+}
+
+// TestLocalRunnerRunWithUser tests Run with user option (requires root).
+func TestLocalRunnerRunWithUser(t *testing.T) {
+	t.Parallel()
+
+	// Skip this test if not running as root
+	if os.Getuid() != 0 {
+		t.Skip("Skipping test that requires root")
+	}
+
+	logger := zap.NewNop()
+	runner := NewLocalRunner(logger)
+	ctx := context.Background()
+
+	opts := deploy.RunOptions{
+		User:  "nobody",
+		Group: "nogroup",
+	}
+
+	result, err := runner.Run(ctx, "id -u", opts)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	if result.ExitCode != 0 {
+		t.Errorf("exit code = %d, want 0", result.ExitCode)
+	}
+}
+
+// TestLocalRunnerRunWithOutputStreaming tests streaming output.
+func TestLocalRunnerRunWithOutputStreaming(t *testing.T) {
+	t.Parallel()
+
+	logger := zap.NewNop()
+	runner := NewLocalRunner(logger)
+	ctx := context.Background()
+
+	var stdout, stderr bytes.Buffer
+	err := runner.RunWithOutput(ctx, "echo stdout && echo stderr >&2", &stdout, &stderr, deploy.RunOptions{})
+
+	if err != nil {
+		t.Fatalf("RunWithOutput() error = %v", err)
+	}
+
+	if stdout.String() != "stdout\n" {
+		t.Errorf("stdout = %q, want %q", stdout.String(), "stdout\n")
+	}
+
+	if stderr.String() != "stderr\n" {
+		t.Errorf("stderr = %q, want %q", stderr.String(), "stderr\n")
+	}
+}
+
+// TestLocalRunnerRunWithOutputTimeout tests timeout with streaming output.
+func TestLocalRunnerRunWithOutputTimeout(t *testing.T) {
+	t.Parallel()
+
+	logger := zap.NewNop()
+	runner := NewLocalRunner(logger)
+	ctx := context.Background()
+
+	var stdout, stderr bytes.Buffer
+	opts := deploy.RunOptions{
+		Timeout: 1 * time.Second,
+	}
+
+	err := runner.RunWithOutput(ctx, "sleep 10", &stdout, &stderr, opts)
+
+	if err == nil {
+		t.Error("RunWithOutput() expected error on timeout")
+	}
+}
+
+// TestLocalRunnerRunInvalidCommand tests running an invalid command.
+func TestLocalRunnerRunInvalidCommand(t *testing.T) {
+	t.Parallel()
+
+	logger := zap.NewNop()
+	runner := NewLocalRunner(logger)
+	ctx := context.Background()
+
+	// Command that doesn't exist
+	result, err := runner.Run(ctx, "nonexistent_command_12345", deploy.RunOptions{})
+
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	if result.ExitCode == 0 {
+		t.Error("exit code should be non-zero for nonexistent command")
+	}
+}
+
+// TestLocalRunnerRunWithOutputInvalidCommand tests streaming output with invalid command.
+func TestLocalRunnerRunWithOutputInvalidCommand(t *testing.T) {
+	t.Parallel()
+
+	logger := zap.NewNop()
+	runner := NewLocalRunner(logger)
+	ctx := context.Background()
+
+	var stdout, stderr bytes.Buffer
+	err := runner.RunWithOutput(ctx, "nonexistent_command_12345", &stdout, &stderr, deploy.RunOptions{})
+
+	if err == nil {
+		t.Error("RunWithOutput() expected error for nonexistent command")
+	}
+}
+
+// TestAgentStatusWithConnection tests Status when connected.
+func TestAgentStatusWithConnection(t *testing.T) {
+	t.Parallel()
+
+	logger := zap.NewNop()
+	cfg := &config.AgentConfig{
+		Agent:  config.AgentIdentityConfig{ID: "test"},
+		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	}
+	agent, _ := NewAgent(cfg, logger)
+	agent.running = false
+
+	status := agent.Status()
+	if status != "stopped" {
+		t.Errorf("Status() = %q, want %q", status, "stopped")
+	}
+}
+
+// TestAgentActiveDeploymentsTracker tests the deployment tracking.
+func TestAgentActiveDeploymentsTracker(t *testing.T) {
+	t.Parallel()
+
+	logger := zap.NewNop()
+	cfg := &config.AgentConfig{
+		Agent:  config.AgentIdentityConfig{ID: "test"},
+		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	}
+	agent, _ := NewAgent(cfg, logger)
+
+	// Test empty map
+	if len(agent.activeDeployments) != 0 {
+		t.Error("activeDeployments should be empty initially")
+	}
+
+	// Add a deployment
+	agent.deployMu.Lock()
+	agent.activeDeployments["deploy-1"] = &activeDeployment{
+		ID:        "deploy-1",
+		Project:   "test-project",
+		StartTime: time.Now(),
+	}
+	agent.deployMu.Unlock()
+
+	agent.deployMu.RLock()
+	if len(agent.activeDeployments) != 1 {
+		t.Errorf("activeDeployments count = %d, want 1", len(agent.activeDeployments))
+	}
+	agent.deployMu.RUnlock()
 }
