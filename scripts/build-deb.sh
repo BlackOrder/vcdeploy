@@ -51,66 +51,9 @@ chmod +x "$WORKDIR/usr/local/bin/vcdeploy-agent"
 cp README.md "$WORKDIR/usr/share/doc/vcdeploy/"
 cp LICENSE "$WORKDIR/usr/share/doc/vcdeploy/" 2>/dev/null || echo "No LICENSE file found"
 
-# Create systemd service files
-cat > "$WORKDIR/lib/systemd/system/vcdeploy-master.service" << 'EOF'
-[Unit]
-Description=VCDeploy Master Server
-Documentation=https://github.com/BlackOrder/vcdeploy
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=vcdeploy
-Group=vcdeploy
-ExecStart=/usr/local/bin/vcdeploy master start
-ExecReload=/bin/kill -HUP $MAINPID
-Restart=always
-RestartSec=5
-LimitNOFILE=65535
-Environment=VCDEPLOY_CONFIG=/etc/vcdeploy/master.yaml
-WorkingDirectory=/var/lib/vcdeploy
-
-# Security hardening
-NoNewPrivileges=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/var/lib/vcdeploy /var/log/vcdeploy /etc/vcdeploy
-PrivateTmp=true
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-cat > "$WORKDIR/lib/systemd/system/vcdeploy-agent.service" << 'EOF'
-[Unit]
-Description=VCDeploy Agent
-Documentation=https://github.com/BlackOrder/vcdeploy
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=vcdeploy
-Group=vcdeploy
-ExecStart=/usr/local/bin/vcdeploy-agent start
-ExecReload=/bin/kill -HUP $MAINPID
-Restart=always
-RestartSec=5
-LimitNOFILE=65535
-Environment=VCDEPLOY_AGENT_CONFIG=/etc/vcdeploy/agent.yaml
-WorkingDirectory=/var/lib/vcdeploy
-
-# Security hardening
-NoNewPrivileges=true
-ProtectSystem=strict
-ProtectHome=read-only
-ReadWritePaths=/var/lib/vcdeploy /var/log/vcdeploy
-PrivateTmp=true
-
-[Install]
-WantedBy=multi-user.target
-EOF
+# Copy systemd service files from canonical location
+cp init/systemd/vcdeploy-master.service "$WORKDIR/lib/systemd/system/"
+cp init/systemd/vcdeploy-agent.service "$WORKDIR/lib/systemd/system/"
 
 # Create sample configuration
 cat > "$WORKDIR/etc/vcdeploy/master.yaml.sample" << 'EOF'
