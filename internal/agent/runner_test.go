@@ -14,7 +14,10 @@ import (
 func newTestRunner(t *testing.T) *LocalRunner {
 	t.Helper()
 	logger := zap.NewNop()
-	return NewLocalRunner(logger)
+	runner := NewLocalRunner(logger)
+	// Disable validation in tests - tests use shell commands not in deployment allowlist
+	runner.SkipValidation = true
+	return runner
 }
 
 func TestLocalRunner_Run_Echo(t *testing.T) {
