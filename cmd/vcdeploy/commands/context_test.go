@@ -3,7 +3,6 @@ package commands
 import (
 	"bytes"
 	"context"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -330,14 +329,6 @@ func TestNewProjectListRunner(t *testing.T) {
 	if runner.ctx != ctx {
 		t.Error("Runner should store context")
 	}
-}
-
-// _mockReadWriter implements io.Reader and io.Writer for testing
-//
-//nolint:unused // Reserved for future tests
-type _mockReadWriter struct {
-	io.Reader
-	io.Writer
 }
 
 func TestAppContext_InputOutput(t *testing.T) {

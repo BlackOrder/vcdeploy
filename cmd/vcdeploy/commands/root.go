@@ -293,7 +293,6 @@ var masterBackupCmd = &cobra.Command{
 // Global state for CLI operations
 var (
 	globalConfig *config.MasterConfig
-	globalDB     *storage.DB //nolint:unused // Used in master command
 	globalLogger *zap.Logger
 )
 
@@ -374,7 +373,6 @@ func runMasterStart(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("open database: %w", err)
 	}
 	defer db.Close()
-	globalDB = db
 
 	// Create and start master server
 	srv, err := server.NewMasterServer(globalConfig, db, globalLogger)
@@ -1350,11 +1348,6 @@ func runProjectRollback(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
-}
-
-//nolint:unused // Reserved for future use
-func _timePtr(t time.Time) *time.Time {
-	return &t
 }
 
 func runTypeList(cmd *cobra.Command, args []string) error {
