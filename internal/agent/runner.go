@@ -16,32 +16,56 @@ import (
 	"time"
 
 	"github.com/BlackOrder/vcdeploy/internal/deploy"
+	"github.com/BlackOrder/vcdeploy/internal/security"
 	"go.uber.org/zap"
 )
 
 // LocalRunner executes commands locally on the agent host.
 type LocalRunner struct {
-	logger *zap.Logger
+	logger    *zap.Logger
+	validator *security.CommandValidator
 	// FailOpenOnUserLookup controls behavior when user/group lookup fails.
 	// If true, logs a warning and continues without user switching (less secure).
 	// If false (default), returns an error when user lookup fails.
 	FailOpenOnUserLookup bool
+	// SkipValidation disables command validation (NOT recommended for production).
+	// Only use this for trusted internal commands or testing.
+	SkipValidation bool
 }
 
-// NewLocalRunner creates a new local command runner.
+// NewLocalRunner creates a new local command runner with default command validation.
 func NewLocalRunner(logger *zap.Logger) *LocalRunner {
-	return &LocalRunner{logger: logger}
+	return &LocalRunner{
+		logger:    logger,
+		validator: security.NewCommandValidator(),
+	}
+}
+
+// NewLocalRunnerWithValidator creates a new local command runner with a custom validator.
+func NewLocalRunnerWithValidator(logger *zap.Logger, validator *security.CommandValidator) *LocalRunner {
+	return &LocalRunner{
+		logger:    logger,
+		validator: validator,
+	}
 }
 
 // Run executes a command and returns the result.
 func (r *LocalRunner) Run(ctx context.Context, cmd string, opts deploy.RunOptions) (*deploy.CommandResult, error) {
 	start := time.Now()
 
+	// Validate command before execution (defense against command injection - G204)
+	if !r.SkipValidation && r.validator != nil {
+		if err := r.validator.Validate(cmd); err != nil {
+			return nil, fmt.Errorf("command validation failed: %w", err)
+		}
+	}
+
 	// Build the command
 	fullCmd := r.buildCommand(cmd, opts)
 	r.logger.Debug("Running command", zap.String("cmd", fullCmd))
 
 	// Create the exec command
+	// #nosec G204 - command is validated above via CommandValidator
 	c := exec.CommandContext(ctx, "bash", "-c", fullCmd)
 
 	// Set working directory
@@ -84,11 +108,19 @@ func (r *LocalRunner) Run(ctx context.Context, cmd string, opts deploy.RunOption
 
 // RunWithOutput executes a command with streaming output.
 func (r *LocalRunner) RunWithOutput(ctx context.Context, cmd string, stdout, stderr io.Writer, opts deploy.RunOptions) error {
+	// Validate command before execution (defense against command injection - G204)
+	if !r.SkipValidation && r.validator != nil {
+		if err := r.validator.Validate(cmd); err != nil {
+			return fmt.Errorf("command validation failed: %w", err)
+		}
+	}
+
 	// Build the command
 	fullCmd := r.buildCommand(cmd, opts)
 	r.logger.Debug("Running command with output", zap.String("cmd", fullCmd))
 
 	// Create the exec command
+	// #nosec G204 - command is validated above via CommandValidator
 	c := exec.CommandContext(ctx, "bash", "-c", fullCmd)
 
 	// Set working directory

@@ -22,7 +22,7 @@ linters:
     - unused
     # Security - important
     - gosec
-    # Code quality - medium priority
+    # Code quality - high priority
     - bodyclose
     - durationcheck
     - errorlint
@@ -33,6 +33,12 @@ linters:
     - sqlclosecheck
     - unconvert
     - whitespace
+    # Additional security and quality linters
+    - gocritic
+    - noctx
+    - prealloc
+    - copyloopvar
+    - revive
 
 linters-settings:
   errcheck:
@@ -74,14 +80,38 @@ linters-settings:
   gosec:
     excludes:
       - G104  # Unhandled errors (covered by errcheck)
-      - G204  # Subprocess launched with variable
-      - G304  # File path from variable
-      - G301  # Directory permissions
-      - G302  # File permissions
-      - G306  # WriteFile permissions
-      - G115  # Integer overflow conversion (acceptable for our use case)
+      # G204 - now protected by CommandValidator, #nosec where validated
+      # G304 - now protected by SafeOps, #nosec where validated
+      - G301  # Directory permissions (validated by SafeOps)
+      - G302  # File permissions (validated by SafeOps)
+      - G306  # WriteFile permissions (validated by SafeOps)
+      # G115 - now has bounds validation, #nosec where validated
     severity: medium
     confidence: medium
+
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - style
+      - performance
+    disabled-checks:
+      - commentedOutCode
+      - hugeParam
+
+  revive:
+    ignore-generated-header: true
+    rules:
+      - name: blank-imports
+      - name: context-as-argument
+      - name: context-keys-type
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: exported
+      - name: increment-decrement
+      - name: var-naming
+      - name: package-comments
+        disabled: true  # Allow packages without comments
 
   misspell:
     locale: US
