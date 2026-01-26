@@ -340,7 +340,7 @@ func initLogger(level string) error {
 
 	logger, err := config.Build()
 	if err != nil {
-		return err
+		return fmt.Errorf("build logger: %w", err)
 	}
 	globalLogger = logger
 	return nil
