@@ -50,8 +50,8 @@ const (
 	// TestUserAgent is a sample user agent string.
 	TestUserAgent = "Test Agent/1.0"
 
-	// TestTOTPSecret is a sample TOTP secret.
-	TestTOTPSecret = "JBSWY3DPEHPK3PXP"
+	// TestTOTPSecret is a sample TOTP secret (test-only, not production credentials).
+	TestTOTPSecret = "JBSWY3DPEHPK3PXP" // #nosec G101 - intentional test-only credential
 
 	// TestAPIKeyPrefix is a sample API key prefix.
 	TestAPIKeyPrefix = "vc_test_"

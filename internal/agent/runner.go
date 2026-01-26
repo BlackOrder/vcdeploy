@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/exec"
 	"strconv"
@@ -197,11 +198,19 @@ func (r *LocalRunner) setUserGroup(cmd *exec.Cmd, user, group string) error {
 		}
 	}
 
+	// Validate UID/GID bounds before conversion (defense-in-depth against G115)
+	if uid < 0 || uid > math.MaxUint32 {
+		return fmt.Errorf("invalid uid %d: must be in range [0, %d]", uid, math.MaxUint32)
+	}
+	if gid < 0 || gid > math.MaxUint32 {
+		return fmt.Errorf("invalid gid %d: must be in range [0, %d]", gid, math.MaxUint32)
+	}
+
 	// Set the credentials on the command
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Credential: &syscall.Credential{
-			Uid: uint32(uid),
-			Gid: uint32(gid),
+			Uid: uint32(uid), // #nosec G115 - bounds validated above
+			Gid: uint32(gid), // #nosec G115 - bounds validated above
 		},
 	}
 

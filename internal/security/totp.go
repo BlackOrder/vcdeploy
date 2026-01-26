@@ -4,7 +4,7 @@ package security
 import (
 	"crypto/hmac"
 	"crypto/rand"
-	"crypto/sha1"
+	"crypto/sha1" //nolint:gosec // G505: Required by RFC 6238 TOTP specification - HMAC-SHA1 is secure
 	"encoding/base32"
 	"encoding/binary"
 	"fmt"
@@ -64,8 +64,8 @@ func generateTOTP(secret string, timestamp int64, config TOTPConfig) string {
 		return ""
 	}
 
-	// Calculate counter
-	counter := uint64(timestamp / int64(config.Period))
+	// Calculate counter (Unix timestamps are always positive, so int64->uint64 is safe)
+	counter := uint64(timestamp / int64(config.Period)) // #nosec G115 - int64->uint64 safe for positive timestamps
 
 	// Convert counter to bytes (big-endian)
 	counterBytes := make([]byte, 8)
