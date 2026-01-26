@@ -883,7 +883,10 @@ func (db *DB) ensureMigrationsTable() error {
 			applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		)
 	`)
-	return err
+	if err != nil {
+		return fmt.Errorf("create migrations table: %w", err)
+	}
+	return nil
 }
 
 // getCurrentVersion returns the highest applied migration version.
@@ -891,7 +894,7 @@ func (db *DB) getCurrentVersion() (int, error) {
 	var version sql.NullInt64
 	err := db.conn.QueryRow(`SELECT MAX(version) FROM schema_migrations`).Scan(&version)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("query max version: %w", err)
 	}
 	if !version.Valid {
 		return 0, nil
@@ -903,7 +906,7 @@ func (db *DB) getCurrentVersion() (int, error) {
 func (db *DB) getAppliedMigrations() ([]MigrationRecord, error) {
 	rows, err := db.conn.Query(`SELECT version, applied_at FROM schema_migrations ORDER BY version`)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query migrations: %w", err)
 	}
 	defer rows.Close()
 
@@ -911,11 +914,14 @@ func (db *DB) getAppliedMigrations() ([]MigrationRecord, error) {
 	for rows.Next() {
 		var r MigrationRecord
 		if err := rows.Scan(&r.Version, &r.AppliedAt); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan migration record: %w", err)
 		}
 		records = append(records, r)
 	}
-	return records, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate migrations: %w", err)
+	}
+	return records, nil
 }
 
 // applyMigration applies a single migration (up or down) within a transaction.
@@ -959,7 +965,7 @@ func (db *DB) migrateFromLegacy() error {
 		WHERE type='table' AND name='schema_migrations'
 	`).Scan(&count)
 	if err != nil {
-		return err
+		return fmt.Errorf("check migrations table: %w", err)
 	}
 
 	if count > 0 {
@@ -973,7 +979,7 @@ func (db *DB) migrateFromLegacy() error {
 		WHERE type='table' AND name='users'
 	`).Scan(&count)
 	if err != nil {
-		return err
+		return fmt.Errorf("check users table: %w", err)
 	}
 
 	if count == 0 {
@@ -983,7 +989,7 @@ func (db *DB) migrateFromLegacy() error {
 
 	// Create migrations table
 	if err := db.ensureMigrationsTable(); err != nil {
-		return err
+		return fmt.Errorf("ensure migrations table: %w", err)
 	}
 
 	// Check which tables exist and mark corresponding migrations as applied
@@ -1008,7 +1014,7 @@ func (db *DB) migrateFromLegacy() error {
 			WHERE type='table' AND name=?
 		`, table).Scan(&count)
 		if err != nil {
-			return err
+			return fmt.Errorf("check table %s: %w", table, err)
 		}
 		if count > 0 && version > maxApplied {
 			maxApplied = version
@@ -1021,7 +1027,7 @@ func (db *DB) migrateFromLegacy() error {
 			INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)
 		`, i)
 		if err != nil {
-			return err
+			return fmt.Errorf("mark migration %d applied: %w", i, err)
 		}
 	}
 

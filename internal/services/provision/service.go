@@ -159,7 +159,7 @@ func (s *Service) Cancel(ctx context.Context, id string) error {
 	// Get current job to check status
 	job, err := s.GetJob(ctx, id)
 	if err != nil {
-		return err
+		return fmt.Errorf("%s: get job: %w", op, err)
 	}
 
 	if job.Status != "pending" && job.Status != "running" {
