@@ -209,12 +209,12 @@ func (a *Agent) Register(ctx context.Context, token string) (cert []byte, caCert
 
 	// Get disk info
 	if diskStat, err := disk.Usage(a.config.Paths.Releases); err == nil {
-		caps.DiskSpaceBytes = int64(diskStat.Total)
+		caps.DiskSpaceBytes = int64(diskStat.Total) // #nosec G115 - uint64->int64 safe: overflow impossible (>9EB)
 	}
 
 	// Get memory info
 	if vmStat, err := mem.VirtualMemory(); err == nil {
-		caps.MemoryBytes = int64(vmStat.Total)
+		caps.MemoryBytes = int64(vmStat.Total) // #nosec G115 - uint64->int64 safe: overflow impossible (>9EB)
 	}
 
 	req := &pb.RegisterRequest{
@@ -328,7 +328,7 @@ func (a *Agent) collectStats() *pb.AgentStats {
 	// Disk usage (check the releases path)
 	if diskStat, err := disk.Usage(a.config.Paths.Releases); err == nil {
 		stats.DiskPercent = diskStat.UsedPercent
-		stats.DiskFreeBytes = int64(diskStat.Free)
+		stats.DiskFreeBytes = int64(diskStat.Free) // #nosec G115 - uint64->int64 safe: overflow impossible (>9EB)
 	}
 
 	return stats
