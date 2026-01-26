@@ -1,5 +1,10 @@
 # vcdeploy
 
+[![CI](https://github.com/BlackOrder/vcdeploy/actions/workflows/ci.yml/badge.svg)](https://github.com/BlackOrder/vcdeploy/actions/workflows/ci.yml)
+[![Security](https://github.com/BlackOrder/vcdeploy/actions/workflows/security.yml/badge.svg)](https://github.com/BlackOrder/vcdeploy/actions/workflows/security.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/BlackOrder/vcdeploy)](https://goreportcard.com/report/github.com/BlackOrder/vcdeploy)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+
 A deployment platform with master-agent architecture for automated, webhook-driven deployments.
 
 ## Features
@@ -13,6 +18,31 @@ A deployment platform with master-agent architecture for automated, webhook-driv
 - **Comprehensive audit logging** for CLI and UI actions
 - **Automatic backups** for database and config files
 - **Auto key rotation** for secrets encryption
+
+## Quick Installation
+
+**Linux/macOS (recommended):**
+```bash
+curl -fsSL https://raw.githubusercontent.com/BlackOrder/vcdeploy/main/scripts/install.sh | bash
+```
+
+**Homebrew (macOS/Linux):**
+```bash
+brew tap BlackOrder/vcdeploy
+brew install vcdeploy
+```
+
+**DEB (Debian/Ubuntu):**
+```bash
+# Download latest release
+wget https://github.com/BlackOrder/vcdeploy/releases/latest/download/vcdeploy_amd64.deb
+sudo dpkg -i vcdeploy_amd64.deb
+```
+
+**RPM (RHEL/Fedora/CentOS):**
+```bash
+sudo dnf install https://github.com/BlackOrder/vcdeploy/releases/latest/download/vcdeploy-x86_64.rpm
+```
 
 ## Architecture
 
@@ -35,6 +65,60 @@ A deployment platform with master-agent architecture for automated, webhook-driv
 │    metrics      │                │    required     │
 └─────────────────┘                └─────────────────┘
 ```
+
+### Internal Architecture
+
+VCDeploy follows a clean layered architecture:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                       HTTP Layer                                │
+│  (internal/server/api_handlers.go, master.go)                  │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      Service Layer                              │
+│  (internal/services/*)                                          │
+│                                                                 │
+│  ┌───────┐ ┌───────┐ ┌────────┐ ┌───────────┐ ┌────────┐       │
+│  │ Users │ │Agents │ │Projects│ │Deployments│ │Secrets │       │
+│  └───────┘ └───────┘ └────────┘ └───────────┘ └────────┘       │
+│  ┌───────┐ ┌────────┐ ┌───────────┐ ┌────────┐                 │
+│  │ Audit │ │Sessions│ │  API Keys │ │Settings│                 │
+│  └───────┘ └────────┘ └───────────┘ └────────┘                 │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      Storage Layer                              │
+│  (internal/storage/db.go, models.go)                           │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Service Layer
+
+All business logic is encapsulated in services located in `internal/services/`:
+
+| Service | Package | Description |
+|---------|---------|-------------|
+| Users | `users` | User account management, authentication |
+| Agents | `agents` | Deployment agent registration and status |
+| Projects | `projects` | Project configuration and types |
+| Deployments | `deployments` | Deployment execution, logs, and scheduling |
+| Secrets | `secrets` | Encrypted secret storage (AES-256-GCM) |
+| Audit | `audit` | Audit logging and filtering |
+| Sessions | `sessions` | User session management |
+| API Keys | `apikeys` | API key management |
+| Settings | `settings` | Application settings |
+
+Each service:
+- Implements an interface defined in `internal/services/interfaces.go`
+- Uses standard errors from `internal/services/errors.go`
+- Accepts `context.Context` for cancellation and timeouts
+- Has comprehensive unit tests
+
+See [internal/services/README.md](internal/services/README.md) for detailed service layer documentation.
 
 ## Quick Start
 
@@ -190,6 +274,86 @@ vcdeploy uses a symlink-based deployment strategy (like Capistrano/Deployer):
 - **Zero-downtime**: Atomic symlink swap
 - **Instant rollback**: Just update symlink to previous release
 - **Shared files**: `.env`, uploads, etc. persist across releases
+
+## Development
+
+### Requirements
+
+- Go 1.25+
+- SQLite 3
+- golangci-lint (for linting)
+- protoc (for gRPC proto generation)
+
+### Build
+
+```bash
+# Build all binaries
+make build
+
+# Build master only
+make build-master
+
+# Build agent only
+make build-agent
+```
+
+### Test
+
+```bash
+# Run all tests
+make test
+
+# Run with race detector
+go test -race ./...
+
+# Run with coverage report
+make test-coverage
+
+# Run service tests only
+go test ./internal/services/...
+
+# Run server integration tests
+go test -v ./internal/server/...
+
+# Run benchmarks
+make test-bench
+```
+
+### Lint
+
+```bash
+# Run linter
+make lint
+
+# Run go vet
+make vet
+
+# Format code
+make fmt
+```
+
+### Security Checks
+
+```bash
+# Run vulnerability check
+make vuln
+
+# Run security scanner
+make gosec
+
+# Run all security checks
+make security
+```
+
+### Run Locally
+
+```bash
+# Run master in development mode
+make dev
+
+# Run agent in development mode
+make dev-agent
+```
 
 ## Security
 

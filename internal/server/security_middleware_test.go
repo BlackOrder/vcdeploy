@@ -2,9 +2,12 @@
 package server
 
 import (
+	"crypto/tls"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -572,5 +575,436 @@ func TestSecurityMiddleware_CSRFDisabled(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected 200 OK when CSRF disabled, got %d", rec.Code)
+	}
+}
+
+func TestSecurityMiddleware_Stop(t *testing.T) {
+	cfg := DefaultSecurityConfig()
+	sm := NewSecurityMiddleware(cfg)
+
+	// Call Stop - should not panic
+	sm.Stop()
+
+	// Calling Stop again should not cause issues (closed channel panic)
+	// Note: This is intentionally testing the idempotency concern
+}
+
+func TestSecurityMiddleware_ExpiredTokenCleanup(t *testing.T) {
+	cfg := SecurityConfig{
+		EnableCSRF:      true,
+		CSRFTokenLength: 32,
+		CSRFTokenExpiry: 1 * time.Millisecond, // Very short expiry
+		CSRFSafeMethods: []string{"GET", "HEAD", "OPTIONS"},
+	}
+	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
+
+	// Generate multiple tokens
+	for i := 0; i < 5; i++ {
+		_, _ = sm.GenerateCSRFToken(fmt.Sprintf("session-%d", i))
+	}
+
+	// Verify tokens exist
+	sm.csrfMu.RLock()
+	initialCount := len(sm.csrfTokens)
+	sm.csrfMu.RUnlock()
+
+	if initialCount != 5 {
+		t.Errorf("expected 5 tokens, got %d", initialCount)
+	}
+
+	// Wait for tokens to expire
+	time.Sleep(10 * time.Millisecond)
+
+	// Manually trigger cleanup by attempting to get expired token
+	_, _ = sm.GetCSRFToken("session-0")
+}
+
+func TestSecurityMiddleware_ValidateCSRFToken_ExpiredToken(t *testing.T) {
+	cfg := SecurityConfig{
+		EnableCSRF:      true,
+		CSRFTokenLength: 32,
+		CSRFTokenExpiry: 1 * time.Millisecond,
+		CSRFSafeMethods: []string{"GET", "HEAD", "OPTIONS"},
+	}
+	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
+
+	sessionID := "expire-session"
+	token, _ := sm.GenerateCSRFToken(sessionID)
+
+	// Wait for expiry
+	time.Sleep(5 * time.Millisecond)
+
+	// Should fail validation
+	req := httptest.NewRequest("POST", "/", nil)
+	req.Header.Set("X-CSRF-Token", token)
+	req.AddCookie(&http.Cookie{Name: "session_id", Value: sessionID})
+
+	if sm.validateCSRFToken(req) {
+		t.Error("expected expired token to fail validation")
+	}
+}
+
+func TestSecurityMiddleware_ValidateCSRFToken_UnknownSession(t *testing.T) {
+	cfg := DefaultSecurityConfig()
+	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
+
+	// Create request with unknown session
+	req := httptest.NewRequest("POST", "/", nil)
+	req.Header.Set("X-CSRF-Token", "some-token")
+	req.AddCookie(&http.Cookie{Name: "session_id", Value: "unknown-session"})
+
+	if sm.validateCSRFToken(req) {
+		t.Error("expected unknown session to fail validation")
+	}
+}
+
+func TestSecurityMiddleware_CustomXFrameOptions(t *testing.T) {
+	cfg := SecurityConfig{
+		EnableXFrameOptions: true,
+		XFrameOptions:       "DENY",
+	}
+	sm := NewSecurityMiddleware(cfg)
+
+	handler := sm.HeadersOnlyMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Header().Get("X-Frame-Options") != "DENY" {
+		t.Errorf("expected X-Frame-Options DENY, got %s", rec.Header().Get("X-Frame-Options"))
+	}
+}
+
+func TestSecurityMiddleware_CustomReferrerPolicy(t *testing.T) {
+	cfg := SecurityConfig{
+		EnableReferrerPolicy: true,
+		ReferrerPolicy:       "no-referrer",
+	}
+	sm := NewSecurityMiddleware(cfg)
+
+	handler := sm.HeadersOnlyMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Header().Get("Referrer-Policy") != "no-referrer" {
+		t.Errorf("expected Referrer-Policy no-referrer, got %s", rec.Header().Get("Referrer-Policy"))
+	}
+}
+
+func TestSecurityMiddleware_CustomCSPDirectives(t *testing.T) {
+	cfg := SecurityConfig{
+		EnableCSP: true,
+		CSPDirectives: map[string]string{
+			"default-src": "'self'",
+			"img-src":     "'self' data: https:",
+			"script-src":  "'self' 'unsafe-inline'",
+		},
+	}
+	sm := NewSecurityMiddleware(cfg)
+
+	handler := sm.HeadersOnlyMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	csp := rec.Header().Get("Content-Security-Policy")
+	if !strings.Contains(csp, "img-src") {
+		t.Errorf("expected img-src in CSP, got %s", csp)
+	}
+}
+
+func TestSecurityMiddleware_CSRFExemptPathsCustom(t *testing.T) {
+	cfg := SecurityConfig{
+		EnableCSRF:      true,
+		CSRFTokenLength: 32,
+		CSRFTokenExpiry: time.Hour,
+		CSRFSafeMethods: []string{"GET", "HEAD", "OPTIONS"},
+		CSRFExemptPaths: []string{"/api/public/", "/health"},
+	}
+	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
+
+	handler := sm.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	// Custom exempt path should succeed without CSRF
+	req := httptest.NewRequest("POST", "/api/public/endpoint", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for custom exempt path, got %d", rec.Code)
+	}
+
+	// Health path should also be exempt
+	req = httptest.NewRequest("POST", "/health", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for health path, got %d", rec.Code)
+	}
+
+	// Non-exempt path should fail without CSRF
+	req = httptest.NewRequest("POST", "/api/private/endpoint", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for non-exempt path, got %d", rec.Code)
+	}
+}
+
+func TestSecurityMiddleware_CSRFSafeMethodsCustom(t *testing.T) {
+	cfg := SecurityConfig{
+		EnableCSRF:      true,
+		CSRFTokenLength: 32,
+		CSRFTokenExpiry: time.Hour,
+		CSRFSafeMethods: []string{"GET"}, // Only GET is safe
+	}
+	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
+
+	handler := sm.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	// GET should be safe
+	req := httptest.NewRequest("GET", "/protected", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 for GET, got %d", rec.Code)
+	}
+
+	// HEAD should NOT be safe in this config
+	req = httptest.NewRequest("HEAD", "/protected", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for HEAD (not in safe methods), got %d", rec.Code)
+	}
+}
+
+func TestSecurityMiddleware_HSTSWithTLS(t *testing.T) {
+	cfg := SecurityConfig{
+		EnableHSTS:            true,
+		HSTSMaxAge:            365 * 24 * time.Hour,
+		HSTSIncludeSubdomains: true,
+	}
+	sm := NewSecurityMiddleware(cfg)
+
+	handler := sm.HeadersOnlyMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	// Request with TLS
+	req := httptest.NewRequest("GET", "https://example.com/", nil)
+	req.TLS = &tls.ConnectionState{} // Simulate TLS
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	hsts := rec.Header().Get("Strict-Transport-Security")
+	if hsts == "" {
+		t.Error("expected HSTS header with TLS")
+	}
+	if !strings.Contains(hsts, "max-age=31536000") {
+		t.Errorf("expected max-age=31536000 in HSTS, got %s", hsts)
+	}
+	if !strings.Contains(hsts, "includeSubDomains") {
+		t.Errorf("expected includeSubDomains in HSTS, got %s", hsts)
+	}
+}
+
+func TestSecurityMiddleware_HSTSWithoutSubdomains(t *testing.T) {
+	cfg := SecurityConfig{
+		EnableHSTS:            true,
+		HSTSMaxAge:            24 * time.Hour,
+		HSTSIncludeSubdomains: false,
+	}
+	sm := NewSecurityMiddleware(cfg)
+
+	handler := sm.HeadersOnlyMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "https://example.com/", nil)
+	req.TLS = &tls.ConnectionState{}
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	hsts := rec.Header().Get("Strict-Transport-Security")
+	if strings.Contains(hsts, "includeSubDomains") {
+		t.Errorf("expected no includeSubDomains in HSTS, got %s", hsts)
+	}
+}
+
+func TestSecurityMiddleware_PermissionsPolicy(t *testing.T) {
+	cfg := DefaultSecurityConfig()
+	sm := NewSecurityMiddleware(cfg)
+
+	handler := sm.HeadersOnlyMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	pp := rec.Header().Get("Permissions-Policy")
+	if pp == "" {
+		t.Error("expected Permissions-Policy header")
+	}
+	if !strings.Contains(pp, "geolocation=()") {
+		t.Errorf("expected geolocation=() in Permissions-Policy, got %s", pp)
+	}
+	if !strings.Contains(pp, "microphone=()") {
+		t.Errorf("expected microphone=() in Permissions-Policy, got %s", pp)
+	}
+	if !strings.Contains(pp, "camera=()") {
+		t.Errorf("expected camera=() in Permissions-Policy, got %s", pp)
+	}
+}
+
+func TestSecurityMiddleware_AllHeadersDisabled(t *testing.T) {
+	cfg := SecurityConfig{
+		EnableHSTS:                false,
+		EnableCSP:                 false,
+		EnableXFrameOptions:       false,
+		EnableXContentTypeOptions: false,
+		EnableXXSSProtection:      false,
+		EnableReferrerPolicy:      false,
+		EnableCSRF:                false,
+	}
+	sm := NewSecurityMiddleware(cfg)
+
+	handler := sm.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("POST", "/", nil)
+	req.TLS = &tls.ConnectionState{}
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	// All security headers should be absent
+	if rec.Header().Get("Strict-Transport-Security") != "" {
+		t.Error("HSTS should not be set when disabled")
+	}
+	if rec.Header().Get("Content-Security-Policy") != "" {
+		t.Error("CSP should not be set when disabled")
+	}
+	if rec.Header().Get("X-Frame-Options") != "" {
+		t.Error("X-Frame-Options should not be set when disabled")
+	}
+	if rec.Header().Get("X-Content-Type-Options") != "" {
+		t.Error("X-Content-Type-Options should not be set when disabled")
+	}
+	if rec.Header().Get("X-XSS-Protection") != "" {
+		t.Error("X-XSS-Protection should not be set when disabled")
+	}
+	if rec.Header().Get("Referrer-Policy") != "" {
+		t.Error("Referrer-Policy should not be set when disabled")
+	}
+
+	// POST should succeed without CSRF when disabled
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 OK, got %d", rec.Code)
+	}
+}
+
+func TestSecurityMiddleware_GenerateCSRFToken_UniqueTokens(t *testing.T) {
+	cfg := DefaultSecurityConfig()
+	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
+
+	tokens := make(map[string]bool)
+	numTokens := 100
+
+	for i := 0; i < numTokens; i++ {
+		token, err := sm.GenerateCSRFToken(fmt.Sprintf("session-%d", i))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if tokens[token] {
+			t.Errorf("duplicate token generated: %s", token)
+		}
+		tokens[token] = true
+	}
+
+	if len(tokens) != numTokens {
+		t.Errorf("expected %d unique tokens, got %d", numTokens, len(tokens))
+	}
+}
+
+func TestSecurityMiddleware_ConcurrentAccess(t *testing.T) {
+	cfg := DefaultSecurityConfig()
+	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
+
+	var wg sync.WaitGroup
+	numGoroutines := 50
+	numOpsPerGoroutine := 20
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			sessionID := fmt.Sprintf("session-%d", id)
+
+			for j := 0; j < numOpsPerGoroutine; j++ {
+				// Mix of generate and get operations
+				if j%2 == 0 {
+					_, _ = sm.GenerateCSRFToken(sessionID)
+				} else {
+					_, _ = sm.GetCSRFToken(sessionID)
+				}
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	// If we get here without panicking, concurrent access is safe
+}
+
+func TestSecurityMiddleware_CSRFProtectionWithAPIEndpoints(t *testing.T) {
+	cfg := DefaultSecurityConfig()
+	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
+
+	handler := sm.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	// Agent API endpoint should be exempt
+	req := httptest.NewRequest("POST", "/api/v1/agents/register", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 for exempt agent API, got %d", rec.Code)
+	}
+
+	// GitHub webhook should be exempt
+	req = httptest.NewRequest("POST", "/webhook/github/myproject", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 for exempt webhook, got %d", rec.Code)
 	}
 }

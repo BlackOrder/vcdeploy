@@ -365,7 +365,7 @@ func runUserDelete(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Are you sure you want to delete user '%s'? (y/N): ", username)
 	var confirm string
-	fmt.Scanln(&confirm)
+	_, _ = fmt.Scanln(&confirm)
 	if strings.ToLower(confirm) != "y" {
 		return fmt.Errorf("aborted")
 	}
@@ -382,7 +382,7 @@ func runUserDelete(cmd *cobra.Command, args []string) error {
 	}
 
 	var users []map[string]interface{}
-	json.NewDecoder(resp.Body).Decode(&users)
+	_ = json.NewDecoder(resp.Body).Decode(&users)
 	resp.Body.Close()
 
 	var userID float64
@@ -567,7 +567,7 @@ func runAgentDelete(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Are you sure you want to remove agent '%s'? (y/N): ", agentID)
 	var confirm string
-	fmt.Scanln(&confirm)
+	_, _ = fmt.Scanln(&confirm)
 	if strings.ToLower(confirm) != "y" {
 		return fmt.Errorf("aborted")
 	}
@@ -876,7 +876,7 @@ func runConfigExport(cmd *cobra.Command, args []string) error {
 	}
 
 	// Output as JSON
-	io.Copy(os.Stdout, resp.Body)
+	_, _ = io.Copy(os.Stdout, resp.Body)
 	fmt.Println()
 	return nil
 }
@@ -1034,7 +1034,7 @@ func runAPIKeyRevoke(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Are you sure you want to revoke API key '%s'? (y/N): ", keyID)
 	var confirm string
-	fmt.Scanln(&confirm)
+	_, _ = fmt.Scanln(&confirm)
 	if strings.ToLower(confirm) != "y" {
 		return fmt.Errorf("aborted")
 	}

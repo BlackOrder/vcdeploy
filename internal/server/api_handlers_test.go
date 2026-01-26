@@ -1576,3 +1576,865 @@ func TestHandleDeploymentRollback_MethodNotAllowed(t *testing.T) {
 		t.Errorf("expected status %d, got %d", http.StatusMethodNotAllowed, w.Code)
 	}
 }
+
+// --- Settings API Additional Tests ---
+
+func TestHandleSettingsCategory_PutSuccess(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	body := strings.NewReader(`{"setting1":"value1","setting2":"value2"}`)
+	req := httptest.NewRequest("PUT", "/api/v1/settings/test-category", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleSettingsCategory(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleSettingsCategory_EmptyCategory(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	req := httptest.NewRequest("GET", "/api/v1/settings/", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleSettingsCategory(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestHandleSettingsCategory_MethodNotAllowed(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	req := httptest.NewRequest("DELETE", "/api/v1/settings/test-category", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleSettingsCategory(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected status %d, got %d", http.StatusMethodNotAllowed, w.Code)
+	}
+}
+
+func TestHandleSettingsCategory_PutInvalidJSON(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	body := strings.NewReader(`{invalid json}`)
+	req := httptest.NewRequest("PUT", "/api/v1/settings/test-category", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleSettingsCategory(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestHandleSettingsExport_MethodNotAllowed(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	req := httptest.NewRequest("POST", "/api/v1/settings/export", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleSettingsExport(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected status %d, got %d", http.StatusMethodNotAllowed, w.Code)
+	}
+}
+
+func TestHandleSettingsImport_MethodNotAllowed(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	req := httptest.NewRequest("GET", "/api/v1/settings/import", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleSettingsImport(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected status %d, got %d", http.StatusMethodNotAllowed, w.Code)
+	}
+}
+
+func TestHandleSettingsImport_InvalidJSON(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	body := strings.NewReader(`not valid json`)
+	req := httptest.NewRequest("POST", "/api/v1/settings/import", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleSettingsImport(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+// --- User API Additional Tests ---
+
+func TestHandleUser_GetSuccess(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	// Get test user ID
+	ctx := context.Background()
+	user, _ := server.db.GetUserByUsername(ctx, "testuser")
+
+	req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/users/%d", user.ID), nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleUser(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	_ = json.NewDecoder(w.Body).Decode(&response)
+	if response["username"] != "testuser" {
+		t.Errorf("expected username 'testuser', got %v", response["username"])
+	}
+}
+
+func TestHandleUser_GetNotFound(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	req := httptest.NewRequest("GET", "/api/v1/users/99999", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleUser(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status %d, got %d", http.StatusNotFound, w.Code)
+	}
+}
+
+func TestHandleUser_UpdateSuccess(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	// Get test user ID
+	ctx := context.Background()
+	user, _ := server.db.GetUserByUsername(ctx, "testuser")
+
+	body := strings.NewReader(`{"email":"newemail@example.com","role":"admin"}`)
+	req := httptest.NewRequest("PUT", fmt.Sprintf("/api/v1/users/%d", user.ID), body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleUser(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleUser_UpdateNotFound(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	body := strings.NewReader(`{"email":"test@test.com"}`)
+	req := httptest.NewRequest("PUT", "/api/v1/users/99999", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleUser(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status %d, got %d", http.StatusNotFound, w.Code)
+	}
+}
+
+func TestHandleUser_UpdateInvalidJSON(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	ctx := context.Background()
+	user, _ := server.db.GetUserByUsername(ctx, "testuser")
+
+	body := strings.NewReader(`{invalid}`)
+	req := httptest.NewRequest("PUT", fmt.Sprintf("/api/v1/users/%d", user.ID), body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleUser(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestHandleUser_DeleteSuccess(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	// Create a user to delete
+	ctx := context.Background()
+	newUser := &storage.User{
+		Username:     "deleteuser",
+		PasswordHash: "hash",
+		Email:        "delete@example.com",
+		Role:         "viewer",
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+	_ = server.db.CreateUser(ctx, newUser)
+
+	req := httptest.NewRequest("DELETE", fmt.Sprintf("/api/v1/users/%d", newUser.ID), nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleUser(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleUser_DeleteNotFound(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	req := httptest.NewRequest("DELETE", "/api/v1/users/99999", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleUser(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status %d, got %d", http.StatusNotFound, w.Code)
+	}
+}
+
+func TestHandleUser_InvalidID(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	req := httptest.NewRequest("GET", "/api/v1/users/invalid", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleUser(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestHandleUser_EmptyID(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	req := httptest.NewRequest("GET", "/api/v1/users/", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleUser(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestHandleUser_MethodNotAllowed(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	req := httptest.NewRequest("PATCH", "/api/v1/users/1", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleUser(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected status %d, got %d", http.StatusMethodNotAllowed, w.Code)
+	}
+}
+
+// --- API Keys Additional Tests ---
+
+func TestHandleAPIKeys_CreateMissingName(t *testing.T) {
+	t.Parallel()
+
+	server, _, sessionToken := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	ctx := context.Background()
+	session, _ := server.db.GetSessionByToken(ctx, sessionToken)
+
+	body := strings.NewReader(`{}`)
+	req := httptest.NewRequest("POST", "/api/v1/apikeys", body)
+	req.Header.Set("Content-Type", "application/json")
+	req = requestWithUserContext(req, session.UserID)
+	w := httptest.NewRecorder()
+
+	server.handleAPIKeys(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleAPIKeys_CreateInvalidJSON(t *testing.T) {
+	t.Parallel()
+
+	server, _, sessionToken := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	ctx := context.Background()
+	session, _ := server.db.GetSessionByToken(ctx, sessionToken)
+
+	body := strings.NewReader(`{invalid}`)
+	req := httptest.NewRequest("POST", "/api/v1/apikeys", body)
+	req.Header.Set("Content-Type", "application/json")
+	req = requestWithUserContext(req, session.UserID)
+	w := httptest.NewRecorder()
+
+	server.handleAPIKeys(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestHandleAPIKeys_CreateWithExpiry(t *testing.T) {
+	t.Parallel()
+
+	server, _, sessionToken := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	ctx := context.Background()
+	session, _ := server.db.GetSessionByToken(ctx, sessionToken)
+
+	body := strings.NewReader(`{"name":"expiring-key","expires_in_days":30}`)
+	req := httptest.NewRequest("POST", "/api/v1/apikeys", body)
+	req.Header.Set("Content-Type", "application/json")
+	req = requestWithUserContext(req, session.UserID)
+	w := httptest.NewRecorder()
+
+	server.handleAPIKeys(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Errorf("expected status %d, got %d: %s", http.StatusCreated, w.Code, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	_ = json.NewDecoder(w.Body).Decode(&response)
+	if response["expiresAt"] == nil {
+		t.Error("expected expiresAt in response")
+	}
+}
+
+func TestHandleAPIKeys_Unauthorized(t *testing.T) {
+	t.Parallel()
+
+	server, _, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	req := httptest.NewRequest("GET", "/api/v1/apikeys", nil)
+	w := httptest.NewRecorder()
+
+	server.handleAPIKeys(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected status %d, got %d", http.StatusUnauthorized, w.Code)
+	}
+}
+
+func TestHandleAPIKeys_MethodNotAllowed(t *testing.T) {
+	t.Parallel()
+
+	server, _, sessionToken := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	ctx := context.Background()
+	session, _ := server.db.GetSessionByToken(ctx, sessionToken)
+
+	req := httptest.NewRequest("PUT", "/api/v1/apikeys", nil)
+	req = requestWithUserContext(req, session.UserID)
+	w := httptest.NewRecorder()
+
+	server.handleAPIKeys(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected status %d, got %d", http.StatusMethodNotAllowed, w.Code)
+	}
+}
+
+// --- Agent API Additional Tests ---
+
+func TestHandleAgentAPI_Update(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	ctx := context.Background()
+	agent := &storage.Agent{
+		ID:       "update-agent-1",
+		Hostname: "agent.example.com",
+		Status:   "online",
+	}
+	_ = server.db.UpsertAgent(ctx, agent)
+
+	body := strings.NewReader(`{"status":"offline","labels":{"env":"prod"}}`)
+	req := httptest.NewRequest("PUT", "/api/v1/agents/update-agent-1", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleAgentAPI(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleAgentAPI_UpdateNotFound(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	body := strings.NewReader(`{"status":"offline"}`)
+	req := httptest.NewRequest("PUT", "/api/v1/agents/nonexistent", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleAgentAPI(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status %d, got %d", http.StatusNotFound, w.Code)
+	}
+}
+
+func TestHandleAgentAPI_UpdateInvalidJSON(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	ctx := context.Background()
+	agent := &storage.Agent{
+		ID:       "invalid-json-agent",
+		Hostname: "agent.example.com",
+		Status:   "online",
+	}
+	_ = server.db.UpsertAgent(ctx, agent)
+
+	body := strings.NewReader(`{invalid}`)
+	req := httptest.NewRequest("PUT", "/api/v1/agents/invalid-json-agent", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleAgentAPI(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+// --- Deployment API Additional Tests ---
+
+func TestHandleDeploymentsAPI_CreateMissingProject(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	body := strings.NewReader(`{"branch":"main"}`)
+	req := httptest.NewRequest("POST", "/api/v1/deployments", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleDeploymentsAPI(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleDeploymentsAPI_CreateInvalidJSON(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	body := strings.NewReader(`{invalid}`)
+	req := httptest.NewRequest("POST", "/api/v1/deployments", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleDeploymentsAPI(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestHandleDeploymentsAPI_ListWithLimit(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	ctx := context.Background()
+	for i := 0; i < 10; i++ {
+		deployment := &storage.Deployment{
+			ID:      fmt.Sprintf("deploy-%d", i),
+			Project: "test-project",
+			Status:  "completed",
+		}
+		_ = server.db.CreateDeployment(ctx, deployment)
+	}
+
+	req := httptest.NewRequest("GET", "/api/v1/deployments?limit=5", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleDeploymentsAPI(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, w.Code)
+	}
+}
+
+func TestHandleDeploymentAPI_DeleteScheduled(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	ctx := context.Background()
+	deployment := &storage.Deployment{
+		ID:     "scheduled-deploy-1",
+		Status: "scheduled",
+	}
+	_ = server.db.CreateDeployment(ctx, deployment)
+
+	req := httptest.NewRequest("DELETE", "/api/v1/deployments/scheduled-deploy-1", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleDeploymentAPI(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleDeploymentAPI_DeleteNotFound(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	req := httptest.NewRequest("DELETE", "/api/v1/deployments/nonexistent", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleDeploymentAPI(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status %d, got %d", http.StatusNotFound, w.Code)
+	}
+}
+
+// --- Deployment Rollback Additional Tests ---
+
+func TestHandleDeploymentRollback_Success(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	ctx := context.Background()
+
+	// Create a project first
+	project := &storage.Project{
+		Name:       "rollback-project",
+		Repository: "https://github.com/test/repo",
+		Branch:     "main",
+		DeployPath: "/var/www/test",
+	}
+	_ = server.db.CreateProject(project)
+
+	// Create a deployment to rollback
+	deployment := &storage.Deployment{
+		ID:      "rollback-deploy-1",
+		Project: "rollback-project",
+		Target:  "production",
+		Branch:  "main",
+		Status:  "success",
+	}
+	_ = server.db.CreateDeployment(ctx, deployment)
+
+	req := httptest.NewRequest("POST", "/api/v1/deployments/rollback-deploy-1/rollback", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleDeploymentRollback(w, req, "rollback-deploy-1")
+
+	if w.Code != http.StatusAccepted {
+		t.Errorf("expected status %d, got %d: %s", http.StatusAccepted, w.Code, w.Body.String())
+	}
+}
+
+// --- Deployment Logs Streaming Test ---
+
+func TestHandleDeploymentLogsStream_NoFlusher(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	ctx := context.Background()
+	deployment := &storage.Deployment{
+		ID:      "logs-deploy-1",
+		Status:  "running",
+		Project: "test-project",
+	}
+	_ = server.db.CreateDeployment(ctx, deployment)
+
+	// Create a recorder that we can test with
+	req := httptest.NewRequest("GET", "/api/v1/deployments/logs-deploy-1/logs?stream=true", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleDeploymentLogsStream(w, req, "logs-deploy-1")
+
+	// SSE should set appropriate headers
+	contentType := w.Header().Get("Content-Type")
+	if contentType != "text/event-stream" {
+		t.Errorf("expected Content-Type 'text/event-stream', got '%s'", contentType)
+	}
+}
+
+// --- Project API Additional Tests ---
+
+func TestHandleProjectsAPI_CreateMissingName(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	body := strings.NewReader(`{"repository":"https://github.com/test/repo"}`)
+	req := httptest.NewRequest("POST", "/api/v1/projects", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleProjectsAPI(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleProjectsAPI_CreateDefaultBranch(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	body := strings.NewReader(`{"name":"default-branch-project","repository":"https://github.com/test/repo"}`)
+	req := httptest.NewRequest("POST", "/api/v1/projects", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleProjectsAPI(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Errorf("expected status %d, got %d: %s", http.StatusCreated, w.Code, w.Body.String())
+	}
+
+	// Verify default branch was set
+	project, _ := server.db.GetProjectByName(context.Background(), "default-branch-project")
+	if project.Branch != "main" {
+		t.Errorf("expected default branch 'main', got '%s'", project.Branch)
+	}
+}
+
+func TestHandleProjectAPI_UpdateInvalidJSON(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	// Create a project first
+	project := &storage.Project{
+		Name:       "update-invalid-json",
+		Repository: "https://github.com/test/repo",
+		Branch:     "main",
+	}
+	_ = server.db.CreateProject(project)
+
+	body := strings.NewReader(`{invalid}`)
+	req := httptest.NewRequest("PUT", "/api/v1/projects/update-invalid-json", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleProjectAPI(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestHandleProjectAPI_UpdateNotFound(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	body := strings.NewReader(`{"branch":"develop"}`)
+	req := httptest.NewRequest("PUT", "/api/v1/projects/nonexistent", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleProjectAPI(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status %d, got %d", http.StatusNotFound, w.Code)
+	}
+}
+
+// --- Webhook Handler Tests ---
+
+func TestHandleProjectWebhooks_PostInvalidJSON(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	// Create a project first
+	project := &storage.Project{
+		Name:       "webhook-invalid-json",
+		Repository: "https://github.com/test/repo",
+		Branch:     "main",
+	}
+	_ = server.db.CreateProject(project)
+
+	body := strings.NewReader(`{invalid}`)
+	req := httptest.NewRequest("POST", "/api/v1/projects/webhook-invalid-json/webhooks", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleProjectWebhooks(w, req, "webhook-invalid-json")
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+// --- Stats API Additional Tests ---
+
+func TestHandleStats_WithData(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	ctx := context.Background()
+
+	// Create some test data
+	project := &storage.Project{Name: "stats-project", Repository: "https://github.com/test/repo"}
+	_ = server.db.CreateProject(project)
+
+	agent := &storage.Agent{ID: "stats-agent", Status: "connected"}
+	_ = server.db.UpsertAgent(ctx, agent)
+
+	deployment := &storage.Deployment{ID: "stats-deploy", Project: "stats-project", Status: "success"}
+	_ = server.db.CreateDeployment(ctx, deployment)
+
+	req := httptest.NewRequest("GET", "/api/v1/stats", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleStats(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, w.Code)
+	}
+
+	var response map[string]interface{}
+	_ = json.NewDecoder(w.Body).Decode(&response)
+
+	projects := response["projects"].(map[string]interface{})
+	if projects["total"].(float64) < 1 {
+		t.Error("expected at least 1 project in stats")
+	}
+
+	agents := response["agents"].(map[string]interface{})
+	if agents["connected"].(float64) < 1 {
+		t.Error("expected at least 1 connected agent in stats")
+	}
+}

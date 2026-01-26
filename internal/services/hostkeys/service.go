@@ -3,6 +3,7 @@ package hostkeys
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -90,7 +91,7 @@ func (s *Service) DeleteByHost(ctx context.Context, hostname string, port int) (
 func (s *Service) IsTrusted(ctx context.Context, hostname string, port int, keyType, fingerprint string) (bool, error) {
 	key, err := s.db.GetSSHHostKey(ctx, hostname, port, keyType)
 	if err != nil {
-		if err == storage.ErrNotFound {
+		if errors.Is(err, storage.ErrNotFound) {
 			return false, nil
 		}
 		return false, fmt.Errorf("getting host key: %w", err)

@@ -203,7 +203,7 @@ func (c *AppContext) Close() {
 		c.Storage.Close()
 	}
 	if c.Logger != nil {
-		c.Logger.Sync()
+		_ = c.Logger.Sync()
 	}
 }
 

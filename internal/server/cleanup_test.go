@@ -8,6 +8,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/BlackOrder/vcdeploy/internal/services/agents"
+	"github.com/BlackOrder/vcdeploy/internal/services/apikeys"
+	"github.com/BlackOrder/vcdeploy/internal/services/audit"
+	"github.com/BlackOrder/vcdeploy/internal/services/deployments"
+	"github.com/BlackOrder/vcdeploy/internal/services/sessions"
+	"github.com/BlackOrder/vcdeploy/internal/services/webhooks"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
@@ -45,6 +51,18 @@ func setupTestCleanupDB(t *testing.T) (*storage.DB, func()) {
 	return db, cleanup
 }
 
+// createTestServices creates real service instances for testing
+func createTestServices(db *storage.DB) CleanupServices {
+	return CleanupServices{
+		SessionService:    sessions.New(db),
+		DeploymentService: deployments.New(db),
+		AuditService:      audit.New(db),
+		AgentService:      agents.New(db),
+		APIKeyService:     apikeys.New(db),
+		WebhookService:    webhooks.New(db, nil),
+	}
+}
+
 func TestDefaultCleanupConfig(t *testing.T) {
 	cfg := DefaultCleanupConfig()
 
@@ -73,16 +91,14 @@ func TestNewCleanupTask(t *testing.T) {
 	defer cleanup()
 
 	logger := zaptest.NewLogger(t)
+	svcs := createTestServices(db)
 
 	// Test with default config
-	task := NewCleanupTask(db, logger, DefaultCleanupConfig())
+	task := NewCleanupTask(svcs, logger, DefaultCleanupConfig())
 	if task == nil {
 		t.Fatal("expected non-nil task")
 	}
 
-	if task.db != db {
-		t.Error("db not set correctly")
-	}
 	if task.interval != 1*time.Hour {
 		t.Errorf("expected interval 1h, got %s", task.interval)
 	}
@@ -93,9 +109,10 @@ func TestNewCleanupTask_ZeroValues(t *testing.T) {
 	defer cleanup()
 
 	logger := zaptest.NewLogger(t)
+	svcs := createTestServices(db)
 
 	// Test with zero values (should use defaults)
-	task := NewCleanupTask(db, logger, CleanupConfig{})
+	task := NewCleanupTask(svcs, logger, CleanupConfig{})
 
 	if task.interval != 1*time.Hour {
 		t.Errorf("expected default interval 1h, got %s", task.interval)
@@ -122,6 +139,7 @@ func TestNewCleanupTask_CustomValues(t *testing.T) {
 	defer cleanup()
 
 	logger := zaptest.NewLogger(t)
+	svcs := createTestServices(db)
 
 	cfg := CleanupConfig{
 		Interval:               15 * time.Minute,
@@ -132,7 +150,7 @@ func TestNewCleanupTask_CustomValues(t *testing.T) {
 		DeploymentLogRetention: 3 * 24 * time.Hour,
 	}
 
-	task := NewCleanupTask(db, logger, cfg)
+	task := NewCleanupTask(svcs, logger, cfg)
 
 	if task.interval != 15*time.Minute {
 		t.Errorf("expected custom interval 15m, got %s", task.interval)
@@ -159,6 +177,7 @@ func TestCleanupTask_StartStop(t *testing.T) {
 	defer cleanup()
 
 	logger := zaptest.NewLogger(t)
+	svcs := createTestServices(db)
 
 	// Use very short interval for testing
 	cfg := CleanupConfig{
@@ -170,7 +189,7 @@ func TestCleanupTask_StartStop(t *testing.T) {
 		DeploymentLogRetention: 1 * time.Hour,
 	}
 
-	task := NewCleanupTask(db, logger, cfg)
+	task := NewCleanupTask(svcs, logger, cfg)
 
 	// Start the task
 	task.Start()
@@ -189,9 +208,10 @@ func TestCleanupTask_CleanExpiredSessions(t *testing.T) {
 	defer cleanup()
 
 	logger := zaptest.NewLogger(t)
+	svcs := createTestServices(db)
 	ctx := context.Background()
 
-	task := NewCleanupTask(db, logger, CleanupConfig{
+	task := NewCleanupTask(svcs, logger, CleanupConfig{
 		SessionExpiry: 1 * time.Hour,
 	})
 
@@ -231,9 +251,10 @@ func TestCleanupTask_CleanOldDeployments(t *testing.T) {
 	defer cleanup()
 
 	logger := zaptest.NewLogger(t)
+	svcs := createTestServices(db)
 	ctx := context.Background()
 
-	task := NewCleanupTask(db, logger, CleanupConfig{
+	task := NewCleanupTask(svcs, logger, CleanupConfig{
 		DeploymentRetention: 7 * 24 * time.Hour, // 7 days
 	})
 
@@ -275,9 +296,10 @@ func TestCleanupTask_MarkStaleAgents(t *testing.T) {
 	defer cleanup()
 
 	logger := zaptest.NewLogger(t)
+	svcs := createTestServices(db)
 	ctx := context.Background()
 
-	task := NewCleanupTask(db, logger, CleanupConfig{
+	task := NewCleanupTask(svcs, logger, CleanupConfig{
 		StaleAgentThreshold: 5 * time.Minute,
 	})
 
@@ -305,8 +327,9 @@ func TestCleanupTask_RunCleanup(t *testing.T) {
 	defer cleanup()
 
 	logger, _ := zap.NewDevelopment()
+	svcs := createTestServices(db)
 
-	task := NewCleanupTask(db, logger, CleanupConfig{
+	task := NewCleanupTask(svcs, logger, CleanupConfig{
 		Interval:               1 * time.Hour,
 		DeploymentRetention:    1 * time.Hour,
 		AuditLogRetention:      1 * time.Hour,
@@ -324,6 +347,7 @@ func TestCleanupTask_MultipleCycles(t *testing.T) {
 	defer cleanup()
 
 	logger := zaptest.NewLogger(t)
+	svcs := createTestServices(db)
 
 	cfg := CleanupConfig{
 		Interval:               20 * time.Millisecond,
@@ -334,7 +358,7 @@ func TestCleanupTask_MultipleCycles(t *testing.T) {
 		DeploymentLogRetention: 1 * time.Hour,
 	}
 
-	task := NewCleanupTask(db, logger, cfg)
+	task := NewCleanupTask(svcs, logger, cfg)
 
 	// Start the task
 	task.Start()
@@ -353,9 +377,10 @@ func TestCleanupTask_CleanExpiredAPIKeys(t *testing.T) {
 	defer cleanup()
 
 	logger := zaptest.NewLogger(t)
+	svcs := createTestServices(db)
 	ctx := context.Background()
 
-	task := NewCleanupTask(db, logger, DefaultCleanupConfig())
+	task := NewCleanupTask(svcs, logger, DefaultCleanupConfig())
 
 	// Create an expired API key
 	expiredKey := &storage.APIKey{

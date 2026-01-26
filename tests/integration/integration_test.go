@@ -422,7 +422,7 @@ func TestHTTPEndpoints(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	})
 
 	// Create test server

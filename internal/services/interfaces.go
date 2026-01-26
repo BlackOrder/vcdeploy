@@ -71,8 +71,10 @@ type UserServicer interface {
 	GetByID(ctx context.Context, id int64) (*storage.User, error)
 	GetByUsername(ctx context.Context, username string) (*storage.User, error)
 	List(ctx context.Context) ([]*storage.User, error)
+	Count(ctx context.Context) (int64, error)
 	Update(ctx context.Context, user *storage.User) error
 	Delete(ctx context.Context, id int64) error
+	DeleteWithCleanup(ctx context.Context, id int64) error
 	VerifyPassword(ctx context.Context, username, password string) (*storage.User, error)
 	UpdatePassword(ctx context.Context, userID int64, newPassword string) error
 	SetTOTP(ctx context.Context, userID int64, secret string, enabled bool) error
@@ -105,6 +107,7 @@ type ProjectServicer interface {
 	List(ctx context.Context) ([]*storage.Project, error)
 	Update(ctx context.Context, project *storage.Project) error
 	Delete(ctx context.Context, name string) error
+	DeleteWithCleanup(ctx context.Context, name string) error
 }
 
 // WebhookServicer defines the interface for project webhook management.
@@ -113,6 +116,8 @@ type WebhookServicer interface {
 	Set(ctx context.Context, projectID int64, provider string, secret []byte, enabled, requireSecret bool) error
 	List(ctx context.Context, projectID int64) ([]*storage.ProjectWebhook, error)
 	Delete(ctx context.Context, projectID int64, provider string) error
+	// CleanupOrphanedWebhooks removes webhooks referencing deleted projects.
+	CleanupOrphanedWebhooks(ctx context.Context) (int64, error)
 }
 
 // DeploymentServicer defines the interface for deployment management.
@@ -121,9 +126,11 @@ type DeploymentServicer interface {
 	GetByID(ctx context.Context, id string) (*storage.DeploymentRecord, error)
 	Update(ctx context.Context, deployment *storage.DeploymentRecord) error
 	ListRecent(ctx context.Context, limit int) ([]*storage.DeploymentRecord, error)
+	CountByStatus(ctx context.Context) (map[string]int64, error)
 	Cancel(ctx context.Context, id string) error
 	// Logs
 	CreateLog(ctx context.Context, log *storage.DeploymentLog) error
+	CreateLogsBatch(ctx context.Context, deploymentID string, logs []*storage.DeploymentLog) error
 	ListLogs(ctx context.Context, deploymentID string) ([]*storage.DeploymentLog, error)
 	ListLogsAfter(ctx context.Context, deploymentID string, afterID int64) ([]*storage.DeploymentLog, error)
 	// Scheduled
@@ -140,6 +147,8 @@ type AgentServicer interface {
 	Upsert(ctx context.Context, agent *storage.Agent) error
 	GetByID(ctx context.Context, id string) (*storage.Agent, error)
 	List(ctx context.Context) ([]*storage.Agent, error)
+	Count(ctx context.Context) (int64, error)
+	CountByStatus(ctx context.Context) (map[string]int64, error)
 	Delete(ctx context.Context, id string) error
 	MarkStale(ctx context.Context, cutoff time.Time) (int64, error)
 }
@@ -169,4 +178,58 @@ type ProjectTypeServicer interface {
 	List(ctx context.Context) ([]*storage.ProjectType, error)
 	Update(ctx context.Context, pt *storage.ProjectType) error
 	Delete(ctx context.Context, name string) error
+}
+
+// RateLimitServicer defines rate limiting operations.
+type RateLimitServicer interface {
+	// BlockIP blocks an IP address for the specified duration.
+	BlockIP(ctx context.Context, ip, reason string, duration time.Duration, blockedBy string) error
+
+	// UnblockIP removes a block on an IP address.
+	UnblockIP(ctx context.Context, ip string) error
+
+	// IsBlocked checks if an IP is currently blocked.
+	IsBlocked(ctx context.Context, ip string) (bool, error)
+
+	// GetBlock retrieves block details for an IP.
+	GetBlock(ctx context.Context, ip string) (*storage.BlockedIP, error)
+
+	// ListBlocked returns all blocked IPs with pagination.
+	ListBlocked(ctx context.Context, pagination Pagination) (*ListResult[*storage.BlockedIP], error)
+
+	// CleanupExpiredBlocks removes expired IP blocks.
+	CleanupExpiredBlocks(ctx context.Context) (int64, error)
+
+	// RecordRequest records a request for rate limiting.
+	RecordRequest(ctx context.Context, key, bucket string, windowDuration time.Duration) error
+
+	// GetRequestCount returns request count for a key within a window.
+	GetRequestCount(ctx context.Context, key, bucket string, window time.Duration) (int64, error)
+
+	// CleanupOldRequests removes old rate limit records.
+	CleanupOldRequests(ctx context.Context, before time.Time) (int64, error)
+}
+
+// ProvisionServicer defines agent provisioning operations.
+type ProvisionServicer interface {
+	// CreateJob creates a new provisioning job.
+	CreateJob(ctx context.Context, job *storage.ProvisionJob) error
+
+	// GetJob retrieves a provisioning job by ID.
+	GetJob(ctx context.Context, id string) (*storage.ProvisionJob, error)
+
+	// UpdateStatus updates the status of a provisioning job.
+	UpdateStatus(ctx context.Context, id, status, stage, errorMessage string, progress int) error
+
+	// ListPending returns all pending provisioning jobs.
+	ListPending(ctx context.Context) ([]*storage.ProvisionJob, error)
+
+	// ListByHost returns provisioning jobs for a specific host.
+	ListByHost(ctx context.Context, host string, pagination Pagination) (*ListResult[*storage.ProvisionJob], error)
+
+	// Cancel cancels a pending provisioning job.
+	Cancel(ctx context.Context, id string) error
+
+	// Cleanup removes old completed/failed jobs.
+	Cleanup(ctx context.Context, before time.Time) (int64, error)
 }

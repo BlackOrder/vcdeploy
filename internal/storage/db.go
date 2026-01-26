@@ -80,6 +80,28 @@ func (db *DB) Conn() *sql.DB {
 	return db.conn
 }
 
+// RunInTransaction executes the given function within a database transaction.
+// If the function returns an error, the transaction is rolled back.
+// Otherwise, the transaction is committed.
+func (db *DB) RunInTransaction(ctx context.Context, fn func(tx *sql.Tx) error) error {
+	tx, err := db.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("beginning transaction: %w", err)
+	}
+
+	if err := fn(tx); err != nil {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			return fmt.Errorf("rollback failed: %v (original error: %w)", rbErr, err)
+		}
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("committing transaction: %w", err)
+	}
+	return nil
+}
+
 // --- User operations ---
 
 // CreateUser creates a new user.
@@ -198,6 +220,36 @@ func (db *DB) ListAgents(ctx context.Context) ([]*Agent, error) {
 	}
 
 	return agents, rows.Err()
+}
+
+// CountAgents returns the total number of agents.
+func (db *DB) CountAgents(ctx context.Context) (int64, error) {
+	var count int64
+	err := db.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM agents`).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("counting agents: %w", err)
+	}
+	return count, nil
+}
+
+// CountAgentsByStatus returns agent counts grouped by status.
+func (db *DB) CountAgentsByStatus(ctx context.Context) (map[string]int64, error) {
+	rows, err := db.conn.QueryContext(ctx, `SELECT COALESCE(status, 'unknown'), COUNT(*) FROM agents GROUP BY status`)
+	if err != nil {
+		return nil, fmt.Errorf("counting agents by status: %w", err)
+	}
+	defer rows.Close()
+
+	counts := make(map[string]int64)
+	for rows.Next() {
+		var status string
+		var count int64
+		if err := rows.Scan(&status, &count); err != nil {
+			return nil, fmt.Errorf("scanning agent count: %w", err)
+		}
+		counts[status] = count
+	}
+	return counts, rows.Err()
 }
 
 // DeleteAgent removes an agent by ID.
@@ -332,10 +384,13 @@ func (db *DB) ListDeploymentLogsAfter(ctx context.Context, deploymentID string, 
 
 // LogAudit creates an audit log entry.
 func (db *DB) LogAudit(ctx context.Context, entry *AuditEntry) error {
+	if entry.Timestamp.IsZero() {
+		entry.Timestamp = time.Now()
+	}
 	_, err := db.conn.ExecContext(ctx, `
-		INSERT INTO audit_logs (source, user, action, resource, details, ip_address, result)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, entry.Source, entry.User, entry.Action, entry.Resource, entry.Details, entry.IPAddress, entry.Result)
+		INSERT INTO audit_logs (timestamp, source, user, action, resource, details, ip_address, result)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, entry.Timestamp, entry.Source, entry.User, entry.Action, entry.Resource, entry.Details, entry.IPAddress, entry.Result)
 	return err
 }
 
@@ -1206,6 +1261,16 @@ func (db *DB) ListUsers(ctx context.Context) ([]*User, error) {
 	return users, rows.Err()
 }
 
+// CountUsers returns the total number of users.
+func (db *DB) CountUsers(ctx context.Context) (int64, error) {
+	var count int64
+	err := db.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("counting users: %w", err)
+	}
+	return count, nil
+}
+
 // GetUserByID retrieves a user by ID.
 func (db *DB) GetUserByID(ctx context.Context, id int64) (*User, error) {
 	var user User
@@ -1234,9 +1299,11 @@ func (db *DB) GetUserByID(ctx context.Context, id int64) (*User, error) {
 // UpdateUserByID updates a user's information.
 func (db *DB) UpdateUserByID(ctx context.Context, user *User) error {
 	_, err := db.conn.ExecContext(ctx, `
-		UPDATE users SET email = ?, role = ?, password_hash = ?, updated_at = datetime('now')
+		UPDATE users SET email = ?, role = ?, password_hash = ?, 
+		       totp_secret = ?, totp_enabled = ?, must_change_password = ?,
+		       updated_at = datetime('now')
 		WHERE id = ?
-	`, user.Email, user.Role, user.PasswordHash, user.ID)
+	`, user.Email, user.Role, user.PasswordHash, user.TOTPSecret, user.TOTPEnabled, user.MustChangePassword, user.ID)
 	return err
 }
 
@@ -1298,6 +1365,26 @@ func (db *DB) ListDeploymentsRecent(ctx context.Context, limit int) ([]*Deployme
 	return deployments, rows.Err()
 }
 
+// CountDeploymentsByStatus returns deployment counts grouped by status.
+func (db *DB) CountDeploymentsByStatus(ctx context.Context) (map[string]int64, error) {
+	rows, err := db.conn.QueryContext(ctx, `SELECT COALESCE(status, 'unknown'), COUNT(*) FROM deployments GROUP BY status`)
+	if err != nil {
+		return nil, fmt.Errorf("counting deployments by status: %w", err)
+	}
+	defer rows.Close()
+
+	counts := make(map[string]int64)
+	for rows.Next() {
+		var status string
+		var count int64
+		if err := rows.Scan(&status, &count); err != nil {
+			return nil, fmt.Errorf("scanning deployment count: %w", err)
+		}
+		counts[status] = count
+	}
+	return counts, rows.Err()
+}
+
 // --- Additional Project operations ---
 
 // UpdateProjectByName updates a project by name.
@@ -1351,7 +1438,7 @@ func (db *DB) CleanupOldDeploymentLogs(ctx context.Context, cutoff time.Time) (i
 // CleanupOldAuditLogs removes audit log entries older than the cutoff.
 func (db *DB) CleanupOldAuditLogs(ctx context.Context, cutoff time.Time) (int64, error) {
 	result, err := db.conn.ExecContext(ctx, `
-		DELETE FROM audit_log WHERE timestamp < ?
+		DELETE FROM audit_logs WHERE timestamp < ?
 	`, cutoff)
 	if err != nil {
 		return 0, err
@@ -1540,4 +1627,304 @@ func (db *DB) DeleteSSHHostKeysByHost(ctx context.Context, hostname string, port
 		return 0, fmt.Errorf("deleting ssh host keys: %w", err)
 	}
 	return result.RowsAffected()
+}
+
+// --- Blocked IP Methods ---
+
+// BlockIP adds or updates a blocked IP record.
+func (db *DB) BlockIP(ctx context.Context, block *BlockedIP) error {
+	_, err := db.conn.ExecContext(ctx, `
+		INSERT INTO blocked_ips (ip_address, reason, blocked_at, expires_at, blocked_by)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(ip_address) DO UPDATE SET
+			reason = excluded.reason,
+			expires_at = excluded.expires_at,
+			blocked_by = excluded.blocked_by
+	`, block.IPAddress, block.Reason, block.BlockedAt, block.ExpiresAt, block.BlockedBy)
+	if err != nil {
+		return fmt.Errorf("blocking IP: %w", err)
+	}
+	return nil
+}
+
+// UnblockIP removes a blocked IP record.
+func (db *DB) UnblockIP(ctx context.Context, ip string) error {
+	_, err := db.conn.ExecContext(ctx, `DELETE FROM blocked_ips WHERE ip_address = ?`, ip)
+	if err != nil {
+		return fmt.Errorf("unblocking IP: %w", err)
+	}
+	return nil
+}
+
+// IsIPBlocked checks if an IP is currently blocked.
+func (db *DB) IsIPBlocked(ctx context.Context, ip string) (bool, error) {
+	var count int
+	err := db.conn.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM blocked_ips 
+		WHERE ip_address = ? AND (expires_at IS NULL OR expires_at > ?)
+	`, ip, time.Now()).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("checking blocked IP: %w", err)
+	}
+	return count > 0, nil
+}
+
+// GetBlockedIP retrieves a blocked IP record.
+func (db *DB) GetBlockedIP(ctx context.Context, ip string) (*BlockedIP, error) {
+	var block BlockedIP
+	err := db.conn.QueryRowContext(ctx, `
+		SELECT id, ip_address, reason, blocked_at, expires_at, COALESCE(blocked_by, '')
+		FROM blocked_ips WHERE ip_address = ?
+	`, ip).Scan(&block.ID, &block.IPAddress, &block.Reason, &block.BlockedAt, &block.ExpiresAt, &block.BlockedBy)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("getting blocked IP: %w", err)
+	}
+	return &block, nil
+}
+
+// ListBlockedIPs returns all currently blocked IPs with pagination.
+func (db *DB) ListBlockedIPs(ctx context.Context, limit, offset int) ([]*BlockedIP, int64, error) {
+	// Get total count
+	var total int64
+	err := db.conn.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM blocked_ips WHERE expires_at IS NULL OR expires_at > ?
+	`, time.Now()).Scan(&total)
+	if err != nil {
+		return nil, 0, fmt.Errorf("counting blocked IPs: %w", err)
+	}
+
+	// Get paginated results
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, ip_address, reason, blocked_at, expires_at, COALESCE(blocked_by, '')
+		FROM blocked_ips 
+		WHERE expires_at IS NULL OR expires_at > ?
+		ORDER BY blocked_at DESC
+		LIMIT ? OFFSET ?
+	`, time.Now(), limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("listing blocked IPs: %w", err)
+	}
+	defer rows.Close()
+
+	var blocks []*BlockedIP
+	for rows.Next() {
+		var block BlockedIP
+		if err := rows.Scan(&block.ID, &block.IPAddress, &block.Reason, &block.BlockedAt, &block.ExpiresAt, &block.BlockedBy); err != nil {
+			return nil, 0, fmt.Errorf("scanning blocked IP: %w", err)
+		}
+		blocks = append(blocks, &block)
+	}
+	return blocks, total, rows.Err()
+}
+
+// CleanupExpiredBlockedIPs removes expired IP blocks.
+func (db *DB) CleanupExpiredBlockedIPs(ctx context.Context) (int64, error) {
+	result, err := db.conn.ExecContext(ctx, `
+		DELETE FROM blocked_ips WHERE expires_at IS NOT NULL AND expires_at <= ?
+	`, time.Now())
+	if err != nil {
+		return 0, fmt.Errorf("cleaning up expired blocked IPs: %w", err)
+	}
+	return result.RowsAffected()
+}
+
+// RecordRateLimitRequest records a rate limit request for tracking.
+func (db *DB) RecordRateLimitRequest(ctx context.Context, key, bucket string, windowStart, windowEnd time.Time) error {
+	_, err := db.conn.ExecContext(ctx, `
+		INSERT INTO rate_limits (key, bucket, count, window_start, window_end)
+		VALUES (?, ?, 1, ?, ?)
+		ON CONFLICT(key, bucket, window_start) DO UPDATE SET count = count + 1
+	`, key, bucket, windowStart, windowEnd)
+	if err != nil {
+		return fmt.Errorf("recording rate limit request: %w", err)
+	}
+	return nil
+}
+
+// GetRateLimitCount returns the request count for a key in a time window.
+func (db *DB) GetRateLimitCount(ctx context.Context, key, bucket string, since time.Time) (int64, error) {
+	var total int64
+	err := db.conn.QueryRowContext(ctx, `
+		SELECT COALESCE(SUM(count), 0) FROM rate_limits 
+		WHERE key = ? AND bucket = ? AND window_end > ?
+	`, key, bucket, since).Scan(&total)
+	if err != nil {
+		return 0, fmt.Errorf("getting rate limit count: %w", err)
+	}
+	return total, nil
+}
+
+// CleanupRateLimitRecords removes old rate limit records.
+func (db *DB) CleanupRateLimitRecords(ctx context.Context, before time.Time) (int64, error) {
+	result, err := db.conn.ExecContext(ctx, `
+		DELETE FROM rate_limits WHERE window_end < ?
+	`, before)
+	if err != nil {
+		return 0, fmt.Errorf("cleaning up rate limit records: %w", err)
+	}
+	return result.RowsAffected()
+}
+
+// --- Provision Job Methods ---
+
+// CreateProvisionJob creates a new provisioning job.
+func (db *DB) CreateProvisionJob(ctx context.Context, job *ProvisionJob) error {
+	_, err := db.conn.ExecContext(ctx, `
+		INSERT INTO agent_provision_jobs (id, target_host, target_port, target_user, ssh_key_id, agent_binary_id, status, stage, progress, started_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, job.ID, job.TargetHost, job.TargetPort, job.TargetUser, job.SSHKeyID, job.AgentBinaryID, job.Status, job.Stage, job.Progress, job.StartedAt)
+	if err != nil {
+		return fmt.Errorf("creating provision job: %w", err)
+	}
+	return nil
+}
+
+// GetProvisionJob retrieves a provisioning job by ID.
+func (db *DB) GetProvisionJob(ctx context.Context, id string) (*ProvisionJob, error) {
+	var job ProvisionJob
+	var completedAt sql.NullTime
+	var stage sql.NullString
+	var errorMsg sql.NullString
+	var rollbackData sql.NullString
+
+	err := db.conn.QueryRowContext(ctx, `
+		SELECT id, target_host, target_port, target_user, ssh_key_id, agent_binary_id, status, stage, progress, error_message, rollback_data, started_at, completed_at
+		FROM agent_provision_jobs WHERE id = ?
+	`, id).Scan(&job.ID, &job.TargetHost, &job.TargetPort, &job.TargetUser, &job.SSHKeyID, &job.AgentBinaryID, &job.Status, &stage, &job.Progress, &errorMsg, &rollbackData, &job.StartedAt, &completedAt)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("getting provision job: %w", err)
+	}
+
+	if stage.Valid {
+		job.Stage = stage.String
+	}
+	if errorMsg.Valid {
+		job.ErrorMessage = errorMsg.String
+	}
+	if rollbackData.Valid {
+		job.RollbackData = rollbackData.String
+	}
+	if completedAt.Valid {
+		job.CompletedAt = &completedAt.Time
+	}
+
+	return &job, nil
+}
+
+// UpdateProvisionJobStatus updates the status of a provisioning job.
+func (db *DB) UpdateProvisionJobStatus(ctx context.Context, id, status, stage, errorMessage string, progress int) error {
+	var completedAt interface{}
+	if status == "completed" || status == "failed" || status == "cancelled" {
+		now := time.Now()
+		completedAt = &now
+	}
+
+	result, err := db.conn.ExecContext(ctx, `
+		UPDATE agent_provision_jobs 
+		SET status = ?, stage = ?, progress = ?, error_message = ?, completed_at = ?
+		WHERE id = ?
+	`, status, stage, progress, errorMessage, completedAt, id)
+	if err != nil {
+		return fmt.Errorf("updating provision job status: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// ListPendingProvisionJobs returns all pending provisioning jobs.
+func (db *DB) ListPendingProvisionJobs(ctx context.Context) ([]*ProvisionJob, error) {
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, target_host, target_port, target_user, ssh_key_id, agent_binary_id, status, stage, progress, error_message, rollback_data, started_at, completed_at
+		FROM agent_provision_jobs 
+		WHERE status IN ('pending', 'running')
+		ORDER BY started_at ASC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("listing pending provision jobs: %w", err)
+	}
+	defer rows.Close()
+
+	return scanProvisionJobs(rows)
+}
+
+// ListProvisionJobsByHost returns provisioning jobs for a specific host.
+func (db *DB) ListProvisionJobsByHost(ctx context.Context, host string, limit, offset int) ([]*ProvisionJob, int64, error) {
+	var total int64
+	err := db.conn.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM agent_provision_jobs WHERE target_host = ?
+	`, host).Scan(&total)
+	if err != nil {
+		return nil, 0, fmt.Errorf("counting provision jobs: %w", err)
+	}
+
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, target_host, target_port, target_user, ssh_key_id, agent_binary_id, status, stage, progress, error_message, rollback_data, started_at, completed_at
+		FROM agent_provision_jobs 
+		WHERE target_host = ?
+		ORDER BY started_at DESC
+		LIMIT ? OFFSET ?
+	`, host, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("listing provision jobs: %w", err)
+	}
+	defer rows.Close()
+
+	jobs, err := scanProvisionJobs(rows)
+	if err != nil {
+		return nil, 0, err
+	}
+	return jobs, total, nil
+}
+
+// CleanupOldProvisionJobs removes old completed/failed jobs.
+func (db *DB) CleanupOldProvisionJobs(ctx context.Context, before time.Time) (int64, error) {
+	result, err := db.conn.ExecContext(ctx, `
+		DELETE FROM agent_provision_jobs 
+		WHERE status IN ('completed', 'failed', 'cancelled') AND completed_at < ?
+	`, before)
+	if err != nil {
+		return 0, fmt.Errorf("cleaning up old provision jobs: %w", err)
+	}
+	return result.RowsAffected()
+}
+
+// scanProvisionJobs is a helper to scan provision job rows.
+func scanProvisionJobs(rows *sql.Rows) ([]*ProvisionJob, error) {
+	var jobs []*ProvisionJob
+	for rows.Next() {
+		var job ProvisionJob
+		var completedAt sql.NullTime
+		var stage sql.NullString
+		var errorMsg sql.NullString
+		var rollbackData sql.NullString
+
+		if err := rows.Scan(&job.ID, &job.TargetHost, &job.TargetPort, &job.TargetUser, &job.SSHKeyID, &job.AgentBinaryID, &job.Status, &stage, &job.Progress, &errorMsg, &rollbackData, &job.StartedAt, &completedAt); err != nil {
+			return nil, fmt.Errorf("scanning provision job: %w", err)
+		}
+
+		if stage.Valid {
+			job.Stage = stage.String
+		}
+		if errorMsg.Valid {
+			job.ErrorMessage = errorMsg.String
+		}
+		if rollbackData.Valid {
+			job.RollbackData = rollbackData.String
+		}
+		if completedAt.Valid {
+			job.CompletedAt = &completedAt.Time
+		}
+
+		jobs = append(jobs, &job)
+	}
+	return jobs, rows.Err()
 }

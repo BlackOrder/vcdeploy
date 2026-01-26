@@ -2,29 +2,74 @@ package provision
 
 import (
 	"context"
-	"errors"
-	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/BlackOrder/vcdeploy/internal/security"
+	"github.com/BlackOrder/vcdeploy/internal/services"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"go.uber.org/zap"
 )
 
-func setupTestProvisioner(t *testing.T) (*Provisioner, *storage.DB) {
+// mockAgentService implements services.AgentServicer for testing.
+type mockAgentService struct {
+	agents map[string]*storage.Agent
+}
+
+func newMockAgentService() *mockAgentService {
+	return &mockAgentService{
+		agents: make(map[string]*storage.Agent),
+	}
+}
+
+func (m *mockAgentService) GetByID(_ context.Context, id string) (*storage.Agent, error) {
+	agent, ok := m.agents[id]
+	if !ok {
+		return nil, services.NotFound("GetByID", "agent", id)
+	}
+	return agent, nil
+}
+
+func (m *mockAgentService) Upsert(_ context.Context, agent *storage.Agent) error {
+	m.agents[agent.ID] = agent
+	return nil
+}
+
+func (m *mockAgentService) Delete(_ context.Context, id string) error {
+	delete(m.agents, id)
+	return nil
+}
+
+func (m *mockAgentService) List(_ context.Context) ([]*storage.Agent, error) {
+	agents := make([]*storage.Agent, 0, len(m.agents))
+	for _, a := range m.agents {
+		agents = append(agents, a)
+	}
+	return agents, nil
+}
+
+func (m *mockAgentService) Count(_ context.Context) (int64, error) {
+	return int64(len(m.agents)), nil
+}
+
+func (m *mockAgentService) CountByStatus(_ context.Context) (map[string]int64, error) {
+	result := make(map[string]int64)
+	for _, a := range m.agents {
+		result[a.Status]++
+	}
+	return result, nil
+}
+
+func (m *mockAgentService) MarkStale(_ context.Context, _ time.Time) (int64, error) {
+	return 0, nil
+}
+
+func setupTestProvisioner(t *testing.T) (*Provisioner, *mockAgentService) {
 	t.Helper()
 
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
 	logger := zap.NewNop()
-
-	db, err := storage.New(dbPath, logger)
-	if err != nil {
-		t.Fatalf("Failed to create test database: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
+	mockSvc := newMockAgentService()
 
 	var registeredTokens = make(map[string]string)
 	cfg := ProvisionerConfig{
@@ -34,9 +79,9 @@ func setupTestProvisioner(t *testing.T) (*Provisioner, *storage.DB) {
 		},
 	}
 
-	p := NewProvisioner(db, nil, nil, logger, cfg)
+	p := NewProvisioner(mockSvc, nil, nil, logger, cfg)
 
-	return p, db
+	return p, mockSvc
 }
 
 func TestProvisioner_Provision(t *testing.T) {
@@ -145,7 +190,7 @@ func TestProvisioner_Provision_DuplicateAgent(t *testing.T) {
 }
 
 func TestProvisioner_Deprovision(t *testing.T) {
-	p, db := setupTestProvisioner(t)
+	p, mockSvc := setupTestProvisioner(t)
 	ctx := context.Background()
 
 	// Provision first
@@ -159,9 +204,9 @@ func TestProvisioner_Deprovision(t *testing.T) {
 	}
 
 	// Verify agent exists
-	agent, err := db.GetAgent(ctx, "agent-1")
-	if err != nil {
-		t.Fatalf("GetAgent failed: %v", err)
+	agent, ok := mockSvc.agents["agent-1"]
+	if !ok {
+		t.Fatal("Agent should exist in mock")
 	}
 	if agent == nil {
 		t.Fatal("Agent should exist")
@@ -174,11 +219,8 @@ func TestProvisioner_Deprovision(t *testing.T) {
 	}
 
 	// Verify agent is gone
-	agent, err = db.GetAgent(ctx, "agent-1")
-	if !errors.Is(err, storage.ErrNotFound) {
-		t.Fatalf("GetAgent expected ErrNotFound after deprovision, got: %v", err)
-	}
-	if agent != nil {
+	_, ok = mockSvc.agents["agent-1"]
+	if ok {
 		t.Error("Agent should be deleted")
 	}
 }
@@ -235,10 +277,10 @@ func TestProvisioner_GetAgent(t *testing.T) {
 	p, _ := setupTestProvisioner(t)
 	ctx := context.Background()
 
-	// Get nonexistent - should return ErrNotFound
+	// Get nonexistent - should return not found error
 	agent, err := p.GetAgent(ctx, "agent-1")
-	if !errors.Is(err, storage.ErrNotFound) {
-		t.Fatalf("GetAgent expected ErrNotFound, got: %v", err)
+	if !services.IsNotFound(err) {
+		t.Fatalf("GetAgent expected not found error, got: %v", err)
 	}
 	if agent != nil {
 		t.Error("Expected nil for nonexistent agent")
@@ -349,7 +391,7 @@ func TestProvisioner_RegenerateToken(t *testing.T) {
 }
 
 func TestProvisioner_RegenerateToken_AlreadyRegistered(t *testing.T) {
-	p, db := setupTestProvisioner(t)
+	p, mockSvc := setupTestProvisioner(t)
 	ctx := context.Background()
 
 	// Provision
@@ -363,9 +405,9 @@ func TestProvisioner_RegenerateToken_AlreadyRegistered(t *testing.T) {
 	}
 
 	// Simulate agent registration
-	agent, _ := db.GetAgent(ctx, "agent-1")
+	agent := mockSvc.agents["agent-1"]
 	agent.Status = "online"
-	_ = db.UpsertAgent(ctx, agent)
+	mockSvc.agents["agent-1"] = agent
 
 	// Try to regenerate - should fail
 	_, err = p.RegenerateToken(ctx, "agent-1")

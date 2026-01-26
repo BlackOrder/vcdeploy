@@ -355,7 +355,8 @@ func (r *SSHRunner) Run(ctx context.Context, cmd string, opts RunOptions) (*Comm
 	}
 
 	if err != nil {
-		if exitErr, ok := err.(*ssh.ExitError); ok {
+		var exitErr *ssh.ExitError
+		if errors.As(err, &exitErr) {
 			result.ExitCode = exitErr.ExitStatus()
 		} else {
 			return nil, fmt.Errorf("running command: %w", err)
@@ -398,7 +399,8 @@ func (r *SSHRunner) RunWithOutput(ctx context.Context, cmd string, stdout, stder
 	r.mu.Unlock()
 
 	if err != nil {
-		if _, ok := err.(*ssh.ExitError); ok {
+		var exitErr *ssh.ExitError
+		if errors.As(err, &exitErr) {
 			return err // Return exit error for caller to handle
 		}
 		return fmt.Errorf("running command: %w", err)

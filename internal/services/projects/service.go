@@ -3,6 +3,7 @@ package projects
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
@@ -81,4 +82,56 @@ func (s *Service) Delete(ctx context.Context, name string) error {
 		return fmt.Errorf("deleting project: %w", err)
 	}
 	return nil
+}
+
+// DeleteWithCleanup deletes a project and all associated data (webhooks, secrets, deployments) in a transaction.
+func (s *Service) DeleteWithCleanup(ctx context.Context, name string) error {
+	// First get the project to find its ID
+	project, err := s.db.GetProjectByName(ctx, name)
+	if err != nil {
+		return fmt.Errorf("getting project: %w", err)
+	}
+
+	return s.db.RunInTransaction(ctx, func(tx *sql.Tx) error {
+		// Delete project webhooks
+		if _, err := tx.ExecContext(ctx, `DELETE FROM project_webhooks WHERE project_id = ?`, project.ID); err != nil {
+			return fmt.Errorf("deleting project webhooks: %w", err)
+		}
+
+		// Delete project secrets
+		if _, err := tx.ExecContext(ctx, `DELETE FROM secrets WHERE project = ?`, name); err != nil {
+			return fmt.Errorf("deleting project secrets: %w", err)
+		}
+
+		// Delete deployment logs for this project's deployments
+		if _, err := tx.ExecContext(ctx, `DELETE FROM deployment_logs WHERE deployment_id IN (SELECT id FROM deployments WHERE project = ?)`, name); err != nil {
+			return fmt.Errorf("deleting deployment logs: %w", err)
+		}
+
+		// Delete deployments
+		if _, err := tx.ExecContext(ctx, `DELETE FROM deployments WHERE project = ?`, name); err != nil {
+			return fmt.Errorf("deleting deployments: %w", err)
+		}
+
+		// Delete scheduled deployments
+		if _, err := tx.ExecContext(ctx, `DELETE FROM scheduled_deployments WHERE project = ?`, name); err != nil {
+			return fmt.Errorf("deleting scheduled deployments: %w", err)
+		}
+
+		// Delete the project
+		result, err := tx.ExecContext(ctx, `DELETE FROM projects WHERE name = ?`, name)
+		if err != nil {
+			return fmt.Errorf("deleting project: %w", err)
+		}
+
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("checking rows affected: %w", err)
+		}
+		if rowsAffected == 0 {
+			return storage.ErrNotFound
+		}
+
+		return nil
+	})
 }

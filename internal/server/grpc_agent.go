@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -185,7 +186,7 @@ func (s *AgentServer) Connect(stream proto.AgentService_ConnectServer) error {
 
 	// Wait for the AgentReady message to identify the agent
 	msg, err := stream.Recv()
-	if err == io.EOF {
+	if errors.Is(err, io.EOF) {
 		return nil
 	}
 	if err != nil {
@@ -276,7 +277,7 @@ func (s *AgentServer) Connect(stream proto.AgentService_ConnectServer) error {
 	// Process incoming messages from agent
 	for {
 		msg, err := stream.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			s.logger.Info("Agent disconnected (EOF)", zap.String("agent_id", agentID))
 			return nil
 		}

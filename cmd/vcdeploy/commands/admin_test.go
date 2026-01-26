@@ -64,7 +64,7 @@ func TestAPIClientGet(t *testing.T) {
 		}
 
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	}))
 	defer server.Close()
 
@@ -97,7 +97,7 @@ func TestAPIClientPost(t *testing.T) {
 		}
 
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]int{"id": 1})
+		_ = json.NewEncoder(w).Encode(map[string]int{"id": 1})
 	}))
 	defer server.Close()
 
@@ -158,14 +158,14 @@ func TestRunUserListSuccess(t *testing.T) {
 			t.Errorf("Path = %q, want /api/v1/users", r.URL.Path)
 		}
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(users)
+		_ = json.NewEncoder(w).Encode(users)
 	}))
 	defer server.Close()
 
 	cmd := userCmd
 	cmd.SetArgs([]string{"list"})
-	cmd.Flags().Set("master", server.URL)
-	cmd.Flags().Set("token", "test-token")
+	_ = cmd.Flags().Set("master", server.URL)
+	_ = cmd.Flags().Set("token", "test-token")
 
 	// We can't easily capture output here, but at least test it doesn't error
 	// In a real scenario, we'd inject the output writer
@@ -182,7 +182,7 @@ func TestRunAgentTokenCreateSuccess(t *testing.T) {
 		}
 
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"token":      "agent-registration-token-123",
 			"expires_at": "2026-02-01T00:00:00Z",
 		})
@@ -298,10 +298,10 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 				{"id": 1.0, "username": "admin", "email": "admin@test.com", "role": "admin", "createdAt": "2024-01-01T00:00:00Z"},
 				{"id": 2.0, "username": "deployer", "email": "deployer@test.com", "role": "deployer", "createdAt": "2024-01-02T00:00:00Z"},
 			}
-			json.NewEncoder(w).Encode(users)
+			_ = json.NewEncoder(w).Encode(users)
 		case http.MethodPost:
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(map[string]interface{}{"id": 3.0, "username": "newuser"})
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": 3.0, "username": "newuser"})
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -312,10 +312,10 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 		switch r.Method {
 		case http.MethodDelete:
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
+			_ = json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
 		case http.MethodPatch:
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]string{"status": "updated"})
+			_ = json.NewEncoder(w).Encode(map[string]string{"status": "updated"})
 		}
 	})
 
@@ -325,7 +325,7 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 			{"id": "agent-1", "hostname": "server1.example.com", "status": "online", "lastSeenAt": "2024-01-01T12:00:00Z"},
 			{"id": "agent-2", "hostname": "server2.example.com", "status": "offline", "lastSeenAt": "2024-01-01T00:00:00Z"},
 		}
-		json.NewEncoder(w).Encode(agents)
+		_ = json.NewEncoder(w).Encode(agents)
 	})
 
 	// Agent by ID endpoint
@@ -334,7 +334,7 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 		if strings.HasSuffix(path, "/tokens") {
 			// Agent token generation
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"token":      "reg-token-12345",
 				"expires_at": "2025-01-01T00:00:00Z",
 			})
@@ -350,7 +350,7 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 				"lastSeenAt":   "2024-01-01T12:00:00Z",
 				"labels":       map[string]interface{}{"env": "production", "tier": "web"},
 			}
-			json.NewEncoder(w).Encode(agent)
+			_ = json.NewEncoder(w).Encode(agent)
 		case http.MethodDelete:
 			w.WriteHeader(http.StatusOK)
 		}
@@ -362,7 +362,7 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 			{"id": "deploy-1", "project": "webapp", "branch": "main", "status": "success", "startedAt": "2024-01-01T10:00:00Z"},
 			{"id": "deploy-2", "project": "api", "branch": "develop", "status": "running", "startedAt": "2024-01-01T11:00:00Z"},
 		}
-		json.NewEncoder(w).Encode(deployments)
+		_ = json.NewEncoder(w).Encode(deployments)
 	})
 
 	// Deployment by ID endpoint
@@ -370,7 +370,7 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 		path := r.URL.Path
 		if strings.HasSuffix(path, "/cancel") {
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]string{"status": "cancelled"})
+			_ = json.NewEncoder(w).Encode(map[string]string{"status": "cancelled"})
 			return
 		}
 		if strings.HasSuffix(path, "/logs") {
@@ -379,7 +379,7 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 				{"createdAt": "2024-01-01T10:01:00Z", "level": "INFO", "message": "Dependencies installed"},
 				{"createdAt": "2024-01-01T10:02:00Z", "level": "INFO", "message": "Build complete"},
 			}
-			json.NewEncoder(w).Encode(logs)
+			_ = json.NewEncoder(w).Encode(logs)
 			return
 		}
 		deployment := map[string]interface{}{
@@ -392,14 +392,14 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 			"completedAt": "2024-01-01T10:05:00Z",
 			"triggeredBy": "admin",
 		}
-		json.NewEncoder(w).Encode(deployment)
+		_ = json.NewEncoder(w).Encode(deployment)
 	})
 
 	// Project deploy endpoint
 	mux.HandleFunc("/api/v1/projects/", func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/deploy") {
 			w.WriteHeader(http.StatusAccepted)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"id":     "deploy-new-1",
 				"status": "pending",
 			})
@@ -416,7 +416,7 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 				"created_at":  "2024-01-01T00:00:00Z",
 				"updated_at":  "2024-01-01T00:00:00Z",
 			}
-			json.NewEncoder(w).Encode(project)
+			_ = json.NewEncoder(w).Encode(project)
 		}
 	})
 
@@ -432,18 +432,18 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 				"max_attempts":    5,
 			},
 		}
-		json.NewEncoder(w).Encode(settings)
+		_ = json.NewEncoder(w).Encode(settings)
 	})
 
 	mux.HandleFunc("/api/v1/settings/import", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]interface{}{"imported": 5})
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"imported": 5})
 	})
 
 	mux.HandleFunc("/api/v1/settings/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPut {
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]string{"status": "updated"})
+			_ = json.NewEncoder(w).Encode(map[string]string{"status": "updated"})
 		}
 	})
 
@@ -455,10 +455,10 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 				{"id": 1.0, "name": "ci-deploy", "createdAt": "2024-01-01T00:00:00Z", "expiresAt": nil, "lastUsedAt": "2024-01-15T10:00:00Z"},
 				{"id": 2.0, "name": "backup-key", "createdAt": "2024-01-05T00:00:00Z", "expiresAt": "2025-01-05T00:00:00Z", "lastUsedAt": nil},
 			}
-			json.NewEncoder(w).Encode(keys)
+			_ = json.NewEncoder(w).Encode(keys)
 		case http.MethodPost:
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"id":   3.0,
 				"name": "new-key",
 				"key":  "vcd_newkey_secret123456",
@@ -479,17 +479,17 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 			{"timestamp": "2024-01-01T10:00:00Z", "user": "admin", "action": "deploy", "resource": "webapp", "result": "success"},
 			{"timestamp": "2024-01-01T09:00:00Z", "user": "admin", "action": "login", "resource": "system", "result": "success"},
 		}
-		json.NewEncoder(w).Encode(entries)
+		_ = json.NewEncoder(w).Encode(entries)
 	})
 
 	// Health endpoint
 	mux.HandleFunc("/api/v1/health", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
 	})
 
 	// Stats endpoint
 	mux.HandleFunc("/api/v1/stats", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"projects":         5.0,
 			"connected_agents": 3.0,
 		})
@@ -522,7 +522,7 @@ func TestRunUserList(t *testing.T) {
 
 	w.Close()
 	var stdout bytes.Buffer
-	io.Copy(&stdout, r)
+	_, _ = io.Copy(&stdout, r)
 	os.Stdout = oldStdout
 
 	if err != nil {
@@ -568,7 +568,7 @@ func TestRunAgentList(t *testing.T) {
 
 	w.Close()
 	var stdout bytes.Buffer
-	io.Copy(&stdout, r)
+	_, _ = io.Copy(&stdout, r)
 	os.Stdout = oldStdout
 
 	if err != nil {
@@ -587,7 +587,7 @@ func TestRunAgentList(t *testing.T) {
 // TestRunAgentListEmpty tests runAgentList when no agents exist.
 func TestRunAgentListEmpty(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode([]map[string]interface{}{})
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{})
 	}))
 	defer server.Close()
 
@@ -601,7 +601,7 @@ func TestRunAgentListEmpty(t *testing.T) {
 
 	w.Close()
 	var stdout bytes.Buffer
-	io.Copy(&stdout, r)
+	_, _ = io.Copy(&stdout, r)
 	os.Stdout = oldStdout
 
 	if err != nil {
@@ -629,7 +629,7 @@ func TestRunAgentShow(t *testing.T) {
 
 	w.Close()
 	var stdout bytes.Buffer
-	io.Copy(&stdout, r)
+	_, _ = io.Copy(&stdout, r)
 	os.Stdout = oldStdout
 
 	if err != nil {
@@ -661,7 +661,7 @@ func TestRunAgentToken(t *testing.T) {
 
 	w.Close()
 	var stdout bytes.Buffer
-	io.Copy(&stdout, r)
+	_, _ = io.Copy(&stdout, r)
 	os.Stdout = oldStdout
 
 	if err != nil {
@@ -678,7 +678,7 @@ func TestRunAgentToken(t *testing.T) {
 func TestRunAgentTokenInvalidResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Return response without token field
-		json.NewEncoder(w).Encode(map[string]interface{}{"other": "value"})
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"other": "value"})
 	}))
 	defer server.Close()
 
@@ -710,7 +710,7 @@ func TestRunDeploymentList(t *testing.T) {
 
 	w.Close()
 	var stdout bytes.Buffer
-	io.Copy(&stdout, r)
+	_, _ = io.Copy(&stdout, r)
 	os.Stdout = oldStdout
 
 	if err != nil {
@@ -741,7 +741,7 @@ func TestRunDeploymentStatus(t *testing.T) {
 
 	w.Close()
 	var stdout bytes.Buffer
-	io.Copy(&stdout, r)
+	_, _ = io.Copy(&stdout, r)
 	os.Stdout = oldStdout
 
 	if err != nil {
@@ -772,7 +772,7 @@ func TestRunDeploymentCancel(t *testing.T) {
 
 	w.Close()
 	var stdout bytes.Buffer
-	io.Copy(&stdout, r)
+	_, _ = io.Copy(&stdout, r)
 	os.Stdout = oldStdout
 
 	if err != nil {
@@ -815,7 +815,7 @@ func TestRunDeploymentLogs(t *testing.T) {
 
 	w.Close()
 	var stdout bytes.Buffer
-	io.Copy(&stdout, r)
+	_, _ = io.Copy(&stdout, r)
 	os.Stdout = oldStdout
 
 	if err != nil {
@@ -834,7 +834,7 @@ func TestRunDeploymentLogs(t *testing.T) {
 // TestRunDeploymentLogsEmpty tests runDeploymentLogs when no logs exist.
 func TestRunDeploymentLogsEmpty(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode([]map[string]interface{}{})
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{})
 	}))
 	defer server.Close()
 
@@ -848,7 +848,7 @@ func TestRunDeploymentLogsEmpty(t *testing.T) {
 
 	w.Close()
 	var stdout bytes.Buffer
-	io.Copy(&stdout, r)
+	_, _ = io.Copy(&stdout, r)
 	os.Stdout = oldStdout
 
 	if err != nil {
@@ -876,7 +876,7 @@ func TestRunConfigShow(t *testing.T) {
 
 	w.Close()
 	var stdout bytes.Buffer
-	io.Copy(&stdout, r)
+	_, _ = io.Copy(&stdout, r)
 	os.Stdout = oldStdout
 
 	if err != nil {
@@ -907,7 +907,7 @@ func TestRunConfigExport(t *testing.T) {
 
 	w.Close()
 	var stdout bytes.Buffer
-	io.Copy(&stdout, r)
+	_, _ = io.Copy(&stdout, r)
 	os.Stdout = oldStdout
 
 	if err != nil {
@@ -950,7 +950,7 @@ func TestRunConfigImport(t *testing.T) {
 
 	w.Close()
 	var stdout bytes.Buffer
-	io.Copy(&stdout, r)
+	_, _ = io.Copy(&stdout, r)
 	os.Stdout = oldStdout
 
 	if err != nil {
@@ -994,7 +994,7 @@ func TestRunConfigSet(t *testing.T) {
 
 	w.Close()
 	var stdout bytes.Buffer
-	io.Copy(&stdout, r)
+	_, _ = io.Copy(&stdout, r)
 	os.Stdout = oldStdout
 
 	if err != nil {
@@ -1038,7 +1038,7 @@ func TestRunAPIKeyList(t *testing.T) {
 
 	w.Close()
 	var stdout bytes.Buffer
-	io.Copy(&stdout, r)
+	_, _ = io.Copy(&stdout, r)
 	os.Stdout = oldStdout
 
 	if err != nil {
@@ -1054,7 +1054,7 @@ func TestRunAPIKeyList(t *testing.T) {
 // TestRunAPIKeyListEmpty tests runAPIKeyList when no keys exist.
 func TestRunAPIKeyListEmpty(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode([]map[string]interface{}{})
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{})
 	}))
 	defer server.Close()
 
@@ -1068,7 +1068,7 @@ func TestRunAPIKeyListEmpty(t *testing.T) {
 
 	w.Close()
 	var stdout bytes.Buffer
-	io.Copy(&stdout, r)
+	_, _ = io.Copy(&stdout, r)
 	os.Stdout = oldStdout
 
 	if err != nil {
@@ -1097,7 +1097,7 @@ func TestRunAPIKeyCreate(t *testing.T) {
 
 	w.Close()
 	var stdout bytes.Buffer
-	io.Copy(&stdout, r)
+	_, _ = io.Copy(&stdout, r)
 	os.Stdout = oldStdout
 
 	if err != nil {
@@ -1131,7 +1131,7 @@ func TestRunDeploymentTrigger(t *testing.T) {
 
 	w.Close()
 	var stdout bytes.Buffer
-	io.Copy(&stdout, r)
+	_, _ = io.Copy(&stdout, r)
 	os.Stdout = oldStdout
 
 	if err != nil {
@@ -1148,7 +1148,7 @@ func TestRunDeploymentTrigger(t *testing.T) {
 func TestRunDeploymentTriggerScheduled(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusAccepted)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"id":           "deploy-scheduled-1",
 			"status":       "scheduled",
 			"scheduled_at": "2025-01-01T00:00:00Z",
@@ -1169,7 +1169,7 @@ func TestRunDeploymentTriggerScheduled(t *testing.T) {
 
 	w.Close()
 	var stdout bytes.Buffer
-	io.Copy(&stdout, r)
+	_, _ = io.Copy(&stdout, r)
 	os.Stdout = oldStdout
 
 	if err != nil {

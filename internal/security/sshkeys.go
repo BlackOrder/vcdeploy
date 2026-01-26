@@ -60,6 +60,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"net"
 	"strconv"
@@ -529,7 +530,8 @@ func (e *HostKeyMismatchError) Error() string {
 
 // isUnknownHostError checks if an error is an UnknownHostError.
 func isUnknownHostError(err error, target **UnknownHostError) bool {
-	if e, ok := err.(*UnknownHostError); ok {
+	var e *UnknownHostError
+	if errors.As(err, &e) {
 		*target = e
 		return true
 	}

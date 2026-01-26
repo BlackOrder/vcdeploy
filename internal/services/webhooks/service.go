@@ -95,3 +95,12 @@ func (s *Service) GetDecryptedSecret(ctx context.Context, projectID int64, provi
 
 	return []byte(decrypted), nil
 }
+
+// CleanupOrphanedWebhooks removes webhooks that reference deleted projects.
+func (s *Service) CleanupOrphanedWebhooks(ctx context.Context) (int64, error) {
+	count, err := s.db.CleanupOrphanedWebhooks(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("cleaning up orphaned webhooks: %w", err)
+	}
+	return count, nil
+}

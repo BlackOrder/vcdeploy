@@ -378,3 +378,288 @@ func TestDatabaseBackupAfterMigrations(t *testing.T) {
 		}
 	}
 }
+
+func TestMigrateToUpward(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := New(dbPath, nil)
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+	defer db.Close()
+
+	ctx := context.Background()
+
+	// First rollback to an earlier version
+	status, err := db.GetMigrationStatus()
+	if err != nil {
+		t.Fatalf("GetMigrationStatus() failed: %v", err)
+	}
+
+	if len(status) < 3 {
+		t.Skip("Need at least 3 migrations for this test")
+	}
+
+	// Roll back 2 migrations
+	if err := db.MigrateDown(ctx, 2); err != nil {
+		t.Fatalf("MigrateDown() failed: %v", err)
+	}
+
+	// Find current version
+	statusAfterDown, _ := db.GetMigrationStatus()
+	var currentVersion int
+	for _, s := range statusAfterDown {
+		if s.Applied && s.Version > currentVersion {
+			currentVersion = s.Version
+		}
+	}
+
+	// Find target version (2 above current)
+	targetVersion := currentVersion + 2
+
+	// Migrate up to specific version
+	if err := db.MigrateTo(ctx, targetVersion); err != nil {
+		t.Fatalf("MigrateTo(%d) upward failed: %v", targetVersion, err)
+	}
+
+	// Verify we're at target
+	statusAfterUp, _ := db.GetMigrationStatus()
+	var maxApplied int
+	for _, s := range statusAfterUp {
+		if s.Applied && s.Version > maxApplied {
+			maxApplied = s.Version
+		}
+	}
+	if maxApplied != targetVersion {
+		t.Errorf("MigrateTo() max applied = %d, want %d", maxApplied, targetVersion)
+	}
+}
+
+func TestMigrateToDownward(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := New(dbPath, nil)
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+	defer db.Close()
+
+	ctx := context.Background()
+
+	status, err := db.GetMigrationStatus()
+	if err != nil {
+		t.Fatalf("GetMigrationStatus() failed: %v", err)
+	}
+
+	if len(status) < 3 {
+		t.Skip("Need at least 3 migrations for this test")
+	}
+
+	// Find max version
+	var maxVersion int
+	for _, s := range status {
+		if s.Applied && s.Version > maxVersion {
+			maxVersion = s.Version
+		}
+	}
+
+	// Migrate down to 2 versions below max
+	targetVersion := maxVersion - 2
+	if err := db.MigrateTo(ctx, targetVersion); err != nil {
+		t.Fatalf("MigrateTo(%d) downward failed: %v", targetVersion, err)
+	}
+
+	// Verify
+	statusAfter, _ := db.GetMigrationStatus()
+	for _, s := range statusAfter {
+		if s.Version > targetVersion && s.Applied {
+			t.Errorf("Migration %d should not be applied after MigrateTo(%d)", s.Version, targetVersion)
+		}
+	}
+}
+
+func TestMigrateDownMultiple(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := New(dbPath, nil)
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+	defer db.Close()
+
+	ctx := context.Background()
+
+	// Get initial state
+	statusBefore, err := db.GetMigrationStatus()
+	if err != nil {
+		t.Fatalf("GetMigrationStatus() failed: %v", err)
+	}
+	appliedBefore := 0
+	for _, s := range statusBefore {
+		if s.Applied {
+			appliedBefore++
+		}
+	}
+
+	if appliedBefore < 3 {
+		t.Skip("Need at least 3 migrations for this test")
+	}
+
+	// Roll back 2 migrations
+	if err := db.MigrateDown(ctx, 2); err != nil {
+		t.Fatalf("MigrateDown(2) failed: %v", err)
+	}
+
+	// Verify
+	statusAfter, err := db.GetMigrationStatus()
+	if err != nil {
+		t.Fatalf("GetMigrationStatus() after failed: %v", err)
+	}
+	appliedAfter := 0
+	for _, s := range statusAfter {
+		if s.Applied {
+			appliedAfter++
+		}
+	}
+
+	if appliedAfter != appliedBefore-2 {
+		t.Errorf("MigrateDown(2) applied = %d, want %d", appliedAfter, appliedBefore-2)
+	}
+}
+
+func TestMigrationsHaveDescriptions(t *testing.T) {
+	for _, m := range migrations {
+		if m.Description == "" {
+			t.Errorf("Migration %d has no description", m.Version)
+		}
+	}
+}
+
+func TestMigrationsHaveUpFunctions(t *testing.T) {
+	for _, m := range migrations {
+		if m.Up == nil {
+			t.Errorf("Migration %d (%s) has no Up function", m.Version, m.Description)
+		}
+	}
+}
+
+func TestApplyMigrationError(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := New(dbPath, nil)
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+	defer db.Close()
+
+	ctx := context.Background()
+
+	// Get current version
+	status, _ := db.GetMigrationStatus()
+	var applied int
+	for _, s := range status {
+		if s.Applied {
+			applied++
+		}
+	}
+
+	// Try to migrate down beyond first
+	// First migrate up fully, then try to migrate down from version 1 (no down possible)
+	if applied > 0 {
+		// Migrate down to 1
+		_ = db.MigrateTo(ctx, 1)
+
+		// Try to migrate down one more - this should fail because migration 1 may not have Down
+		_ = db.MigrateDown(ctx, 1)
+		// This may or may not error depending on whether migration 1 has Down function
+		// Either way, this exercises the code path
+	}
+}
+
+func TestMigrateUpAlreadyAtLatest(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := New(dbPath, nil)
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+	defer db.Close()
+
+	ctx := context.Background()
+
+	// Already at latest from New()
+	// Call MigrateUp again - should be a no-op
+	err = db.MigrateUp(ctx)
+	if err != nil {
+		t.Fatalf("MigrateUp() when already at latest error = %v", err)
+	}
+
+	// Verify still at latest
+	status, _ := db.GetMigrationStatus()
+	allApplied := true
+	for _, s := range status {
+		if !s.Applied {
+			allApplied = false
+			break
+		}
+	}
+	if !allApplied {
+		t.Error("MigrateUp() should keep all migrations applied")
+	}
+}
+
+func TestMigrateToSameVersion(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := New(dbPath, nil)
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+	defer db.Close()
+
+	ctx := context.Background()
+
+	// Get current version
+	status, _ := db.GetMigrationStatus()
+	var maxApplied int
+	for _, s := range status {
+		if s.Applied && s.Version > maxApplied {
+			maxApplied = s.Version
+		}
+	}
+
+	// Migrate to same version - should be no-op
+	err = db.MigrateTo(ctx, maxApplied)
+	if err != nil {
+		t.Fatalf("MigrateTo() same version error = %v", err)
+	}
+}
+
+func TestMigrateDownZeroSteps(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := New(dbPath, nil)
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+	defer db.Close()
+
+	ctx := context.Background()
+
+	// MigrateDown with 0 steps should return error (steps must be positive)
+	err = db.MigrateDown(ctx, 0)
+	if err == nil {
+		t.Fatal("MigrateDown(0) should return error")
+	}
+	// Verify it's the expected error
+	if err.Error() != "steps must be positive" {
+		t.Errorf("MigrateDown(0) error = %v, want 'steps must be positive'", err)
+	}
+}

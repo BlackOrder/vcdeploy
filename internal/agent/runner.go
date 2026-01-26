@@ -4,6 +4,7 @@ package agent
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -69,7 +70,8 @@ func (r *LocalRunner) Run(ctx context.Context, cmd string, opts deploy.RunOption
 	}
 
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			result.ExitCode = exitErr.ExitCode()
 		} else {
 			return nil, fmt.Errorf("running command: %w", err)
@@ -112,7 +114,8 @@ func (r *LocalRunner) RunWithOutput(ctx context.Context, cmd string, stdout, std
 	// Run command
 	err := c.Run()
 	if err != nil {
-		if _, ok := err.(*exec.ExitError); ok {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			return err // Return exit error for caller to handle
 		}
 		return fmt.Errorf("running command: %w", err)

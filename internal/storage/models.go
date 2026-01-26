@@ -233,3 +233,57 @@ type SSHHostKey struct {
 // Deployment is an alias for DeploymentRecord for backward compatibility.
 // Deprecated: Use DeploymentRecord directly.
 type Deployment = DeploymentRecord
+
+// --- Rate Limit Models ---
+
+// BlockedIP represents a blocked IP address.
+type BlockedIP struct {
+	ID        int64
+	IPAddress string
+	Reason    string
+	BlockedAt time.Time
+	ExpiresAt time.Time
+	BlockedBy string
+}
+
+// RateLimitRecord represents a rate limit tracking record.
+type RateLimitRecord struct {
+	ID          int64
+	Key         string
+	Bucket      string
+	Count       int
+	WindowStart time.Time
+	WindowEnd   time.Time
+}
+
+// --- Provision Job Models ---
+
+// ProvisionJob represents an agent provisioning job.
+type ProvisionJob struct {
+	ID            string
+	TargetHost    string
+	TargetPort    int
+	TargetUser    string
+	SSHKeyID      *int64
+	AgentBinaryID *int64
+	Status        string
+	Stage         string
+	Progress      int
+	ErrorMessage  string
+	RollbackData  string
+	StartedAt     time.Time
+	CompletedAt   *time.Time
+}
+
+// AgentBinary represents an agent binary release.
+type AgentBinary struct {
+	ID             int64
+	Version        string
+	OS             string
+	Arch           string
+	Path           string
+	ChecksumSHA256 string
+	SizeBytes      int64
+	UploadedAt     time.Time
+	IsCurrent      bool
+}

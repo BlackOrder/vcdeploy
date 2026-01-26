@@ -4,12 +4,12 @@ package provision
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"text/template"
 	"time"
 
 	"github.com/BlackOrder/vcdeploy/internal/security"
+	"github.com/BlackOrder/vcdeploy/internal/services"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"go.uber.org/zap"
 )
@@ -19,7 +19,7 @@ var installScriptTmpl = template.Must(template.New("install").Parse(installScrip
 
 // Provisioner handles agent provisioning operations.
 type Provisioner struct {
-	db        *storage.DB
+	agents    services.AgentServicer
 	ca        *security.CAManager
 	ssh       *security.SSHKeyManager
 	logger    *zap.Logger
@@ -36,9 +36,9 @@ type ProvisionerConfig struct {
 }
 
 // NewProvisioner creates a new agent provisioner.
-func NewProvisioner(db *storage.DB, ca *security.CAManager, ssh *security.SSHKeyManager, logger *zap.Logger, cfg ProvisionerConfig) *Provisioner {
+func NewProvisioner(agents services.AgentServicer, ca *security.CAManager, ssh *security.SSHKeyManager, logger *zap.Logger, cfg ProvisionerConfig) *Provisioner {
 	return &Provisioner{
-		db:            db,
+		agents:        agents,
 		ca:            ca,
 		ssh:           ssh,
 		logger:        logger.Named("provisioner"),
@@ -107,8 +107,8 @@ func (p *Provisioner) Provision(ctx context.Context, req *ProvisionRequest) (*Pr
 	}
 
 	// Check if agent already exists
-	existing, err := p.db.GetAgent(ctx, req.AgentID)
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
+	existing, err := p.agents.GetByID(ctx, req.AgentID)
+	if err != nil && !services.IsNotFound(err) {
 		return nil, fmt.Errorf("checking existing agent: %w", err)
 	}
 	if existing != nil {
@@ -134,7 +134,7 @@ func (p *Provisioner) Provision(ctx context.Context, req *ProvisionRequest) (*Pr
 		Labels:   req.Labels,
 		Status:   "pending",
 	}
-	if err := p.db.UpsertAgent(ctx, agent); err != nil {
+	if err := p.agents.Upsert(ctx, agent); err != nil {
 		return nil, fmt.Errorf("creating agent record: %w", err)
 	}
 
@@ -159,8 +159,8 @@ func (p *Provisioner) Provision(ctx context.Context, req *ProvisionRequest) (*Pr
 // Deprovision removes an agent and revokes its certificates.
 func (p *Provisioner) Deprovision(ctx context.Context, agentID string) error {
 	// Check agent exists
-	_, err := p.db.GetAgent(ctx, agentID)
-	if errors.Is(err, storage.ErrNotFound) {
+	_, err := p.agents.GetByID(ctx, agentID)
+	if services.IsNotFound(err) {
 		return fmt.Errorf("agent %s not found", agentID)
 	}
 	if err != nil {
@@ -186,7 +186,7 @@ func (p *Provisioner) Deprovision(ctx context.Context, agentID string) error {
 	}
 
 	// Delete the agent record
-	if err := p.db.DeleteAgent(ctx, agentID); err != nil {
+	if err := p.agents.Delete(ctx, agentID); err != nil {
 		return fmt.Errorf("deleting agent: %w", err)
 	}
 
@@ -196,17 +196,17 @@ func (p *Provisioner) Deprovision(ctx context.Context, agentID string) error {
 
 // ListAgents returns all provisioned agents.
 func (p *Provisioner) ListAgents(ctx context.Context) ([]*storage.Agent, error) {
-	return p.db.ListAgents(ctx)
+	return p.agents.List(ctx)
 }
 
 // GetAgent returns a specific agent.
 func (p *Provisioner) GetAgent(ctx context.Context, agentID string) (*storage.Agent, error) {
-	return p.db.GetAgent(ctx, agentID)
+	return p.agents.GetByID(ctx, agentID)
 }
 
 // UpdateAgentLabels updates an agent's labels.
 func (p *Provisioner) UpdateAgentLabels(ctx context.Context, agentID string, labels map[string]string) error {
-	agent, err := p.db.GetAgent(ctx, agentID)
+	agent, err := p.agents.GetByID(ctx, agentID)
 	if err != nil {
 		return fmt.Errorf("getting agent: %w", err)
 	}
@@ -215,13 +215,13 @@ func (p *Provisioner) UpdateAgentLabels(ctx context.Context, agentID string, lab
 	}
 
 	agent.Labels = labels
-	return p.db.UpsertAgent(ctx, agent)
+	return p.agents.Upsert(ctx, agent)
 }
 
 // RegenerateToken generates a new registration token for an agent.
 // This is useful if the original token expired or was compromised.
 func (p *Provisioner) RegenerateToken(ctx context.Context, agentID string) (string, error) {
-	agent, err := p.db.GetAgent(ctx, agentID)
+	agent, err := p.agents.GetByID(ctx, agentID)
 	if err != nil {
 		return "", fmt.Errorf("getting agent: %w", err)
 	}
@@ -247,7 +247,7 @@ func (p *Provisioner) RegenerateToken(ctx context.Context, agentID string) (stri
 
 // GetInstallScript returns an installation script for an agent.
 func (p *Provisioner) GetInstallScript(ctx context.Context, agentID, token string) (string, error) {
-	agent, err := p.db.GetAgent(ctx, agentID)
+	agent, err := p.agents.GetByID(ctx, agentID)
 	if err != nil {
 		return "", fmt.Errorf("getting agent: %w", err)
 	}

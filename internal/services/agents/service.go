@@ -66,6 +66,24 @@ func (s *Service) MarkStale(ctx context.Context, cutoff time.Time) (int64, error
 	return count, nil
 }
 
+// Count returns the total number of agents.
+func (s *Service) Count(ctx context.Context) (int64, error) {
+	count, err := s.db.CountAgents(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("counting agents: %w", err)
+	}
+	return count, nil
+}
+
+// CountByStatus returns agent counts grouped by status.
+func (s *Service) CountByStatus(ctx context.Context) (map[string]int64, error) {
+	counts, err := s.db.CountAgentsByStatus(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("counting agents by status: %w", err)
+	}
+	return counts, nil
+}
+
 // UpdateStatus updates an agent's status and last seen time.
 func (s *Service) UpdateStatus(ctx context.Context, id, status string) error {
 	agent, err := s.db.GetAgent(ctx, id)

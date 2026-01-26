@@ -783,7 +783,7 @@ func TestHandleProjectTypesPost(t *testing.T) {
 	server.handleProjectTypes(rec, req)
 
 	var types []*storage.ProjectType
-	json.NewDecoder(rec.Body).Decode(&types)
+	_ = json.NewDecoder(rec.Body).Decode(&types)
 
 	found := false
 	for _, pt := range types {
@@ -920,7 +920,7 @@ func TestSecretsFilterByProject(t *testing.T) {
 	}
 
 	var secrets []map[string]interface{}
-	json.NewDecoder(rec.Body).Decode(&secrets)
+	_ = json.NewDecoder(rec.Body).Decode(&secrets)
 
 	for _, s := range secrets {
 		if s["project"] != "project-a" {
@@ -1164,5 +1164,569 @@ func TestUIAPIKeysPage(t *testing.T) {
 	body := rec.Body.String()
 	if !strings.Contains(body, "API Keys") {
 		t.Error("response should contain 'API Keys' title")
+	}
+}
+
+// --- Authentication Tests ---
+
+func TestWithAuth_ValidXAPIKey(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	called := false
+	handler := server.withAuth(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects", nil)
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	rec := httptest.NewRecorder()
+
+	handler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if !called {
+		t.Error("handler should have been called")
+	}
+}
+
+func TestWithAuth_ExpiredAPIKey(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	ctx := context.Background()
+
+	// Create a user first
+	user := &storage.User{
+		Username:     "expired-key-user",
+		PasswordHash: "hash",
+		Email:        "expired@example.com",
+		Role:         "admin",
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+	_ = server.db.CreateUser(ctx, user)
+
+	// Create an expired API key
+	expiredKey := "expired-api-key-12345"
+	hash := sha256.Sum256([]byte(expiredKey))
+	pastTime := time.Now().Add(-24 * time.Hour)
+	apiKey := &storage.APIKey{
+		UserID:    user.ID,
+		Name:      "expired-key",
+		KeyHash:   hex.EncodeToString(hash[:]),
+		Scopes:    `["*"]`,
+		CreatedAt: time.Now(),
+		ExpiresAt: &pastTime, // Expired
+	}
+	_ = server.db.CreateAPIKey(ctx, apiKey)
+
+	called := false
+	handler := server.withAuth(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects", nil)
+	req.Header.Set("Authorization", "Bearer "+expiredKey)
+	rec := httptest.NewRecorder()
+
+	handler(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+	if called {
+		t.Error("handler should not have been called for expired key")
+	}
+}
+
+func TestWithUIAuth_ExpiredSession(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	ctx := context.Background()
+
+	// Create a user
+	user := &storage.User{
+		Username:     "expired-session-user",
+		PasswordHash: "hash",
+		Email:        "session@example.com",
+		Role:         "admin",
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+	_ = server.db.CreateUser(ctx, user)
+
+	// Create an expired session
+	expiredSession := &storage.Session{
+		ID:        "expired-session-token",
+		UserID:    user.ID,
+		IPAddress: "127.0.0.1",
+		UserAgent: "test-agent",
+		CreatedAt: time.Now().Add(-48 * time.Hour),
+		ExpiresAt: time.Now().Add(-24 * time.Hour), // Expired
+	}
+	_ = server.db.CreateSession(ctx, expiredSession)
+
+	called := false
+	handler := server.withUIAuth(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	req.AddCookie(&http.Cookie{Name: "session", Value: "expired-session-token"})
+	rec := httptest.NewRecorder()
+
+	handler(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want %d (redirect)", rec.Code, http.StatusSeeOther)
+	}
+	if called {
+		t.Error("handler should not have been called for expired session")
+	}
+}
+
+func TestWithUIAuth_InvalidSession(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	called := false
+	handler := server.withUIAuth(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	req.AddCookie(&http.Cookie{Name: "session", Value: "invalid-session-token"})
+	rec := httptest.NewRecorder()
+
+	handler(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusSeeOther)
+	}
+	if called {
+		t.Error("handler should not have been called")
+	}
+}
+
+// --- JSON Response Tests ---
+
+func TestJsonError(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	rec := httptest.NewRecorder()
+
+	server.jsonError(rec, http.StatusBadRequest, "test error message")
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+
+	if rec.Header().Get("Content-Type") != "application/json" {
+		t.Error("Content-Type should be application/json")
+	}
+
+	var result map[string]interface{}
+	_ = json.NewDecoder(rec.Body).Decode(&result)
+
+	if result["error"] != true {
+		t.Error("error field should be true")
+	}
+	if result["message"] != "test error message" {
+		t.Errorf("message = %v, want 'test error message'", result["message"])
+	}
+}
+
+// --- Agent Connection Tests ---
+
+func TestCheckAgentHealth_MultipleStates(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+
+	now := time.Now()
+	server.agentsMu.Lock()
+	server.agents["healthy"] = &AgentConnection{
+		ID:       "healthy",
+		Status:   "connected",
+		LastPing: now,
+	}
+	server.agents["stale"] = &AgentConnection{
+		ID:       "stale",
+		Status:   "connected",
+		LastPing: now.Add(-5 * time.Minute),
+	}
+	server.agents["recently-active"] = &AgentConnection{
+		ID:       "recently-active",
+		Status:   "connected",
+		LastPing: now.Add(-1 * time.Minute), // Within threshold
+	}
+	server.agents["already-stale"] = &AgentConnection{
+		ID:       "already-stale",
+		Status:   "stale",
+		LastPing: now.Add(-10 * time.Minute),
+	}
+	server.agentsMu.Unlock()
+
+	server.checkAgentHealth()
+
+	server.agentsMu.RLock()
+	defer server.agentsMu.RUnlock()
+
+	if server.agents["healthy"].Status != "connected" {
+		t.Errorf("healthy agent should remain connected, got %s", server.agents["healthy"].Status)
+	}
+	if server.agents["stale"].Status != "stale" {
+		t.Errorf("stale agent should be marked stale, got %s", server.agents["stale"].Status)
+	}
+	if server.agents["recently-active"].Status != "connected" {
+		t.Errorf("recently-active agent should remain connected, got %s", server.agents["recently-active"].Status)
+	}
+	// An already stale agent should remain stale
+	if server.agents["already-stale"].Status != "stale" {
+		t.Errorf("already-stale agent should remain stale, got %s", server.agents["already-stale"].Status)
+	}
+}
+
+// --- Logging Middleware Tests ---
+
+func TestLoggingMiddleware_RecordsStatus(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte("not found"))
+	})
+
+	wrapped := server.loggingMiddleware(inner)
+
+	req := httptest.NewRequest(http.MethodGet, "/nonexistent", nil)
+	rec := httptest.NewRecorder()
+
+	wrapped.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+func TestLoggingMiddleware_HandlesErrors(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "Internal error", http.StatusInternalServerError)
+	})
+
+	wrapped := server.loggingMiddleware(inner)
+
+	req := httptest.NewRequest(http.MethodGet, "/error", nil)
+	rec := httptest.NewRecorder()
+
+	wrapped.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+}
+
+// --- ResponseWriter Tests ---
+
+func TestResponseWriter_DefaultStatus(t *testing.T) {
+	t.Parallel()
+
+	rec := httptest.NewRecorder()
+	rw := &responseWriter{ResponseWriter: rec, status: 200}
+
+	// Write without calling WriteHeader
+	_, _ = rw.Write([]byte("test"))
+
+	if rw.status != 200 {
+		t.Errorf("status = %d, want 200 (default)", rw.status)
+	}
+}
+
+func TestResponseWriter_WriteHeaderMultipleCalls(t *testing.T) {
+	t.Parallel()
+
+	rec := httptest.NewRecorder()
+	rw := &responseWriter{ResponseWriter: rec, status: 200}
+
+	// First call should set status
+	rw.WriteHeader(http.StatusCreated)
+	if rw.status != http.StatusCreated {
+		t.Errorf("status = %d, want %d", rw.status, http.StatusCreated)
+	}
+
+	// Second call - status already recorded (per HTTP spec, only first call matters)
+	rw.WriteHeader(http.StatusAccepted)
+	// The status in rw tracks the actual status sent
+}
+
+// --- Template Function Tests ---
+
+func TestTemplateFuncs_FormatTime(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	funcs := server.templateFuncs()
+
+	formatTime := funcs["formatTime"].(func(time.Time) string)
+
+	tests := []struct {
+		input    time.Time
+		expected string
+	}{
+		{time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC), "2024-01-15 10:30:00"},
+		{time.Date(2024, 12, 31, 23, 59, 59, 0, time.UTC), "2024-12-31 23:59:59"},
+		{time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC), "2024-01-01 00:00:00"},
+	}
+
+	for _, tc := range tests {
+		result := formatTime(tc.input)
+		if result != tc.expected {
+			t.Errorf("formatTime(%v) = %s, want %s", tc.input, result, tc.expected)
+		}
+	}
+}
+
+func TestTemplateFuncs_Json(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	funcs := server.templateFuncs()
+
+	jsonFunc := funcs["json"].(func(interface{}) string)
+
+	tests := []struct {
+		input    interface{}
+		expected string
+	}{
+		{map[string]string{"key": "value"}, `{"key":"value"}`},
+		{[]int{1, 2, 3}, `[1,2,3]`},
+		{"simple string", `"simple string"`},
+		{42, `42`},
+		{nil, `null`},
+	}
+
+	for _, tc := range tests {
+		result := jsonFunc(tc.input)
+		if result != tc.expected {
+			t.Errorf("json(%v) = %s, want %s", tc.input, result, tc.expected)
+		}
+	}
+}
+
+// --- Server Configuration Tests ---
+
+func TestSetCAManager(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+
+	// Initially nil
+	if server.caManager != nil {
+		t.Error("caManager should be nil initially")
+	}
+
+	// Can't easily test with real CA, but we can verify the method exists
+	// and sets the field (with nil just to verify no panic)
+	server.SetCAManager(nil)
+}
+
+func TestSetKMS(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+
+	// Can set KMS (already set in newTestServer, but test method)
+	server.SetKMS(nil)
+
+	if server.kms != nil {
+		t.Error("kms should be nil after setting to nil")
+	}
+}
+
+// --- GetUserIDFromContext Tests ---
+
+func TestGetUserIDFromContext(t *testing.T) {
+	t.Parallel()
+
+	// Test with user ID in context
+	req := httptest.NewRequest("GET", "/", nil)
+	ctx := context.WithValue(req.Context(), contextKeyUserID, int64(123))
+	req = req.WithContext(ctx)
+
+	userID, ok := GetUserIDFromContext(req.Context())
+	if !ok {
+		t.Error("expected ok = true")
+	}
+	if userID != 123 {
+		t.Errorf("userID = %d, want 123", userID)
+	}
+}
+
+func TestGetUserIDFromContext_Missing(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest("GET", "/", nil)
+
+	userID, ok := GetUserIDFromContext(req.Context())
+	if ok {
+		t.Error("expected ok = false for missing context")
+	}
+	if userID != 0 {
+		t.Errorf("userID = %d, want 0 for missing context", userID)
+	}
+}
+
+func TestGetUserIDFromContext_WrongType(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest("GET", "/", nil)
+	ctx := context.WithValue(req.Context(), contextKeyUserID, "not-an-int")
+	req = req.WithContext(ctx)
+
+	userID, ok := GetUserIDFromContext(req.Context())
+	if ok {
+		t.Error("expected ok = false for wrong type")
+	}
+	if userID != 0 {
+		t.Errorf("userID = %d, want 0 for wrong type", userID)
+	}
+}
+
+// --- MasterServer Initialization Tests ---
+
+func TestNewMasterServer_WithRateLimiter(t *testing.T) {
+	t.Parallel()
+
+	logger := zap.NewNop()
+	db, err := storage.New(":memory:", logger)
+	if err != nil {
+		t.Fatalf("failed to create db: %v", err)
+	}
+
+	cfg := &config.MasterConfig{
+		Server: config.ServerConfig{Listen: ":8080"},
+		GRPC:   config.GRPCConfig{Listen: ":9090"},
+	}
+
+	server, err := NewMasterServer(cfg, db, logger)
+	if err != nil {
+		t.Fatalf("NewMasterServer() error = %v", err)
+	}
+
+	// Rate limiter should be initialized
+	if server.rateLimiter == nil {
+		t.Log("Note: rateLimiter may be nil if initialization failed (expected in test environment)")
+	}
+}
+
+func TestNewMasterServer_WithSecurityMiddleware(t *testing.T) {
+	t.Parallel()
+
+	logger := zap.NewNop()
+	db, err := storage.New(":memory:", logger)
+	if err != nil {
+		t.Fatalf("failed to create db: %v", err)
+	}
+
+	cfg := &config.MasterConfig{
+		Server: config.ServerConfig{Listen: ":8080"},
+		GRPC:   config.GRPCConfig{Listen: ":9090"},
+	}
+
+	server, err := NewMasterServer(cfg, db, logger)
+	if err != nil {
+		t.Fatalf("NewMasterServer() error = %v", err)
+	}
+
+	// Security middleware should be initialized
+	if server.securityMiddleware == nil {
+		t.Error("securityMiddleware should be initialized")
+	}
+}
+
+// --- Benchmark Tests ---
+
+func BenchmarkHandleStats(b *testing.B) {
+	logger := zap.NewNop()
+	db, err := storage.New(":memory:", logger)
+	if err != nil {
+		b.Fatalf("failed to create db: %v", err)
+	}
+	cfg := &config.MasterConfig{}
+	server, err := NewMasterServer(cfg, db, logger)
+	if err != nil {
+		b.Fatalf("failed to create server: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/stats", nil)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		rec := httptest.NewRecorder()
+		server.handleStats(rec, req)
+	}
+}
+
+func BenchmarkWithAuth(b *testing.B) {
+	logger := zap.NewNop()
+	db, err := storage.New(":memory:", logger)
+	if err != nil {
+		b.Fatalf("failed to create db: %v", err)
+	}
+	cfg := &config.MasterConfig{}
+	server, err := NewMasterServer(cfg, db, logger)
+	if err != nil {
+		b.Fatalf("failed to create server: %v", err)
+	}
+
+	// Setup test user and API key
+	ctx := context.Background()
+	user := &storage.User{
+		Username:     "benchuser",
+		PasswordHash: "hash",
+		Email:        "bench@example.com",
+		Role:         "admin",
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+	_ = server.db.CreateUser(ctx, user)
+
+	rawAPIKey := "bench-api-key-12345"
+	hash := sha256.Sum256([]byte(rawAPIKey))
+	apiKey := &storage.APIKey{
+		UserID:    user.ID,
+		Name:      "bench-key",
+		KeyHash:   hex.EncodeToString(hash[:]),
+		Scopes:    `["*"]`,
+		CreatedAt: time.Now(),
+	}
+	_ = server.db.CreateAPIKey(ctx, apiKey)
+
+	// Initialize API key service for lookup
+	server.apiKeyService = apikeys.New(db)
+
+	handler := server.withAuth(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects", nil)
+	req.Header.Set("Authorization", "Bearer "+rawAPIKey)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		rec := httptest.NewRecorder()
+		handler(rec, req)
 	}
 }

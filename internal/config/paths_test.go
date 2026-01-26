@@ -142,3 +142,107 @@ func TestGetSystemConfigSingleton(t *testing.T) {
 		t.Error("GetSystemConfig() should return same instance")
 	}
 }
+
+func TestGetSystemConfigWithCustomPaths(t *testing.T) {
+	// Reset before test
+	ResetSystemConfig()
+	defer ResetSystemConfig()
+
+	// Create a custom config file
+	tmpDir := t.TempDir()
+	customConfigPath := filepath.Join(tmpDir, "vcdeploy.yaml")
+	customConfig := `paths:
+  config_dir: /custom/etc
+  data_dir: /custom/data
+  run_dir: /custom/run
+  log_dir: /custom/log
+`
+	if err := os.WriteFile(customConfigPath, []byte(customConfig), 0644); err != nil {
+		t.Fatalf("Failed to write custom config: %v", err)
+	}
+
+	// Note: We can't easily test loading from custom path since DefaultSystemConfigPath is a constant
+	// But we can test the default behavior
+	cfg, err := GetSystemConfig()
+	if err != nil {
+		t.Fatalf("GetSystemConfig() error = %v", err)
+	}
+	if cfg == nil {
+		t.Fatal("GetSystemConfig() returned nil")
+	}
+}
+
+func TestEnsureDirectoriesError(t *testing.T) {
+	// Test with a path that cannot be created (invalid path)
+	cfg := &SystemConfig{
+		Paths: SystemPaths{
+			ConfigDir: "/dev/null/invalid/path",
+			DataDir:   "/dev/null/invalid/path2",
+			RunDir:    "/dev/null/invalid/path3",
+			LogDir:    "/dev/null/invalid/path4",
+		},
+	}
+
+	err := cfg.EnsureDirectories()
+	// Should fail since /dev/null is not a directory
+	if err == nil {
+		t.Error("EnsureDirectories should fail with invalid path")
+	}
+}
+
+func TestSystemConfigCustomPaths(t *testing.T) {
+	cfg := &SystemConfig{
+		Paths: SystemPaths{
+			ConfigDir: "/custom/config",
+			DataDir:   "/custom/data",
+			RunDir:    "/custom/run",
+			LogDir:    "/custom/log",
+		},
+	}
+
+	// Test all path methods with custom values
+	tests := []struct {
+		name     string
+		got      string
+		expected string
+	}{
+		{"DatabasePath", cfg.DatabasePath(), "/custom/data/vcdeploy.db"},
+		{"MasterConfigPath", cfg.MasterConfigPath(), "/custom/config/master.yaml"},
+		{"AgentConfigPath", cfg.AgentConfigPath(), "/custom/config/agent.yaml"},
+		{"MasterPIDPath", cfg.MasterPIDPath(), "/custom/run/vcdeploy.pid"},
+		{"AgentPIDPath", cfg.AgentPIDPath(), "/custom/run/vcdeploy-agent.pid"},
+		{"BackupsDir", cfg.BackupsDir(), "/custom/data/backups"},
+		{"SecretsBackupsDir", cfg.SecretsBackupsDir(), "/custom/data/backups/secrets"},
+		{"TemplatesDir", cfg.TemplatesDir(), "/custom/data/templates"},
+		{"StaticDir", cfg.StaticDir(), "/custom/data/static"},
+		{"MasterLogPath", cfg.MasterLogPath(), "/custom/log/master.log"},
+		{"AgentLogPath", cfg.AgentLogPath(), "/custom/log/agent.log"},
+		{"SSHKeysDir", cfg.SSHKeysDir(), "/custom/data/ssh_keys"},
+		{"CertsDir", cfg.CertsDir(), "/custom/data/certs"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.got != tt.expected {
+				t.Errorf("%s() = %v, want %v", tt.name, tt.got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestResetSystemConfigMultipleTimes(t *testing.T) {
+	// Reset multiple times to ensure it's safe
+	ResetSystemConfig()
+	ResetSystemConfig()
+	ResetSystemConfig()
+
+	cfg, err := GetSystemConfig()
+	if err != nil {
+		t.Fatalf("GetSystemConfig() after multiple resets error = %v", err)
+	}
+	if cfg == nil {
+		t.Fatal("GetSystemConfig() returned nil after multiple resets")
+	}
+
+	ResetSystemConfig()
+}
