@@ -1,0 +1,30 @@
+[Unit]
+Description=VCDeploy Agent
+Documentation=https://github.com/BlackOrder/vcdeploy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vcdeploy
+Group=vcdeploy
+ExecStart=/usr/local/bin/vcdeploy-agent start
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=5
+LimitNOFILE=65535
+Environment=VCDEPLOY_AGENT_CONFIG=/etc/vcdeploy/agent.yaml
+WorkingDirectory=/var/lib/vcdeploy
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/vcdeploy /var/log/vcdeploy
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

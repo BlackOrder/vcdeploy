@@ -71,7 +71,7 @@ type MasterServer struct {
 	hostKeyService     services.HostKeyServicer
 
 	// Legacy services (to be deprecated)
-	legacySecretService  *security.SecretService
+	legacySecretService   *security.SecretService
 	legacySettingsService *config.SettingsService
 
 	// Webhook handling
@@ -329,7 +329,7 @@ func (s *MasterServer) Start(ctx context.Context) error {
 	errCh := make(chan error, 2)
 
 	s.wg.Go(func() {
-		if err := s.startHTTP(); err != nil && err != http.ErrServerClosed {
+		if err := s.startHTTP(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			s.logger.Error("HTTP server error", zap.Error(err))
 			errCh <- err
 		}
@@ -495,7 +495,16 @@ func (s *MasterServer) runBackgroundTasks(ctx context.Context) {
 	// Create and start the cleanup task
 	cleanupConfig := DefaultCleanupConfig()
 	cleanupConfig.Interval = time.Minute // Check every minute for demo, but actual cleanup runs less often
-	cleanupTask := NewCleanupTask(s.db, s.logger, cleanupConfig)
+
+	cleanupServices := CleanupServices{
+		SessionService:    s.sessionService,
+		DeploymentService: s.deploymentService,
+		AuditService:      s.auditService,
+		AgentService:      s.agentService,
+		APIKeyService:     s.apiKeyService,
+		WebhookService:    s.webhookService,
+	}
+	cleanupTask := NewCleanupTask(cleanupServices, s.logger, cleanupConfig)
 	cleanupTask.Start()
 
 	ticker := time.NewTicker(time.Minute)

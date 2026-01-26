@@ -702,7 +702,7 @@ func mockAPIServer(t *testing.T) *httptest.Server {
 				{"id": 1, "username": "admin", "email": "admin@test.com", "role": "admin", "createdAt": time.Now().Format(time.RFC3339)},
 				{"id": 2, "username": "deployer", "email": "deployer@test.com", "role": "deployer", "createdAt": time.Now().Format(time.RFC3339)},
 			}
-			json.NewEncoder(w).Encode(users)
+			_ = json.NewEncoder(w).Encode(users)
 		case http.MethodPost:
 			var req map[string]string
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -714,7 +714,7 @@ func mockAPIServer(t *testing.T) *httptest.Server {
 				return
 			}
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(map[string]interface{}{"id": 3, "username": req["username"]})
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": 3, "username": req["username"]})
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -733,7 +733,7 @@ func mockAPIServer(t *testing.T) *httptest.Server {
 			{"id": "agent-1", "hostname": "server1.example.com", "status": "online", "lastSeenAt": time.Now().Format(time.RFC3339)},
 			{"id": "agent-2", "hostname": "server2.example.com", "status": "offline", "lastSeenAt": time.Now().Add(-24 * time.Hour).Format(time.RFC3339)},
 		}
-		json.NewEncoder(w).Encode(agents)
+		_ = json.NewEncoder(w).Encode(agents)
 	})
 
 	mux.HandleFunc("/api/v1/agents/", func(w http.ResponseWriter, r *http.Request) {
@@ -748,7 +748,7 @@ func mockAPIServer(t *testing.T) *httptest.Server {
 				"lastSeenAt":   time.Now().Format(time.RFC3339),
 				"labels":       map[string]interface{}{"env": "production"},
 			}
-			json.NewEncoder(w).Encode(agent)
+			_ = json.NewEncoder(w).Encode(agent)
 		case http.MethodDelete:
 			w.WriteHeader(http.StatusOK)
 		}
@@ -757,7 +757,7 @@ func mockAPIServer(t *testing.T) *httptest.Server {
 	mux.HandleFunc("/api/v1/agents/tokens", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"token":      "test-registration-token-12345",
 				"expires_at": time.Now().Add(24 * time.Hour).Format(time.RFC3339),
 			})
@@ -770,18 +770,18 @@ func mockAPIServer(t *testing.T) *httptest.Server {
 			{"id": "deploy-1", "project": "webapp", "status": "success", "createdAt": time.Now().Format(time.RFC3339)},
 			{"id": "deploy-2", "project": "api", "status": "running", "createdAt": time.Now().Format(time.RFC3339)},
 		}
-		json.NewEncoder(w).Encode(deployments)
+		_ = json.NewEncoder(w).Encode(deployments)
 	})
 
 	mux.HandleFunc("/api/v1/deployments/", func(w http.ResponseWriter, r *http.Request) {
 		deployID := strings.TrimPrefix(r.URL.Path, "/api/v1/deployments/")
 		if strings.HasSuffix(deployID, "/cancel") {
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]interface{}{"status": "cancelled"})
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"status": "cancelled"})
 			return
 		}
 		if strings.HasSuffix(deployID, "/logs") {
-			w.Write([]byte("Build started...\nInstalling dependencies...\nBuild complete.\n"))
+			_, _ = w.Write([]byte("Build started...\nInstalling dependencies...\nBuild complete.\n"))
 			return
 		}
 		deployment := map[string]interface{}{
@@ -791,14 +791,14 @@ func mockAPIServer(t *testing.T) *httptest.Server {
 			"branch":    "main",
 			"createdAt": time.Now().Format(time.RFC3339),
 		}
-		json.NewEncoder(w).Encode(deployment)
+		_ = json.NewEncoder(w).Encode(deployment)
 	})
 
 	// Project deploy endpoint
 	mux.HandleFunc("/api/v1/projects/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/deploy") {
 			w.WriteHeader(http.StatusAccepted)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"id":     "deploy-new",
 				"status": "pending",
 			})
@@ -816,7 +816,7 @@ func mockAPIServer(t *testing.T) *httptest.Server {
 				"sessionTimeout": "24h",
 			},
 		}
-		json.NewEncoder(w).Encode(config)
+		_ = json.NewEncoder(w).Encode(config)
 	})
 
 	// API key endpoints
@@ -826,10 +826,10 @@ func mockAPIServer(t *testing.T) *httptest.Server {
 			keys := []map[string]interface{}{
 				{"id": 1, "name": "ci-key", "prefix": "vcd_ci", "createdAt": time.Now().Format(time.RFC3339)},
 			}
-			json.NewEncoder(w).Encode(keys)
+			_ = json.NewEncoder(w).Encode(keys)
 		case http.MethodPost:
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"id":    2,
 				"name":  "new-key",
 				"key":   "vcd_test_key_secret123",
@@ -846,7 +846,7 @@ func mockAPIServer(t *testing.T) *httptest.Server {
 
 	// Health endpoint
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
 	})
 
 	return httptest.NewServer(mux)
@@ -901,7 +901,7 @@ func TestE2E_UserListCommand(t *testing.T) {
 			}
 
 			body, _ := io.ReadAll(resp.Body)
-			cmd.OutOrStdout().Write(body)
+			_, _ = cmd.OutOrStdout().Write(body)
 			return nil
 		},
 	})
@@ -953,7 +953,7 @@ func TestE2E_AgentListCommand(t *testing.T) {
 			defer resp.Body.Close()
 
 			body, _ := io.ReadAll(resp.Body)
-			cmd.OutOrStdout().Write(body)
+			_, _ = cmd.OutOrStdout().Write(body)
 			return nil
 		},
 	})
@@ -1005,7 +1005,7 @@ func TestE2E_DeploymentListCommand(t *testing.T) {
 			defer resp.Body.Close()
 
 			body, _ := io.ReadAll(resp.Body)
-			cmd.OutOrStdout().Write(body)
+			_, _ = cmd.OutOrStdout().Write(body)
 			return nil
 		},
 	})
@@ -1057,7 +1057,7 @@ func TestE2E_ConfigShowCommand(t *testing.T) {
 			defer resp.Body.Close()
 
 			body, _ := io.ReadAll(resp.Body)
-			cmd.OutOrStdout().Write(body)
+			_, _ = cmd.OutOrStdout().Write(body)
 			return nil
 		},
 	})
@@ -1109,7 +1109,7 @@ func TestE2E_APIKeyListCommand(t *testing.T) {
 			defer resp.Body.Close()
 
 			body, _ := io.ReadAll(resp.Body)
-			cmd.OutOrStdout().Write(body)
+			_, _ = cmd.OutOrStdout().Write(body)
 			return nil
 		},
 	})
@@ -1165,7 +1165,7 @@ func TestE2E_APIKeyCreateCommand(t *testing.T) {
 			}
 
 			body, _ := io.ReadAll(resp.Body)
-			cmd.OutOrStdout().Write(body)
+			_, _ = cmd.OutOrStdout().Write(body)
 			return nil
 		},
 	}
@@ -1216,7 +1216,7 @@ func TestE2E_AgentShowCommand(t *testing.T) {
 			defer resp.Body.Close()
 
 			body, _ := io.ReadAll(resp.Body)
-			cmd.OutOrStdout().Write(body)
+			_, _ = cmd.OutOrStdout().Write(body)
 			return nil
 		},
 	})
@@ -1269,7 +1269,7 @@ func TestE2E_DeploymentStatusCommand(t *testing.T) {
 			defer resp.Body.Close()
 
 			body, _ := io.ReadAll(resp.Body)
-			cmd.OutOrStdout().Write(body)
+			_, _ = cmd.OutOrStdout().Write(body)
 			return nil
 		},
 	})
@@ -1322,7 +1322,7 @@ func TestE2E_DeploymentLogsCommand(t *testing.T) {
 			defer resp.Body.Close()
 
 			body, _ := io.ReadAll(resp.Body)
-			cmd.OutOrStdout().Write(body)
+			_, _ = cmd.OutOrStdout().Write(body)
 			return nil
 		},
 	})
@@ -1382,7 +1382,7 @@ func TestE2E_AgentTokenCommand(t *testing.T) {
 			defer resp.Body.Close()
 
 			respBody, _ := io.ReadAll(resp.Body)
-			cmd.OutOrStdout().Write(respBody)
+			_, _ = cmd.OutOrStdout().Write(respBody)
 			return nil
 		},
 	}

@@ -196,7 +196,7 @@ func TestCAManagerIssueAgentCertificate(t *testing.T) {
 	mgr, _ := NewCAManager(db, kms, nil)
 	ctx := context.Background()
 	config := DefaultCAConfig()
-	mgr.Initialize(ctx, config)
+	_ = mgr.Initialize(ctx, config)
 
 	agentID := "agent-001"
 	hostname := "agent1.example.com"
@@ -252,7 +252,7 @@ func TestCAManagerRenewAgentCertificate(t *testing.T) {
 	mgr, _ := NewCAManager(db, kms, nil)
 	ctx := context.Background()
 	config := DefaultCAConfig()
-	mgr.Initialize(ctx, config)
+	_ = mgr.Initialize(ctx, config)
 
 	agentID := "agent-001"
 	hostname := "agent1.example.com"
@@ -285,7 +285,7 @@ func TestCAManagerRotateCA(t *testing.T) {
 	mgr, _ := NewCAManager(db, kms, nil)
 	ctx := context.Background()
 	config := DefaultCAConfig()
-	mgr.Initialize(ctx, config)
+	_ = mgr.Initialize(ctx, config)
 
 	// Issue certificate with old CA
 	cert1, _ := mgr.IssueAgentCertificate(ctx, "agent-001", "agent1.example.com")
@@ -331,7 +331,7 @@ func TestCAManagerListCAs(t *testing.T) {
 	mgr, _ := NewCAManager(db, kms, nil)
 	ctx := context.Background()
 	config := DefaultCAConfig()
-	mgr.Initialize(ctx, config)
+	_ = mgr.Initialize(ctx, config)
 
 	// Rotate a few times
 	_, _ = mgr.RotateCA(ctx, config)
@@ -359,7 +359,7 @@ func TestCAManagerRevokeCertificate(t *testing.T) {
 	mgr, _ := NewCAManager(db, kms, nil)
 	ctx := context.Background()
 	config := DefaultCAConfig()
-	mgr.Initialize(ctx, config)
+	_ = mgr.Initialize(ctx, config)
 
 	cert, _ := mgr.IssueAgentCertificate(ctx, "agent-001", "agent1.example.com")
 
@@ -381,7 +381,7 @@ func TestCAManagerShouldRenew(t *testing.T) {
 	mgr, _ := NewCAManager(db, kms, nil)
 	ctx := context.Background()
 	config := DefaultCAConfig()
-	mgr.Initialize(ctx, config)
+	_ = mgr.Initialize(ctx, config)
 
 	cert, _ := mgr.IssueAgentCertificate(ctx, "agent-001", "agent1.example.com")
 
@@ -404,7 +404,7 @@ func TestCAManagerProcessExpiredCertificates(t *testing.T) {
 	mgr, _ := NewCAManager(db, kms, nil)
 	ctx := context.Background()
 	config := DefaultCAConfig()
-	mgr.Initialize(ctx, config)
+	_ = mgr.Initialize(ctx, config)
 
 	// Issue certificate
 	_, _ = mgr.IssueAgentCertificate(ctx, "agent-001", "agent1.example.com")
@@ -429,7 +429,7 @@ func TestCAManagerGetAgentCertificate(t *testing.T) {
 	mgr, _ := NewCAManager(db, kms, nil)
 	ctx := context.Background()
 	config := DefaultCAConfig()
-	mgr.Initialize(ctx, config)
+	_ = mgr.Initialize(ctx, config)
 
 	// No certificate yet
 	cert, err := mgr.GetAgentCertificate(ctx, "agent-001")

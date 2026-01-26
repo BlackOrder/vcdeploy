@@ -6,13 +6,20 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BlackOrder/vcdeploy/internal/storage"
+	"github.com/BlackOrder/vcdeploy/internal/services"
 	"go.uber.org/zap"
 )
 
 // CleanupTask handles periodic cleanup of old data.
 type CleanupTask struct {
-	db                     *storage.DB
+	// Service layer
+	sessionService    services.SessionServicer
+	deploymentService services.DeploymentServicer
+	auditService      services.AuditServicer
+	agentService      services.AgentServicer
+	apiKeyService     services.APIKeyServicer
+	webhookService    services.WebhookServicer
+
 	logger                 *zap.Logger
 	stopCh                 chan struct{}
 	wg                     sync.WaitGroup
@@ -46,8 +53,18 @@ func DefaultCleanupConfig() CleanupConfig {
 	}
 }
 
+// CleanupServices holds the services needed by the cleanup task.
+type CleanupServices struct {
+	SessionService    services.SessionServicer
+	DeploymentService services.DeploymentServicer
+	AuditService      services.AuditServicer
+	AgentService      services.AgentServicer
+	APIKeyService     services.APIKeyServicer
+	WebhookService    services.WebhookServicer
+}
+
 // NewCleanupTask creates a new cleanup task.
-func NewCleanupTask(db *storage.DB, logger *zap.Logger, cfg CleanupConfig) *CleanupTask {
+func NewCleanupTask(svcs CleanupServices, logger *zap.Logger, cfg CleanupConfig) *CleanupTask {
 	if cfg.Interval == 0 {
 		cfg.Interval = time.Hour
 	}
@@ -68,7 +85,12 @@ func NewCleanupTask(db *storage.DB, logger *zap.Logger, cfg CleanupConfig) *Clea
 	}
 
 	return &CleanupTask{
-		db:                     db,
+		sessionService:         svcs.SessionService,
+		deploymentService:      svcs.DeploymentService,
+		auditService:           svcs.AuditService,
+		agentService:           svcs.AgentService,
+		apiKeyService:          svcs.APIKeyService,
+		webhookService:         svcs.WebhookService,
 		logger:                 logger,
 		stopCh:                 make(chan struct{}),
 		interval:               cfg.Interval,
@@ -174,39 +196,39 @@ func (c *CleanupTask) runCleanup() {
 
 // cleanExpiredSessions removes sessions that have expired.
 func (c *CleanupTask) cleanExpiredSessions(ctx context.Context) (int64, error) {
-	return c.db.CleanupExpiredSessions(ctx, time.Now().Add(-c.sessionExpiry))
+	return c.sessionService.DeleteExpired(ctx)
 }
 
 // cleanOldDeployments removes deployment records older than the retention period.
 func (c *CleanupTask) cleanOldDeployments(ctx context.Context) (int64, error) {
 	cutoff := time.Now().Add(-c.deploymentRetention)
-	return c.db.CleanupOldDeployments(ctx, cutoff)
+	return c.deploymentService.CleanupOld(ctx, cutoff)
 }
 
 // cleanOldDeploymentLogs removes deployment logs older than the retention period.
 func (c *CleanupTask) cleanOldDeploymentLogs(ctx context.Context) (int64, error) {
 	cutoff := time.Now().Add(-c.deploymentLogRetention)
-	return c.db.CleanupOldDeploymentLogs(ctx, cutoff)
+	return c.deploymentService.CleanupOldLogs(ctx, cutoff)
 }
 
 // cleanOldAuditLogs removes audit log entries older than the retention period.
 func (c *CleanupTask) cleanOldAuditLogs(ctx context.Context) (int64, error) {
 	cutoff := time.Now().Add(-c.auditLogRetention)
-	return c.db.CleanupOldAuditLogs(ctx, cutoff)
+	return c.auditService.Cleanup(ctx, cutoff)
 }
 
 // markStaleAgents marks agents that haven't been seen recently as stale.
 func (c *CleanupTask) markStaleAgents(ctx context.Context) (int64, error) {
 	cutoff := time.Now().Add(-c.staleAgentThreshold)
-	return c.db.MarkStaleAgents(ctx, cutoff)
+	return c.agentService.MarkStale(ctx, cutoff)
 }
 
 // cleanExpiredAPIKeys removes API keys that have expired.
 func (c *CleanupTask) cleanExpiredAPIKeys(ctx context.Context) (int64, error) {
-	return c.db.CleanupExpiredAPIKeys(ctx, time.Now())
+	return c.apiKeyService.CleanupExpired(ctx)
 }
 
 // cleanOrphanedWebhooks removes webhook configs for deleted projects.
 func (c *CleanupTask) cleanOrphanedWebhooks(ctx context.Context) (int64, error) {
-	return c.db.CleanupOrphanedWebhooks(ctx)
+	return c.webhookService.CleanupOrphanedWebhooks(ctx)
 }

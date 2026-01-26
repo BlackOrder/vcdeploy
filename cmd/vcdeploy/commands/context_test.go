@@ -425,11 +425,11 @@ func TestMasterStatusRunner_RunWithStats(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"healthy"}`))
+		_, _ = w.Write([]byte(`{"status":"healthy"}`))
 	})
 	mux.HandleFunc("/api/v1/stats", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"projects":5,"connected_agents":3}`))
+		_, _ = w.Write([]byte(`{"projects":5,"connected_agents":3}`))
 	})
 	server.Config.Handler = mux
 	defer server.Close()

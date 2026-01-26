@@ -1,0 +1,590 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>notify: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/BlackOrder/vcdeploy/internal/notify/notify.go (68.8%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package notify
+
+import (
+        "bytes"
+        "context"
+        "crypto/hmac"
+        "crypto/sha256"
+        "encoding/hex"
+        "encoding/json"
+        "fmt"
+        "net"
+        "net/http"
+        "net/smtp"
+        "strconv"
+        "strings"
+        "sync"
+        "text/template"
+        "time"
+
+        "go.uber.org/zap"
+)
+
+// Event represents a deployment event for notifications
+type Event struct {
+        Type        string    `json:"type"`
+        ProjectID   string    `json:"project_id"`
+        ProjectName string    `json:"project_name"`
+        Environment string    `json:"environment"`
+        DeployID    string    `json:"deploy_id"`
+        Version     string    `json:"version"`
+        Status      string    `json:"status"`
+        User        string    `json:"user"`
+        Message     string    `json:"message"`
+        URL         string    `json:"url"`
+        Timestamp   time.Time `json:"timestamp"`
+}
+
+// Notifier interface for different notification channels
+type Notifier interface {
+        Send(ctx context.Context, event Event) error
+        Name() string
+}
+
+// Manager handles multiple notification channels.
+// Thread-safety: Register should only be called during initialization before
+// any calls to Notify. If dynamic registration is needed, external synchronization
+// is required.
+type Manager struct {
+        logger    *zap.Logger
+        mu        sync.RWMutex // Protects notifiers slice
+        notifiers []Notifier
+        wg        sync.WaitGroup
+}
+
+// NewManager creates a notification manager
+func NewManager(logger *zap.Logger) *Manager <span class="cov8" title="1">{
+        return &amp;Manager{
+                logger:    logger,
+                notifiers: make([]Notifier, 0),
+        }
+}</span>
+
+// Register adds a notifier to the manager.
+// Note: Register should be called during initialization only.
+func (m *Manager) Register(n Notifier) <span class="cov8" title="1">{
+        m.mu.Lock()
+        defer m.mu.Unlock()
+        m.notifiers = append(m.notifiers, n)
+        m.logger.Info("registered notifier", zap.String("name", n.Name()))
+}</span>
+
+// Notify sends an event to all registered notifiers asynchronously.
+// Use NotifyAndWait if you need to wait for all notifications to complete.
+func (m *Manager) Notify(ctx context.Context, event Event) <span class="cov8" title="1">{
+        event.Timestamp = time.Now()
+
+        m.mu.RLock()
+        notifiers := m.notifiers // Copy slice reference under lock
+        m.mu.RUnlock()
+
+        for _, n := range notifiers </span><span class="cov8" title="1">{
+                m.wg.Add(1)
+                go func(notifier Notifier) </span><span class="cov8" title="1">{
+                        defer m.wg.Done()
+                        defer func() </span><span class="cov8" title="1">{
+                                if r := recover(); r != nil </span><span class="cov0" title="0">{
+                                        m.logger.Error("panic in notifier",
+                                                zap.String("notifier", notifier.Name()),
+                                                zap.Any("panic", r),
+                                        )
+                                }</span>
+                        }()
+                        <span class="cov8" title="1">if err := notifier.Send(ctx, event); err != nil </span><span class="cov8" title="1">{
+                                m.logger.Error("notification failed",
+                                        zap.String("notifier", notifier.Name()),
+                                        zap.Error(err),
+                                )
+                        }</span>
+                }(n)
+        }
+}
+
+// NotifyAndWait sends an event to all registered notifiers and waits for completion.
+// Use this during shutdown to ensure all notifications are sent.
+func (m *Manager) NotifyAndWait(ctx context.Context, event Event) <span class="cov8" title="1">{
+        m.Notify(ctx, event)
+        m.Wait()
+}</span>
+
+// Wait blocks until all in-flight notifications complete.
+func (m *Manager) Wait() <span class="cov8" title="1">{
+        m.wg.Wait()
+}</span>
+
+// SlackConfig holds Slack notification settings
+type SlackConfig struct {
+        WebhookURL string
+        Channel    string
+        Username   string
+        IconEmoji  string
+}
+
+// SlackNotifier sends notifications to Slack
+type SlackNotifier struct {
+        config SlackConfig
+        client *http.Client
+}
+
+// NewSlackNotifier creates a Slack notifier
+func NewSlackNotifier(cfg SlackConfig) *SlackNotifier <span class="cov8" title="1">{
+        return &amp;SlackNotifier{
+                config: cfg,
+                client: &amp;http.Client{Timeout: 10 * time.Second},
+        }
+}</span>
+
+// Name returns the notifier name
+func (s *SlackNotifier) Name() string <span class="cov8" title="1">{
+        return "slack"
+}</span>
+
+// Send sends a notification to Slack
+func (s *SlackNotifier) Send(ctx context.Context, event Event) error <span class="cov8" title="1">{
+        if s.config.WebhookURL == "" </span><span class="cov8" title="1">{
+                return nil
+        }</span>
+
+        <span class="cov8" title="1">color := "#36a64f" // green
+        switch event.Status </span>{
+        case "failed":<span class="cov0" title="0">
+                color = "#dc3545"</span>
+        case "pending", "running":<span class="cov0" title="0">
+                color = "#ffc107"</span>
+        case "rolled_back":<span class="cov0" title="0">
+                color = "#fd7e14"</span>
+        }
+
+        <span class="cov8" title="1">emoji := ":rocket:"
+        switch event.Type </span>{
+        case "rollback":<span class="cov0" title="0">
+                emoji = ":rewind:"</span>
+        case "failed":<span class="cov0" title="0">
+                emoji = ":x:"</span>
+        }
+
+        <span class="cov8" title="1">payload := map[string]interface{}{
+                "channel":    s.config.Channel,
+                "username":   s.config.Username,
+                "icon_emoji": s.config.IconEmoji,
+                "attachments": []map[string]interface{}{
+                        {
+                                "color": color,
+                                "blocks": []map[string]interface{}{
+                                        {
+                                                "type": "section",
+                                                "text": map[string]string{
+                                                        "type": "mrkdwn",
+                                                        "text": fmt.Sprintf("%s *%s* deployment to *%s*", emoji, event.ProjectName, event.Environment),
+                                                },
+                                        },
+                                        {
+                                                "type": "section",
+                                                "fields": []map[string]string{
+                                                        {"type": "mrkdwn", "text": fmt.Sprintf("*Status:*\n%s", event.Status)},
+                                                        {"type": "mrkdwn", "text": fmt.Sprintf("*Version:*\n%s", event.Version)},
+                                                        {"type": "mrkdwn", "text": fmt.Sprintf("*Triggered by:*\n%s", event.User)},
+                                                        {"type": "mrkdwn", "text": fmt.Sprintf("*Time:*\n%s", event.Timestamp.Format(time.RFC822))},
+                                                },
+                                        },
+                                },
+                        },
+                },
+        }
+
+        if event.Message != "" </span><span class="cov0" title="0">{
+                attachments := payload["attachments"].([]map[string]interface{})
+                blocks := attachments[0]["blocks"].([]map[string]interface{})
+                blocks = append(blocks, map[string]interface{}{
+                        "type": "section",
+                        "text": map[string]string{
+                                "type": "mrkdwn",
+                                "text": fmt.Sprintf("*Message:*\n%s", event.Message),
+                        },
+                })
+                attachments[0]["blocks"] = blocks
+        }</span>
+
+        <span class="cov8" title="1">if event.URL != "" </span><span class="cov0" title="0">{
+                attachments := payload["attachments"].([]map[string]interface{})
+                blocks := attachments[0]["blocks"].([]map[string]interface{})
+                blocks = append(blocks, map[string]interface{}{
+                        "type": "actions",
+                        "elements": []map[string]interface{}{
+                                {
+                                        "type": "button",
+                                        "text": map[string]string{
+                                                "type": "plain_text",
+                                                "text": "View Deployment",
+                                        },
+                                        "url": event.URL,
+                                },
+                        },
+                })
+                attachments[0]["blocks"] = blocks
+        }</span>
+
+        <span class="cov8" title="1">body, err := json.Marshal(payload)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("marshal payload: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">req, err := http.NewRequestWithContext(ctx, "POST", s.config.WebhookURL, bytes.NewReader(body))
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("create request: %w", err)
+        }</span>
+        <span class="cov8" title="1">req.Header.Set("Content-Type", "application/json")
+
+        resp, err := s.client.Do(req)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("send request: %w", err)
+        }</span>
+        <span class="cov8" title="1">defer resp.Body.Close()
+
+        if resp.StatusCode != http.StatusOK </span><span class="cov8" title="1">{
+                return fmt.Errorf("slack returned status %d", resp.StatusCode)
+        }</span>
+
+        <span class="cov8" title="1">return nil</span>
+}
+
+// EmailConfig holds email notification settings
+type EmailConfig struct {
+        SMTPHost    string
+        SMTPPort    int
+        Username    string
+        Password    string
+        FromAddress string
+        FromName    string
+        ToAddresses []string
+        TemplateDir string
+}
+
+// EmailNotifier sends notifications via email
+type EmailNotifier struct {
+        config    EmailConfig
+        templates *template.Template
+}
+
+// NewEmailNotifier creates an email notifier
+func NewEmailNotifier(cfg EmailConfig) (*EmailNotifier, error) <span class="cov8" title="1">{
+        n := &amp;EmailNotifier{config: cfg}
+
+        if cfg.TemplateDir != "" </span><span class="cov0" title="0">{
+                tmpl, err := template.ParseGlob(cfg.TemplateDir + "/*.html")
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, fmt.Errorf("parse templates: %w", err)
+                }</span>
+                <span class="cov0" title="0">n.templates = tmpl</span>
+        }
+
+        <span class="cov8" title="1">return n, nil</span>
+}
+
+// Name returns the notifier name
+func (e *EmailNotifier) Name() string <span class="cov8" title="1">{
+        return "email"
+}</span>
+
+// Send sends a notification via email
+func (e *EmailNotifier) Send(ctx context.Context, event Event) error <span class="cov8" title="1">{
+        if e.config.SMTPHost == "" || len(e.config.ToAddresses) == 0 </span><span class="cov8" title="1">{
+                return nil
+        }</span>
+
+        <span class="cov0" title="0">subject := fmt.Sprintf("[vcdeploy] %s - %s deployment %s",
+                event.ProjectName, event.Environment, event.Status)
+
+        var body bytes.Buffer
+        if e.templates != nil </span><span class="cov0" title="0">{
+                if err := e.templates.ExecuteTemplate(&amp;body, "deployment.html", event); err != nil </span><span class="cov0" title="0">{
+                        return fmt.Errorf("execute template: %w", err)
+                }</span>
+        } else<span class="cov0" title="0"> {
+                body.WriteString(e.defaultTemplate(event))
+        }</span>
+
+        <span class="cov0" title="0">msg := fmt.Sprintf("From: %s &lt;%s&gt;\r\n"+
+                "To: %s\r\n"+
+                "Subject: %s\r\n"+
+                "MIME-Version: 1.0\r\n"+
+                "Content-Type: text/html; charset=utf-8\r\n"+
+                "\r\n"+
+                "%s",
+                e.config.FromName,
+                e.config.FromAddress,
+                strings.Join(e.config.ToAddresses, ", "),
+                subject,
+                body.String(),
+        )
+
+        addr := net.JoinHostPort(e.config.SMTPHost, strconv.Itoa(e.config.SMTPPort))
+        var auth smtp.Auth
+        if e.config.Username != "" </span><span class="cov0" title="0">{
+                auth = smtp.PlainAuth("", e.config.Username, e.config.Password, e.config.SMTPHost)
+        }</span>
+
+        <span class="cov0" title="0">err := smtp.SendMail(addr, auth, e.config.FromAddress, e.config.ToAddresses, []byte(msg))
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("send mail: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">return nil</span>
+}
+
+func (e *EmailNotifier) defaultTemplate(event Event) string <span class="cov8" title="1">{
+        statusColor := "#28a745"
+        switch event.Status </span>{
+        case "failed":<span class="cov8" title="1">
+                statusColor = "#dc3545"</span>
+        case "pending", "running":<span class="cov8" title="1">
+                statusColor = "#ffc107"</span>
+        case "rolled_back":<span class="cov8" title="1">
+                statusColor = "#fd7e14"</span>
+        }
+
+        <span class="cov8" title="1">messageSection := ""
+        if event.Message != "" </span><span class="cov8" title="1">{
+                messageSection = fmt.Sprintf("&lt;dt&gt;Message&lt;/dt&gt;&lt;dd&gt;%s&lt;/dd&gt;", event.Message)
+        }</span>
+
+        <span class="cov8" title="1">buttonSection := ""
+        if event.URL != "" </span><span class="cov8" title="1">{
+                buttonSection = fmt.Sprintf(`&lt;p&gt;&lt;a href="%s" class="button"&gt;View Deployment&lt;/a&gt;&lt;/p&gt;`, event.URL)
+        }</span>
+
+        <span class="cov8" title="1">return fmt.Sprintf(`&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+    &lt;style&gt;
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #1a1a2e; color: white; padding: 20px; border-radius: 8px 8px 0 0; }
+        .content { background: #f8f9fa; padding: 20px; border-radius: 0 0 8px 8px; }
+        .status { display: inline-block; padding: 4px 12px; border-radius: 4px; color: white; background: %s; }
+        .details { margin: 20px 0; }
+        .details dt { color: #666; font-size: 12px; margin-top: 12px; }
+        .details dd { margin: 4px 0 0 0; font-weight: 500; }
+        .button { display: inline-block; padding: 10px 20px; background: #28a745; color: white; text-decoration: none; border-radius: 4px; }
+    &lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+    &lt;div class="container"&gt;
+        &lt;div class="header"&gt;
+            &lt;h1 style="margin: 0;"&gt;🚀 Deployment Notification&lt;/h1&gt;
+        &lt;/div&gt;
+        &lt;div class="content"&gt;
+            &lt;p&gt;&lt;strong&gt;%s&lt;/strong&gt; deployment to &lt;strong&gt;%s&lt;/strong&gt;&lt;/p&gt;
+            &lt;p&gt;Status: &lt;span class="status"&gt;%s&lt;/span&gt;&lt;/p&gt;
+            
+            &lt;dl class="details"&gt;
+                &lt;dt&gt;Version&lt;/dt&gt;
+                &lt;dd&gt;%s&lt;/dd&gt;
+                
+                &lt;dt&gt;Triggered by&lt;/dt&gt;
+                &lt;dd&gt;%s&lt;/dd&gt;
+                
+                &lt;dt&gt;Time&lt;/dt&gt;
+                &lt;dd&gt;%s&lt;/dd&gt;
+                
+                %s
+            &lt;/dl&gt;
+            
+            %s
+        &lt;/div&gt;
+    &lt;/div&gt;
+&lt;/body&gt;
+&lt;/html&gt;`,
+                statusColor,
+                event.ProjectName,
+                event.Environment,
+                event.Status,
+                event.Version,
+                event.User,
+                event.Timestamp.Format(time.RFC1123),
+                messageSection,
+                buttonSection,
+        )</span>
+}
+
+// WebhookConfig holds webhook notification settings
+type WebhookConfig struct {
+        URL     string
+        Method  string
+        Headers map[string]string
+        Secret  string
+}
+
+// WebhookNotifier sends notifications to custom webhooks
+type WebhookNotifier struct {
+        config WebhookConfig
+        client *http.Client
+}
+
+// NewWebhookNotifier creates a webhook notifier
+func NewWebhookNotifier(cfg WebhookConfig) *WebhookNotifier <span class="cov8" title="1">{
+        if cfg.Method == "" </span><span class="cov8" title="1">{
+                cfg.Method = "POST"
+        }</span>
+        <span class="cov8" title="1">return &amp;WebhookNotifier{
+                config: cfg,
+                client: &amp;http.Client{Timeout: 30 * time.Second},
+        }</span>
+}
+
+// Name returns the notifier name
+func (w *WebhookNotifier) Name() string <span class="cov8" title="1">{
+        return "webhook"
+}</span>
+
+// Send sends a notification to the configured webhook
+func (w *WebhookNotifier) Send(ctx context.Context, event Event) error <span class="cov8" title="1">{
+        if w.config.URL == "" </span><span class="cov8" title="1">{
+                return nil
+        }</span>
+
+        <span class="cov8" title="1">body, err := json.Marshal(event)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("marshal event: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">req, err := http.NewRequestWithContext(ctx, w.config.Method, w.config.URL, bytes.NewReader(body))
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("create request: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">req.Header.Set("Content-Type", "application/json")
+        req.Header.Set("User-Agent", "vcdeploy/1.0")
+
+        for k, v := range w.config.Headers </span><span class="cov8" title="1">{
+                req.Header.Set(k, v)
+        }</span>
+
+        // Add HMAC signature if secret is configured
+        <span class="cov8" title="1">if w.config.Secret != "" </span><span class="cov8" title="1">{
+                sig := computeHMACSHA256(body, []byte(w.config.Secret))
+                req.Header.Set("X-VCDeploy-Signature", "sha256="+sig)
+        }</span>
+
+        <span class="cov8" title="1">resp, err := w.client.Do(req)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("send request: %w", err)
+        }</span>
+        <span class="cov8" title="1">defer resp.Body.Close()
+
+        if resp.StatusCode &gt;= 400 </span><span class="cov8" title="1">{
+                return fmt.Errorf("webhook returned status %d", resp.StatusCode)
+        }</span>
+
+        <span class="cov8" title="1">return nil</span>
+}
+
+// computeHMACSHA256 computes HMAC-SHA256 and returns hex string
+func computeHMACSHA256(message, key []byte) string <span class="cov8" title="1">{
+        h := hmac.New(sha256.New, key)
+        h.Write(message)
+        return hex.EncodeToString(h.Sum(nil))
+}</span>
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

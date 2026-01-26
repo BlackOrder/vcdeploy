@@ -3,6 +3,7 @@ package users
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"time"
@@ -170,6 +171,46 @@ func (s *Service) SetTOTP(ctx context.Context, userID int64, secret string, enab
 	}
 
 	return nil
+}
+
+// Count returns the total number of users.
+func (s *Service) Count(ctx context.Context) (int64, error) {
+	count, err := s.db.CountUsers(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("counting users: %w", err)
+	}
+	return count, nil
+}
+
+// DeleteWithCleanup deletes a user and all associated data (sessions, API keys) in a transaction.
+func (s *Service) DeleteWithCleanup(ctx context.Context, userID int64) error {
+	return s.db.RunInTransaction(ctx, func(tx *sql.Tx) error {
+		// Delete all user's sessions
+		if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ?`, userID); err != nil {
+			return fmt.Errorf("deleting user sessions: %w", err)
+		}
+
+		// Delete all user's API keys
+		if _, err := tx.ExecContext(ctx, `DELETE FROM api_keys WHERE user_id = ?`, userID); err != nil {
+			return fmt.Errorf("deleting user API keys: %w", err)
+		}
+
+		// Delete the user
+		result, err := tx.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, userID)
+		if err != nil {
+			return fmt.Errorf("deleting user: %w", err)
+		}
+
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("checking rows affected: %w", err)
+		}
+		if rowsAffected == 0 {
+			return ErrUserNotFound
+		}
+
+		return nil
+	})
 }
 
 // Errors

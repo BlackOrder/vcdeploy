@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -358,7 +359,7 @@ func runMasterStart(cmd *cobra.Command, args []string) error {
 	if err := initLogger(logLevel); err != nil {
 		return err
 	}
-	defer globalLogger.Sync()
+	defer func() { _ = globalLogger.Sync() }()
 
 	globalLogger.Info("starting vcdeploy master",
 		zap.String("version", version),
@@ -476,7 +477,7 @@ func tryPidFileStop() error {
 	}
 
 	if err := process.Signal(syscall.SIGTERM); err != nil {
-		if err == os.ErrProcessDone {
+		if errors.Is(err, os.ErrProcessDone) {
 			fmt.Println("Process already stopped.")
 			return nil
 		}
@@ -800,14 +801,13 @@ func runProjectList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dbPath := getDBPath()
-	db, err := storage.Open(dbPath)
+	svc, cleanup, err := InitCLIServices(getDBPath())
 	if err != nil {
-		return fmt.Errorf("open database: %w", err)
+		return err
 	}
-	defer db.Close()
+	defer cleanup()
 
-	projects, err := db.ListProjects()
+	projects, err := svc.Projects.List(cmd.Context())
 	if err != nil {
 		return fmt.Errorf("list projects: %w", err)
 	}
@@ -849,12 +849,11 @@ func runProjectAdd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dbPath := getDBPath()
-	db, err := storage.Open(dbPath)
+	svc, cleanup, err := InitCLIServices(getDBPath())
 	if err != nil {
-		return fmt.Errorf("open database: %w", err)
+		return err
 	}
-	defer db.Close()
+	defer cleanup()
 
 	// Interactive project creation
 	reader := bufio.NewReader(os.Stdin)
@@ -880,16 +879,8 @@ func runProjectAdd(cmd *cobra.Command, args []string) error {
 	projectType, _ := reader.ReadString('\n')
 	projectType = strings.TrimSpace(projectType)
 
-	project := &storage.Project{
-		Name:       projectName,
-		Repository: repoURL,
-		Branch:     branch,
-		DeployPath: deployPath,
-		Type:       projectType,
-		CreatedAt:  time.Now(),
-	}
-
-	if err := db.CreateProject(project); err != nil {
+	ctx := cmd.Context()
+	if _, err := svc.Projects.Create(ctx, projectName, repoURL, branch, deployPath, projectType); err != nil {
 		return fmt.Errorf("create project: %w", err)
 	}
 
@@ -905,15 +896,16 @@ func runProjectEdit(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dbPath := getDBPath()
-	db, err := storage.Open(dbPath)
+	svc, cleanup, err := InitCLIServices(getDBPath())
 	if err != nil {
-		return fmt.Errorf("open database: %w", err)
+		return err
 	}
-	defer db.Close()
+	defer cleanup()
+
+	ctx := cmd.Context()
 
 	// Get existing project
-	project, err := db.GetProjectByName(cmd.Context(), projectName)
+	project, err := svc.Projects.GetByName(ctx, projectName)
 	if err != nil {
 		return fmt.Errorf("get project: %w", err)
 	}
@@ -1000,8 +992,7 @@ func runProjectEdit(cmd *cobra.Command, args []string) error {
 	}
 
 	// Update project
-	ctx := context.Background()
-	if err := db.UpdateProjectByName(ctx, project); err != nil {
+	if err := svc.Projects.Update(ctx, project); err != nil {
 		return fmt.Errorf("update project: %w", err)
 	}
 
@@ -1027,14 +1018,13 @@ func runProjectDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dbPath := getDBPath()
-	db, err := storage.Open(dbPath)
+	svc, cleanup, err := InitCLIServices(getDBPath())
 	if err != nil {
-		return fmt.Errorf("open database: %w", err)
+		return err
 	}
-	defer db.Close()
+	defer cleanup()
 
-	if err := db.DeleteProject(projectName); err != nil {
+	if err := svc.Projects.DeleteWithCleanup(cmd.Context(), projectName); err != nil {
 		return fmt.Errorf("delete project: %w", err)
 	}
 
@@ -1049,14 +1039,13 @@ func runProjectValidate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dbPath := getDBPath()
-	db, err := storage.Open(dbPath)
+	svc, cleanup, err := InitCLIServices(getDBPath())
 	if err != nil {
-		return fmt.Errorf("open database: %w", err)
+		return err
 	}
-	defer db.Close()
+	defer cleanup()
 
-	project, err := db.GetProjectByName(cmd.Context(), projectName)
+	project, err := svc.Projects.GetByName(cmd.Context(), projectName)
 	if err != nil {
 		return fmt.Errorf("get project: %w", err)
 	}
@@ -1136,14 +1125,13 @@ func runProjectDeploy(cmd *cobra.Command, args []string) error {
 		if err := initConfig(cmd); err != nil {
 			return err
 		}
-		dbPath := getDBPath()
-		db, err := storage.Open(dbPath)
+		svc, cleanup, err := InitCLIServices(getDBPath())
 		if err != nil {
-			return fmt.Errorf("open database: %w", err)
+			return err
 		}
-		defer db.Close()
+		defer cleanup()
 
-		_, err = db.GetProjectByName(cmd.Context(), projectName)
+		_, err = svc.Projects.GetByName(cmd.Context(), projectName)
 		if err != nil {
 			return fmt.Errorf("get project: %w", err)
 		}
@@ -1228,7 +1216,7 @@ func runProjectDeploy(cmd *cobra.Command, args []string) error {
 		var status struct {
 			Status string `json:"status"`
 		}
-		json.NewDecoder(statusResp.Body).Decode(&status)
+		_ = json.NewDecoder(statusResp.Body).Decode(&status)
 		statusResp.Body.Close()
 
 		switch status.Status {
@@ -1374,14 +1362,13 @@ func runTypeList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dbPath := getDBPath()
-	db, err := storage.Open(dbPath)
+	svc, cleanup, err := InitCLIServices(getDBPath())
 	if err != nil {
-		return fmt.Errorf("open database: %w", err)
+		return err
 	}
-	defer db.Close()
+	defer cleanup()
 
-	types, err := db.ListProjectTypes()
+	types, err := svc.ProjectTypes.List(cmd.Context())
 	if err != nil {
 		return fmt.Errorf("list types: %w", err)
 	}
@@ -1410,12 +1397,11 @@ func runTypeCreate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dbPath := getDBPath()
-	db, err := storage.Open(dbPath)
+	svc, cleanup, err := InitCLIServices(getDBPath())
 	if err != nil {
-		return fmt.Errorf("open database: %w", err)
+		return err
 	}
-	defer db.Close()
+	defer cleanup()
 
 	reader := bufio.NewReader(os.Stdin)
 
@@ -1429,14 +1415,7 @@ func runTypeCreate(cmd *cobra.Command, args []string) error {
 	buildCmd, _ := reader.ReadString('\n')
 	buildCmd = strings.TrimSpace(buildCmd)
 
-	projectType := &storage.ProjectType{
-		Name:        typeName,
-		Description: description,
-		BuildCmd:    buildCmd,
-		CreatedAt:   time.Now(),
-	}
-
-	if err := db.CreateProjectType(projectType); err != nil {
+	if _, err := svc.ProjectTypes.Create(cmd.Context(), typeName, description, buildCmd); err != nil {
 		return fmt.Errorf("create type: %w", err)
 	}
 
@@ -1451,15 +1430,16 @@ func runTypeEdit(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dbPath := getDBPath()
-	db, err := storage.Open(dbPath)
+	svc, cleanup, err := InitCLIServices(getDBPath())
 	if err != nil {
-		return fmt.Errorf("open database: %w", err)
+		return err
 	}
-	defer db.Close()
+	defer cleanup()
+
+	ctx := cmd.Context()
 
 	// Get existing project type
-	projectType, err := db.GetProjectTypeByName(typeName)
+	projectType, err := svc.ProjectTypes.GetByName(ctx, typeName)
 	if err != nil {
 		return fmt.Errorf("get project type: %w", err)
 	}
@@ -1514,7 +1494,7 @@ func runTypeEdit(cmd *cobra.Command, args []string) error {
 	}
 
 	// Update project type
-	if err := db.UpdateProjectTypeByName(projectType); err != nil {
+	if err := svc.ProjectTypes.Update(ctx, projectType); err != nil {
 		return fmt.Errorf("update project type: %w", err)
 	}
 
@@ -1542,14 +1522,13 @@ func runTypeDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dbPath := getDBPath()
-	db, err := storage.Open(dbPath)
+	svc, cleanup, err := InitCLIServices(getDBPath())
 	if err != nil {
-		return fmt.Errorf("open database: %w", err)
+		return err
 	}
-	defer db.Close()
+	defer cleanup()
 
-	if err := db.DeleteProjectType(typeName); err != nil {
+	if err := svc.ProjectTypes.Delete(cmd.Context(), typeName); err != nil {
 		return fmt.Errorf("delete type: %w", err)
 	}
 
@@ -1566,19 +1545,11 @@ func runSecretSet(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dbPath := getDBPath()
-	db, err := storage.Open(dbPath)
+	svc, cleanup, err := InitCLIServices(getDBPath())
 	if err != nil {
-		return fmt.Errorf("open database: %w", err)
+		return err
 	}
-	defer db.Close()
-
-	// Initialize KMS for encryption
-	kms, err := security.NewKMS(db.Conn(), globalLogger)
-	if err != nil {
-		return fmt.Errorf("initialize KMS: %w", err)
-	}
-	secrets := security.NewSecretService(db, kms)
+	defer cleanup()
 
 	var value string
 	if stdin {
@@ -1612,8 +1583,8 @@ func runSecretSet(cmd *cobra.Command, args []string) error {
 		scopeName = parts[1]
 	}
 
-	ctx := context.Background()
-	if err := secrets.Set(ctx, project, scopeName, key, value); err != nil {
+	ctx := cmd.Context()
+	if err := svc.Secrets.Set(ctx, project, scopeName, key, value); err != nil {
 		return fmt.Errorf("set secret: %w", err)
 	}
 
@@ -1628,19 +1599,18 @@ func runSecretList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dbPath := getDBPath()
-	db, err := storage.Open(dbPath)
+	svc, cleanup, err := InitCLIServices(getDBPath())
 	if err != nil {
-		return fmt.Errorf("open database: %w", err)
+		return err
 	}
-	defer db.Close()
+	defer cleanup()
 
-	secrets, err := db.ListSecrets(project)
+	secretsMetadata, err := svc.Secrets.ListByProject(cmd.Context(), project)
 	if err != nil {
 		return fmt.Errorf("list secrets: %w", err)
 	}
 
-	if len(secrets) == 0 {
+	if len(secretsMetadata) == 0 {
 		fmt.Printf("No secrets configured for '%s'.\n", project)
 		return nil
 	}
@@ -1650,7 +1620,7 @@ func runSecretList(cmd *cobra.Command, args []string) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "KEY\tUPDATED\tSCOPE")
 
-	for _, s := range secrets {
+	for _, s := range secretsMetadata {
 		fmt.Fprintf(w, "%s\t%s\t%s\n", s.Key, s.UpdatedAt.Format("2006-01-02 15:04"), s.Scope)
 	}
 	w.Flush()
@@ -1676,14 +1646,21 @@ func runSecretDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dbPath := getDBPath()
-	db, err := storage.Open(dbPath)
+	svc, cleanup, err := InitCLIServices(getDBPath())
 	if err != nil {
-		return fmt.Errorf("open database: %w", err)
+		return err
 	}
-	defer db.Close()
+	defer cleanup()
 
-	if err := db.DeleteSecret(scope, key); err != nil {
+	// Parse scope into project/scope
+	project := scope
+	scopeName := "_default"
+	if parts := strings.SplitN(scope, "/", 2); len(parts) == 2 {
+		project = parts[0]
+		scopeName = parts[1]
+	}
+
+	if err := svc.Secrets.Delete(cmd.Context(), project, scopeName, key); err != nil {
 		return fmt.Errorf("delete secret: %w", err)
 	}
 
@@ -1698,12 +1675,11 @@ func runSecretImport(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dbPath := getDBPath()
-	db, err := storage.Open(dbPath)
+	svc, cleanup, err := InitCLIServices(getDBPath())
 	if err != nil {
-		return fmt.Errorf("open database: %w", err)
+		return err
 	}
-	defer db.Close()
+	defer cleanup()
 
 	fmt.Printf("Importing secrets to '%s' from stdin (.env format)...\n", scope)
 	fmt.Println("Paste your .env content, then press Ctrl+D when done:")
@@ -1711,14 +1687,7 @@ func runSecretImport(cmd *cobra.Command, args []string) error {
 
 	scanner := bufio.NewScanner(os.Stdin)
 	count := 0
-
-	// Initialize KMS for encryption
-	kms, err := security.NewKMS(db.Conn(), globalLogger)
-	if err != nil {
-		return fmt.Errorf("initialize KMS: %w", err)
-	}
-	secrets := security.NewSecretService(db, kms)
-	ctx := context.Background()
+	ctx := cmd.Context()
 
 	// Parse scope into project/scope
 	project := scope
@@ -1749,7 +1718,7 @@ func runSecretImport(cmd *cobra.Command, args []string) error {
 		// Remove quotes if present
 		value = strings.Trim(value, `"'`)
 
-		if err := secrets.Set(ctx, project, scopeName, key, value); err != nil {
+		if err := svc.Secrets.Set(ctx, project, scopeName, key, value); err != nil {
 			fmt.Printf("  Error setting %s: %v\n", key, err)
 			continue
 		}

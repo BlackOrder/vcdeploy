@@ -1,0 +1,247 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# vim: set ts=2 sw=2 tw=0 fo=cnqoj
+
+version: 2
+
+project_name: vcdeploy
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+builds:
+  - id: vcdeploy
+    main: ./cmd/vcdeploy
+    binary: vcdeploy
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.ShortCommit}}
+      - -X main.date={{.Date}}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+  - id: vcdeploy-agent
+    main: ./cmd/vcdeploy-agent
+    binary: vcdeploy-agent
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.ShortCommit}}
+      - -X main.date={{.Date}}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: default
+    builds:
+      - vcdeploy
+      - vcdeploy-agent
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README.md
+      - LICENSE
+      - scripts/install.sh
+      - scripts/uninstall.sh
+
+nfpms:
+  - id: packages
+    package_name: vcdeploy
+    vendor: BlackOrder
+    homepage: https://github.com/BlackOrder/vcdeploy
+    maintainer: VCDeploy Team <vcdeploy@blackorder.dev>
+    description: Deployment automation and orchestration tool
+    license: Apache-2.0
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/local/bin
+    contents:
+      # Systemd service files
+      - src: ./init/systemd/vcdeploy-master.service
+        dst: /lib/systemd/system/vcdeploy-master.service
+        type: config
+        packager: deb
+      - src: ./init/systemd/vcdeploy-master.service
+        dst: /usr/lib/systemd/system/vcdeploy-master.service
+        type: config
+        packager: rpm
+      - src: ./init/systemd/vcdeploy-agent.service
+        dst: /lib/systemd/system/vcdeploy-agent.service
+        type: config
+        packager: deb
+      - src: ./init/systemd/vcdeploy-agent.service
+        dst: /usr/lib/systemd/system/vcdeploy-agent.service
+        type: config
+        packager: rpm
+      # Config directory
+      - dst: /etc/vcdeploy
+        type: dir
+        file_info:
+          mode: 0750
+      # Data directory  
+      - dst: /var/lib/vcdeploy
+        type: dir
+        file_info:
+          mode: 0755
+      # Log directory
+      - dst: /var/log/vcdeploy
+        type: dir
+        file_info:
+          mode: 0755
+    scripts:
+      postinstall: ./scripts/postinstall.sh
+      preremove: ./scripts/preremove.sh
+    deb:
+      lintian_overrides:
+        - statically-linked-binary
+        - changelog-file-missing-in-native-package
+    rpm:
+      group: System Environment/Daemons
+
+brews:
+  - name: vcdeploy
+    repository:
+      owner: BlackOrder
+      name: homebrew-vcdeploy
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: https://github.com/BlackOrder/vcdeploy
+    description: Deployment automation and orchestration tool
+    license: Apache-2.0
+    install: |
+      bin.install "vcdeploy"
+      bin.install "vcdeploy-agent"
+    test: |
+      system "#{bin}/vcdeploy", "version"
+    caveats: |
+      To get started with VCDeploy:
+        vcdeploy init
+        vcdeploy master start
+
+      For more information, visit:
+        https://github.com/BlackOrder/vcdeploy
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+      - Merge pull request
+      - Merge branch
+  groups:
+    - title: "🚀 Features"
+      regexp: '^.*?feat(\(.+\))??!?:.+$'
+      order: 0
+    - title: "🐛 Bug Fixes"
+      regexp: '^.*?fix(\(.+\))??!?:.+$'
+      order: 1
+    - title: "🔒 Security"
+      regexp: '^.*?sec(\(.+\))??!?:.+$'
+      order: 2
+    - title: "📦 Dependencies"
+      regexp: '^.*?deps(\(.+\))??!?:.+$'
+      order: 3
+    - title: "📚 Documentation"
+      regexp: '^.*?docs(\(.+\))??!?:.+$'
+      order: 4
+    - title: "🏗️ Other"
+      order: 999
+
+release:
+  github:
+    owner: BlackOrder
+    name: vcdeploy
+  draft: false
+  prerelease: auto
+  name_template: "{{.ProjectName}} v{{.Version}}"
+  header: |
+    ## VCDeploy v{{.Version}}
+
+    ### Installation
+
+    **Linux/macOS (curl):**
+    ```bash
+    curl -fsSL https://raw.githubusercontent.com/BlackOrder/vcdeploy/main/scripts/install.sh | bash
+    ```
+
+    **Homebrew (macOS/Linux):**
+    ```bash
+    brew tap BlackOrder/vcdeploy
+    brew install vcdeploy
+    ```
+
+    **Direct Download:**
+    Download the appropriate binary for your platform from the assets below.
+
+  footer: |
+    **Full Changelog**: https://github.com/BlackOrder/vcdeploy/compare/{{.PreviousTag}}...{{.Tag}}
+
+# Signs releases with GPG if available
+signs:
+  - cmd: gpg
+    args:
+      - "--batch"
+      - "-u"
+      - "{{ .Env.GPG_FINGERPRINT }}"
+      - "--output"
+      - "${signature}"
+      - "--detach-sign"
+      - "${artifact}"
+    artifacts: checksum
+    output: true
+
+# Docker images (optional)
+dockers:
+  - image_templates:
+      - "ghcr.io/blackorder/vcdeploy:{{ .Tag }}"
+      - "ghcr.io/blackorder/vcdeploy:latest"
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+    ids:
+      - vcdeploy
+      - vcdeploy-agent
+    skip_push: auto
+
+# Announce new releases
+announce:
+  skip: '{{ gt (len .Prerelease) 0 }}'

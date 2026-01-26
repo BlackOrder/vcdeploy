@@ -3,6 +3,7 @@ package deployments
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
@@ -55,6 +56,15 @@ func (s *Service) ListRecent(ctx context.Context, limit int) ([]*storage.Deploym
 		return nil, fmt.Errorf("listing deployments: %w", err)
 	}
 	return deployments, nil
+}
+
+// CountByStatus returns deployment counts grouped by status.
+func (s *Service) CountByStatus(ctx context.Context) (map[string]int64, error) {
+	counts, err := s.db.CountDeploymentsByStatus(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("counting deployments by status: %w", err)
+	}
+	return counts, nil
 }
 
 // Cancel marks a deployment as cancelled.
@@ -153,4 +163,43 @@ func (s *Service) CleanupOldLogs(ctx context.Context, cutoff time.Time) (int64, 
 		return 0, fmt.Errorf("cleaning up old deployment logs: %w", err)
 	}
 	return count, nil
+}
+
+// CreateLogsBatch creates multiple deployment log entries in a single transaction.
+// This is more efficient than creating logs one at a time for bulk operations.
+func (s *Service) CreateLogsBatch(ctx context.Context, deploymentID string, logs []*storage.DeploymentLog) error {
+	if len(logs) == 0 {
+		return nil
+	}
+
+	return s.db.RunInTransaction(ctx, func(tx *sql.Tx) error {
+		stmt, err := tx.PrepareContext(ctx, `
+			INSERT INTO deployment_logs (deployment_id, level, message, source)
+			VALUES (?, ?, ?, ?)
+		`)
+		if err != nil {
+			return fmt.Errorf("preparing statement: %w", err)
+		}
+		defer stmt.Close()
+
+		for _, log := range logs {
+			if log.DeploymentID == "" {
+				log.DeploymentID = deploymentID
+			}
+			if log.Level == "" {
+				log.Level = "info"
+			}
+
+			_, err := stmt.ExecContext(ctx,
+				log.DeploymentID,
+				log.Level,
+				log.Message,
+				log.Source,
+			)
+			if err != nil {
+				return fmt.Errorf("inserting log: %w", err)
+			}
+		}
+		return nil
+	})
 }

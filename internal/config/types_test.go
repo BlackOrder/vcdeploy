@@ -345,7 +345,7 @@ hooks:
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		LoadTypeConfig(configPath)
+		_, _ = LoadTypeConfig(configPath)
 	}
 }
 
@@ -365,6 +365,6 @@ func BenchmarkSaveTypeConfig(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		savePath := filepath.Join(tmpDir, "bench.yaml")
-		SaveTypeConfig(cfg, savePath)
+		_ = SaveTypeConfig(cfg, savePath)
 	}
 }

@@ -702,3 +702,435 @@ func TestSettingsService_UpdateOverwrite(t *testing.T) {
 		t.Errorf("expected 'updated', got '%s'", val)
 	}
 }
+
+func TestSettingsService_SetRaw(t *testing.T) {
+	db, kms, cleanup := setupTestSettingsDB(t)
+	defer cleanup()
+
+	svc := NewSettingsService(db, kms)
+	ctx := context.Background()
+
+	tests := []struct {
+		name      string
+		category  string
+		key       string
+		value     string
+		valueType string
+		encrypted bool
+	}{
+		{
+			name:      "raw string",
+			category:  "test",
+			key:       "string_val",
+			value:     "test-value",
+			valueType: "string",
+			encrypted: false,
+		},
+		{
+			name:      "raw int",
+			category:  "test",
+			key:       "int_val",
+			value:     "42",
+			valueType: "int",
+			encrypted: false,
+		},
+		{
+			name:      "raw bool",
+			category:  "test",
+			key:       "bool_val",
+			value:     "true",
+			valueType: "bool",
+			encrypted: false,
+		},
+		{
+			name:      "raw duration",
+			category:  "test",
+			key:       "duration_val",
+			value:     "5m",
+			valueType: "duration",
+			encrypted: false,
+		},
+		{
+			name:      "encrypted value",
+			category:  "secrets",
+			key:       "api_key",
+			value:     "secret-key",
+			valueType: "string",
+			encrypted: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := svc.SetRaw(ctx, tt.category, tt.key, tt.value, tt.valueType, tt.encrypted); err != nil {
+				t.Fatalf("SetRaw failed: %v", err)
+			}
+
+			val, err := svc.Get(ctx, tt.category, tt.key)
+			if err != nil {
+				t.Fatalf("Get failed: %v", err)
+			}
+			if val != tt.value {
+				t.Errorf("expected '%s', got '%s'", tt.value, val)
+			}
+		})
+	}
+}
+
+func TestSettingsService_ListByCategory(t *testing.T) {
+	db, kms, cleanup := setupTestSettingsDB(t)
+	defer cleanup()
+
+	svc := NewSettingsService(db, kms)
+	ctx := context.Background()
+
+	// Set up test data in multiple categories
+	if err := svc.Set(ctx, "category_a", "key1", "value1", false); err != nil {
+		t.Fatalf("Set failed: %v", err)
+	}
+	if err := svc.Set(ctx, "category_a", "key2", "value2", false); err != nil {
+		t.Fatalf("Set failed: %v", err)
+	}
+	if err := svc.Set(ctx, "category_b", "key3", "value3", false); err != nil {
+		t.Fatalf("Set failed: %v", err)
+	}
+
+	// List by category
+	settings, err := svc.ListByCategory(ctx, "category_a")
+	if err != nil {
+		t.Fatalf("ListByCategory failed: %v", err)
+	}
+
+	if len(settings) != 2 {
+		t.Errorf("expected 2 settings in category_a, got %d", len(settings))
+	}
+
+	// Verify metadata fields are populated
+	for _, s := range settings {
+		if s.Category != "category_a" {
+			t.Errorf("expected category 'category_a', got '%s'", s.Category)
+		}
+		if s.Key == "" {
+			t.Error("expected non-empty key")
+		}
+	}
+}
+
+func TestSettingsService_ListAll(t *testing.T) {
+	db, kms, cleanup := setupTestSettingsDB(t)
+	defer cleanup()
+
+	svc := NewSettingsService(db, kms)
+	ctx := context.Background()
+
+	// Set up test data
+	if err := svc.Set(ctx, "cat1", "key1", "val1", false); err != nil {
+		t.Fatalf("Set failed: %v", err)
+	}
+	if err := svc.SetInt(ctx, "cat2", "key2", 123); err != nil {
+		t.Fatalf("SetInt failed: %v", err)
+	}
+	if err := svc.SetBool(ctx, "cat3", "key3", true); err != nil {
+		t.Fatalf("SetBool failed: %v", err)
+	}
+
+	// List all settings
+	settings, err := svc.ListAll(ctx)
+	if err != nil {
+		t.Fatalf("ListAll failed: %v", err)
+	}
+
+	if len(settings) < 3 {
+		t.Errorf("expected at least 3 settings, got %d", len(settings))
+	}
+
+	// Verify metadata
+	for _, s := range settings {
+		if s.Category == "" {
+			t.Error("expected non-empty category")
+		}
+		if s.Key == "" {
+			t.Error("expected non-empty key")
+		}
+	}
+}
+
+func TestSettingsService_GetCategoryWithEncrypted(t *testing.T) {
+	db, kms, cleanup := setupTestSettingsDB(t)
+	defer cleanup()
+
+	svc := NewSettingsService(db, kms)
+	ctx := context.Background()
+
+	// Set normal and encrypted values in same category
+	if err := svc.Set(ctx, "mixed", "normal", "plain-value", false); err != nil {
+		t.Fatalf("Set failed: %v", err)
+	}
+	if err := svc.Set(ctx, "mixed", "secret", "encrypted-value", true); err != nil {
+		t.Fatalf("Set encrypted failed: %v", err)
+	}
+
+	// Get entire category
+	result, err := svc.GetCategory(ctx, "mixed")
+	if err != nil {
+		t.Fatalf("GetCategory failed: %v", err)
+	}
+
+	if result["normal"] != "plain-value" {
+		t.Errorf("expected 'plain-value', got '%s'", result["normal"])
+	}
+	if result["secret"] != "encrypted-value" {
+		t.Errorf("expected 'encrypted-value', got '%s'", result["secret"])
+	}
+}
+
+func TestSettingsService_SetDefaultsAllCategories(t *testing.T) {
+	db, kms, cleanup := setupTestSettingsDB(t)
+	defer cleanup()
+
+	svc := NewSettingsService(db, kms)
+	ctx := context.Background()
+
+	// Set all defaults
+	if err := svc.SetDefaults(ctx); err != nil {
+		t.Fatalf("SetDefaults failed: %v", err)
+	}
+
+	// Verify various categories are set
+	categories := []struct {
+		category string
+		key      string
+	}{
+		{"server", "listen"},
+		{"server", "tls_enabled"},
+		{"grpc", "listen"},
+		{"ssh", "default_user"},
+		{"security", "session_timeout"},
+		{"backup", "db_enabled"},
+		{"logs", "app_level"},
+		{"webhooks", "github_enabled"},
+		{"notifications", "slack_enabled"},
+		{"api", "enabled"},
+		{"appearance", "theme"},
+	}
+
+	for _, c := range categories {
+		val, err := svc.Get(ctx, c.category, c.key)
+		if err != nil {
+			t.Errorf("Get %s/%s failed: %v", c.category, c.key, err)
+		}
+		if val == "" {
+			t.Errorf("expected %s/%s to be set", c.category, c.key)
+		}
+	}
+}
+
+func TestSettingsService_ExportWithTypes(t *testing.T) {
+	db, kms, cleanup := setupTestSettingsDB(t)
+	defer cleanup()
+
+	svc := NewSettingsService(db, kms)
+	ctx := context.Background()
+
+	// Set values of different types
+	if err := svc.Set(ctx, "test", "str", "string-value", false); err != nil {
+		t.Fatalf("Set string failed: %v", err)
+	}
+	if err := svc.SetInt(ctx, "test", "num", 42); err != nil {
+		t.Fatalf("SetInt failed: %v", err)
+	}
+	if err := svc.SetBool(ctx, "test", "flag", true); err != nil {
+		t.Fatalf("SetBool failed: %v", err)
+	}
+	if err := svc.SetDuration(ctx, "test", "dur", 5*time.Minute); err != nil {
+		t.Fatalf("SetDuration failed: %v", err)
+	}
+
+	// Export YAML
+	yamlData, err := svc.Export(ctx)
+	if err != nil {
+		t.Fatalf("Export failed: %v", err)
+	}
+
+	yamlStr := string(yamlData)
+	if yamlStr == "" {
+		t.Error("expected non-empty YAML export")
+	}
+
+	// Export JSON
+	jsonData, err := svc.ExportJSON(ctx)
+	if err != nil {
+		t.Fatalf("ExportJSON failed: %v", err)
+	}
+
+	jsonStr := string(jsonData)
+	if jsonStr == "" {
+		t.Error("expected non-empty JSON export")
+	}
+
+	// Verify JSON contains expected structure
+	if len(jsonStr) < 10 {
+		t.Error("JSON export too short")
+	}
+}
+
+func TestSettingsService_ExportWithEncryptedValues(t *testing.T) {
+	db, kms, cleanup := setupTestSettingsDB(t)
+	defer cleanup()
+
+	svc := NewSettingsService(db, kms)
+	ctx := context.Background()
+
+	// Set encrypted value
+	if err := svc.Set(ctx, "secrets", "password", "my-secret-password", true); err != nil {
+		t.Fatalf("Set encrypted failed: %v", err)
+	}
+
+	// Export should decrypt values
+	yamlData, err := svc.Export(ctx)
+	if err != nil {
+		t.Fatalf("Export failed: %v", err)
+	}
+
+	yamlStr := string(yamlData)
+	if yamlStr == "" {
+		t.Error("expected non-empty YAML export")
+	}
+}
+
+func TestSettingsService_ImportWithAllTypes(t *testing.T) {
+	db, kms, cleanup := setupTestSettingsDB(t)
+	defer cleanup()
+
+	svc := NewSettingsService(db, kms)
+	ctx := context.Background()
+
+	// Import settings with various types
+	yamlData := []byte(`
+settings:
+  string_val: "hello"
+  int_val: 123
+  float_val: 45.6
+  bool_true: true
+  bool_false: false
+  int64_val: 9223372036854775807
+`)
+
+	if err := svc.Import(ctx, yamlData); err != nil {
+		t.Fatalf("Import failed: %v", err)
+	}
+
+	// Verify string
+	strVal, _ := svc.Get(ctx, "settings", "string_val")
+	if strVal != "hello" {
+		t.Errorf("expected 'hello', got '%s'", strVal)
+	}
+
+	// Verify int
+	intVal := svc.GetInt(ctx, "settings", "int_val", 0)
+	if intVal != 123 {
+		t.Errorf("expected 123, got %d", intVal)
+	}
+
+	// Verify bool true
+	boolTrue := svc.GetBool(ctx, "settings", "bool_true", false)
+	if !boolTrue {
+		t.Error("expected bool_true to be true")
+	}
+
+	// Verify bool false
+	boolFalse := svc.GetBool(ctx, "settings", "bool_false", true)
+	if boolFalse {
+		t.Error("expected bool_false to be false")
+	}
+}
+
+func TestSettingsService_ImportSecurityEncryption(t *testing.T) {
+	db, kms, cleanup := setupTestSettingsDB(t)
+	defer cleanup()
+
+	svc := NewSettingsService(db, kms)
+	ctx := context.Background()
+
+	// Import security settings that should be encrypted
+	yamlData := []byte(`
+security:
+  master_key: "super-secret-key"
+  smtp_password: "email-password"
+  normal_setting: "not-encrypted"
+`)
+
+	if err := svc.Import(ctx, yamlData); err != nil {
+		t.Fatalf("Import failed: %v", err)
+	}
+
+	// Verify values are retrievable (decrypted)
+	masterKey, _ := svc.Get(ctx, "security", "master_key")
+	if masterKey != "super-secret-key" {
+		t.Errorf("expected 'super-secret-key', got '%s'", masterKey)
+	}
+
+	smtpPass, _ := svc.Get(ctx, "security", "smtp_password")
+	if smtpPass != "email-password" {
+		t.Errorf("expected 'email-password', got '%s'", smtpPass)
+	}
+}
+
+func TestSettingsService_SetRawWithoutKMS(t *testing.T) {
+	db, _, cleanup := setupTestSettingsDB(t)
+	defer cleanup()
+
+	// Create service without KMS
+	svc := NewSettingsService(db, nil)
+	ctx := context.Background()
+
+	// SetRaw with encrypted=true but no KMS should still work
+	// (value won't actually be encrypted)
+	if err := svc.SetRaw(ctx, "test", "key", "value", "string", true); err != nil {
+		t.Fatalf("SetRaw without KMS failed: %v", err)
+	}
+
+	val, err := svc.Get(ctx, "test", "key")
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+	if val != "value" {
+		t.Errorf("expected 'value', got '%s'", val)
+	}
+}
+
+func TestSettingsService_GetCategoryEmpty(t *testing.T) {
+	db, kms, cleanup := setupTestSettingsDB(t)
+	defer cleanup()
+
+	svc := NewSettingsService(db, kms)
+	ctx := context.Background()
+
+	// Get category that doesn't exist
+	result, err := svc.GetCategory(ctx, "nonexistent_category")
+	if err != nil {
+		t.Fatalf("GetCategory failed: %v", err)
+	}
+
+	if len(result) != 0 {
+		t.Errorf("expected empty map for nonexistent category, got %d items", len(result))
+	}
+}
+
+func TestSettingsService_ListByCategoryEmpty(t *testing.T) {
+	db, kms, cleanup := setupTestSettingsDB(t)
+	defer cleanup()
+
+	svc := NewSettingsService(db, kms)
+	ctx := context.Background()
+
+	// List category that doesn't exist
+	settings, err := svc.ListByCategory(ctx, "nonexistent")
+	if err != nil {
+		t.Fatalf("ListByCategory failed: %v", err)
+	}
+
+	if len(settings) != 0 {
+		t.Errorf("expected empty list for nonexistent category, got %d", len(settings))
+	}
+}

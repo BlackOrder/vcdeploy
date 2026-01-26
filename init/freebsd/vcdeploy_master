@@ -1,0 +1,40 @@
+#!/usr/local/etc/rc.d
+
+# PROVIDE: vcdeploy_master
+# REQUIRE: LOGIN DAEMON NETWORKING
+# KEYWORD: shutdown
+
+. /etc/rc.subr
+
+name="vcdeploy_master"
+rcvar="${name}_enable"
+
+load_rc_config $name
+: ${vcdeploy_master_enable:="NO"}
+: ${vcdeploy_master_user:="vcdeploy"}
+: ${vcdeploy_master_config:="/usr/local/etc/vcdeploy/master.yaml"}
+
+command="/usr/local/bin/vcdeploy"
+command_args="master start"
+pidfile="/var/run/${name}.pid"
+
+start_cmd="${name}_start"
+stop_cmd="${name}_stop"
+
+vcdeploy_master_start()
+{
+    echo "Starting ${name}."
+    /usr/sbin/daemon -f -p ${pidfile} -u ${vcdeploy_master_user} \
+        ${command} ${command_args}
+}
+
+vcdeploy_master_stop()
+{
+    echo "Stopping ${name}."
+    if [ -f ${pidfile} ]; then
+        kill -TERM $(cat ${pidfile})
+        rm -f ${pidfile}
+    fi
+}
+
+run_rc_command "$1"
