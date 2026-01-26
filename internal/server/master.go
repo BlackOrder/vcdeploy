@@ -3,9 +3,7 @@ package server
 
 import (
 	"context"
-	"crypto/sha256"
 	"crypto/tls"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,6 +27,7 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/services/deployments"
 	"github.com/BlackOrder/vcdeploy/internal/services/hostkeys"
 	"github.com/BlackOrder/vcdeploy/internal/services/projects"
+	"github.com/BlackOrder/vcdeploy/internal/services/projecttypes"
 	"github.com/BlackOrder/vcdeploy/internal/services/secrets"
 	"github.com/BlackOrder/vcdeploy/internal/services/sessions"
 	"github.com/BlackOrder/vcdeploy/internal/services/settings"
@@ -58,17 +57,18 @@ type MasterServer struct {
 	kms *security.KMS
 
 	// Service layer - new architecture
-	secretService     services.SecretServicer
-	settingsSvc       services.SettingsServicer
-	userService       services.UserServicer
-	sessionService    services.SessionServicer
-	apiKeyService     services.APIKeyServicer
-	projectService    services.ProjectServicer
-	webhookService    services.WebhookServicer
-	deploymentService services.DeploymentServicer
-	agentService      services.AgentServicer
-	auditService      services.AuditServicer
-	hostKeyService    services.HostKeyServicer
+	secretService      services.SecretServicer
+	settingsSvc        services.SettingsServicer
+	userService        services.UserServicer
+	sessionService     services.SessionServicer
+	apiKeyService      services.APIKeyServicer
+	projectService     services.ProjectServicer
+	projectTypeService services.ProjectTypeServicer
+	webhookService     services.WebhookServicer
+	deploymentService  services.DeploymentServicer
+	agentService       services.AgentServicer
+	auditService       services.AuditServicer
+	hostKeyService     services.HostKeyServicer
 
 	// Legacy services (to be deprecated)
 	legacySecretService  *security.SecretService
@@ -243,6 +243,7 @@ func (s *MasterServer) SetWebhookHandler(kms *security.KMS, processor webhooksha
 	s.sessionService = sessions.New(s.db)
 	s.apiKeyService = apikeys.New(s.db)
 	s.projectService = projects.New(s.db)
+	s.projectTypeService = projecttypes.New(s.db)
 	s.webhookService = webhooks.New(s.db, kms)
 	s.deploymentService = deployments.New(s.db)
 	s.agentService = agents.New(s.db)
@@ -527,7 +528,7 @@ func (s *MasterServer) processScheduledDeployments() {
 	defer cancel()
 
 	// Get pending scheduled deployments that are due
-	deployments, err := s.db.ListPendingScheduledDeployments(ctx)
+	deployments, err := s.deploymentService.ListPendingScheduled(ctx)
 	if err != nil {
 		s.logger.Error("Failed to list scheduled deployments", zap.Error(err))
 		return
@@ -541,7 +542,7 @@ func (s *MasterServer) processScheduledDeployments() {
 		)
 
 		// Update deployment status to running
-		deployment := &storage.Deployment{
+		deployment := &storage.DeploymentRecord{
 			ID:          d.ID,
 			Project:     d.Project,
 			Target:      d.Target,
@@ -550,7 +551,7 @@ func (s *MasterServer) processScheduledDeployments() {
 			TriggeredBy: d.ScheduledBy,
 			StartedAt:   time.Now(),
 		}
-		if err := s.db.UpdateDeployment(ctx, deployment); err != nil {
+		if err := s.deploymentService.Update(ctx, deployment); err != nil {
 			s.logger.Error("Failed to update scheduled deployment", zap.Error(err))
 			continue
 		}
@@ -565,7 +566,7 @@ func (s *MasterServer) processScheduledDeployments() {
 			deployment.Status = "failed"
 			now := time.Now()
 			deployment.CompletedAt = &now
-			_ = s.db.UpdateDeployment(ctx, deployment)
+			_ = s.deploymentService.Update(ctx, deployment)
 			continue
 		}
 
@@ -575,9 +576,9 @@ func (s *MasterServer) processScheduledDeployments() {
 }
 
 // triggerDeploymentOnAgent sends a deployment command to the appropriate agent.
-func (s *MasterServer) triggerDeploymentOnAgent(ctx context.Context, deployment *storage.Deployment) error {
+func (s *MasterServer) triggerDeploymentOnAgent(ctx context.Context, deployment *storage.DeploymentRecord) error {
 	// Get project details
-	project, err := s.db.GetProjectByName(ctx, deployment.Project)
+	project, err := s.projectService.GetByName(ctx, deployment.Project)
 	if err != nil {
 		return fmt.Errorf("get project: %w", err)
 	}
@@ -731,12 +732,8 @@ func (s *MasterServer) validateAPIKey(ctx context.Context, key string) (int64, e
 		return 0, fmt.Errorf("empty API key")
 	}
 
-	// Hash the key for lookup
-	hash := sha256.Sum256([]byte(key))
-	keyHash := hex.EncodeToString(hash[:])
-
-	// Look up in database
-	apiKey, err := s.db.GetAPIKeyByHash(ctx, keyHash)
+	// Look up using API key service
+	apiKey, err := s.apiKeyService.GetByRawKey(ctx, key)
 	if errors.Is(err, storage.ErrNotFound) {
 		return 0, fmt.Errorf("API key not found")
 	}
@@ -756,7 +753,7 @@ func (s *MasterServer) validateAPIKey(ctx context.Context, key string) (int64, e
 				s.logger.Error("panic in API key usage update", zap.Any("panic", r))
 			}
 		}()
-		if err := s.db.UpdateAPIKeyUsage(context.Background(), apiKey.ID); err != nil {
+		if err := s.apiKeyService.UpdateUsage(context.Background(), apiKey.ID); err != nil {
 			s.logger.Debug("Failed to update API key usage", zap.Error(err))
 		}
 	}()
@@ -770,8 +767,8 @@ func (s *MasterServer) validateSession(ctx context.Context, token string) (int64
 		return 0, fmt.Errorf("empty session token")
 	}
 
-	// Look up in database
-	session, err := s.db.GetSessionByToken(ctx, token)
+	// Look up using session service
+	session, err := s.sessionService.GetByToken(ctx, token)
 	if errors.Is(err, storage.ErrNotFound) {
 		return 0, fmt.Errorf("session not found or expired")
 	}
@@ -960,7 +957,8 @@ func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
 func (s *MasterServer) handleProjectTypes(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		types, err := s.db.ListProjectTypes()
+		ctx := r.Context()
+		types, err := s.projectTypeService.List(ctx)
 		if err != nil {
 			s.logger.Error("Failed to list project types", zap.Error(err))
 			s.jsonError(w, http.StatusInternalServerError, "Failed to list project types")
@@ -987,14 +985,9 @@ func (s *MasterServer) handleProjectTypes(w http.ResponseWriter, r *http.Request
 			return
 		}
 
-		pt := &storage.ProjectType{
-			Name:        req.Name,
-			Description: req.Description,
-			BuildCmd:    req.BuildCmd,
-			CreatedAt:   time.Now(),
-		}
-
-		if err := s.db.CreateProjectType(pt); err != nil {
+		ctx := r.Context()
+		pt, err := s.projectTypeService.Create(ctx, req.Name, req.Description, req.BuildCmd)
+		if err != nil {
 			s.logger.Error("Failed to create project type", zap.Error(err))
 			s.jsonError(w, http.StatusInternalServerError, "Failed to create project type")
 			return
@@ -1022,7 +1015,8 @@ func (s *MasterServer) handleProjectType(w http.ResponseWriter, r *http.Request)
 
 	switch r.Method {
 	case http.MethodGet:
-		pt, err := s.db.GetProjectTypeByName(name)
+		ctx := r.Context()
+		pt, err := s.projectTypeService.GetByName(ctx, name)
 		if err != nil {
 			s.logger.Error("Failed to get project type", zap.Error(err))
 			s.jsonError(w, http.StatusNotFound, "Project type not found")
@@ -1047,7 +1041,8 @@ func (s *MasterServer) handleProjectType(w http.ResponseWriter, r *http.Request)
 			BuildCmd:    req.BuildCmd,
 		}
 
-		if err := s.db.UpdateProjectTypeByName(pt); err != nil {
+		ctx := r.Context()
+		if err := s.projectTypeService.Update(ctx, pt); err != nil {
 			s.logger.Error("Failed to update project type", zap.Error(err))
 			s.jsonError(w, http.StatusInternalServerError, "Failed to update project type")
 			return
@@ -1057,7 +1052,8 @@ func (s *MasterServer) handleProjectType(w http.ResponseWriter, r *http.Request)
 		s.jsonResponse(w, map[string]string{"status": "updated"})
 
 	case http.MethodDelete:
-		if err := s.db.DeleteProjectType(name); err != nil {
+		ctx := r.Context()
+		if err := s.projectTypeService.Delete(ctx, name); err != nil {
 			s.logger.Error("Failed to delete project type", zap.Error(err))
 			s.jsonError(w, http.StatusInternalServerError, "Failed to delete project type")
 			return
@@ -1098,7 +1094,7 @@ func (s *MasterServer) handleAuditLogs(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	entries, err := s.db.ListAuditLogs(ctx, limit, offset)
+	entries, err := s.auditService.List(ctx, limit, offset)
 	if err != nil {
 		s.logger.Error("Failed to list audit logs", zap.Error(err))
 		http.Error(w, "Internal error", http.StatusInternalServerError)
@@ -1132,7 +1128,7 @@ func (s *MasterServer) logAudit(r *http.Request, action, resource, details, resu
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := s.db.LogAudit(ctx, entry); err != nil {
+	if err := s.auditService.Log(ctx, entry); err != nil {
 		s.logger.Error("Failed to write audit log", zap.Error(err))
 	}
 }
@@ -1220,7 +1216,7 @@ func (s *MasterServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
 		// Look up user
-		user, err := s.db.GetUserByUsername(ctx, username)
+		user, err := s.userService.GetByUsername(ctx, username)
 		if errors.Is(err, storage.ErrNotFound) {
 			s.logger.Debug("Login failed: user not found", zap.String("username", username))
 			s.logAudit(r, "login", "session", "user not found: "+username, "failure")
@@ -1262,24 +1258,9 @@ func (s *MasterServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// Generate session token
-		sessionToken, err := security.GenerateSecureToken(32)
+		// Create session using service
+		session, err := s.sessionService.Create(ctx, user.ID, extractClientIP(r), r.UserAgent(), 7*24*time.Hour)
 		if err != nil {
-			s.logger.Error("Failed to generate session token", zap.Error(err))
-			s.renderTemplate(w, "login", map[string]interface{}{"Error": "Internal error"})
-			return
-		}
-
-		// Create session in database
-		session := &storage.Session{
-			ID:        sessionToken,
-			UserID:    user.ID,
-			IPAddress: extractClientIP(r),
-			UserAgent: r.UserAgent(),
-			CreatedAt: time.Now(),
-			ExpiresAt: time.Now().Add(7 * 24 * time.Hour), // 7 days
-		}
-		if err := s.db.CreateSession(ctx, session); err != nil {
 			s.logger.Error("Failed to create session", zap.Error(err))
 			s.renderTemplate(w, "login", map[string]interface{}{"Error": "Internal error"})
 			return
@@ -1295,7 +1276,7 @@ func (s *MasterServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 		// Set session cookie
 		http.SetCookie(w, &http.Cookie{
 			Name:     "session",
-			Value:    sessionToken,
+			Value:    session.ID,
 			Path:     "/",
 			HttpOnly: true,
 			Secure:   s.config.Server.TLS.Enabled,
@@ -1314,8 +1295,8 @@ func (s *MasterServer) handleLogout(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
 		// Get user ID for audit log (if session exists) before deleting
-		if session, err := s.db.GetSessionByToken(ctx, cookie.Value); err == nil {
-			_ = s.db.LogAudit(ctx, &storage.AuditEntry{
+		if session, err := s.sessionService.GetByToken(ctx, cookie.Value); err == nil {
+			_ = s.auditService.Log(ctx, &storage.AuditEntry{
 				Source:    "web",
 				User:      fmt.Sprintf("user:%d", session.UserID),
 				Action:    "logout",
@@ -1325,7 +1306,7 @@ func (s *MasterServer) handleLogout(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 
-		if err := s.db.DeleteSession(ctx, cookie.Value); err != nil {
+		if err := s.sessionService.Delete(ctx, cookie.Value); err != nil {
 			s.logger.Debug("Failed to delete session", zap.Error(err))
 		}
 	}
@@ -1372,7 +1353,8 @@ func (s *MasterServer) handleSettingsUI(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *MasterServer) handleSecretsUI(w http.ResponseWriter, r *http.Request) {
-	projects, err := s.db.ListProjects()
+	ctx := r.Context()
+	projects, err := s.projectService.List(ctx)
 	if err != nil {
 		s.logger.Error("Failed to list projects for secrets UI", zap.Error(err))
 		// Continue with empty list rather than failing completely

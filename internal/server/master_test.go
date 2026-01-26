@@ -20,6 +20,7 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/services/deployments"
 	"github.com/BlackOrder/vcdeploy/internal/services/hostkeys"
 	"github.com/BlackOrder/vcdeploy/internal/services/projects"
+	"github.com/BlackOrder/vcdeploy/internal/services/projecttypes"
 	"github.com/BlackOrder/vcdeploy/internal/services/secrets"
 	"github.com/BlackOrder/vcdeploy/internal/services/sessions"
 	"github.com/BlackOrder/vcdeploy/internal/services/settings"
@@ -70,6 +71,7 @@ func newTestServer(t *testing.T) *MasterServer {
 	server.sessionService = sessions.New(db)
 	server.apiKeyService = apikeys.New(db)
 	server.projectService = projects.New(db)
+	server.projectTypeService = projecttypes.New(db)
 	server.webhookService = webhooks.New(db, kms)
 	server.deploymentService = deployments.New(db)
 	server.agentService = agents.New(db)
