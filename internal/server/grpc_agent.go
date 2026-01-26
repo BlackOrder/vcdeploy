@@ -12,6 +12,7 @@ import (
 
 	"github.com/BlackOrder/vcdeploy/internal/proto"
 	"github.com/BlackOrder/vcdeploy/internal/security"
+	"github.com/BlackOrder/vcdeploy/internal/services"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
@@ -25,6 +26,10 @@ type AgentServer struct {
 	db     *storage.DB
 	ca     *security.CAManager
 	logger *zap.Logger
+
+	// Service layer
+	agentService      services.AgentServicer
+	deploymentService services.DeploymentServicer
 
 	// tokens maps agent IDs to their registration tokens
 	tokens     map[string]string
@@ -60,6 +65,12 @@ func NewAgentServer(db *storage.DB, ca *security.CAManager, logger *zap.Logger) 
 		connections:     make(map[string]*GRPCAgentConnection),
 		pendingCommands: make(map[string]chan *proto.MasterMessage),
 	}
+}
+
+// SetServices sets the service layer dependencies for the AgentServer.
+func (s *AgentServer) SetServices(agentSvc services.AgentServicer, deploymentSvc services.DeploymentServicer) {
+	s.agentService = agentSvc
+	s.deploymentService = deploymentSvc
 }
 
 // RegisterToken adds a registration token for an agent.
@@ -134,7 +145,7 @@ func (s *AgentServer) Register(ctx context.Context, req *proto.RegisterRequest) 
 		Certificate:  cert.SerialNumber,
 	}
 
-	if err := s.db.UpsertAgent(ctx, agent); err != nil {
+	if err := s.agentService.Upsert(ctx, agent); err != nil {
 		s.logger.Error("Failed to store agent",
 			zap.String("agent_id", req.AgentId),
 			zap.Error(err),
@@ -192,7 +203,7 @@ func (s *AgentServer) Connect(stream proto.AgentService_ConnectServer) error {
 	}
 
 	// Verify agent exists and is registered
-	agent, err := s.db.GetAgent(ctx, agentID)
+	agent, err := s.agentService.GetByID(ctx, agentID)
 	if err != nil {
 		return status.Errorf(codes.Internal, "failed to lookup agent: %v", err)
 	}
@@ -250,7 +261,7 @@ func (s *AgentServer) Connect(stream proto.AgentService_ConnectServer) error {
 	// Update agent status
 	agent.Status = "online"
 	agent.LastSeenAt = time.Now()
-	if err := s.db.UpsertAgent(ctx, agent); err != nil {
+	if err := s.agentService.Upsert(ctx, agent); err != nil {
 		s.logger.Warn("Failed to update agent status", zap.Error(err))
 	}
 
@@ -301,7 +312,7 @@ func (s *AgentServer) Heartbeat(ctx context.Context, req *proto.HeartbeatRequest
 	}
 
 	// Get agent
-	agent, err := s.db.GetAgent(ctx, req.AgentId)
+	agent, err := s.agentService.GetByID(ctx, req.AgentId)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to lookup agent: %v", err)
 	}
@@ -328,7 +339,7 @@ func (s *AgentServer) Heartbeat(ctx context.Context, req *proto.HeartbeatRequest
 		}
 	}
 
-	if err := s.db.UpsertAgent(ctx, agent); err != nil {
+	if err := s.agentService.Upsert(ctx, agent); err != nil {
 		s.logger.Warn("Failed to update agent", zap.Error(err))
 	}
 
@@ -477,10 +488,10 @@ func (s *AgentServer) cleanupConnection(agentID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	agent, err := s.db.GetAgent(ctx, agentID)
+	agent, err := s.agentService.GetByID(ctx, agentID)
 	if err == nil && agent != nil {
 		agent.Status = "offline"
-		if err := s.db.UpsertAgent(ctx, agent); err != nil {
+		if err := s.agentService.Upsert(ctx, agent); err != nil {
 			s.logger.Warn("Failed to update agent status to offline",
 				zap.String("agent_id", agentID),
 				zap.Error(err))
@@ -553,7 +564,7 @@ func (s *AgentServer) handleDeploymentLog(ctx context.Context, agentID string, l
 	}
 
 	// Store in deployment logs
-	return s.db.CreateDeploymentLog(ctx, &storage.DeploymentLog{
+	return s.deploymentService.CreateLog(ctx, &storage.DeploymentLog{
 		DeploymentID: log.DeploymentId,
 		Level:        log.Level.String(),
 		Message:      log.Message,
@@ -592,7 +603,7 @@ func (s *AgentServer) handleCommandResult(ctx context.Context, agentID string, r
 		message += fmt.Sprintf("\nStderr: %s", result.Stderr)
 	}
 
-	return s.db.CreateDeploymentLog(ctx, &storage.DeploymentLog{
+	return s.deploymentService.CreateLog(ctx, &storage.DeploymentLog{
 		DeploymentID: result.DeploymentId,
 		Level:        level,
 		Message:      message,
@@ -607,7 +618,7 @@ func (s *AgentServer) updateDeploymentStatus(ctx context.Context, status *proto.
 		return nil
 	}
 
-	deployment, err := s.db.GetDeployment(ctx, status.DeploymentId)
+	deployment, err := s.deploymentService.GetByID(ctx, status.DeploymentId)
 	if err != nil {
 		return fmt.Errorf("get deployment: %w", err)
 	}
@@ -649,5 +660,5 @@ func (s *AgentServer) updateDeploymentStatus(ctx context.Context, status *proto.
 		deployment.CompletedAt = &now
 	}
 
-	return s.db.UpdateDeployment(ctx, deployment)
+	return s.deploymentService.Update(ctx, deployment)
 }

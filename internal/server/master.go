@@ -250,6 +250,11 @@ func (s *MasterServer) SetWebhookHandler(kms *security.KMS, processor webhooksha
 	s.auditService = audit.New(s.db)
 	s.hostKeyService = hostkeys.New(s.db)
 
+	// Inject services into AgentServer if it exists
+	if s.agentServer != nil {
+		s.agentServer.SetServices(s.agentService, s.deploymentService)
+	}
+
 	secretStore := &webhookSecretStoreAdapter{
 		db:     s.db,
 		kms:    kms,
