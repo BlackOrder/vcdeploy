@@ -12,7 +12,9 @@
 # Test artifacts (Go test binaries, not Dockerfile.test)
 *.test.exe
 *.out
-coverage.html
+*.sarif
+*coverage*.html
+cover*.html
 coverage.txt
 
 # Dependency directories
