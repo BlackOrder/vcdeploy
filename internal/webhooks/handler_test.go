@@ -67,12 +67,12 @@ func createGitHubSignature(secret string, payload []byte) string {
 }
 
 func newTestHandler(secrets *MockSecretStore, processor *MockEventProcessor) *Handler {
-	logger, _ := zap.NewDevelopment()
+	logger := zap.NewNop()
 	return NewHandler(logger, secrets, processor)
 }
 
 func TestValidateGitHubSignatureMethod(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
+	logger := zap.NewNop()
 	secrets := &MockSecretStore{Secrets: map[string]string{}}
 	processor := &MockEventProcessor{}
 	h := NewHandler(logger, secrets, processor)
@@ -1597,7 +1597,7 @@ func TestExtractProjectID(t *testing.T) {
 
 // Benchmarks
 func BenchmarkValidateGitHubSignature(b *testing.B) {
-	logger, _ := zap.NewDevelopment()
+	logger := zap.NewNop()
 	secrets := &MockSecretStore{}
 	processor := &MockEventProcessor{}
 	h := NewHandler(logger, secrets, processor)

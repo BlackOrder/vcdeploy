@@ -9,6 +9,13 @@ import (
 	"go.uber.org/zap"
 )
 
+// NewTestLogger returns a no-op logger for tests.
+// Using zap.NewNop() ensures tests don't produce log output.
+func NewTestLogger(t *testing.T) *zap.Logger {
+	t.Helper()
+	return zap.NewNop()
+}
+
 // NewTestDB creates a temporary SQLite database for testing.
 // It returns the database instance and a cleanup function.
 // The caller should defer the cleanup function to ensure proper cleanup.

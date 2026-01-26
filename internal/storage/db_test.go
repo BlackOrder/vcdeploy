@@ -34,7 +34,7 @@ func TestNewWithLogger(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test_logger.db")
 
-	logger, _ := zap.NewDevelopment()
+	logger := zap.NewNop()
 	db, err := New(dbPath, logger)
 	if err != nil {
 		t.Fatalf("New() with logger error = %v", err)

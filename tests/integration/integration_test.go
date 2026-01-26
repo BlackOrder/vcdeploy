@@ -39,7 +39,7 @@ func NewTestFixture(t *testing.T) *TestFixture {
 	tempDir := t.TempDir()
 
 	// Create logger
-	logger, _ := zap.NewDevelopment()
+	logger := zap.NewNop()
 
 	// Create database
 	dbPath := filepath.Join(tempDir, "test.db")

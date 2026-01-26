@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -15,21 +14,16 @@ import (
 // setupTestDB creates a test database and returns a cleanup function.
 func setupTestDB(t *testing.T) (*storage.DB, func()) {
 	t.Helper()
-	tmpDir, err := os.MkdirTemp("", "vcdeploy-hostkeys-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
+	tmpDir := t.TempDir()
 
 	dbPath := filepath.Join(tmpDir, "test.db")
 	db, err := storage.New(dbPath, nil)
 	if err != nil {
-		os.RemoveAll(tmpDir)
 		t.Fatalf("Failed to create database: %v", err)
 	}
 
 	return db, func() {
 		db.Close()
-		os.RemoveAll(tmpDir)
 	}
 }
 
