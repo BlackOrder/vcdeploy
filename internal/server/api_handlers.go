@@ -4,10 +4,8 @@ package server
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -15,11 +13,9 @@ import (
 	"time"
 
 	"github.com/BlackOrder/vcdeploy/internal/proto"
-	"github.com/BlackOrder/vcdeploy/internal/security"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"github.com/BlackOrder/vcdeploy/internal/validation"
 	"go.uber.org/zap"
-	"golang.org/x/crypto/bcrypt"
 )
 
 // --- Stats API ---
@@ -35,17 +31,17 @@ func (s *MasterServer) handleStats(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	// Gather statistics - log warnings on errors but continue with zero values
-	projects, err := s.db.ListProjects()
+	projects, err := s.projectService.List(ctx)
 	if err != nil {
 		s.logger.Warn("failed to list projects for stats", zap.Error(err))
 		projects = nil
 	}
-	agents, err := s.db.ListAgents(ctx)
+	agents, err := s.agentService.List(ctx)
 	if err != nil {
 		s.logger.Warn("failed to list agents for stats", zap.Error(err))
 		agents = nil
 	}
-	deployments, err := s.db.ListDeploymentsRecent(ctx, 100)
+	deployments, err := s.deploymentService.ListRecent(ctx, 100)
 	if err != nil {
 		s.logger.Warn("failed to list deployments for stats", zap.Error(err))
 		deployments = nil
@@ -99,7 +95,7 @@ func (s *MasterServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		users, err := s.db.ListUsers(ctx)
+		users, err := s.userService.List(ctx)
 		if err != nil {
 			s.logger.Error("Failed to list users", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -140,31 +136,17 @@ func (s *MasterServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 			req.Role = "user"
 		}
 
-		// Validate password complexity
-		if err := security.ValidatePassword(req.Password); err != nil {
-			s.jsonError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-
-		// Hash password
-		hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+		// Create user through service (handles password validation and hashing)
+		user, err := s.userService.Create(ctx, req.Username, req.Password, req.Email, req.Role)
 		if err != nil {
-			s.logger.Error("Failed to hash password", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-			return
-		}
-
-		user := &storage.User{
-			Username:     req.Username,
-			Email:        req.Email,
-			PasswordHash: string(hash),
-			Role:         req.Role,
-			CreatedAt:    time.Now(),
-		}
-
-		if err := s.db.CreateUser(ctx, user); err != nil {
 			s.logger.Error("Failed to create user", zap.Error(err))
-			s.jsonError(w, http.StatusConflict, "user already exists or database error")
+			// Check if it's a password validation error (should return 400)
+			if strings.Contains(err.Error(), "password validation failed") {
+				s.jsonError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			// Otherwise it's likely a duplicate user (return 409)
+			s.jsonError(w, http.StatusConflict, err.Error())
 			return
 		}
 
@@ -202,14 +184,14 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		user, err := s.db.GetUserByID(ctx, userID)
-		if errors.Is(err, storage.ErrNotFound) {
-			http.Error(w, "User not found", http.StatusNotFound)
-			return
-		}
+		user, err := s.userService.GetByID(ctx, userID)
 		if err != nil {
 			s.logger.Error("Failed to get user", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+		if user == nil {
+			http.Error(w, "User not found", http.StatusNotFound)
 			return
 		}
 		s.jsonResponse(w, map[string]interface{}{
@@ -231,14 +213,14 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		user, err := s.db.GetUserByID(ctx, userID)
-		if errors.Is(err, storage.ErrNotFound) {
-			http.Error(w, "User not found", http.StatusNotFound)
-			return
-		}
+		user, err := s.userService.GetByID(ctx, userID)
 		if err != nil {
 			s.logger.Error("Failed to get user", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+		if user == nil {
+			http.Error(w, "User not found", http.StatusNotFound)
 			return
 		}
 
@@ -249,21 +231,17 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 		if req.Role != "" {
 			user.Role = req.Role
 		}
+
+		// Handle password update via service
 		if req.Password != "" {
-			// Validate password complexity
-			if err := security.ValidatePassword(req.Password); err != nil {
+			if err := s.userService.UpdatePassword(ctx, userID, req.Password); err != nil {
+				s.logger.Error("Failed to update password", zap.Error(err))
 				s.jsonError(w, http.StatusBadRequest, err.Error())
 				return
 			}
-			hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-			if err != nil {
-				http.Error(w, "Internal server error", http.StatusInternalServerError)
-				return
-			}
-			user.PasswordHash = string(hash)
 		}
 
-		if err := s.db.UpdateUserByID(ctx, user); err != nil {
+		if err := s.userService.Update(ctx, user); err != nil {
 			s.logger.Error("Failed to update user", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
@@ -273,18 +251,18 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 		s.jsonResponse(w, map[string]string{"status": "updated"})
 
 	case http.MethodDelete:
-		user, err := s.db.GetUserByID(ctx, userID)
-		if errors.Is(err, storage.ErrNotFound) {
-			http.Error(w, "User not found", http.StatusNotFound)
-			return
-		}
+		user, err := s.userService.GetByID(ctx, userID)
 		if err != nil {
 			s.logger.Error("Failed to get user", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
+		if user == nil {
+			http.Error(w, "User not found", http.StatusNotFound)
+			return
+		}
 
-		if err := s.db.DeleteUser(ctx, userID); err != nil {
+		if err := s.userService.Delete(ctx, userID); err != nil {
 			s.logger.Error("Failed to delete user", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
@@ -452,9 +430,12 @@ func (s *MasterServer) handleSettingsImport(w http.ResponseWriter, r *http.Reque
 
 // handleProjectsAPI handles project list and creation with full implementation.
 func (s *MasterServer) handleProjectsAPI(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
 	switch r.Method {
 	case http.MethodGet:
-		projects, err := s.db.ListProjects()
+		projects, err := s.projectService.List(ctx)
 		if err != nil {
 			s.logger.Error("Failed to list projects", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -483,16 +464,8 @@ func (s *MasterServer) handleProjectsAPI(w http.ResponseWriter, r *http.Request)
 			req.Branch = "main"
 		}
 
-		project := &storage.Project{
-			Name:       req.Name,
-			Repository: req.Repository,
-			Branch:     req.Branch,
-			DeployPath: req.DeployPath,
-			Type:       req.Type,
-			CreatedAt:  time.Now(),
-		}
-
-		if err := s.db.CreateProject(project); err != nil {
+		project, err := s.projectService.Create(ctx, req.Name, req.Repository, req.Branch, req.DeployPath, req.Type)
+		if err != nil {
 			s.logger.Error("Failed to create project", zap.Error(err))
 			s.jsonError(w, http.StatusConflict, "project already exists")
 			return
@@ -536,7 +509,7 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 
 	switch r.Method {
 	case http.MethodGet:
-		project, err := s.db.GetProjectByName(ctx, projectName)
+		project, err := s.projectService.GetByName(ctx, projectName)
 		if err != nil {
 			http.Error(w, "Project not found", http.StatusNotFound)
 			return
@@ -555,7 +528,7 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 
-		project, err := s.db.GetProjectByName(ctx, projectName)
+		project, err := s.projectService.GetByName(ctx, projectName)
 		if err != nil {
 			http.Error(w, "Project not found", http.StatusNotFound)
 			return
@@ -575,7 +548,7 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 			project.Type = req.Type
 		}
 
-		if err := s.db.UpdateProjectByName(ctx, project); err != nil {
+		if err := s.projectService.Update(ctx, project); err != nil {
 			s.logger.Error("Failed to update project", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
@@ -585,7 +558,7 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 		s.jsonResponse(w, project)
 
 	case http.MethodDelete:
-		if err := s.db.DeleteProject(projectName); err != nil {
+		if err := s.projectService.Delete(ctx, projectName); err != nil {
 			s.logger.Error("Failed to delete project", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
@@ -604,7 +577,7 @@ func (s *MasterServer) handleProjectWebhooks(w http.ResponseWriter, r *http.Requ
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	project, err := s.db.GetProjectByName(ctx, projectName)
+	project, err := s.projectService.GetByName(ctx, projectName)
 	if err != nil {
 		http.Error(w, "Project not found", http.StatusNotFound)
 		return
@@ -613,17 +586,17 @@ func (s *MasterServer) handleProjectWebhooks(w http.ResponseWriter, r *http.Requ
 	switch r.Method {
 	case http.MethodGet:
 		// Get all webhooks for this project
-		webhooks := make([]map[string]interface{}, 0)
+		webhooksList := make([]map[string]interface{}, 0)
 		for _, provider := range []string{"github", "gitlab", "bitbucket"} {
-			wh, err := s.db.GetProjectWebhook(ctx, project.ID, provider)
+			wh, err := s.webhookService.Get(ctx, project.ID, provider)
 			if err == nil && wh != nil {
-				webhooks = append(webhooks, map[string]interface{}{
+				webhooksList = append(webhooksList, map[string]interface{}{
 					"provider": provider,
 					"enabled":  wh.Enabled,
 				})
 			}
 		}
-		s.jsonResponse(w, webhooks)
+		s.jsonResponse(w, webhooksList)
 
 	case http.MethodPost:
 		var req struct {
@@ -648,7 +621,7 @@ func (s *MasterServer) handleProjectWebhooks(w http.ResponseWriter, r *http.Requ
 			requireSecret = *req.RequireSecret
 		}
 
-		if err := s.db.SetProjectWebhook(ctx, project.ID, req.Provider, []byte(req.Secret), req.Enabled, requireSecret); err != nil {
+		if err := s.webhookService.Set(ctx, project.ID, req.Provider, []byte(req.Secret), req.Enabled, requireSecret); err != nil {
 			s.logger.Error("Failed to set webhook", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
@@ -673,7 +646,7 @@ func (s *MasterServer) handleProjectDeploy(w http.ResponseWriter, r *http.Reques
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	project, err := s.db.GetProjectByName(ctx, projectName)
+	project, err := s.projectService.GetByName(ctx, projectName)
 	if err != nil {
 		http.Error(w, "Project not found", http.StatusNotFound)
 		return
@@ -700,7 +673,7 @@ func (s *MasterServer) handleProjectDeploy(w http.ResponseWriter, r *http.Reques
 	// Get username from context
 	username := "api"
 	if userID, ok := GetUserIDFromContext(r.Context()); ok {
-		if user, err := s.db.GetUserByID(ctx, userID); err == nil && user != nil {
+		if user, err := s.userService.GetByID(ctx, userID); err == nil && user != nil {
 			username = user.Username
 		}
 	}
@@ -715,7 +688,7 @@ func (s *MasterServer) handleProjectDeploy(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		if err := s.db.CreateScheduledDeployment(ctx, deploymentID, project.Name, req.Target, req.Branch, scheduledTime, username); err != nil {
+		if err := s.deploymentService.CreateScheduled(ctx, deploymentID, project.Name, req.Target, req.Branch, scheduledTime, username); err != nil {
 			s.logger.Error("Failed to create scheduled deployment", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
@@ -732,7 +705,7 @@ func (s *MasterServer) handleProjectDeploy(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Create immediate deployment
-	deployment := &storage.Deployment{
+	deployment := &storage.DeploymentRecord{
 		ID:          deploymentID,
 		Project:     project.Name,
 		Target:      req.Target,
@@ -742,7 +715,7 @@ func (s *MasterServer) handleProjectDeploy(w http.ResponseWriter, r *http.Reques
 		StartedAt:   time.Now(),
 	}
 
-	if err := s.db.CreateDeployment(ctx, deployment); err != nil {
+	if err := s.deploymentService.Create(ctx, deployment); err != nil {
 		s.logger.Error("Failed to create deployment", zap.Error(err))
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
@@ -765,7 +738,7 @@ func (s *MasterServer) handleAgentsAPI(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	agents, err := s.db.ListAgents(ctx)
+	agents, err := s.agentService.List(ctx)
 	if err != nil {
 		s.logger.Error("Failed to list agents", zap.Error(err))
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -797,7 +770,7 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		agent, err := s.db.GetAgent(ctx, agentID)
+		agent, err := s.agentService.GetByID(ctx, agentID)
 		if err != nil {
 			s.logger.Error("Failed to get agent", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -819,7 +792,7 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		agent, err := s.db.GetAgent(ctx, agentID)
+		agent, err := s.agentService.GetByID(ctx, agentID)
 		if err != nil || agent == nil {
 			http.Error(w, "Agent not found", http.StatusNotFound)
 			return
@@ -832,7 +805,7 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 			agent.Status = req.Status
 		}
 
-		if err := s.db.UpsertAgent(ctx, agent); err != nil {
+		if err := s.agentService.Upsert(ctx, agent); err != nil {
 			s.logger.Error("Failed to update agent", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
@@ -842,7 +815,7 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 		s.jsonResponse(w, agent)
 
 	case http.MethodDelete:
-		if err := s.db.DeleteAgent(ctx, agentID); err != nil {
+		if err := s.agentService.Delete(ctx, agentID); err != nil {
 			s.logger.Error("Failed to delete agent", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
@@ -903,7 +876,7 @@ func (s *MasterServer) handleDeploymentsAPI(w http.ResponseWriter, r *http.Reque
 			}
 		}
 
-		deployments, err := s.db.ListDeploymentsRecent(ctx, limit)
+		deployments, err := s.deploymentService.ListRecent(ctx, limit)
 		if err != nil {
 			s.logger.Error("Failed to list deployments", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -973,7 +946,7 @@ func (s *MasterServer) handleDeploymentAPI(w http.ResponseWriter, r *http.Reques
 
 	switch r.Method {
 	case http.MethodGet:
-		deployment, err := s.db.GetDeployment(ctx, deploymentID)
+		deployment, err := s.deploymentService.GetByID(ctx, deploymentID)
 		if err != nil {
 			s.logger.Error("Failed to get deployment", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -987,14 +960,14 @@ func (s *MasterServer) handleDeploymentAPI(w http.ResponseWriter, r *http.Reques
 
 	case http.MethodDelete:
 		// Cancel if running, otherwise just acknowledge
-		deployment, err := s.db.GetDeployment(ctx, deploymentID)
+		deployment, err := s.deploymentService.GetByID(ctx, deploymentID)
 		if err != nil || deployment == nil {
 			http.Error(w, "Deployment not found", http.StatusNotFound)
 			return
 		}
 
 		if deployment.Status == "scheduled" {
-			if err := s.db.CancelScheduledDeployment(ctx, deploymentID); err != nil {
+			if err := s.deploymentService.CancelScheduled(ctx, deploymentID); err != nil {
 				s.logger.Error("Failed to cancel deployment", zap.Error(err))
 				http.Error(w, "Internal server error", http.StatusInternalServerError)
 				return
@@ -1019,7 +992,7 @@ func (s *MasterServer) handleDeploymentCancel(w http.ResponseWriter, r *http.Req
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	deployment, err := s.db.GetDeployment(ctx, deploymentID)
+	deployment, err := s.deploymentService.GetByID(ctx, deploymentID)
 	if err != nil || deployment == nil {
 		http.Error(w, "Deployment not found", http.StatusNotFound)
 		return
@@ -1065,7 +1038,7 @@ func (s *MasterServer) handleDeploymentCancel(w http.ResponseWriter, r *http.Req
 	now := time.Now()
 	deployment.Status = "cancelled"
 	deployment.CompletedAt = &now
-	if err := s.db.UpdateDeployment(ctx, deployment); err != nil {
+	if err := s.deploymentService.Update(ctx, deployment); err != nil {
 		s.logger.Error("Failed to cancel deployment", zap.Error(err))
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
@@ -1085,7 +1058,7 @@ func (s *MasterServer) handleDeploymentRollback(w http.ResponseWriter, r *http.R
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	deployment, err := s.db.GetDeployment(ctx, deploymentID)
+	deployment, err := s.deploymentService.GetByID(ctx, deploymentID)
 	if err != nil || deployment == nil {
 		http.Error(w, "Deployment not found", http.StatusNotFound)
 		return
@@ -1094,14 +1067,14 @@ func (s *MasterServer) handleDeploymentRollback(w http.ResponseWriter, r *http.R
 	// Get username from context
 	username := "api"
 	if userID, ok := GetUserIDFromContext(r.Context()); ok {
-		if user, err := s.db.GetUserByID(ctx, userID); err == nil && user != nil {
+		if user, err := s.userService.GetByID(ctx, userID); err == nil && user != nil {
 			username = user.Username
 		}
 	}
 
 	// Create rollback deployment record
 	rollbackID := fmt.Sprintf("rollback-%d", time.Now().UnixNano())
-	rollback := &storage.Deployment{
+	rollback := &storage.DeploymentRecord{
 		ID:            rollbackID,
 		Project:       deployment.Project,
 		Target:        deployment.Target,
@@ -1112,7 +1085,7 @@ func (s *MasterServer) handleDeploymentRollback(w http.ResponseWriter, r *http.R
 		StartedAt:     time.Now(),
 	}
 
-	if err := s.db.CreateDeployment(ctx, rollback); err != nil {
+	if err := s.deploymentService.Create(ctx, rollback); err != nil {
 		s.logger.Error("Failed to create rollback", zap.Error(err))
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
@@ -1131,7 +1104,7 @@ func (s *MasterServer) handleDeploymentRollback(w http.ResponseWriter, r *http.R
 
 		if agentID != "" && s.agentServer.IsAgentConnected(agentID) {
 			// Get project details for rollback
-			project, err := s.db.GetProjectByName(ctx, deployment.Project)
+			project, err := s.projectService.GetByName(ctx, deployment.Project)
 			if err == nil && project != nil {
 				rollbackCmd := &proto.RollbackCommand{
 					DeploymentId:  rollbackID,
@@ -1143,7 +1116,7 @@ func (s *MasterServer) handleDeploymentRollback(w http.ResponseWriter, r *http.R
 
 				// Update status to running
 				rollback.Status = "running"
-				if err := s.db.UpdateDeployment(ctx, rollback); err != nil {
+				if err := s.deploymentService.Update(ctx, rollback); err != nil {
 					s.logger.Error("Failed to update deployment status to running", zap.Error(err))
 				}
 
@@ -1156,7 +1129,7 @@ func (s *MasterServer) handleDeploymentRollback(w http.ResponseWriter, r *http.R
 					rollback.Status = "failed"
 					now := time.Now()
 					rollback.CompletedAt = &now
-					if err := s.db.UpdateDeployment(ctx, rollback); err != nil {
+					if err := s.deploymentService.Update(ctx, rollback); err != nil {
 						s.logger.Error("Failed to update deployment status to failed", zap.Error(err))
 					}
 				} else {
@@ -1188,7 +1161,7 @@ func (s *MasterServer) handleDeploymentLogs(w http.ResponseWriter, r *http.Reque
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	logs, err := s.db.ListDeploymentLogs(ctx, deploymentID)
+	logs, err := s.deploymentService.ListLogs(ctx, deploymentID)
 	if err != nil {
 		s.logger.Error("Failed to get deployment logs", zap.Error(err))
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -1219,7 +1192,7 @@ func (s *MasterServer) handleDeploymentLogsStream(w http.ResponseWriter, r *http
 
 	// Send initial logs
 	ctx := r.Context()
-	logs, err := s.db.ListDeploymentLogs(ctx, deploymentID)
+	logs, err := s.deploymentService.ListLogs(ctx, deploymentID)
 	if err != nil {
 		fmt.Fprintf(w, "event: error\ndata: %s\n\n", err.Error())
 		flusher.Flush()
@@ -1263,7 +1236,7 @@ func (s *MasterServer) handleDeploymentLogsStream(w http.ResponseWriter, r *http
 			return
 		case <-ticker.C:
 			// Check for new logs
-			newLogs, err := s.db.ListDeploymentLogsAfter(ctx, deploymentID, lastID)
+			newLogs, err := s.deploymentService.ListLogsAfter(ctx, deploymentID, lastID)
 			if err != nil {
 				s.logger.Error("Failed to poll logs", zap.Error(err))
 				continue
@@ -1281,7 +1254,7 @@ func (s *MasterServer) handleDeploymentLogsStream(w http.ResponseWriter, r *http
 			flusher.Flush()
 
 			// Check if deployment is complete
-			deployment, err := s.db.GetDeployment(ctx, deploymentID)
+			deployment, err := s.deploymentService.GetByID(ctx, deploymentID)
 			if err != nil {
 				continue
 			}
@@ -1311,7 +1284,7 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		keys, err := s.db.ListAPIKeys(ctx, userID)
+		keys, err := s.apiKeyService.List(ctx, userID)
 		if err != nil {
 			s.logger.Error("Failed to list API keys", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -1346,33 +1319,15 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Generate secure API key
-		rawKey, err := security.GenerateSecureToken(32)
-		if err != nil {
-			s.logger.Error("Failed to generate API key", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-			return
-		}
-
-		// Hash it for storage
-		hash := sha256.Sum256([]byte(rawKey))
-		keyHash := hex.EncodeToString(hash[:])
-
 		var expiresAt *time.Time
 		if req.ExpiresIn > 0 {
 			exp := time.Now().AddDate(0, 0, req.ExpiresIn)
 			expiresAt = &exp
 		}
 
-		apiKey := &storage.APIKey{
-			UserID:    userID,
-			Name:      req.Name,
-			KeyHash:   keyHash,
-			CreatedAt: time.Now(),
-			ExpiresAt: expiresAt,
-		}
-
-		if err := s.db.CreateAPIKey(ctx, apiKey); err != nil {
+		// Create API key using service (handles generation and hashing)
+		rawKey, apiKey, err := s.apiKeyService.Create(ctx, userID, req.Name, []string{"*"}, expiresAt)
+		if err != nil {
 			s.logger.Error("Failed to create API key", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
@@ -1409,7 +1364,7 @@ func (s *MasterServer) handleAPIKey(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodDelete:
-		if err := s.db.DeleteAPIKey(ctx, keyID); err != nil {
+		if err := s.apiKeyService.Delete(ctx, keyID); err != nil {
 			s.logger.Error("Failed to revoke API key", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
