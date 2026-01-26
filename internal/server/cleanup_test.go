@@ -3,7 +3,6 @@ package server
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -24,28 +23,22 @@ func setupTestCleanupDB(t *testing.T) (*storage.DB, func()) {
 	t.Helper()
 
 	// Create temp directory
-	tmpDir, err := os.MkdirTemp("", "cleanup_test")
-	if err != nil {
-		t.Fatalf("create temp dir: %v", err)
-	}
+	tmpDir := t.TempDir()
 
 	dbPath := filepath.Join(tmpDir, "test.db")
 	db, err := storage.Open(dbPath)
 	if err != nil {
-		os.RemoveAll(tmpDir)
 		t.Fatalf("open database: %v", err)
 	}
 
 	// Run migrations
 	if err := db.MigrateUp(context.Background()); err != nil {
 		db.Close()
-		os.RemoveAll(tmpDir)
 		t.Fatalf("migrate database: %v", err)
 	}
 
 	cleanup := func() {
 		db.Close()
-		os.RemoveAll(tmpDir)
 	}
 
 	return db, cleanup
@@ -326,7 +319,7 @@ func TestCleanupTask_RunCleanup(t *testing.T) {
 	db, cleanup := setupTestCleanupDB(t)
 	defer cleanup()
 
-	logger, _ := zap.NewDevelopment()
+	logger := zap.NewNop()
 	svcs := createTestServices(db)
 
 	task := NewCleanupTask(svcs, logger, CleanupConfig{

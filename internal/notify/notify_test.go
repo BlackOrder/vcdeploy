@@ -101,7 +101,7 @@ func TestEventJSON(t *testing.T) {
 func TestNewManager(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := zap.NewDevelopment()
+	logger := zap.NewNop()
 	manager := NewManager(logger)
 
 	if manager == nil {
@@ -112,7 +112,7 @@ func TestNewManager(t *testing.T) {
 func TestManagerRegister(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := zap.NewDevelopment()
+	logger := zap.NewNop()
 	manager := NewManager(logger)
 
 	notifier1 := &MockNotifier{NameValue: "mock1"}
@@ -129,7 +129,7 @@ func TestManagerRegister(t *testing.T) {
 func TestManagerNotify(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := zap.NewDevelopment()
+	logger := zap.NewNop()
 	manager := NewManager(logger)
 
 	notifier := &MockNotifier{NameValue: "test-notifier"}
@@ -159,7 +159,7 @@ func TestManagerNotify(t *testing.T) {
 func TestManagerNotifyMultiple(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := zap.NewDevelopment()
+	logger := zap.NewNop()
 	manager := NewManager(logger)
 
 	notifiers := []*MockNotifier{
@@ -194,7 +194,7 @@ func TestManagerNotifyMultiple(t *testing.T) {
 func TestManagerNotifyWithError(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := zap.NewDevelopment()
+	logger := zap.NewNop()
 	manager := NewManager(logger)
 
 	// One notifier that fails
@@ -233,7 +233,7 @@ func TestManagerNotifyWithError(t *testing.T) {
 func TestManagerNotifyAndWait(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := zap.NewDevelopment()
+	logger := zap.NewNop()
 	manager := NewManager(logger)
 
 	notifier := &MockNotifier{
@@ -258,7 +258,7 @@ func TestManagerNotifyAndWait(t *testing.T) {
 func TestManagerWait(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := zap.NewDevelopment()
+	logger := zap.NewNop()
 	manager := NewManager(logger)
 
 	notifier := &MockNotifier{
@@ -870,7 +870,7 @@ func TestComputeHMACSHA256(t *testing.T) {
 
 // Benchmark tests
 func BenchmarkManagerNotify(b *testing.B) {
-	logger, _ := zap.NewDevelopment()
+	logger := zap.NewNop()
 	manager := NewManager(logger)
 
 	for i := 0; i < 5; i++ {
@@ -1453,7 +1453,7 @@ func (p *PanickingNotifier) Name() string {
 func TestManagerNotifyWithPanic(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := zap.NewDevelopment()
+	logger := zap.NewNop()
 	manager := NewManager(logger)
 
 	// Register a panicking notifier
@@ -1484,7 +1484,7 @@ func TestManagerNotifyWithPanic(t *testing.T) {
 func TestManagerNotifyNoNotifiers(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := zap.NewDevelopment()
+	logger := zap.NewNop()
 	manager := NewManager(logger)
 
 	// Don't register any notifiers
@@ -1503,7 +1503,7 @@ func TestManagerNotifyNoNotifiers(t *testing.T) {
 func TestManagerNotifyAndWaitMultiple(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := zap.NewDevelopment()
+	logger := zap.NewNop()
 	manager := NewManager(logger)
 
 	notifiers := make([]*MockNotifier, 5)
@@ -1700,7 +1700,7 @@ func TestComputeHMACSHA256WithEmptyInputs(t *testing.T) {
 func TestManagerConcurrentNotify(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := zap.NewDevelopment()
+	logger := zap.NewNop()
 	manager := NewManager(logger)
 
 	var callCount int

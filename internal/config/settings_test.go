@@ -4,7 +4,6 @@ package config
 import (
 	"context"
 	"errors"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -18,22 +17,17 @@ func setupTestSettingsDB(t *testing.T) (*storage.DB, *security.KMS, func()) {
 	t.Helper()
 
 	// Create temp directory
-	tmpDir, err := os.MkdirTemp("", "settings_test")
-	if err != nil {
-		t.Fatalf("create temp dir: %v", err)
-	}
+	tmpDir := t.TempDir()
 
 	dbPath := filepath.Join(tmpDir, "test.db")
 	db, err := storage.Open(dbPath)
 	if err != nil {
-		os.RemoveAll(tmpDir)
 		t.Fatalf("open database: %v", err)
 	}
 
 	// Run migrations
 	if err := db.MigrateUp(context.Background()); err != nil {
 		db.Close()
-		os.RemoveAll(tmpDir)
 		t.Fatalf("migrate database: %v", err)
 	}
 
@@ -41,20 +35,17 @@ func setupTestSettingsDB(t *testing.T) (*storage.DB, *security.KMS, func()) {
 	kms, err := security.NewKMS(db.Conn(), nil)
 	if err != nil {
 		db.Close()
-		os.RemoveAll(tmpDir)
 		t.Fatalf("init KMS: %v", err)
 	}
 
 	// Initialize KMS (create first key)
 	if err := kms.Initialize(context.Background()); err != nil {
 		db.Close()
-		os.RemoveAll(tmpDir)
 		t.Fatalf("initialize KMS: %v", err)
 	}
 
 	cleanup := func() {
 		db.Close()
-		os.RemoveAll(tmpDir)
 	}
 
 	return db, kms, cleanup

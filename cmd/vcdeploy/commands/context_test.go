@@ -40,7 +40,7 @@ func TestAppContext_WithLogger(t *testing.T) {
 	t.Parallel()
 
 	ctx := NewAppContext()
-	logger, _ := zap.NewDevelopment()
+	logger := zap.NewNop()
 
 	result := ctx.WithLogger(logger)
 
@@ -230,7 +230,7 @@ func TestAppContext_Chaining(t *testing.T) {
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 	stdin := strings.NewReader("input")
-	logger, _ := zap.NewDevelopment()
+	logger := zap.NewNop()
 
 	ctx := NewAppContext().
 		WithLogger(logger).

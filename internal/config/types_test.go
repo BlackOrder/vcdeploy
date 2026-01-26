@@ -72,11 +72,7 @@ func TestTypeConfigValidate(t *testing.T) {
 }
 
 func TestLoadTypeConfig(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "vcdeploy-test-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	// Create test config file
 	configPath := filepath.Join(tmpDir, "test-type.yaml")
@@ -120,11 +116,7 @@ hooks:
 }
 
 func TestLoadTypeConfigDefaults(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "vcdeploy-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	// Config without keep_releases
 	configPath := filepath.Join(tmpDir, "minimal.yaml")
@@ -152,29 +144,21 @@ func TestLoadTypeConfigNotFound(t *testing.T) {
 }
 
 func TestLoadTypeConfigInvalid(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "vcdeploy-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	configPath := filepath.Join(tmpDir, "invalid.yaml")
 	if err := os.WriteFile(configPath, []byte("invalid: [yaml: content"), 0644); err != nil {
 		t.Fatalf("Failed to write config: %v", err)
 	}
 
-	_, err = LoadTypeConfig(configPath)
+	_, err := LoadTypeConfig(configPath)
 	if err == nil {
 		t.Error("LoadTypeConfig() should return error for invalid YAML")
 	}
 }
 
 func TestSaveTypeConfig(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "vcdeploy-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	cfg := &TypeConfig{
 		Name:         "saved-type",
@@ -184,7 +168,7 @@ func TestSaveTypeConfig(t *testing.T) {
 
 	savePath := filepath.Join(tmpDir, "nested", "saved.yaml")
 
-	err = SaveTypeConfig(cfg, savePath)
+	err := SaveTypeConfig(cfg, savePath)
 	if err != nil {
 		t.Fatalf("SaveTypeConfig() error = %v", err)
 	}
@@ -322,11 +306,7 @@ func TestTypeHooks(t *testing.T) {
 
 // Benchmark tests
 func BenchmarkLoadTypeConfig(b *testing.B) {
-	tmpDir, err := os.MkdirTemp("", "vcdeploy-bench-*")
-	if err != nil {
-		b.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := b.TempDir()
 
 	configPath := filepath.Join(tmpDir, "bench.yaml")
 	configContent := `name: benchmark
@@ -350,11 +330,7 @@ hooks:
 }
 
 func BenchmarkSaveTypeConfig(b *testing.B) {
-	tmpDir, err := os.MkdirTemp("", "vcdeploy-bench-*")
-	if err != nil {
-		b.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := b.TempDir()
 
 	cfg := &TypeConfig{
 		Name:         "benchmark",
