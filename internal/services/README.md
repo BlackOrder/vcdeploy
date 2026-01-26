@@ -21,8 +21,8 @@ internal/services/
 ├── validation.go           # Input validation helpers
 ├── README.md               # This file
 ├── testutil/
-│   ├── db.go               # Test database setup
-│   └── fixtures.go         # Test data factories
+│   ├── db.go               # Test database setup + NewTestLogger
+│   └── constants.go        # Test constants for consistent data
 ├── agents/
 │   ├── service.go
 │   └── service_test.go
@@ -292,72 +292,53 @@ import (
 )
 
 func TestMyService(t *testing.T) {
-    // Create test database
+    // Create test database (automatically cleaned up)
     db, cleanup := testutil.NewTestDB(t)
     defer cleanup()
 
+    // Create no-op logger for tests
+    logger := testutil.NewTestLogger(t)
+
     svc := myservice.New(db)
     
-    // Use fixtures for test data
-    user := testutil.UserFixture(
-        testutil.WithUsername("testuser"),
-        testutil.WithRole("admin"),
-    )
-    
-    project := testutil.ProjectFixture(
-        testutil.WithProjectName("myproject"),
-        testutil.WithBranch("develop"),
-    )
-    
-    deployment := testutil.DeploymentFixture("myproject",
-        testutil.WithStatus("running"),
-    )
+    // Use constants for consistent test data
+    user := &storage.User{
+        Username: testutil.TestUsername,
+        Email:    testutil.TestEmail,
+        Role:     testutil.TestRole,
+    }
 }
 ```
 
-### Available Fixtures
+### Test Helpers
 
 ```go
-// Users
-testutil.UserFixture(opts...)
-testutil.WithUsername("name")
-testutil.WithEmail("email@example.com")
-testutil.WithRole("admin")
+// Database helpers
+testutil.NewTestDB(t)     // Creates temp SQLite DB for tests
+testutil.SetupBenchDB(b)  // Creates temp SQLite DB for benchmarks
+testutil.NewTestLogger(t) // Returns zap.NewNop() logger
 
-// Projects
-testutil.ProjectFixture(opts...)
-testutil.WithProjectName("name")
-testutil.WithRepository("url")
-testutil.WithBranch("main")
-
-// Deployments
-testutil.DeploymentFixture(projectName, opts...)
-testutil.WithStatus("running")
-testutil.WithTarget("production")
-
-// Agents
-testutil.AgentFixture(opts...)
-testutil.WithAgentID("id")
-testutil.WithHostname("host")
-
-// Sessions
-testutil.SessionFixture(userID, opts...)
-testutil.WithToken("token")
-
-// API Keys
-testutil.APIKeyFixture(userID, opts...)
-testutil.WithKeyName("name")
-testutil.WithScopes(`["read"]`)
-
-// Audit Entries
-testutil.AuditEntryFixture(opts...)
-testutil.WithAuditAction("create")
-
-// Secrets
-testutil.SecretFixture(project, scope, key, opts...)
-
-// Deployment Logs
-testutil.DeploymentLogFixture(deploymentID, opts...)
+// Constants for consistent test data
+testutil.TestTimeout          // 30 * time.Second
+testutil.TestPassword         // "StrongP@ss123!"
+testutil.TestWeakPassword     // "weak"
+testutil.TestEmail            // "test@example.com"
+testutil.TestUsername         // "testuser"
+testutil.TestRole             // "user"
+testutil.TestAdminRole        // "admin"
+testutil.TestProjectName      // "test-project"
+testutil.TestRepository       // "https://github.com/example/repo.git"
+testutil.TestBranch           // "main"
+testutil.TestDeployPath       // "/var/www/test"
+testutil.TestAgentID          // "agent-test-001"
+testutil.TestHostname         // "test-host"
+testutil.TestIPAddress        // "127.0.0.1"
+testutil.TestUserAgent        // "Test Agent/1.0"
+testutil.TestTOTPSecret       // Sample TOTP secret
+testutil.TestAPIKeyPrefix     // "vc_test_"
+testutil.TestWebhookSecret    // "webhook-secret-123"
+testutil.TestSessionDuration  // 24 * time.Hour
+testutil.TestAPIKeyDuration   // 720 * time.Hour (30 days)
 ```
 
 ### Mocking Services
@@ -398,6 +379,7 @@ go test -cover ./internal/services/...
 
 # Run specific service tests
 go test -v ./internal/services/users/...
+
 
 # Run with race detector
 go test -race ./internal/services/...
@@ -462,3 +444,42 @@ user, err := s.db.GetUserByUsername(ctx, username)
 // After  
 user, err := s.userService.GetByUsername(ctx, username)
 ```
+## Interface Design Notes
+
+### Current Interface Sizes
+
+The service interfaces are designed to be cohesive - grouping related operations together:
+
+| Interface | Methods | Responsibility |
+|-----------|---------|---------------|
+| `UserServicer` | 11 | User CRUD + auth operations |
+| `SessionServicer` | 6 | Session management |
+| `APIKeyServicer` | 6 | API key management |
+| `ProjectServicer` | 6 | Project CRUD |
+| `DeploymentServicer` | 14 | Deployments, logs, scheduling, cleanup |
+| `SettingsServicer` | 16 | Settings get/set/list |
+| `SecretServicer` | 10 | Secret management + import/export |
+| `AgentServicer` | 7 | Agent management |
+| `AuditServicer` | 3 | Audit logging |
+| `WebhookServicer` | 5 | Webhook configuration |
+| `HostKeyServicer` | 7 | SSH host key management |
+| `ProjectTypeServicer` | 5 | Project type management |
+| `RateLimitServicer` | 8 | Rate limiting + IP blocking |
+| `ProvisionServicer` | 7 | Agent provisioning jobs |
+
+### Interface Segregation Considerations
+
+The larger interfaces (`DeploymentServicer`, `SettingsServicer`) could potentially be
+split into smaller, more focused interfaces. However, the current design:
+
+1. **Maintains Cohesion**: All methods in each interface relate to the same domain
+2. **Simplifies Dependency Injection**: Services need one interface, not multiple
+3. **Matches Usage Patterns**: Most consumers use multiple methods from the interface
+4. **Avoids Over-Engineering**: The interfaces are not unreasonably large
+
+If future requirements dictate, consider splitting:
+
+- `DeploymentServicer` → `DeploymentCRUD`, `DeploymentLogs`, `DeploymentScheduler`, `DeploymentCleaner`
+- `SettingsServicer` → `SettingsReader`, `SettingsWriter`, `SettingsManager`
+
+For now, use the existing interfaces and compose behavior as needed.
