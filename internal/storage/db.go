@@ -1653,6 +1653,124 @@ func (db *DB) DeleteSSHHostKeysByHost(ctx context.Context, hostname string, port
 	return result.RowsAffected()
 }
 
+// --- SSH Jump Server operations ---
+
+// CreateJumpServer creates a new SSH jump server.
+func (db *DB) CreateJumpServer(ctx context.Context, js *SSHJumpServer) error {
+	result, err := db.conn.ExecContext(ctx, `
+		INSERT INTO ssh_jump_servers (name, host, port, username, ssh_key_id)
+		VALUES (?, ?, ?, ?, ?)
+	`, js.Name, js.Host, js.Port, js.Username, js.SSHKeyID)
+	if err != nil {
+		return fmt.Errorf("creating jump server: %w", err)
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("getting last insert id: %w", err)
+	}
+	js.ID = id
+	return nil
+}
+
+// GetJumpServer retrieves a jump server by ID.
+func (db *DB) GetJumpServer(ctx context.Context, id int64) (*SSHJumpServer, error) {
+	js := &SSHJumpServer{}
+	var sshKeyID sql.NullInt64
+	err := db.conn.QueryRowContext(ctx, `
+		SELECT id, name, host, port, username, ssh_key_id, created_at
+		FROM ssh_jump_servers
+		WHERE id = ?
+	`, id).Scan(&js.ID, &js.Name, &js.Host, &js.Port, &js.Username, &sshKeyID, &js.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("getting jump server: %w", err)
+	}
+	if sshKeyID.Valid {
+		js.SSHKeyID = &sshKeyID.Int64
+	}
+	return js, nil
+}
+
+// GetJumpServerByName retrieves a jump server by name.
+func (db *DB) GetJumpServerByName(ctx context.Context, name string) (*SSHJumpServer, error) {
+	js := &SSHJumpServer{}
+	var sshKeyID sql.NullInt64
+	err := db.conn.QueryRowContext(ctx, `
+		SELECT id, name, host, port, username, ssh_key_id, created_at
+		FROM ssh_jump_servers
+		WHERE name = ?
+	`, name).Scan(&js.ID, &js.Name, &js.Host, &js.Port, &js.Username, &sshKeyID, &js.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("getting jump server by name: %w", err)
+	}
+	if sshKeyID.Valid {
+		js.SSHKeyID = &sshKeyID.Int64
+	}
+	return js, nil
+}
+
+// ListJumpServers retrieves all jump servers.
+func (db *DB) ListJumpServers(ctx context.Context) ([]*SSHJumpServer, error) {
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, name, host, port, username, ssh_key_id, created_at
+		FROM ssh_jump_servers
+		ORDER BY name
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("listing jump servers: %w", err)
+	}
+	defer rows.Close()
+
+	var servers []*SSHJumpServer
+	for rows.Next() {
+		js := &SSHJumpServer{}
+		var sshKeyID sql.NullInt64
+		if err := rows.Scan(&js.ID, &js.Name, &js.Host, &js.Port, &js.Username, &sshKeyID, &js.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scanning jump server: %w", err)
+		}
+		if sshKeyID.Valid {
+			js.SSHKeyID = &sshKeyID.Int64
+		}
+		servers = append(servers, js)
+	}
+	return servers, rows.Err()
+}
+
+// UpdateJumpServer updates an existing jump server.
+func (db *DB) UpdateJumpServer(ctx context.Context, js *SSHJumpServer) error {
+	result, err := db.conn.ExecContext(ctx, `
+		UPDATE ssh_jump_servers
+		SET name = ?, host = ?, port = ?, username = ?, ssh_key_id = ?
+		WHERE id = ?
+	`, js.Name, js.Host, js.Port, js.Username, js.SSHKeyID, js.ID)
+	if err != nil {
+		return fmt.Errorf("updating jump server: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// DeleteJumpServer deletes a jump server by ID.
+func (db *DB) DeleteJumpServer(ctx context.Context, id int64) error {
+	result, err := db.conn.ExecContext(ctx, `DELETE FROM ssh_jump_servers WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("deleting jump server: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // --- Blocked IP Methods ---
 
 // BlockIP adds or updates a blocked IP record.

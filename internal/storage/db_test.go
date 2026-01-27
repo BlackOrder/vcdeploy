@@ -5153,3 +5153,199 @@ func TestListAPIKeysWithData(t *testing.T) {
 		t.Errorf("ListAPIKeys() = %d, want 2", len(keys))
 	}
 }
+
+// --- SSH Jump Server Tests ---
+
+func TestJumpServerCRUD(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create
+	js := &SSHJumpServer{
+		Name:     "bastion1",
+		Host:     "bastion.example.com",
+		Port:     22,
+		Username: "admin",
+	}
+	if err := db.CreateJumpServer(ctx, js); err != nil {
+		t.Fatalf("CreateJumpServer() error = %v", err)
+	}
+	if js.ID == 0 {
+		t.Error("CreateJumpServer() did not set ID")
+	}
+
+	// Get by ID
+	got, err := db.GetJumpServer(ctx, js.ID)
+	if err != nil {
+		t.Fatalf("GetJumpServer() error = %v", err)
+	}
+	if got.Name != js.Name {
+		t.Errorf("GetJumpServer() name = %v, want %v", got.Name, js.Name)
+	}
+	if got.Host != js.Host {
+		t.Errorf("GetJumpServer() host = %v, want %v", got.Host, js.Host)
+	}
+	if got.Port != js.Port {
+		t.Errorf("GetJumpServer() port = %v, want %v", got.Port, js.Port)
+	}
+	if got.Username != js.Username {
+		t.Errorf("GetJumpServer() username = %v, want %v", got.Username, js.Username)
+	}
+
+	// Get by name
+	gotByName, err := db.GetJumpServerByName(ctx, "bastion1")
+	if err != nil {
+		t.Fatalf("GetJumpServerByName() error = %v", err)
+	}
+	if gotByName.ID != js.ID {
+		t.Errorf("GetJumpServerByName() ID = %v, want %v", gotByName.ID, js.ID)
+	}
+
+	// Update
+	js.Host = "new-bastion.example.com"
+	js.Port = 2222
+	if err := db.UpdateJumpServer(ctx, js); err != nil {
+		t.Fatalf("UpdateJumpServer() error = %v", err)
+	}
+
+	// Verify update
+	updated, err := db.GetJumpServer(ctx, js.ID)
+	if err != nil {
+		t.Fatalf("GetJumpServer() after update error = %v", err)
+	}
+	if updated.Host != "new-bastion.example.com" {
+		t.Errorf("UpdateJumpServer() host = %v, want new-bastion.example.com", updated.Host)
+	}
+	if updated.Port != 2222 {
+		t.Errorf("UpdateJumpServer() port = %v, want 2222", updated.Port)
+	}
+
+	// Delete
+	if err := db.DeleteJumpServer(ctx, js.ID); err != nil {
+		t.Fatalf("DeleteJumpServer() error = %v", err)
+	}
+
+	// Verify delete
+	_, err = db.GetJumpServer(ctx, js.ID)
+	if err != ErrNotFound {
+		t.Errorf("GetJumpServer() after delete error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestListJumpServers(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create multiple jump servers
+	servers := []*SSHJumpServer{
+		{Name: "bastion-a", Host: "a.example.com", Port: 22, Username: "admin"},
+		{Name: "bastion-b", Host: "b.example.com", Port: 22, Username: "root"},
+		{Name: "bastion-c", Host: "c.example.com", Port: 2222, Username: "ubuntu"},
+	}
+
+	for _, js := range servers {
+		if err := db.CreateJumpServer(ctx, js); err != nil {
+			t.Fatalf("CreateJumpServer() error = %v", err)
+		}
+	}
+
+	// List all
+	list, err := db.ListJumpServers(ctx)
+	if err != nil {
+		t.Fatalf("ListJumpServers() error = %v", err)
+	}
+	if len(list) != 3 {
+		t.Errorf("ListJumpServers() = %d servers, want 3", len(list))
+	}
+
+	// Verify sorting by name
+	if list[0].Name != "bastion-a" {
+		t.Errorf("ListJumpServers() first server = %s, want bastion-a", list[0].Name)
+	}
+}
+
+func TestJumpServerNotFound(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Get by ID
+	_, err := db.GetJumpServer(ctx, 99999)
+	if err != ErrNotFound {
+		t.Errorf("GetJumpServer() error = %v, want ErrNotFound", err)
+	}
+
+	// Get by name
+	_, err = db.GetJumpServerByName(ctx, "nonexistent")
+	if err != ErrNotFound {
+		t.Errorf("GetJumpServerByName() error = %v, want ErrNotFound", err)
+	}
+
+	// Update nonexistent
+	err = db.UpdateJumpServer(ctx, &SSHJumpServer{ID: 99999, Name: "test"})
+	if err != ErrNotFound {
+		t.Errorf("UpdateJumpServer() error = %v, want ErrNotFound", err)
+	}
+
+	// Delete nonexistent
+	err = db.DeleteJumpServer(ctx, 99999)
+	if err != ErrNotFound {
+		t.Errorf("DeleteJumpServer() error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestJumpServerWithSSHKeyID(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create jump server with SSH key reference
+	keyID := int64(42)
+	js := &SSHJumpServer{
+		Name:     "bastion-with-key",
+		Host:     "key.example.com",
+		Port:     22,
+		Username: "keyuser",
+		SSHKeyID: &keyID,
+	}
+	if err := db.CreateJumpServer(ctx, js); err != nil {
+		t.Fatalf("CreateJumpServer() error = %v", err)
+	}
+
+	// Get and verify SSH key ID is preserved
+	got, err := db.GetJumpServer(ctx, js.ID)
+	if err != nil {
+		t.Fatalf("GetJumpServer() error = %v", err)
+	}
+	if got.SSHKeyID == nil {
+		t.Error("GetJumpServer() SSHKeyID = nil, want non-nil")
+	} else if *got.SSHKeyID != keyID {
+		t.Errorf("GetJumpServer() SSHKeyID = %d, want %d", *got.SSHKeyID, keyID)
+	}
+}
+
+func TestJumpServerDuplicateName(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create first server
+	js1 := &SSHJumpServer{Name: "unique-name", Host: "a.example.com", Port: 22, Username: "user"}
+	if err := db.CreateJumpServer(ctx, js1); err != nil {
+		t.Fatalf("CreateJumpServer() first error = %v", err)
+	}
+
+	// Try to create with duplicate name
+	js2 := &SSHJumpServer{Name: "unique-name", Host: "b.example.com", Port: 22, Username: "user"}
+	err := db.CreateJumpServer(ctx, js2)
+	if err == nil {
+		t.Error("CreateJumpServer() with duplicate name should fail")
+	}
+}
