@@ -485,3 +485,146 @@ func computeHMACSHA256(message, key []byte) string {
 	h.Write(message)
 	return hex.EncodeToString(h.Sum(nil))
 }
+
+// --- Discord Notifier ---
+
+// DiscordConfig holds Discord notification settings
+type DiscordConfig struct {
+	WebhookURL string
+	Username   string
+	AvatarURL  string
+}
+
+// DiscordNotifier sends notifications to Discord
+type DiscordNotifier struct {
+	config DiscordConfig
+	client *http.Client
+}
+
+// NewDiscordNotifier creates a Discord notifier
+func NewDiscordNotifier(cfg DiscordConfig) *DiscordNotifier {
+	return &DiscordNotifier{
+		config: cfg,
+		client: &http.Client{Timeout: 10 * time.Second},
+	}
+}
+
+// Name returns the notifier name
+func (d *DiscordNotifier) Name() string {
+	return "discord"
+}
+
+// Send sends a notification to Discord
+func (d *DiscordNotifier) Send(ctx context.Context, event Event) error {
+	if d.config.WebhookURL == "" {
+		return nil
+	}
+
+	// Map status to color (Discord uses decimal colors)
+	color := 3066993 // green (#2ECC71)
+	switch event.Status {
+	case "failed":
+		color = 15158332 // red (#E74C3C)
+	case "pending", "running":
+		color = 16776960 // yellow (#FFFF00)
+	case "rolled_back":
+		color = 15105570 // orange (#E67E22)
+	}
+
+	emoji := "🚀"
+	switch event.Type {
+	case "rollback":
+		emoji = "⏪"
+	case "failed":
+		emoji = "❌"
+	}
+
+	// Build Discord embed
+	embed := map[string]interface{}{
+		"title":       fmt.Sprintf("%s %s Deployment", emoji, event.ProjectName),
+		"description": fmt.Sprintf("Deployment to **%s**", event.Environment),
+		"color":       color,
+		"fields": []map[string]interface{}{
+			{
+				"name":   "Status",
+				"value":  event.Status,
+				"inline": true,
+			},
+			{
+				"name":   "Version",
+				"value":  event.Version,
+				"inline": true,
+			},
+			{
+				"name":   "Triggered By",
+				"value":  event.User,
+				"inline": true,
+			},
+		},
+		"timestamp": event.Timestamp.Format(time.RFC3339),
+		"footer": map[string]string{
+			"text": "VCDeploy",
+		},
+	}
+
+	if event.Message != "" {
+		fields := embed["fields"].([]map[string]interface{})
+		fields = append(fields, map[string]interface{}{
+			"name":   "Message",
+			"value":  truncateString(event.Message, 1024),
+			"inline": false,
+		})
+		embed["fields"] = fields
+	}
+
+	if event.URL != "" {
+		embed["url"] = event.URL
+	}
+
+	payload := map[string]interface{}{
+		"embeds": []map[string]interface{}{embed},
+	}
+
+	if d.config.Username != "" {
+		payload["username"] = d.config.Username
+	}
+	if d.config.AvatarURL != "" {
+		payload["avatar_url"] = d.config.AvatarURL
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", d.config.WebhookURL, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "vcdeploy/1.0")
+
+	resp, err := d.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("discord returned status %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+// truncateString truncates a string to the specified max length
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	if maxLen <= 3 {
+		return s[:maxLen]
+	}
+	return s[:maxLen-3] + "..."
+}

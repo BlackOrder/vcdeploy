@@ -154,6 +154,7 @@ type NotificationProvidersConfig struct {
 	Slack   SlackNotificationConfig   `yaml:"slack"`
 	Email   EmailNotificationConfig   `yaml:"email"`
 	Webhook WebhookNotificationConfig `yaml:"webhook"`
+	Discord DiscordNotificationConfig `yaml:"discord"`
 }
 
 // SlackNotificationConfig defines Slack notification settings.
@@ -177,6 +178,14 @@ type SMTPConfig struct {
 // WebhookNotificationConfig defines generic webhook notification settings.
 type WebhookNotificationConfig struct {
 	Enabled bool `yaml:"enabled"`
+}
+
+// DiscordNotificationConfig defines Discord notification settings.
+type DiscordNotificationConfig struct {
+	Enabled    bool   `yaml:"enabled"`
+	WebhookURL string `yaml:"webhook_url"`
+	Username   string `yaml:"username"`
+	AvatarURL  string `yaml:"avatar_url"`
 }
 
 // APIConfig defines API settings.

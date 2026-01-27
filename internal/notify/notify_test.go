@@ -1858,3 +1858,288 @@ func TestEmailNotifierDefaultTemplateWithEmptyOptionals(t *testing.T) {
 		t.Error("template should have closing html tag")
 	}
 }
+
+// --- Discord Notifier Tests ---
+
+func TestDiscordNotifierName(t *testing.T) {
+	t.Parallel()
+
+	notifier := NewDiscordNotifier(DiscordConfig{})
+
+	if notifier.Name() != "discord" {
+		t.Errorf("DiscordNotifier.Name() = %v, want discord", notifier.Name())
+	}
+}
+
+func TestDiscordNotifierSend(t *testing.T) {
+	t.Parallel()
+
+	var receivedPayload map[string]interface{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("Expected POST, got %s", r.Method)
+		}
+
+		if r.Header.Get("Content-Type") != "application/json" {
+			t.Errorf("Expected Content-Type application/json, got %s", r.Header.Get("Content-Type"))
+		}
+
+		decoder := json.NewDecoder(r.Body)
+		if err := decoder.Decode(&receivedPayload); err != nil {
+			t.Errorf("Failed to decode payload: %v", err)
+		}
+
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	cfg := DiscordConfig{
+		WebhookURL: server.URL,
+		Username:   "VCDeploy Bot",
+		AvatarURL:  "https://example.com/avatar.png",
+	}
+
+	notifier := NewDiscordNotifier(cfg)
+
+	event := Event{
+		Type:        "deployment",
+		ProjectName: "Test Project",
+		Environment: "production",
+		Status:      "success",
+		User:        "admin",
+		Version:     "v1.2.3",
+		Timestamp:   time.Now(),
+	}
+
+	ctx := context.Background()
+	err := notifier.Send(ctx, event)
+
+	if err != nil {
+		t.Fatalf("DiscordNotifier.Send() error = %v", err)
+	}
+
+	// Verify payload structure
+	if receivedPayload["username"] != "VCDeploy Bot" {
+		t.Errorf("Expected username 'VCDeploy Bot', got %v", receivedPayload["username"])
+	}
+	if receivedPayload["avatar_url"] != "https://example.com/avatar.png" {
+		t.Errorf("Expected avatar_url, got %v", receivedPayload["avatar_url"])
+	}
+
+	embeds, ok := receivedPayload["embeds"].([]interface{})
+	if !ok || len(embeds) == 0 {
+		t.Fatal("Expected embeds array")
+	}
+
+	embed, ok := embeds[0].(map[string]interface{})
+	if !ok {
+		t.Fatal("Expected embed object")
+	}
+
+	// Check embed has expected fields
+	if embed["title"] == nil {
+		t.Error("Expected title in embed")
+	}
+	if embed["color"] == nil {
+		t.Error("Expected color in embed")
+	}
+	if embed["fields"] == nil {
+		t.Error("Expected fields in embed")
+	}
+}
+
+func TestDiscordNotifierSendWithMessage(t *testing.T) {
+	t.Parallel()
+
+	var receivedPayload map[string]interface{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		decoder := json.NewDecoder(r.Body)
+		decoder.Decode(&receivedPayload)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	cfg := DiscordConfig{WebhookURL: server.URL}
+	notifier := NewDiscordNotifier(cfg)
+
+	event := Event{
+		Type:        "deployment",
+		ProjectName: "Test",
+		Environment: "prod",
+		Status:      "success",
+		User:        "admin",
+		Message:     "Custom deployment message",
+	}
+
+	err := notifier.Send(context.Background(), event)
+	if err != nil {
+		t.Fatalf("Send() error = %v", err)
+	}
+
+	// Verify message is in fields
+	embeds := receivedPayload["embeds"].([]interface{})
+	embed := embeds[0].(map[string]interface{})
+	fields := embed["fields"].([]interface{})
+
+	foundMessage := false
+	for _, f := range fields {
+		field := f.(map[string]interface{})
+		if field["name"] == "Message" {
+			foundMessage = true
+			if field["value"] != "Custom deployment message" {
+				t.Errorf("Expected message value, got %v", field["value"])
+			}
+		}
+	}
+	if !foundMessage {
+		t.Error("Expected Message field in embed")
+	}
+}
+
+func TestDiscordNotifierSendWithURL(t *testing.T) {
+	t.Parallel()
+
+	var receivedPayload map[string]interface{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		decoder := json.NewDecoder(r.Body)
+		decoder.Decode(&receivedPayload)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	cfg := DiscordConfig{WebhookURL: server.URL}
+	notifier := NewDiscordNotifier(cfg)
+
+	event := Event{
+		Type:        "deployment",
+		ProjectName: "Test",
+		Environment: "prod",
+		Status:      "success",
+		User:        "admin",
+		URL:         "https://example.com/deploy/123",
+	}
+
+	err := notifier.Send(context.Background(), event)
+	if err != nil {
+		t.Fatalf("Send() error = %v", err)
+	}
+
+	embeds := receivedPayload["embeds"].([]interface{})
+	embed := embeds[0].(map[string]interface{})
+
+	if embed["url"] != "https://example.com/deploy/123" {
+		t.Errorf("Expected URL in embed, got %v", embed["url"])
+	}
+}
+
+func TestDiscordNotifierStatusColors(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		status        string
+		expectedColor float64 // JSON numbers are float64
+	}{
+		{"success", 3066993},   // green
+		{"failed", 15158332},   // red
+		{"pending", 16776960},  // yellow
+		{"running", 16776960},  // yellow
+		{"rolled_back", 15105570}, // orange
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.status, func(t *testing.T) {
+			var receivedPayload map[string]interface{}
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				decoder := json.NewDecoder(r.Body)
+				decoder.Decode(&receivedPayload)
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer server.Close()
+
+			cfg := DiscordConfig{WebhookURL: server.URL}
+			notifier := NewDiscordNotifier(cfg)
+
+			event := Event{
+				Type:        "deployment",
+				ProjectName: "Test",
+				Environment: "prod",
+				Status:      tc.status,
+				User:        "admin",
+			}
+
+			notifier.Send(context.Background(), event)
+
+			embeds := receivedPayload["embeds"].([]interface{})
+			embed := embeds[0].(map[string]interface{})
+			color := embed["color"].(float64)
+
+			if color != tc.expectedColor {
+				t.Errorf("Expected color %v for status %s, got %v", tc.expectedColor, tc.status, color)
+			}
+		})
+	}
+}
+
+func TestDiscordNotifierSendEmptyURL(t *testing.T) {
+	t.Parallel()
+
+	cfg := DiscordConfig{WebhookURL: ""}
+	notifier := NewDiscordNotifier(cfg)
+
+	event := Event{
+		Type:   "deployment",
+		Status: "success",
+	}
+
+	err := notifier.Send(context.Background(), event)
+
+	// Empty URL should not error, just skip
+	if err != nil {
+		t.Errorf("Expected no error for empty URL, got: %v", err)
+	}
+}
+
+func TestDiscordNotifierSendFailure(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer server.Close()
+
+	cfg := DiscordConfig{WebhookURL: server.URL}
+	notifier := NewDiscordNotifier(cfg)
+
+	event := Event{
+		Type:   "deployment",
+		Status: "success",
+	}
+
+	err := notifier.Send(context.Background(), event)
+
+	if err == nil {
+		t.Error("Expected error for 400 response")
+	}
+}
+
+func TestTruncateString(t *testing.T) {
+	tests := []struct {
+		input    string
+		maxLen   int
+		expected string
+	}{
+		{"hello", 10, "hello"},
+		{"hello world", 5, "he..."},
+		{"hi", 2, "hi"},
+		{"test", 3, "tes"}, // maxLen <= 3 returns prefix without ellipsis
+		{"", 10, ""},
+		{"a very long string", 10, "a very ..."},
+	}
+
+	for _, tc := range tests {
+		result := truncateString(tc.input, tc.maxLen)
+		if result != tc.expected {
+			t.Errorf("truncateString(%q, %d) = %q, want %q", tc.input, tc.maxLen, result, tc.expected)
+		}
+	}
+}
