@@ -53,6 +53,14 @@ func newTestServer(t *testing.T) *MasterServer {
 		t.Fatalf("failed to create server: %v", err)
 	}
 
+	// Register cleanup
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		server.Stop(ctx) //nolint:errcheck
+		db.Close()       //nolint:errcheck
+	})
+
 	// Set up KMS for tests
 	kms, err := security.NewKMS(db.Conn(), nil)
 	if err != nil {
@@ -145,6 +153,7 @@ func TestNewMasterServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
+	t.Cleanup(func() { db.Close() })
 
 	cfg := &config.MasterConfig{
 		Server: config.ServerConfig{Listen: ":8080"},
@@ -152,6 +161,11 @@ func TestNewMasterServer(t *testing.T) {
 	}
 
 	server, err := NewMasterServer(cfg, db, logger)
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		server.Stop(ctx) //nolint:errcheck
+	})
 
 	if err != nil {
 		t.Fatalf("NewMasterServer() error = %v", err)
@@ -653,11 +667,17 @@ func BenchmarkHandleHealth(b *testing.B) {
 	if err != nil {
 		b.Fatalf("failed to create db: %v", err)
 	}
+	b.Cleanup(func() { db.Close() })
 	cfg := &config.MasterConfig{}
 	server, err := NewMasterServer(cfg, db, logger)
 	if err != nil {
 		b.Fatalf("failed to create server: %v", err)
 	}
+	b.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		server.Stop(ctx) //nolint:errcheck
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
 
@@ -876,7 +896,7 @@ func TestHandleDeploymentLogs(t *testing.T) {
 	_ = server.db.CreateProject(project)
 
 	// Create a test deployment
-	deployment := &storage.Deployment{
+	deployment := &storage.DeploymentRecord{
 		ID:          "test-deploy-1",
 		Project:     "test-project",
 		Status:      "running",
@@ -886,14 +906,19 @@ func TestHandleDeploymentLogs(t *testing.T) {
 	}
 	_ = server.db.CreateDeployment(ctx, deployment)
 
-	// Test non-streaming logs request via the logs path component
-	// The handler expects deployment ID from path, which we need to simulate
+	// Test streaming logs with a context that cancels quickly
+	// This simulates a client disconnecting
+	cancelCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer cancel()
+
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/deployments/test-deploy-1/logs", nil)
+	req = req.WithContext(cancelCtx)
 	rec := httptest.NewRecorder()
 
 	// Call handleDeploymentLogsStream with deployment ID
 	server.handleDeploymentLogsStream(rec, req, "test-deploy-1")
 
+	// Should return OK (even though it's a streaming endpoint that eventually closes)
 	if rec.Code != http.StatusOK {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
@@ -1614,6 +1639,7 @@ func TestNewMasterServer_WithRateLimiter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
+	t.Cleanup(func() { db.Close() })
 
 	cfg := &config.MasterConfig{
 		Server: config.ServerConfig{Listen: ":8080"},
@@ -1624,6 +1650,11 @@ func TestNewMasterServer_WithRateLimiter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewMasterServer() error = %v", err)
 	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		server.Stop(ctx) //nolint:errcheck
+	})
 
 	// Rate limiter should be initialized
 	if server.rateLimiter == nil {
@@ -1639,6 +1670,7 @@ func TestNewMasterServer_WithSecurityMiddleware(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
+	t.Cleanup(func() { db.Close() })
 
 	cfg := &config.MasterConfig{
 		Server: config.ServerConfig{Listen: ":8080"},
@@ -1649,6 +1681,11 @@ func TestNewMasterServer_WithSecurityMiddleware(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewMasterServer() error = %v", err)
 	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		server.Stop(ctx) //nolint:errcheck
+	})
 
 	// Security middleware should be initialized
 	if server.securityMiddleware == nil {
@@ -1664,11 +1701,22 @@ func BenchmarkHandleStats(b *testing.B) {
 	if err != nil {
 		b.Fatalf("failed to create db: %v", err)
 	}
+	b.Cleanup(func() { db.Close() })
 	cfg := &config.MasterConfig{}
 	server, err := NewMasterServer(cfg, db, logger)
 	if err != nil {
 		b.Fatalf("failed to create server: %v", err)
 	}
+	b.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		server.Stop(ctx) //nolint:errcheck
+	})
+
+	// Initialize services that handleStats needs
+	server.projectService = projects.New(db)
+	server.agentService = agents.New(db)
+	server.deploymentService = deployments.New(db)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/stats", nil)
 
@@ -1685,11 +1733,17 @@ func BenchmarkWithAuth(b *testing.B) {
 	if err != nil {
 		b.Fatalf("failed to create db: %v", err)
 	}
+	b.Cleanup(func() { db.Close() })
 	cfg := &config.MasterConfig{}
 	server, err := NewMasterServer(cfg, db, logger)
 	if err != nil {
 		b.Fatalf("failed to create server: %v", err)
 	}
+	b.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		server.Stop(ctx) //nolint:errcheck
+	})
 
 	// Setup test user and API key
 	ctx := context.Background()

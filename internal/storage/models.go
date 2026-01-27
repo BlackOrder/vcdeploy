@@ -230,10 +230,6 @@ type SSHHostKey struct {
 	UpdatedAt   time.Time
 }
 
-// Deployment is an alias for DeploymentRecord for backward compatibility.
-// Deprecated: Use DeploymentRecord directly.
-type Deployment = DeploymentRecord
-
 // --- Rate Limit Models ---
 
 // BlockedIP represents a blocked IP address.

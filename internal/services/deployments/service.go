@@ -174,8 +174,8 @@ func (s *Service) CreateLogsBatch(ctx context.Context, deploymentID string, logs
 
 	return s.db.RunInTransaction(ctx, func(tx *sql.Tx) error {
 		stmt, err := tx.PrepareContext(ctx, `
-			INSERT INTO deployment_logs (deployment_id, level, message, source)
-			VALUES (?, ?, ?, ?)
+			INSERT INTO deployment_logs (deployment_id, level, message, source, created_at)
+			VALUES (?, ?, ?, ?, ?)
 		`)
 		if err != nil {
 			return fmt.Errorf("preparing statement: %w", err)
@@ -189,12 +189,16 @@ func (s *Service) CreateLogsBatch(ctx context.Context, deploymentID string, logs
 			if log.Level == "" {
 				log.Level = "info"
 			}
+			if log.CreatedAt.IsZero() {
+				log.CreatedAt = time.Now()
+			}
 
 			_, err := stmt.ExecContext(ctx,
 				log.DeploymentID,
 				log.Level,
 				log.Message,
 				log.Source,
+				log.CreatedAt,
 			)
 			if err != nil {
 				return fmt.Errorf("inserting log: %w", err)

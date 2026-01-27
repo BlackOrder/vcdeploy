@@ -658,7 +658,7 @@ func TestDeploymentFlow(t *testing.T) {
 
 	// Create a deployment
 	deploymentID := fmt.Sprintf("deploy-%d", time.Now().UnixNano())
-	deployment := &storage.Deployment{
+	deployment := &storage.DeploymentRecord{
 		ID:          deploymentID,
 		Project:     project.Name,
 		Target:      "production",
@@ -752,7 +752,7 @@ func TestE2EDeploymentWorkflow(t *testing.T) {
 
 	// Step 4: Create a deployment
 	deploymentID := fmt.Sprintf("e2e-deploy-%d", time.Now().UnixNano())
-	deployment := &storage.Deployment{
+	deployment := &storage.DeploymentRecord{
 		ID:            deploymentID,
 		Project:       project.Name,
 		Target:        "production",
@@ -963,4 +963,538 @@ func TestE2EProjectTypeManagement(t *testing.T) {
 	}
 
 	t.Log("E2E project type management workflow completed successfully")
+}
+
+// TestE2EAgentDeploymentWithLogs tests the complete workflow:
+// Agent registration -> deployment creation -> logs -> status updates -> completion
+func TestE2EAgentDeploymentWithLogs(t *testing.T) {
+	f := NewTestFixture(t)
+	defer f.Close()
+
+	ctx := context.Background()
+
+	// Step 1: Register an agent
+	agent := &storage.Agent{
+		ID:       "workflow-agent-001",
+		Hostname: "deploy-server-1.example.com",
+		Labels: map[string]string{
+			"env":      "staging",
+			"region":   "us-east-1",
+			"capacity": "high",
+		},
+		Status:     "connected",
+		LastSeenAt: time.Now(),
+	}
+	err := f.DB.UpsertAgent(ctx, agent)
+	if err != nil {
+		t.Fatalf("Failed to register agent: %v", err)
+	}
+	t.Log("Step 1: Agent registered")
+
+	// Step 2: Create a project
+	project := &storage.Project{
+		Name:       "workflow-test-app",
+		Repository: "https://github.com/test/workflow-app.git",
+		Branch:     "main",
+		DeployPath: "/var/www/workflow-app",
+		Type:       "web",
+		CreatedAt:  time.Now(),
+	}
+	err = f.DB.CreateProject(project)
+	if err != nil {
+		t.Fatalf("Failed to create project: %v", err)
+	}
+	t.Log("Step 2: Project created")
+
+	// Step 3: Simulate agent heartbeat
+	agent.LastSeenAt = time.Now()
+	agent.Status = "connected"
+	err = f.DB.UpsertAgent(ctx, agent)
+	if err != nil {
+		t.Fatalf("Failed to update agent heartbeat: %v", err)
+	}
+	t.Log("Step 3: Agent heartbeat updated")
+
+	// Step 4: Create a deployment
+	deploymentID := fmt.Sprintf("workflow-deploy-%d", time.Now().UnixNano())
+	deployment := &storage.DeploymentRecord{
+		ID:            deploymentID,
+		Project:       project.Name,
+		Target:        "staging",
+		Branch:        "main",
+		CommitHash:    "a1b2c3d4e5f6",
+		Status:        "pending",
+		ReleaseNumber: 1,
+		TriggeredBy:   "ci-pipeline",
+		TriggerSource: "webhook",
+		StartedAt:     time.Now(),
+	}
+	err = f.DB.CreateDeployment(ctx, deployment)
+	if err != nil {
+		t.Fatalf("Failed to create deployment: %v", err)
+	}
+	t.Log("Step 4: Deployment created")
+
+	// Step 5: Simulate deployment start - add initial log
+	initialLog := &storage.DeploymentLog{
+		DeploymentID: deploymentID,
+		Level:        "info",
+		Message:      "Starting deployment for workflow-test-app",
+		Source:       "system",
+		CreatedAt:    time.Now(),
+	}
+	err = f.DB.CreateDeploymentLog(ctx, initialLog)
+	if err != nil {
+		t.Fatalf("Failed to create deployment log: %v", err)
+	}
+	t.Log("Step 5: Initial deployment log created")
+
+	// Step 6: Update deployment to running
+	deployment.Status = "running"
+	err = f.DB.UpdateDeployment(ctx, deployment)
+	if err != nil {
+		t.Fatalf("Failed to update deployment status to running: %v", err)
+	}
+	t.Log("Step 6: Deployment status updated to running")
+
+	// Step 7: Simulate deployment progress with multiple logs
+	logEntries := []struct {
+		level   string
+		message string
+	}{
+		{"info", "Cloning repository https://github.com/test/workflow-app.git"},
+		{"info", "Checking out branch main at commit a1b2c3d4e5f6"},
+		{"info", "Running pre-deploy hooks"},
+		{"info", "Installing dependencies"},
+		{"info", "Building application"},
+		{"info", "Running tests"},
+		{"info", "Deploying to /var/www/workflow-app"},
+		{"info", "Running post-deploy hooks"},
+		{"info", "Deployment completed successfully"},
+	}
+
+	for _, entry := range logEntries {
+		log := &storage.DeploymentLog{
+			DeploymentID: deploymentID,
+			Level:        entry.level,
+			Message:      entry.message,
+			Source:       "agent",
+			CreatedAt:    time.Now(),
+		}
+		err = f.DB.CreateDeploymentLog(ctx, log)
+		if err != nil {
+			t.Fatalf("Failed to create log entry: %v", err)
+		}
+	}
+	t.Log("Step 7: Deployment progress logs created")
+
+	// Step 8: Verify logs are stored and retrievable
+	logs, err := f.DB.ListDeploymentLogs(ctx, deploymentID)
+	if err != nil {
+		t.Fatalf("Failed to retrieve deployment logs: %v", err)
+	}
+	expectedLogCount := len(logEntries) + 1 // +1 for initial log
+	if len(logs) != expectedLogCount {
+		t.Errorf("Expected %d logs, got %d", expectedLogCount, len(logs))
+	}
+	t.Log("Step 8: Deployment logs verified")
+
+	// Step 9: Mark deployment as successful
+	completedAt := time.Now()
+	deployment.Status = "success"
+	deployment.CompletedAt = &completedAt
+	err = f.DB.UpdateDeployment(ctx, deployment)
+	if err != nil {
+		t.Fatalf("Failed to mark deployment as success: %v", err)
+	}
+	t.Log("Step 9: Deployment marked as successful")
+
+	// Step 10: Verify final deployment state
+	finalDeployment, err := f.DB.GetDeployment(ctx, deploymentID)
+	if err != nil {
+		t.Fatalf("Failed to get final deployment: %v", err)
+	}
+	if finalDeployment.Status != "success" {
+		t.Errorf("Expected deployment status 'success', got '%s'", finalDeployment.Status)
+	}
+	if finalDeployment.CompletedAt == nil {
+		t.Error("Expected deployment to have completion time")
+	}
+	t.Log("Step 10: Final deployment state verified")
+
+	// Step 11: Test audit logging for the deployment
+	auditEntry := &storage.AuditEntry{
+		Action:    "deployment.completed",
+		User:      "system",
+		Source:    "integration-test",
+		Resource:  deploymentID,
+		Details:   fmt.Sprintf(`{"project":"%s","status":"success"}`, project.Name),
+		IPAddress: "127.0.0.1",
+		Result:    "success",
+		Timestamp: time.Now(),
+	}
+	err = f.DB.LogAudit(ctx, auditEntry)
+	if err != nil {
+		t.Fatalf("Failed to create audit entry: %v", err)
+	}
+	t.Log("Step 11: Audit entry created")
+
+	// Step 12: Verify audit log retrieval
+	auditLogs, err := f.DB.ListAuditLogs(ctx, 10, 0)
+	if err != nil {
+		t.Fatalf("Failed to list audit entries: %v", err)
+	}
+	found := false
+	for _, entry := range auditLogs {
+		if entry.Resource == deploymentID && entry.Action == "deployment.completed" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Audit entry should be retrievable")
+	}
+	t.Log("Step 12: Audit log verified")
+
+	// Step 13: Verify agent is still connected
+	storedAgent, err := f.DB.GetAgent(ctx, agent.ID)
+	if err != nil {
+		t.Fatalf("Failed to get agent: %v", err)
+	}
+	if storedAgent.Status != "connected" {
+		t.Errorf("Expected agent status 'connected', got '%s'", storedAgent.Status)
+	}
+	t.Log("Step 13: Agent status verified")
+
+	t.Log("E2E agent deployment with logs workflow completed successfully")
+}
+
+// TestE2EDeploymentFailureWorkflow tests deployment failure handling:
+// Deployment start -> error during deploy -> failure status -> rollback request
+func TestE2EDeploymentFailureWorkflow(t *testing.T) {
+	f := NewTestFixture(t)
+	defer f.Close()
+
+	ctx := context.Background()
+
+	// Step 1: Create a project
+	project := &storage.Project{
+		Name:       "failure-test-app",
+		Repository: "https://github.com/test/failure-app.git",
+		Branch:     "main",
+		DeployPath: "/var/www/failure-app",
+		Type:       "web",
+		CreatedAt:  time.Now(),
+	}
+	err := f.DB.CreateProject(project)
+	if err != nil {
+		t.Fatalf("Failed to create project: %v", err)
+	}
+
+	// Step 2: Create a successful previous deployment (for rollback target)
+	prevDeploymentID := fmt.Sprintf("prev-deploy-%d", time.Now().UnixNano())
+	prevCompletedAt := time.Now().Add(-1 * time.Hour)
+	prevDeployment := &storage.DeploymentRecord{
+		ID:            prevDeploymentID,
+		Project:       project.Name,
+		Target:        "production",
+		Branch:        "main",
+		CommitHash:    "prev123456",
+		Status:        "success",
+		ReleaseNumber: 1,
+		TriggeredBy:   "admin",
+		TriggerSource: "manual",
+		StartedAt:     time.Now().Add(-2 * time.Hour),
+		CompletedAt:   &prevCompletedAt,
+	}
+	err = f.DB.CreateDeployment(ctx, prevDeployment)
+	if err != nil {
+		t.Fatalf("Failed to create previous deployment: %v", err)
+	}
+
+	// Step 3: Create new deployment that will fail
+	failedDeploymentID := fmt.Sprintf("failed-deploy-%d", time.Now().UnixNano())
+	failedDeployment := &storage.DeploymentRecord{
+		ID:            failedDeploymentID,
+		Project:       project.Name,
+		Target:        "production",
+		Branch:        "main",
+		CommitHash:    "broken123",
+		Status:        "pending",
+		ReleaseNumber: 2,
+		TriggeredBy:   "ci",
+		TriggerSource: "webhook",
+		StartedAt:     time.Now(),
+	}
+	err = f.DB.CreateDeployment(ctx, failedDeployment)
+	if err != nil {
+		t.Fatalf("Failed to create deployment: %v", err)
+	}
+
+	// Step 4: Update to running
+	failedDeployment.Status = "running"
+	err = f.DB.UpdateDeployment(ctx, failedDeployment)
+	if err != nil {
+		t.Fatalf("Failed to update deployment to running: %v", err)
+	}
+
+	// Step 5: Add failure logs
+	errorLogs := []struct {
+		level   string
+		message string
+	}{
+		{"info", "Starting deployment for failure-test-app"},
+		{"info", "Cloning repository"},
+		{"info", "Installing dependencies"},
+		{"error", "Build failed: exit code 1"},
+		{"error", "npm ERR! Failed to compile TypeScript"},
+		{"error", "Deployment aborted due to build failure"},
+	}
+
+	for _, entry := range errorLogs {
+		log := &storage.DeploymentLog{
+			DeploymentID: failedDeploymentID,
+			Level:        entry.level,
+			Message:      entry.message,
+			Source:       "agent",
+			CreatedAt:    time.Now(),
+		}
+		err = f.DB.CreateDeploymentLog(ctx, log)
+		if err != nil {
+			t.Fatalf("Failed to create log entry: %v", err)
+		}
+	}
+
+	// Step 6: Mark deployment as failed
+	completedAt := time.Now()
+	failedDeployment.Status = "failed"
+	failedDeployment.CompletedAt = &completedAt
+	err = f.DB.UpdateDeployment(ctx, failedDeployment)
+	if err != nil {
+		t.Fatalf("Failed to mark deployment as failed: %v", err)
+	}
+
+	// Step 7: Verify failure state
+	finalDeployment, err := f.DB.GetDeployment(ctx, failedDeploymentID)
+	if err != nil {
+		t.Fatalf("Failed to get deployment: %v", err)
+	}
+	if finalDeployment.Status != "failed" {
+		t.Errorf("Expected status 'failed', got '%s'", finalDeployment.Status)
+	}
+
+	// Step 8: Verify error logs are present
+	logs, err := f.DB.ListDeploymentLogs(ctx, failedDeploymentID)
+	if err != nil {
+		t.Fatalf("Failed to get logs: %v", err)
+	}
+	hasErrorLog := false
+	for _, log := range logs {
+		if log.Level == "error" {
+			hasErrorLog = true
+			break
+		}
+	}
+	if !hasErrorLog {
+		t.Error("Expected error logs to be present")
+	}
+
+	// Step 9: Create rollback deployment
+	rollbackDeploymentID := fmt.Sprintf("rollback-deploy-%d", time.Now().UnixNano())
+	rollbackDeployment := &storage.DeploymentRecord{
+		ID:            rollbackDeploymentID,
+		Project:       project.Name,
+		Target:        "production",
+		Branch:        "main",
+		CommitHash:    prevDeployment.CommitHash, // Rolling back to previous commit
+		Status:        "pending",
+		ReleaseNumber: 3,
+		TriggeredBy:   "admin",
+		TriggerSource: "rollback",
+		StartedAt:     time.Now(),
+	}
+	err = f.DB.CreateDeployment(ctx, rollbackDeployment)
+	if err != nil {
+		t.Fatalf("Failed to create rollback deployment: %v", err)
+	}
+
+	// Step 10: Complete rollback
+	rollbackCompletedAt := time.Now()
+	rollbackDeployment.Status = "success"
+	rollbackDeployment.CompletedAt = &rollbackCompletedAt
+	err = f.DB.UpdateDeployment(ctx, rollbackDeployment)
+	if err != nil {
+		t.Fatalf("Failed to complete rollback: %v", err)
+	}
+
+	// Step 11: Verify deployment history
+	allDeployments, err := f.DB.ListDeploymentsRecent(ctx, 10)
+	if err != nil {
+		t.Fatalf("Failed to list deployments: %v", err)
+	}
+
+	projectDeployments := make([]*storage.DeploymentRecord, 0)
+	for _, d := range allDeployments {
+		if d.Project == project.Name {
+			projectDeployments = append(projectDeployments, d)
+		}
+	}
+
+	if len(projectDeployments) < 3 {
+		t.Errorf("Expected at least 3 deployments for project, got %d", len(projectDeployments))
+	}
+
+	t.Log("E2E deployment failure workflow completed successfully")
+}
+
+// TestE2EMultiAgentDeployment tests coordinated deployment across multiple agents
+func TestE2EMultiAgentDeployment(t *testing.T) {
+	f := NewTestFixture(t)
+	defer f.Close()
+
+	ctx := context.Background()
+
+	// Step 1: Register multiple agents
+	agents := []*storage.Agent{
+		{
+			ID:         "multi-agent-1",
+			Hostname:   "web-server-1.example.com",
+			Labels:     map[string]string{"role": "web", "region": "us-east"},
+			Status:     "connected",
+			LastSeenAt: time.Now(),
+		},
+		{
+			ID:         "multi-agent-2",
+			Hostname:   "web-server-2.example.com",
+			Labels:     map[string]string{"role": "web", "region": "us-west"},
+			Status:     "connected",
+			LastSeenAt: time.Now(),
+		},
+		{
+			ID:         "multi-agent-3",
+			Hostname:   "api-server-1.example.com",
+			Labels:     map[string]string{"role": "api", "region": "us-east"},
+			Status:     "connected",
+			LastSeenAt: time.Now(),
+		},
+	}
+
+	for _, agent := range agents {
+		err := f.DB.UpsertAgent(ctx, agent)
+		if err != nil {
+			t.Fatalf("Failed to register agent %s: %v", agent.ID, err)
+		}
+	}
+	t.Log("Step 1: Multiple agents registered")
+
+	// Step 2: Create a project
+	project := &storage.Project{
+		Name:       "multi-deploy-app",
+		Repository: "https://github.com/test/multi-app.git",
+		Branch:     "main",
+		DeployPath: "/var/www/multi-app",
+		Type:       "web",
+		CreatedAt:  time.Now(),
+	}
+	err := f.DB.CreateProject(project)
+	if err != nil {
+		t.Fatalf("Failed to create project: %v", err)
+	}
+	t.Log("Step 2: Project created")
+
+	// Step 3: Create deployment for each agent target
+	deploymentIDs := make([]string, 0)
+	for i, agent := range agents {
+		deploymentID := fmt.Sprintf("multi-deploy-%d-%d", i, time.Now().UnixNano())
+		deployment := &storage.DeploymentRecord{
+			ID:            deploymentID,
+			Project:       project.Name,
+			Target:        agent.Hostname,
+			Branch:        "main",
+			CommitHash:    "multi123",
+			Status:        "pending",
+			ReleaseNumber: 1,
+			TriggeredBy:   "orchestrator",
+			TriggerSource: "manual",
+			StartedAt:     time.Now(),
+		}
+		err = f.DB.CreateDeployment(ctx, deployment)
+		if err != nil {
+			t.Fatalf("Failed to create deployment for %s: %v", agent.ID, err)
+		}
+		deploymentIDs = append(deploymentIDs, deploymentID)
+	}
+	t.Log("Step 3: Deployments created for all agents")
+
+	// Step 4: Simulate parallel deployment execution
+	for _, deploymentID := range deploymentIDs {
+		deployment, err := f.DB.GetDeployment(ctx, deploymentID)
+		if err != nil {
+			t.Fatalf("Failed to get deployment %s: %v", deploymentID, err)
+		}
+
+		// Update to running
+		deployment.Status = "running"
+		err = f.DB.UpdateDeployment(ctx, deployment)
+		if err != nil {
+			t.Fatalf("Failed to update deployment to running: %v", err)
+		}
+
+		// Add logs
+		log := &storage.DeploymentLog{
+			DeploymentID: deploymentID,
+			Level:        "info",
+			Message:      fmt.Sprintf("Deploying to %s", deployment.Target),
+			Source:       "agent",
+			CreatedAt:    time.Now(),
+		}
+		err = f.DB.CreateDeploymentLog(ctx, log)
+		if err != nil {
+			t.Fatalf("Failed to create log: %v", err)
+		}
+
+		// Complete deployment
+		completedAt := time.Now()
+		deployment.Status = "success"
+		deployment.CompletedAt = &completedAt
+		err = f.DB.UpdateDeployment(ctx, deployment)
+		if err != nil {
+			t.Fatalf("Failed to complete deployment: %v", err)
+		}
+	}
+	t.Log("Step 4: All deployments completed")
+
+	// Step 5: Verify all deployments succeeded
+	successCount := 0
+	for _, deploymentID := range deploymentIDs {
+		deployment, err := f.DB.GetDeployment(ctx, deploymentID)
+		if err != nil {
+			t.Fatalf("Failed to get deployment %s: %v", deploymentID, err)
+		}
+		if deployment.Status == "success" {
+			successCount++
+		}
+	}
+	if successCount != len(agents) {
+		t.Errorf("Expected %d successful deployments, got %d", len(agents), successCount)
+	}
+	t.Log("Step 5: All deployments verified as successful")
+
+	// Step 6: Verify all agents are still connected
+	storedAgents, err := f.DB.ListAgents(ctx)
+	if err != nil {
+		t.Fatalf("Failed to list agents: %v", err)
+	}
+	connectedCount := 0
+	for _, agent := range storedAgents {
+		if agent.Status == "connected" {
+			connectedCount++
+		}
+	}
+	if connectedCount != len(agents) {
+		t.Errorf("Expected %d connected agents, got %d", len(agents), connectedCount)
+	}
+	t.Log("Step 6: All agents verified as connected")
+
+	t.Log("E2E multi-agent deployment workflow completed successfully")
 }

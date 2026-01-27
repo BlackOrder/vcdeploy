@@ -90,8 +90,9 @@ type MasterServer struct {
 	templatesDir string
 
 	// Shutdown handling
-	shutdown chan struct{}
-	wg       sync.WaitGroup
+	shutdown     chan struct{}
+	shutdownOnce sync.Once
+	wg           sync.WaitGroup
 }
 
 // AgentConnection tracks a connected agent.
@@ -639,24 +640,27 @@ func (s *MasterServer) triggerDeploymentOnAgent(ctx context.Context, deployment 
 }
 
 // Shutdown gracefully stops the server.
+// Shutdown is idempotent and can be called multiple times safely.
 func (s *MasterServer) Shutdown(ctx context.Context) error {
-	s.logger.Info("Shutting down server")
-	close(s.shutdown)
+	s.shutdownOnce.Do(func() {
+		s.logger.Info("Shutting down server")
+		close(s.shutdown)
 
-	// Stop background goroutines in middleware and rate limiter
-	if s.securityMiddleware != nil {
-		s.securityMiddleware.Stop()
-	}
-	if s.rateLimiter != nil {
-		s.rateLimiter.Stop()
-	}
+		// Stop background goroutines in middleware and rate limiter
+		if s.securityMiddleware != nil {
+			s.securityMiddleware.Stop()
+		}
+		if s.rateLimiter != nil {
+			s.rateLimiter.Stop()
+		}
 
-	if s.httpServer != nil {
-		_ = s.httpServer.Shutdown(ctx)
-	}
-	if s.grpcServer != nil {
-		s.grpcServer.GracefulStop()
-	}
+		if s.httpServer != nil {
+			_ = s.httpServer.Shutdown(ctx)
+		}
+		if s.grpcServer != nil {
+			s.grpcServer.GracefulStop()
+		}
+	})
 
 	s.wg.Wait()
 	return nil

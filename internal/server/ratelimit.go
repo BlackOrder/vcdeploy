@@ -21,7 +21,8 @@ type RateLimiter struct {
 	blocked map[string]time.Time
 
 	// Cleanup ticker
-	stopCh chan struct{}
+	stopCh   chan struct{}
+	stopOnce sync.Once
 }
 
 // RateLimitConfig configures the rate limiter.
@@ -374,8 +375,11 @@ type BlockedIP struct {
 }
 
 // Stop stops the rate limiter's background goroutines.
+// Stop is idempotent and can be called multiple times safely.
 func (rl *RateLimiter) Stop() {
-	close(rl.stopCh)
+	rl.stopOnce.Do(func() {
+		close(rl.stopCh)
+	})
 }
 
 // --- Private methods ---

@@ -76,6 +76,7 @@ func TestDefaultCSPDirectives(t *testing.T) {
 func TestNewSecurityMiddleware(t *testing.T) {
 	cfg := DefaultSecurityConfig()
 	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
 
 	if sm == nil {
 		t.Fatal("expected non-nil middleware")
@@ -88,6 +89,7 @@ func TestNewSecurityMiddleware(t *testing.T) {
 func TestNewSecurityMiddleware_Defaults(t *testing.T) {
 	// Test with zero values - should set defaults
 	sm := NewSecurityMiddleware(SecurityConfig{})
+	defer sm.Stop()
 
 	if sm.config.CSRFTokenLength != 32 {
 		t.Errorf("expected default CSRF token length 32, got %d", sm.config.CSRFTokenLength)
@@ -103,6 +105,7 @@ func TestNewSecurityMiddleware_Defaults(t *testing.T) {
 func TestSecurityMiddleware_AddSecurityHeaders(t *testing.T) {
 	cfg := DefaultSecurityConfig()
 	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
 
 	handler := sm.HeadersOnlyMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -148,6 +151,7 @@ func TestSecurityMiddleware_AddSecurityHeaders(t *testing.T) {
 func TestSecurityMiddleware_HSTS_OnlyWithTLS(t *testing.T) {
 	cfg := DefaultSecurityConfig()
 	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
 
 	handler := sm.HeadersOnlyMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -176,6 +180,7 @@ func TestSecurityMiddleware_DisabledFeatures(t *testing.T) {
 		EnableCSRF:                false,
 	}
 	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
 
 	handler := sm.HeadersOnlyMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -207,6 +212,7 @@ func TestSecurityMiddleware_DisabledFeatures(t *testing.T) {
 func TestSecurityMiddleware_IsSafeMethod(t *testing.T) {
 	cfg := DefaultSecurityConfig()
 	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
 
 	tests := []struct {
 		method   string
@@ -234,6 +240,7 @@ func TestSecurityMiddleware_IsSafeMethod(t *testing.T) {
 func TestSecurityMiddleware_IsExemptPath(t *testing.T) {
 	cfg := DefaultSecurityConfig()
 	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
 
 	tests := []struct {
 		path     string
@@ -263,6 +270,7 @@ func TestSecurityMiddleware_IsExemptPath(t *testing.T) {
 func TestSecurityMiddleware_GenerateCSRFToken(t *testing.T) {
 	cfg := DefaultSecurityConfig()
 	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
 
 	sessionID := "test-session-123"
 	token1, err := sm.GenerateCSRFToken(sessionID)
@@ -302,6 +310,7 @@ func TestSecurityMiddleware_GenerateCSRFToken(t *testing.T) {
 func TestSecurityMiddleware_GetCSRFToken(t *testing.T) {
 	cfg := DefaultSecurityConfig()
 	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
 
 	sessionID := "test-session-456"
 
@@ -331,6 +340,7 @@ func TestSecurityMiddleware_GetCSRFToken_ExpiredToken(t *testing.T) {
 		CSRFTokenExpiry: 1 * time.Millisecond, // Very short expiry
 	}
 	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
 
 	sessionID := "test-session-expire"
 	token1, err := sm.GenerateCSRFToken(sessionID)
@@ -354,6 +364,7 @@ func TestSecurityMiddleware_GetCSRFToken_ExpiredToken(t *testing.T) {
 func TestSecurityMiddleware_ValidateCSRFToken(t *testing.T) {
 	cfg := DefaultSecurityConfig()
 	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
 
 	sessionID := "test-session-validate"
 	token, err := sm.GenerateCSRFToken(sessionID)
@@ -374,6 +385,7 @@ func TestSecurityMiddleware_ValidateCSRFToken(t *testing.T) {
 func TestSecurityMiddleware_ValidateCSRFToken_InvalidToken(t *testing.T) {
 	cfg := DefaultSecurityConfig()
 	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
 
 	sessionID := "test-session-invalid"
 	_, err := sm.GenerateCSRFToken(sessionID)
@@ -394,6 +406,7 @@ func TestSecurityMiddleware_ValidateCSRFToken_InvalidToken(t *testing.T) {
 func TestSecurityMiddleware_ValidateCSRFToken_MissingToken(t *testing.T) {
 	cfg := DefaultSecurityConfig()
 	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
 
 	sessionID := "test-session-missing"
 	_, _ = sm.GenerateCSRFToken(sessionID)
@@ -410,6 +423,7 @@ func TestSecurityMiddleware_ValidateCSRFToken_MissingToken(t *testing.T) {
 func TestSecurityMiddleware_ValidateCSRFToken_MissingSession(t *testing.T) {
 	cfg := DefaultSecurityConfig()
 	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
 
 	// Create request without session cookie
 	req := httptest.NewRequest("POST", "/", nil)
@@ -423,6 +437,7 @@ func TestSecurityMiddleware_ValidateCSRFToken_MissingSession(t *testing.T) {
 func TestSecurityMiddleware_ValidateCSRFToken_FormValue(t *testing.T) {
 	cfg := DefaultSecurityConfig()
 	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
 
 	sessionID := "test-session-form"
 	token, err := sm.GenerateCSRFToken(sessionID)
@@ -443,6 +458,7 @@ func TestSecurityMiddleware_ValidateCSRFToken_FormValue(t *testing.T) {
 func TestSecurityMiddleware_CSRFProtection(t *testing.T) {
 	cfg := DefaultSecurityConfig()
 	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
 
 	sessionID := "csrf-middleware-test"
 	token, err := sm.GenerateCSRFToken(sessionID)
@@ -481,6 +497,7 @@ func TestSecurityMiddleware_CSRFProtection(t *testing.T) {
 func TestSecurityMiddleware_CSRFExemptPaths(t *testing.T) {
 	cfg := DefaultSecurityConfig()
 	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
 
 	handler := sm.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -500,6 +517,7 @@ func TestSecurityMiddleware_CSRFExemptPaths(t *testing.T) {
 func TestSecurityMiddleware_SafeMethods(t *testing.T) {
 	cfg := DefaultSecurityConfig()
 	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
 
 	handler := sm.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -532,6 +550,7 @@ func TestSecurityMiddleware_BuildCSP_Empty(t *testing.T) {
 		CSPDirectives: map[string]string{},
 	}
 	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
 
 	csp := sm.buildCSP()
 	if csp != "default-src 'self'" {
@@ -548,6 +567,7 @@ func TestSecurityMiddleware_BuildCSP_Custom(t *testing.T) {
 		},
 	}
 	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
 
 	csp := sm.buildCSP()
 	if !strings.Contains(csp, "default-src 'self'") {
@@ -562,6 +582,7 @@ func TestSecurityMiddleware_CSRFDisabled(t *testing.T) {
 	cfg := DefaultSecurityConfig()
 	cfg.EnableCSRF = false
 	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
 
 	handler := sm.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -581,6 +602,7 @@ func TestSecurityMiddleware_CSRFDisabled(t *testing.T) {
 func TestSecurityMiddleware_Stop(t *testing.T) {
 	cfg := DefaultSecurityConfig()
 	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
 
 	// Call Stop - should not panic
 	sm.Stop()
@@ -597,7 +619,6 @@ func TestSecurityMiddleware_ExpiredTokenCleanup(t *testing.T) {
 		CSRFSafeMethods: []string{"GET", "HEAD", "OPTIONS"},
 	}
 	sm := NewSecurityMiddleware(cfg)
-	defer sm.Stop()
 
 	// Generate multiple tokens
 	for i := 0; i < 5; i++ {
@@ -628,7 +649,6 @@ func TestSecurityMiddleware_ValidateCSRFToken_ExpiredToken(t *testing.T) {
 		CSRFSafeMethods: []string{"GET", "HEAD", "OPTIONS"},
 	}
 	sm := NewSecurityMiddleware(cfg)
-	defer sm.Stop()
 
 	sessionID := "expire-session"
 	token, _ := sm.GenerateCSRFToken(sessionID)
@@ -649,7 +669,6 @@ func TestSecurityMiddleware_ValidateCSRFToken_ExpiredToken(t *testing.T) {
 func TestSecurityMiddleware_ValidateCSRFToken_UnknownSession(t *testing.T) {
 	cfg := DefaultSecurityConfig()
 	sm := NewSecurityMiddleware(cfg)
-	defer sm.Stop()
 
 	// Create request with unknown session
 	req := httptest.NewRequest("POST", "/", nil)
@@ -667,6 +686,7 @@ func TestSecurityMiddleware_CustomXFrameOptions(t *testing.T) {
 		XFrameOptions:       "DENY",
 	}
 	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
 
 	handler := sm.HeadersOnlyMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -687,6 +707,7 @@ func TestSecurityMiddleware_CustomReferrerPolicy(t *testing.T) {
 		ReferrerPolicy:       "no-referrer",
 	}
 	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
 
 	handler := sm.HeadersOnlyMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -711,6 +732,7 @@ func TestSecurityMiddleware_CustomCSPDirectives(t *testing.T) {
 		},
 	}
 	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
 
 	handler := sm.HeadersOnlyMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -735,7 +757,6 @@ func TestSecurityMiddleware_CSRFExemptPathsCustom(t *testing.T) {
 		CSRFExemptPaths: []string{"/api/public/", "/health"},
 	}
 	sm := NewSecurityMiddleware(cfg)
-	defer sm.Stop()
 
 	handler := sm.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -777,7 +798,6 @@ func TestSecurityMiddleware_CSRFSafeMethodsCustom(t *testing.T) {
 		CSRFSafeMethods: []string{"GET"}, // Only GET is safe
 	}
 	sm := NewSecurityMiddleware(cfg)
-	defer sm.Stop()
 
 	handler := sm.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -807,6 +827,7 @@ func TestSecurityMiddleware_HSTSWithTLS(t *testing.T) {
 		HSTSIncludeSubdomains: true,
 	}
 	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
 
 	handler := sm.HeadersOnlyMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -837,6 +858,7 @@ func TestSecurityMiddleware_HSTSWithoutSubdomains(t *testing.T) {
 		HSTSIncludeSubdomains: false,
 	}
 	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
 
 	handler := sm.HeadersOnlyMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -856,6 +878,7 @@ func TestSecurityMiddleware_HSTSWithoutSubdomains(t *testing.T) {
 func TestSecurityMiddleware_PermissionsPolicy(t *testing.T) {
 	cfg := DefaultSecurityConfig()
 	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
 
 	handler := sm.HeadersOnlyMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -891,6 +914,7 @@ func TestSecurityMiddleware_AllHeadersDisabled(t *testing.T) {
 		EnableCSRF:                false,
 	}
 	sm := NewSecurityMiddleware(cfg)
+	defer sm.Stop()
 
 	handler := sm.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -930,7 +954,6 @@ func TestSecurityMiddleware_AllHeadersDisabled(t *testing.T) {
 func TestSecurityMiddleware_GenerateCSRFToken_UniqueTokens(t *testing.T) {
 	cfg := DefaultSecurityConfig()
 	sm := NewSecurityMiddleware(cfg)
-	defer sm.Stop()
 
 	tokens := make(map[string]bool)
 	numTokens := 100
@@ -954,7 +977,6 @@ func TestSecurityMiddleware_GenerateCSRFToken_UniqueTokens(t *testing.T) {
 func TestSecurityMiddleware_ConcurrentAccess(t *testing.T) {
 	cfg := DefaultSecurityConfig()
 	sm := NewSecurityMiddleware(cfg)
-	defer sm.Stop()
 
 	var wg sync.WaitGroup
 	numGoroutines := 50
@@ -984,7 +1006,6 @@ func TestSecurityMiddleware_ConcurrentAccess(t *testing.T) {
 func TestSecurityMiddleware_CSRFProtectionWithAPIEndpoints(t *testing.T) {
 	cfg := DefaultSecurityConfig()
 	sm := NewSecurityMiddleware(cfg)
-	defer sm.Stop()
 
 	handler := sm.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
