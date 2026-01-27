@@ -86,10 +86,6 @@ func newTestServer(t *testing.T) *MasterServer {
 	server.auditService = audit.New(db)
 	server.hostKeyService = hostkeys.New(db)
 
-	// Legacy services (for backward compatibility during transition)
-	server.legacySecretService = security.NewSecretService(db, kms)
-	server.legacySettingsService = config.NewSettingsService(db, kms)
-
 	return server
 }
 
