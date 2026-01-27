@@ -22,6 +22,7 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/services/hostkeys"
 	"github.com/BlackOrder/vcdeploy/internal/services/projects"
 	"github.com/BlackOrder/vcdeploy/internal/services/projecttypes"
+	"github.com/BlackOrder/vcdeploy/internal/services/provision"
 	"github.com/BlackOrder/vcdeploy/internal/services/secrets"
 	"github.com/BlackOrder/vcdeploy/internal/services/sessions"
 	"github.com/BlackOrder/vcdeploy/internal/services/settings"
@@ -86,6 +87,7 @@ func newTestServer(t *testing.T) *MasterServer {
 	server.agentService = agents.New(db)
 	server.auditService = audit.New(db)
 	server.hostKeyService = hostkeys.New(db)
+	server.provisionService = provision.New(db)
 
 	// Re-initialize enforcement middleware with the userService now set
 	server.enforcementMiddleware = NewEnforcementMiddleware(cfg, server.userService, logger)
