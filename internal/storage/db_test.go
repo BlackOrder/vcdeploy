@@ -371,8 +371,7 @@ func TestGetDeployment(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Create deployment with release_number set to avoid NULL scan issue
-	// Note: This tests the workaround; the real fix should be in GetDeployment to handle NULLs
+	// Create deployment - GetDeployment properly handles NULL values via sql.Null* types
 	deployment := &DeploymentRecord{
 		ID:            "deploy-002",
 		Project:       "testproject",
@@ -380,7 +379,7 @@ func TestGetDeployment(t *testing.T) {
 		Branch:        "develop",
 		CommitHash:    "xyz789",
 		Status:        "pending",
-		ReleaseNumber: 1, // Set to avoid NULL
+		ReleaseNumber: 1,
 		TriggeredBy:   "ci",
 		TriggerSource: "github",
 	}

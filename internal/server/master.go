@@ -70,10 +70,6 @@ type MasterServer struct {
 	auditService       services.AuditServicer
 	hostKeyService     services.HostKeyServicer
 
-	// Legacy services (to be deprecated)
-	legacySecretService   *security.SecretService
-	legacySettingsService *config.SettingsService
-
 	// Webhook handling
 	webhookHandler *webhookHandlerAdapter
 
@@ -233,11 +229,7 @@ func (s *MasterServer) SetWebhookHandler(kms *security.KMS, processor webhooksha
 	// Also set KMS on the server for secrets API
 	s.kms = kms
 
-	// Initialize legacy services (for backward compatibility during transition)
-	s.legacySecretService = security.NewSecretService(s.db, kms)
-	s.legacySettingsService = config.NewSettingsService(s.db, kms)
-
-	// Initialize new service layer
+	// Initialize service layer
 	s.secretService = secrets.New(s.db, kms)
 	s.settingsSvc = settings.New(s.db, kms)
 	s.userService = users.New(s.db)
