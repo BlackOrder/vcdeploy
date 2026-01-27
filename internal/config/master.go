@@ -159,7 +159,11 @@ type NotificationProvidersConfig struct {
 
 // SlackNotificationConfig defines Slack notification settings.
 type SlackNotificationConfig struct {
-	Enabled bool `yaml:"enabled"`
+	Enabled    bool   `yaml:"enabled"`
+	WebhookURL string `yaml:"webhook_url"`
+	Channel    string `yaml:"channel"`
+	Username   string `yaml:"username"`
+	IconEmoji  string `yaml:"icon_emoji"`
 }
 
 // EmailNotificationConfig defines email notification settings.
@@ -170,14 +174,23 @@ type EmailNotificationConfig struct {
 
 // SMTPConfig defines SMTP settings.
 type SMTPConfig struct {
-	Host string `yaml:"host"`
-	Port int    `yaml:"port"`
-	User string `yaml:"user"`
+	Host        string   `yaml:"host"`
+	Port        int      `yaml:"port"`
+	User        string   `yaml:"user"`
+	Password    string   `yaml:"password"`
+	TLS         bool     `yaml:"tls"`
+	FromAddress string   `yaml:"from_address"`
+	FromName    string   `yaml:"from_name"`
+	ToAddresses []string `yaml:"to_addresses"`
 }
 
 // WebhookNotificationConfig defines generic webhook notification settings.
 type WebhookNotificationConfig struct {
-	Enabled bool `yaml:"enabled"`
+	Enabled bool              `yaml:"enabled"`
+	URL     string            `yaml:"url"`
+	Method  string            `yaml:"method"`
+	Headers map[string]string `yaml:"headers"`
+	Secret  string            `yaml:"secret"`
 }
 
 // DiscordNotificationConfig defines Discord notification settings.
