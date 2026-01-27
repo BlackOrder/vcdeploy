@@ -75,8 +75,10 @@ type MasterServer struct {
 	webhookHandler *webhookHandlerAdapter
 
 	// Security middleware
-	securityMiddleware *SecurityMiddleware
-	rateLimiter        *RateLimiter
+	securityMiddleware    *SecurityMiddleware
+	rateLimiter           *RateLimiter
+	enforcementMiddleware *EnforcementMiddleware
+	logSizeEnforcer       *LogSizeEnforcer
 
 	// Agent management (for HTTP API, synced from gRPC service)
 	agents   map[string]*AgentConnection
@@ -205,6 +207,12 @@ func NewMasterServer(cfg *config.MasterConfig, db *storage.DB, logger *zap.Logge
 
 	// Initialize security middleware
 	s.securityMiddleware = NewSecurityMiddleware(DefaultSecurityConfig())
+
+	// Initialize enforcement middleware
+	s.enforcementMiddleware = NewEnforcementMiddleware(cfg, s.userService, logger)
+
+	// Initialize log size enforcer
+	s.logSizeEnforcer = NewLogSizeEnforcer(cfg.Logs.Deployment.MaxSizeMB, logger)
 
 	// Initialize rate limiter
 	var err error
