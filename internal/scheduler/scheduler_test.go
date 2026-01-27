@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -456,4 +457,134 @@ func equalSlice(a, b []int) bool {
 		}
 	}
 	return true
+}
+
+func TestScheduler_RunDueJobs(t *testing.T) {
+	logger := zap.NewNop()
+	sched := New(logger)
+
+	// Create a job that's immediately due
+	job := &testJob{name: "due-job", enabled: true}
+	schedule := &IntervalSchedule{Interval: -time.Hour} // Already past due
+
+	if err := sched.AddJob(job, schedule); err != nil {
+		t.Fatalf("AddJob() error = %v", err)
+	}
+
+	// Start and let scheduler tick once
+	sched.Start()
+	time.Sleep(1500 * time.Millisecond) // Wait for at least one scheduler tick
+	sched.Stop()
+
+	if !job.ran {
+		t.Error("Due job was not executed")
+	}
+}
+
+func TestScheduler_ExecuteJobWithError(t *testing.T) {
+	logger := zap.NewNop()
+	sched := New(logger)
+
+	// Create a job that returns an error
+	job := &testJob{name: "error-job", enabled: true, err: fmt.Errorf("test error")}
+	schedule := &IntervalSchedule{Interval: time.Hour}
+
+	if err := sched.AddJob(job, schedule); err != nil {
+		t.Fatalf("AddJob() error = %v", err)
+	}
+
+	// Run the job now
+	err := sched.RunJobNow("error-job")
+	if err == nil {
+		t.Error("Expected error from job execution")
+	}
+
+	if !job.ran {
+		t.Error("Job was not executed")
+	}
+}
+
+func TestScheduler_DisabledJob(t *testing.T) {
+	logger := zap.NewNop()
+	sched := New(logger)
+
+	// Create a disabled job
+	job := &testJob{name: "disabled-job", enabled: false}
+	schedule := &IntervalSchedule{Interval: -time.Hour} // Already past due
+
+	if err := sched.AddJob(job, schedule); err != nil {
+		t.Fatalf("AddJob() error = %v", err)
+	}
+
+	// Start briefly
+	sched.Start()
+	time.Sleep(1500 * time.Millisecond)
+	sched.Stop()
+
+	// Disabled job should not run
+	if job.ran {
+		t.Error("Disabled job should not have been executed")
+	}
+}
+
+func TestScheduler_MultipleJobs(t *testing.T) {
+	logger := zap.NewNop()
+	sched := New(logger)
+
+	// Create multiple jobs
+	job1 := &testJob{name: "job1", enabled: true}
+	job2 := &testJob{name: "job2", enabled: true}
+	job3 := &testJob{name: "job3", enabled: false}
+
+	sched.AddJob(job1, &IntervalSchedule{Interval: -time.Hour})
+	sched.AddJob(job2, &IntervalSchedule{Interval: -time.Hour})
+	sched.AddJob(job3, &IntervalSchedule{Interval: -time.Hour})
+
+	// Start scheduler
+	sched.Start()
+	time.Sleep(1500 * time.Millisecond)
+	sched.Stop()
+
+	if !job1.ran {
+		t.Error("job1 should have run")
+	}
+	if !job2.ran {
+		t.Error("job2 should have run")
+	}
+	if job3.ran {
+		t.Error("job3 should not have run (disabled)")
+	}
+}
+
+func TestScheduler_JobStatusUpdates(t *testing.T) {
+	logger := zap.NewNop()
+	sched := New(logger)
+
+	job := &testJob{name: "status-job", enabled: true}
+	schedule := &IntervalSchedule{Interval: -time.Hour} // Already past due
+
+	if err := sched.AddJob(job, schedule); err != nil {
+		t.Fatalf("AddJob() error = %v", err)
+	}
+
+	statusBefore := sched.GetJobStatus()
+	lastRunBefore := statusBefore["status-job"].LastRun
+
+	// Start and let scheduler tick to execute the due job
+	sched.Start()
+	time.Sleep(1500 * time.Millisecond)
+	sched.Stop()
+
+	statusAfter := sched.GetJobStatus()
+	lastRunAfter := statusAfter["status-job"].LastRun
+
+	// LastRun should be updated after scheduled execution
+	if !lastRunAfter.After(lastRunBefore) {
+		t.Error("LastRun should be updated after job execution")
+	}
+
+	// NextRun should be set
+	if statusAfter["status-job"].NextRun.IsZero() {
+		t.Error("NextRun should be set after job execution")
+	}
 }

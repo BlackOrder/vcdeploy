@@ -429,3 +429,175 @@ func TestAuditExportJob_ExportFormat(t *testing.T) {
 		t.Errorf("Expected %d entries, got %d", len(entries), len(decoded))
 	}
 }
+
+func TestDatabaseBackupJob_CleanOldBackups(t *testing.T) {
+	logger := zap.NewNop()
+
+	t.Run("removes backups beyond retention", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create an old backup with correct prefix
+		oldBackup := filepath.Join(tmpDir, "vcdeploy-backup-20200101-000000.db")
+		if err := os.WriteFile(oldBackup, []byte("old backup"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		oldTime := time.Now().Add(-48 * time.Hour)
+		os.Chtimes(oldBackup, oldTime, oldTime)
+
+		// Create a new backup with correct prefix
+		newBackup := filepath.Join(tmpDir, "vcdeploy-backup-20241231-235959.db")
+		if err := os.WriteFile(newBackup, []byte("new backup"), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		cfg := &config.DatabaseBackupConfig{
+			Enabled:   true,
+			Path:      tmpDir,
+			Retention: 24 * time.Hour,
+		}
+
+		job := NewDatabaseBackupJob(nil, cfg, logger)
+		// Call cleanOldBackups directly
+		if err := job.cleanOldBackups(tmpDir); err != nil {
+			t.Errorf("cleanOldBackups() error = %v", err)
+		}
+
+		// Old backup should be deleted
+		if _, err := os.Stat(oldBackup); !os.IsNotExist(err) {
+			t.Error("Old backup should have been deleted")
+		}
+
+		// New backup should still exist
+		if _, err := os.Stat(newBackup); err != nil {
+			t.Error("New backup should still exist")
+		}
+	})
+
+	t.Run("ignores directories", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create a directory with matching prefix
+		subDir := filepath.Join(tmpDir, "vcdeploy-backup-subdir")
+		if err := os.Mkdir(subDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		cfg := &config.DatabaseBackupConfig{
+			Enabled:   true,
+			Path:      tmpDir,
+			Retention: time.Nanosecond, // Immediately expired
+		}
+
+		job := NewDatabaseBackupJob(nil, cfg, logger)
+		if err := job.cleanOldBackups(tmpDir); err != nil {
+			t.Errorf("cleanOldBackups() error = %v", err)
+		}
+
+		// Directory should still exist
+		if _, err := os.Stat(subDir); err != nil {
+			t.Error("Directory should not be deleted")
+		}
+	})
+
+	t.Run("ignores files without matching prefix", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create a file without the correct prefix
+		otherFile := filepath.Join(tmpDir, "other-backup.db")
+		if err := os.WriteFile(otherFile, []byte("other"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		oldTime := time.Now().Add(-48 * time.Hour)
+		os.Chtimes(otherFile, oldTime, oldTime)
+
+		cfg := &config.DatabaseBackupConfig{
+			Enabled:   true,
+			Path:      tmpDir,
+			Retention: time.Nanosecond,
+		}
+
+		job := NewDatabaseBackupJob(nil, cfg, logger)
+		if err := job.cleanOldBackups(tmpDir); err != nil {
+			t.Errorf("cleanOldBackups() error = %v", err)
+		}
+
+		// File should still exist (wrong prefix)
+		if _, err := os.Stat(otherFile); err != nil {
+			t.Error("File without matching prefix should not be deleted")
+		}
+	})
+
+	t.Run("handles read directory error", func(t *testing.T) {
+		cfg := &config.DatabaseBackupConfig{
+			Enabled:   true,
+			Retention: 24 * time.Hour,
+		}
+		job := NewDatabaseBackupJob(nil, cfg, logger)
+
+		err := job.cleanOldBackups("/nonexistent/path")
+		if err == nil {
+			t.Error("Expected error for non-existent directory")
+		}
+	})
+}
+
+func TestLogRotationJob_Defaults(t *testing.T) {
+	logger := zap.NewNop()
+
+	// Test default values are applied
+	job := NewLogRotationJob(LogRotationConfig{
+		Enabled: true,
+	}, logger)
+
+	if job.logDir != "/var/log/vcdeploy" {
+		t.Errorf("Expected default logDir '/var/log/vcdeploy', got '%s'", job.logDir)
+	}
+	if job.maxSizeMB != 100 {
+		t.Errorf("Expected default maxSizeMB 100, got %d", job.maxSizeMB)
+	}
+	if job.retention != 7*24*time.Hour {
+		t.Errorf("Expected default retention 7 days, got %v", job.retention)
+	}
+}
+
+func TestLogRotationJob_RotateFile(t *testing.T) {
+	logger := zap.NewNop()
+	tmpDir := t.TempDir()
+
+	job := NewLogRotationJob(LogRotationConfig{
+		Enabled:   true,
+		LogDir:    tmpDir,
+		MaxSizeMB: 1,
+	}, logger)
+
+	// Create source file
+	srcPath := filepath.Join(tmpDir, "source.log")
+	content := []byte("test log content")
+	if err := os.WriteFile(srcPath, content, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Rotate file
+	dstPath := filepath.Join(tmpDir, "source.rotated.log")
+	if err := job.rotateFile(srcPath, dstPath); err != nil {
+		t.Fatalf("rotateFile() error = %v", err)
+	}
+
+	// Check destination has content
+	rotated, err := os.ReadFile(dstPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(rotated) != string(content) {
+		t.Errorf("Rotated content mismatch: got %q, want %q", rotated, content)
+	}
+
+	// Check source is truncated
+	srcInfo, err := os.Stat(srcPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if srcInfo.Size() != 0 {
+		t.Errorf("Source file should be truncated, size = %d", srcInfo.Size())
+	}
+}
