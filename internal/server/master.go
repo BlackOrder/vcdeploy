@@ -19,6 +19,7 @@ import (
 
 	"github.com/BlackOrder/vcdeploy/internal/config"
 	"github.com/BlackOrder/vcdeploy/internal/proto"
+	"github.com/BlackOrder/vcdeploy/internal/scheduler"
 	"github.com/BlackOrder/vcdeploy/internal/security"
 	"github.com/BlackOrder/vcdeploy/internal/services"
 	"github.com/BlackOrder/vcdeploy/internal/services/agents"
@@ -89,6 +90,9 @@ type MasterServer struct {
 	shutdown     chan struct{}
 	shutdownOnce sync.Once
 	wg           sync.WaitGroup
+
+	// Scheduled jobs
+	scheduler *scheduler.Scheduler
 }
 
 // AgentConnection tracks a connected agent.
@@ -500,9 +504,17 @@ func (s *MasterServer) runBackgroundTasks(ctx context.Context) {
 	cleanupTask := NewCleanupTask(cleanupServices, s.logger, cleanupConfig)
 	cleanupTask.Start()
 
+	// Set up scheduled jobs
+	s.setupScheduledJobs()
+
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 	defer cleanupTask.Stop()
+	defer func() {
+		if s.scheduler != nil {
+			s.scheduler.Stop()
+		}
+	}()
 
 	for {
 		select {
@@ -580,6 +592,71 @@ func (s *MasterServer) processScheduledDeployments() {
 		// Note: actual completion status will be updated when agent reports back
 		s.logger.Info("Deployment triggered on agent", zap.String("deployment_id", d.ID))
 	}
+}
+
+// setupScheduledJobs initializes and starts the scheduler with configured jobs.
+func (s *MasterServer) setupScheduledJobs() {
+	s.scheduler = scheduler.New(s.logger)
+
+	// Key rotation job
+	if s.config.Security.KeyRotation.Enabled {
+		keyRotationJob := scheduler.NewKeyRotationJob(s.kms, &s.config.Security.KeyRotation, s.logger)
+		schedule := &scheduler.IntervalSchedule{Interval: s.config.Security.KeyRotation.Interval}
+		if err := s.scheduler.AddJob(keyRotationJob, schedule); err != nil {
+			s.logger.Error("Failed to add key rotation job", zap.Error(err))
+		}
+	}
+
+	// Database backup job
+	if s.config.Backup.Database.Enabled {
+		dbBackupJob := scheduler.NewDatabaseBackupJob(s.db, &s.config.Backup.Database, s.logger)
+		schedule := &scheduler.IntervalSchedule{Interval: s.config.Backup.Database.Interval}
+		if err := s.scheduler.AddJob(dbBackupJob, schedule); err != nil {
+			s.logger.Error("Failed to add database backup job", zap.Error(err))
+		}
+	}
+
+	// Audit export job
+	if s.config.Logs.Audit.Export.Enabled {
+		auditExportJob := scheduler.NewAuditExportJob(s.db, &s.config.Logs.Audit.Export, s.logger)
+		var schedule scheduler.Schedule
+		if s.config.Logs.Audit.Export.Schedule != "" {
+			var err error
+			schedule, err = scheduler.ParseSchedule(s.config.Logs.Audit.Export.Schedule)
+			if err != nil {
+				s.logger.Error("Invalid audit export schedule, using daily default", zap.Error(err))
+				schedule = &scheduler.DailySchedule{Hour: 2, Minute: 0}
+			}
+		} else {
+			schedule = &scheduler.DailySchedule{Hour: 2, Minute: 0}
+		}
+		if err := s.scheduler.AddJob(auditExportJob, schedule); err != nil {
+			s.logger.Error("Failed to add audit export job", zap.Error(err))
+		}
+	}
+
+	// Log rotation job
+	if s.config.Logs.Rotation.Schedule != "" {
+		rotationCfg := scheduler.LogRotationConfig{
+			Enabled:   true,
+			LogDir:    "/var/log/vcdeploy",
+			MaxSizeMB: s.config.Logs.Deployment.MaxSizeMB,
+			Retention: s.config.Logs.Deployment.Retention,
+		}
+		logRotationJob := scheduler.NewLogRotationJob(rotationCfg, s.logger)
+
+		schedule, err := scheduler.ParseSchedule(s.config.Logs.Rotation.Schedule)
+		if err != nil {
+			s.logger.Error("Invalid log rotation schedule, using daily default", zap.Error(err))
+			schedule = &scheduler.DailySchedule{Hour: 3, Minute: 0}
+		}
+		if err := s.scheduler.AddJob(logRotationJob, schedule); err != nil {
+			s.logger.Error("Failed to add log rotation job", zap.Error(err))
+		}
+	}
+
+	s.scheduler.Start()
+	s.logger.Info("Scheduled jobs initialized")
 }
 
 // triggerDeploymentOnAgent sends a deployment command to the appropriate agent.
