@@ -95,6 +95,12 @@ func (s *MasterServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
+		// Admin-only: listing all users
+		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
+			http.Error(w, msg, status)
+			return
+		}
+
 		users, err := s.userService.List(ctx)
 		if err != nil {
 			s.logger.Error("Failed to list users", zap.Error(err))
@@ -116,6 +122,12 @@ func (s *MasterServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 		s.jsonResponse(w, result)
 
 	case http.MethodPost:
+		// Admin-only: creating users
+		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
+			http.Error(w, msg, status)
+			return
+		}
+
 		var req struct {
 			Username string `json:"username"`
 			Email    string `json:"email"`
@@ -184,6 +196,12 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
+		// Admin-only: viewing other user details
+		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
+			http.Error(w, msg, status)
+			return
+		}
+
 		user, err := s.userService.GetByID(ctx, userID)
 		if err != nil {
 			s.logger.Error("Failed to get user", zap.Error(err))
@@ -203,6 +221,12 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 		})
 
 	case http.MethodPut:
+		// Admin-only: updating users
+		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
+			http.Error(w, msg, status)
+			return
+		}
+
 		var req struct {
 			Email    string `json:"email"`
 			Role     string `json:"role"`
@@ -251,6 +275,12 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 		s.jsonResponse(w, map[string]string{"status": "updated"})
 
 	case http.MethodDelete:
+		// Admin-only: deleting users
+		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
+			http.Error(w, msg, status)
+			return
+		}
+
 		user, err := s.userService.GetByID(ctx, userID)
 		if err != nil {
 			s.logger.Error("Failed to get user", zap.Error(err))
@@ -294,6 +324,12 @@ func (s *MasterServer) handleSettingsCategory(w http.ResponseWriter, r *http.Req
 
 	switch r.Method {
 	case http.MethodGet:
+		// Read access: viewer role + read scope
+		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
+			http.Error(w, msg, status)
+			return
+		}
+
 		if s.settingsSvc == nil {
 			http.Error(w, "Settings service not configured", http.StatusInternalServerError)
 			return
@@ -313,6 +349,12 @@ func (s *MasterServer) handleSettingsCategory(w http.ResponseWriter, r *http.Req
 		s.jsonResponse(w, result)
 
 	case http.MethodPut:
+		// Admin-only: changing settings
+		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
+			http.Error(w, msg, status)
+			return
+		}
+
 		if s.settingsSvc == nil {
 			http.Error(w, "Settings service not configured", http.StatusInternalServerError)
 			return
@@ -347,13 +389,19 @@ func (s *MasterServer) handleSettingsExport(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	// Admin-only: exporting settings
+	if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
+		http.Error(w, msg, status)
+		return
+	}
+
 	if s.settingsSvc == nil {
 		http.Error(w, "Settings service not configured", http.StatusInternalServerError)
 		return
 	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
-	defer cancel()
 
 	settings, err := s.settingsSvc.ListAll(ctx)
 	if err != nil {
@@ -386,13 +434,19 @@ func (s *MasterServer) handleSettingsImport(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	// Admin-only: importing settings
+	if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
+		http.Error(w, msg, status)
+		return
+	}
+
 	if s.settingsSvc == nil {
 		http.Error(w, "Settings service not configured", http.StatusServiceUnavailable)
 		return
 	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-	defer cancel()
 
 	var req map[string]map[string]struct {
 		Value     string `json:"value"`
@@ -435,6 +489,12 @@ func (s *MasterServer) handleProjectsAPI(w http.ResponseWriter, r *http.Request)
 
 	switch r.Method {
 	case http.MethodGet:
+		// Read access: viewer role + read scope
+		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
+			http.Error(w, msg, status)
+			return
+		}
+
 		projects, err := s.projectService.List(ctx)
 		if err != nil {
 			s.logger.Error("Failed to list projects", zap.Error(err))
@@ -444,6 +504,12 @@ func (s *MasterServer) handleProjectsAPI(w http.ResponseWriter, r *http.Request)
 		s.jsonResponse(w, projects)
 
 	case http.MethodPost:
+		// Write access: user role + write scope
+		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
+			http.Error(w, msg, status)
+			return
+		}
+
 		var req struct {
 			Name       string `json:"name"`
 			Repository string `json:"repository"`
@@ -509,6 +575,12 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 
 	switch r.Method {
 	case http.MethodGet:
+		// Read access: viewer role + read scope
+		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
+			http.Error(w, msg, status)
+			return
+		}
+
 		project, err := s.projectService.GetByName(ctx, projectName)
 		if err != nil {
 			http.Error(w, "Project not found", http.StatusNotFound)
@@ -517,6 +589,12 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 		s.jsonResponse(w, project)
 
 	case http.MethodPut:
+		// Write access: user role + write scope
+		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
+			http.Error(w, msg, status)
+			return
+		}
+
 		var req struct {
 			Repository string `json:"repository"`
 			Branch     string `json:"branch"`
@@ -558,6 +636,12 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 		s.jsonResponse(w, project)
 
 	case http.MethodDelete:
+		// Write access: user role + write scope
+		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
+			http.Error(w, msg, status)
+			return
+		}
+
 		if err := s.projectService.Delete(ctx, projectName); err != nil {
 			s.logger.Error("Failed to delete project", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -585,6 +669,12 @@ func (s *MasterServer) handleProjectWebhooks(w http.ResponseWriter, r *http.Requ
 
 	switch r.Method {
 	case http.MethodGet:
+		// Read access: viewer role + read scope
+		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
+			http.Error(w, msg, status)
+			return
+		}
+
 		// Get all webhooks for this project
 		webhooksList := make([]map[string]interface{}, 0)
 		for _, provider := range []string{"github", "gitlab", "bitbucket"} {
@@ -599,6 +689,12 @@ func (s *MasterServer) handleProjectWebhooks(w http.ResponseWriter, r *http.Requ
 		s.jsonResponse(w, webhooksList)
 
 	case http.MethodPost:
+		// Write access: user role + write scope
+		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
+			http.Error(w, msg, status)
+			return
+		}
+
 		var req struct {
 			Provider      string `json:"provider"`
 			Secret        string `json:"secret"`
@@ -738,6 +834,12 @@ func (s *MasterServer) handleAgentsAPI(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
+	// Read access: viewer role + read scope
+	if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
+		http.Error(w, msg, status)
+		return
+	}
+
 	agents, err := s.agentService.List(ctx)
 	if err != nil {
 		s.logger.Error("Failed to list agents", zap.Error(err))
@@ -770,6 +872,12 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
+		// Read access: viewer role + read scope
+		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
+			http.Error(w, msg, status)
+			return
+		}
+
 		agent, err := s.agentService.GetByID(ctx, agentID)
 		if err != nil {
 			s.logger.Error("Failed to get agent", zap.Error(err))
@@ -783,6 +891,12 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 		s.jsonResponse(w, agent)
 
 	case http.MethodPut:
+		// Write access: user role + write scope
+		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
+			http.Error(w, msg, status)
+			return
+		}
+
 		var req struct {
 			Labels map[string]string `json:"labels"`
 			Status string            `json:"status"`
@@ -815,6 +929,12 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 		s.jsonResponse(w, agent)
 
 	case http.MethodDelete:
+		// Admin-only: deleting agents
+		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
+			http.Error(w, msg, status)
+			return
+		}
+
 		if err := s.agentService.Delete(ctx, agentID); err != nil {
 			s.logger.Error("Failed to delete agent", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -868,6 +988,12 @@ func (s *MasterServer) handleDeploymentsAPI(w http.ResponseWriter, r *http.Reque
 
 	switch r.Method {
 	case http.MethodGet:
+		// Read access: viewer role + read scope
+		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
+			http.Error(w, msg, status)
+			return
+		}
+
 		// Parse query params
 		limit := 50
 		if l := r.URL.Query().Get("limit"); l != "" {
@@ -885,6 +1011,12 @@ func (s *MasterServer) handleDeploymentsAPI(w http.ResponseWriter, r *http.Reque
 		s.jsonResponse(w, deployments)
 
 	case http.MethodPost:
+		// Write access: user role + write scope
+		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
+			http.Error(w, msg, status)
+			return
+		}
+
 		var req struct {
 			Project     string `json:"project"`
 			Branch      string `json:"branch"`
@@ -1284,6 +1416,12 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
+		// Read access: viewer role + read scope (users can view their own keys)
+		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
+			http.Error(w, msg, status)
+			return
+		}
+
 		keys, err := s.apiKeyService.List(ctx, userID)
 		if err != nil {
 			s.logger.Error("Failed to list API keys", zap.Error(err))
@@ -1305,6 +1443,12 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 		s.jsonResponse(w, result)
 
 	case http.MethodPost:
+		// Write access: user role + write scope
+		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
+			http.Error(w, msg, status)
+			return
+		}
+
 		var req struct {
 			Name      string `json:"name"`
 			ExpiresIn int    `json:"expires_in_days"` // 0 = no expiry
