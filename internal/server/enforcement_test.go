@@ -445,3 +445,145 @@ func containsSubstr(s, substr string) bool {
 	}
 	return false
 }
+
+// Test Require2FAForAdminFunc (HandlerFunc version)
+func TestRequire2FAForAdminFunc(t *testing.T) {
+	logger := zap.NewNop()
+
+	t.Run("skips check when Require2FAAdmin is false", func(t *testing.T) {
+		cfg := &config.MasterConfig{
+			Security: config.SecurityConfig{Require2FAAdmin: false},
+		}
+		userSvc := newMockUserService()
+		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
+
+		handlerFunc := mw.Require2FAForAdminFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		req := httptest.NewRequest("GET", "/", nil)
+		rr := httptest.NewRecorder()
+
+		handlerFunc(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status %d, got %d", http.StatusOK, rr.Code)
+		}
+	})
+
+	t.Run("allows requests without user context", func(t *testing.T) {
+		cfg := &config.MasterConfig{
+			Security: config.SecurityConfig{Require2FAAdmin: true},
+		}
+		userSvc := newMockUserService()
+		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
+
+		handlerFunc := mw.Require2FAForAdminFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		req := httptest.NewRequest("GET", "/", nil)
+		rr := httptest.NewRecorder()
+
+		handlerFunc(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status %d, got %d", http.StatusOK, rr.Code)
+		}
+	})
+
+	t.Run("allows non-admin users", func(t *testing.T) {
+		cfg := &config.MasterConfig{
+			Security: config.SecurityConfig{Require2FAAdmin: true},
+		}
+		userSvc := newMockUserService()
+		userSvc.addUser(&storage.User{ID: 1, Username: "user", Role: "viewer", TOTPEnabled: false})
+		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
+
+		handlerFunc := mw.Require2FAForAdminFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		req := httptest.NewRequest("GET", "/", nil)
+		ctx := context.WithValue(req.Context(), contextKeyUserID, int64(1))
+		req = req.WithContext(ctx)
+		rr := httptest.NewRecorder()
+
+		handlerFunc(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status %d, got %d", http.StatusOK, rr.Code)
+		}
+	})
+
+	t.Run("allows admin with 2FA enabled", func(t *testing.T) {
+		cfg := &config.MasterConfig{
+			Security: config.SecurityConfig{Require2FAAdmin: true},
+		}
+		userSvc := newMockUserService()
+		userSvc.addUser(&storage.User{ID: 1, Username: "admin", Role: "admin", TOTPEnabled: true})
+		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
+
+		handlerFunc := mw.Require2FAForAdminFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		req := httptest.NewRequest("GET", "/", nil)
+		ctx := context.WithValue(req.Context(), contextKeyUserID, int64(1))
+		req = req.WithContext(ctx)
+		rr := httptest.NewRecorder()
+
+		handlerFunc(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status %d, got %d", http.StatusOK, rr.Code)
+		}
+	})
+
+	t.Run("rejects admin without 2FA", func(t *testing.T) {
+		cfg := &config.MasterConfig{
+			Security: config.SecurityConfig{Require2FAAdmin: true},
+		}
+		userSvc := newMockUserService()
+		userSvc.addUser(&storage.User{ID: 1, Username: "admin", Role: "admin", TOTPEnabled: false})
+		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
+
+		handlerFunc := mw.Require2FAForAdminFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		req := httptest.NewRequest("GET", "/admin", nil)
+		ctx := context.WithValue(req.Context(), contextKeyUserID, int64(1))
+		req = req.WithContext(ctx)
+		rr := httptest.NewRecorder()
+
+		handlerFunc(rr, req)
+
+		if rr.Code != http.StatusForbidden {
+			t.Errorf("Expected status %d, got %d", http.StatusForbidden, rr.Code)
+		}
+	})
+
+	t.Run("handles user lookup error", func(t *testing.T) {
+		cfg := &config.MasterConfig{
+			Security: config.SecurityConfig{Require2FAAdmin: true},
+		}
+		userSvc := newMockUserService() // User not added, so lookup will fail
+		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
+
+		handlerFunc := mw.Require2FAForAdminFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		req := httptest.NewRequest("GET", "/", nil)
+		ctx := context.WithValue(req.Context(), contextKeyUserID, int64(999)) // Non-existent user
+		req = req.WithContext(ctx)
+		rr := httptest.NewRecorder()
+
+		handlerFunc(rr, req)
+
+		if rr.Code != http.StatusInternalServerError {
+			t.Errorf("Expected status %d, got %d", http.StatusInternalServerError, rr.Code)
+		}
+	})
+}

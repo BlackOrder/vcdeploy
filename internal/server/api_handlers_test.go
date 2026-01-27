@@ -2444,3 +2444,197 @@ func TestHandleStats_WithData(t *testing.T) {
 		t.Error("expected at least 1 connected agent in stats")
 	}
 }
+
+// --- Additional Rollback Tests for Coverage ---
+
+func TestHandleDeploymentRollback_WithUserContext(t *testing.T) {
+	t.Parallel()
+
+	server, _, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	ctx := context.Background()
+
+	// Create a test user
+	testUser := &storage.User{
+		Username: "rollback-user",
+		Email:    "rollback@example.com",
+		Role:     "admin",
+	}
+	_ = server.db.CreateUser(ctx, testUser)
+
+	// Create a project
+	project := &storage.Project{
+		Name:       "rollback-ctx-project",
+		Repository: "https://github.com/test/repo",
+		Branch:     "main",
+		DeployPath: "/var/www/test",
+	}
+	_ = server.db.CreateProject(project)
+
+	// Create a deployment to rollback
+	deployment := &storage.DeploymentRecord{
+		ID:      "rollback-ctx-deploy",
+		Project: "rollback-ctx-project",
+		Target:  "production",
+		Branch:  "main",
+		Status:  "success",
+	}
+	_ = server.db.CreateDeployment(ctx, deployment)
+
+	// Get the user ID
+	user, _ := server.db.GetUserByUsername(ctx, "rollback-user")
+
+	req := httptest.NewRequest("POST", "/api/v1/deployments/rollback-ctx-deploy/rollback", nil)
+	req = requestWithUserContext(req, user.ID)
+	w := httptest.NewRecorder()
+
+	server.handleDeploymentRollback(w, req, "rollback-ctx-deploy")
+
+	if w.Code != http.StatusAccepted {
+		t.Errorf("expected status %d, got %d: %s", http.StatusAccepted, w.Code, w.Body.String())
+	}
+}
+
+// --- Additional Logs Streaming Tests for Coverage ---
+
+func TestHandleDeploymentLogsStream_MethodNotAllowed(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	req := httptest.NewRequest("POST", "/api/v1/deployments/test-deploy/logs?stream=true", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleDeploymentLogsStream(w, req, "test-deploy")
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected status %d, got %d", http.StatusMethodNotAllowed, w.Code)
+	}
+}
+
+func TestHandleDeploymentLogsStream_WithExistingLogs(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	ctx := context.Background()
+
+	// Create deployment
+	deployment := &storage.DeploymentRecord{
+		ID:      "stream-logs-deploy",
+		Status:  "running",
+		Project: "test-project",
+	}
+	_ = server.db.CreateDeployment(ctx, deployment)
+
+	// Create some logs
+	log1 := &storage.DeploymentLog{
+		DeploymentID: "stream-logs-deploy",
+		Level:        "info",
+		Message:      "Starting deployment",
+		Source:       "agent",
+	}
+	log2 := &storage.DeploymentLog{
+		DeploymentID: "stream-logs-deploy",
+		Level:        "info",
+		Message:      "Deployment in progress",
+		Source:       "agent",
+	}
+	_ = server.db.CreateDeploymentLog(ctx, log1)
+	_ = server.db.CreateDeploymentLog(ctx, log2)
+
+	// Use context with short timeout
+	cancelCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer cancel()
+
+	req := httptest.NewRequest("GET", "/api/v1/deployments/stream-logs-deploy/logs?stream=true", nil)
+	req = req.WithContext(cancelCtx)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleDeploymentLogsStream(w, req, "stream-logs-deploy")
+
+	// Check SSE headers
+	if w.Header().Get("Content-Type") != "text/event-stream" {
+		t.Errorf("expected Content-Type 'text/event-stream', got '%s'", w.Header().Get("Content-Type"))
+	}
+
+	// Body should contain the log data
+	body := w.Body.String()
+	if !strings.Contains(body, "Starting deployment") {
+		t.Error("expected body to contain 'Starting deployment'")
+	}
+	if !strings.Contains(body, "Deployment in progress") {
+		t.Error("expected body to contain 'Deployment in progress'")
+	}
+}
+
+func TestHandleDeploymentLogsStream_CompletedDeployment(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	ctx := context.Background()
+
+	// Create a completed deployment
+	completedAt := time.Now()
+	deployment := &storage.DeploymentRecord{
+		ID:          "completed-stream-deploy",
+		Status:      "success",
+		Project:     "test-project",
+		CompletedAt: &completedAt,
+	}
+	_ = server.db.CreateDeployment(ctx, deployment)
+
+	// Use context with longer timeout to allow for the ticker loop to run
+	cancelCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	req := httptest.NewRequest("GET", "/api/v1/deployments/completed-stream-deploy/logs?stream=true", nil)
+	req = req.WithContext(cancelCtx)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleDeploymentLogsStream(w, req, "completed-stream-deploy")
+
+	// Should receive complete event or at least have SSE headers set
+	if w.Header().Get("Content-Type") != "text/event-stream" {
+		t.Errorf("expected Content-Type 'text/event-stream', got '%s'", w.Header().Get("Content-Type"))
+	}
+}
+
+// --- Settings Export Success Test for Coverage ---
+
+func TestHandleSettingsExport_Success(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _ := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	req := httptest.NewRequest("GET", "/api/v1/settings/export", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	server.handleSettingsExport(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+
+	// Should return JSON with settings
+	contentType := w.Header().Get("Content-Type")
+	if !strings.Contains(contentType, "application/json") {
+		t.Errorf("expected Content-Type to contain 'application/json', got '%s'", contentType)
+	}
+
+	// Should be valid JSON
+	var settings map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&settings); err != nil {
+		t.Errorf("failed to decode settings export: %v", err)
+	}
+}
