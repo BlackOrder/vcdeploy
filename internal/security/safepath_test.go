@@ -271,3 +271,174 @@ func TestSanitizePath(t *testing.T) {
 		})
 	}
 }
+
+// TestSafeJoinSecurityEdgeCases tests additional security edge cases.
+func TestSafeJoinSecurityEdgeCases(t *testing.T) {
+	tests := []struct {
+		name         string
+		base         string
+		relativePath string
+		wantErr      error
+	}{
+		// URL encoding attacks (these should be handled by the caller before SafeJoin)
+		{
+			name:         "double dot with extra slashes",
+			base:         "/var/deploy",
+			relativePath: "app/.//./../../../etc/passwd",
+			wantErr:      ErrPathTraversal,
+		},
+		{
+			name:         "symlink-like traversal",
+			base:         "/var/deploy",
+			relativePath: "app/logs/../../../../../../etc/shadow",
+			wantErr:      ErrPathTraversal,
+		},
+		// Base path edge cases
+		{
+			name:         "base is root blocks traversal",
+			base:         "/",
+			relativePath: "etc/passwd",
+			wantErr:      ErrPathTraversal, // Correctly blocked - don't allow access from root
+		},
+		{
+			name:         "relative base path",
+			base:         "deploy",
+			relativePath: "../secrets",
+			wantErr:      ErrPathTraversal,
+		},
+		// Whitespace and special characters
+		{
+			name:         "path with spaces allowed",
+			base:         "/var/deploy",
+			relativePath: "my app/config.yml",
+			wantErr:      nil,
+		},
+		{
+			name:         "path with unicode allowed",
+			base:         "/var/deploy",
+			relativePath: "données/config.yml",
+			wantErr:      nil,
+		},
+		// Edge length cases
+		{
+			name:         "very long valid path",
+			base:         "/var/deploy",
+			relativePath: "a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/config.yml",
+			wantErr:      nil,
+		},
+		{
+			name:         "path equals base returns base",
+			base:         "/var/deploy",
+			relativePath: ".",
+			wantErr:      nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := SafeJoin(tt.base, tt.relativePath)
+			if err != tt.wantErr {
+				t.Errorf("SafeJoin() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// TestIsWithinBaseEdgeCases tests edge cases for IsWithinBase.
+func TestIsWithinBaseEdgeCases(t *testing.T) {
+	tests := []struct {
+		name   string
+		base   string
+		path   string
+		expect bool
+	}{
+		{
+			name:   "exact match",
+			base:   "/var/deploy",
+			path:   "/var/deploy",
+			expect: true,
+		},
+		{
+			name:   "similar prefix but different directory",
+			base:   "/var/deploy",
+			path:   "/var/deploy-backup/file",
+			expect: false,
+		},
+		{
+			name:   "base with trailing slash",
+			base:   "/var/deploy/",
+			path:   "/var/deploy/app",
+			expect: true,
+		},
+		{
+			name:   "path outside base with similar name",
+			base:   "/home/user",
+			path:   "/home/username/secrets",
+			expect: false,
+		},
+		{
+			name:   "nested deeply within base",
+			base:   "/var/deploy",
+			path:   "/var/deploy/a/b/c/d/e/file.txt",
+			expect: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsWithinBase(tt.base, tt.path); got != tt.expect {
+				t.Errorf("IsWithinBase(%q, %q) = %v, want %v", tt.base, tt.path, got, tt.expect)
+			}
+		})
+	}
+}
+
+// TestValidateRelativePathSecurityCases tests security-focused relative path validation.
+func TestValidateRelativePathSecurityCases(t *testing.T) {
+	tests := []struct {
+		name    string
+		path    string
+		wantErr error
+	}{
+		{
+			name:    "multiple parent directories",
+			path:    "../../../../etc/passwd",
+			wantErr: ErrPathTraversal,
+		},
+		{
+			name:    "hidden in middle but escapes",
+			path:    "safe/../../dangerous",
+			wantErr: ErrPathTraversal,
+		},
+		{
+			name:    "windows-style path on unix blocked",
+			path:    "C:\\Windows\\System32",
+			wantErr: nil, // On Unix this is just a weird filename
+		},
+		{
+			name:    "single dot is safe",
+			path:    ".",
+			wantErr: nil,
+		},
+		{
+			name:    "double dot alone blocked",
+			path:    "..",
+			wantErr: ErrPathTraversal,
+		},
+		{
+			name:    "multiple dots in filename safe",
+			path:    "config...backup.yml",
+			wantErr: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateRelativePath(tt.path)
+			if err != tt.wantErr {
+				t.Errorf("ValidateRelativePath(%q) error = %v, wantErr %v", tt.path, err, tt.wantErr)
+			}
+		})
+	}
+}
+

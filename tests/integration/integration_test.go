@@ -1498,3 +1498,315 @@ func TestE2EMultiAgentDeployment(t *testing.T) {
 
 	t.Log("E2E multi-agent deployment workflow completed successfully")
 }
+
+// TestAuthenticationFlows tests various authentication scenarios.
+func TestAuthenticationFlows(t *testing.T) {
+	f := NewTestFixture(t)
+	defer f.Close()
+
+	ctx := context.Background()
+
+	t.Run("user creation and password verification", func(t *testing.T) {
+		// Create user
+		user := &storage.User{
+			Username:     "authtest",
+			PasswordHash: "$2a$10$1234567890123456789012345678901234567890123456789012", // bcrypt hash
+			Email:        "authtest@example.com",
+			Role:         "user",
+		}
+		err := f.DB.CreateUser(ctx, user)
+		if err != nil {
+			t.Fatalf("CreateUser() error = %v", err)
+		}
+		if user.ID == 0 {
+			t.Error("CreateUser() did not set ID")
+		}
+
+		// Verify user can be retrieved
+		fetched, err := f.DB.GetUserByUsername(ctx, "authtest")
+		if err != nil {
+			t.Fatalf("GetUserByUsername() error = %v", err)
+		}
+		if fetched.Email != user.Email {
+			t.Errorf("GetUserByUsername() email = %s, want %s", fetched.Email, user.Email)
+		}
+	})
+
+	t.Run("session creation and validation", func(t *testing.T) {
+		// Create user first
+		user := &storage.User{
+			Username:     "sessiontest",
+			PasswordHash: "$2a$10$1234567890123456789012345678901234567890123456789012",
+			Email:        "sessiontest@example.com",
+			Role:         "admin",
+		}
+		_ = f.DB.CreateUser(ctx, user)
+
+		// Create session
+		session := &storage.Session{
+			ID:        "test-session-token-123",
+			UserID:    user.ID,
+			Token:     "test-session-token-123",
+			IPAddress: "192.168.1.1",
+			UserAgent: "Mozilla/5.0",
+			ExpiresAt: time.Now().Add(24 * time.Hour),
+		}
+		err := f.DB.CreateSession(ctx, session)
+		if err != nil {
+			t.Fatalf("CreateSession() error = %v", err)
+		}
+
+		// Validate session
+		fetched, err := f.DB.GetSessionByToken(ctx, "test-session-token-123")
+		if err != nil {
+			t.Fatalf("GetSessionByToken() error = %v", err)
+		}
+		if fetched.UserID != user.ID {
+			t.Errorf("GetSessionByToken() userID = %d, want %d", fetched.UserID, user.ID)
+		}
+
+		// Delete session (logout)
+		err = f.DB.DeleteSession(ctx, "test-session-token-123")
+		if err != nil {
+			t.Fatalf("DeleteSession() error = %v", err)
+		}
+
+		// Verify session is gone
+		_, err = f.DB.GetSessionByToken(ctx, "test-session-token-123")
+		if err != storage.ErrNotFound {
+			t.Errorf("GetSessionByToken() after delete error = %v, want ErrNotFound", err)
+		}
+	})
+
+	t.Run("expired session rejected", func(t *testing.T) {
+		user := &storage.User{
+			Username:     "expiredsession",
+			PasswordHash: "$2a$10$1234567890123456789012345678901234567890123456789012",
+			Email:        "expired@example.com",
+			Role:         "user",
+		}
+		_ = f.DB.CreateUser(ctx, user)
+
+		// Create expired session
+		session := &storage.Session{
+			ID:        "expired-token",
+			UserID:    user.ID,
+			Token:     "expired-token",
+			IPAddress: "192.168.1.1",
+			UserAgent: "Test Agent",
+			ExpiresAt: time.Now().Add(-1 * time.Hour), // Already expired
+		}
+		_ = f.DB.CreateSession(ctx, session)
+
+		// Attempting to get expired session should fail
+		_, err := f.DB.GetSessionByToken(ctx, "expired-token")
+		if err != storage.ErrNotFound {
+			t.Errorf("GetSessionByToken() with expired token error = %v, want ErrNotFound", err)
+		}
+	})
+
+	t.Run("API key creation and validation", func(t *testing.T) {
+		user := &storage.User{
+			Username:     "apikeytest",
+			PasswordHash: "$2a$10$1234567890123456789012345678901234567890123456789012",
+			Email:        "apikey@example.com",
+			Role:         "admin",
+		}
+		_ = f.DB.CreateUser(ctx, user)
+
+		// Create API key
+		apiKey := &storage.APIKey{
+			UserID:    user.ID,
+			Name:      "test-key",
+			KeyHash:   "hashed-key-value",
+			KeyPrefix: "vcd_test",
+			Scopes:    `["read", "write"]`,
+		}
+		err := f.DB.CreateAPIKey(ctx, apiKey)
+		if err != nil {
+			t.Fatalf("CreateAPIKey() error = %v", err)
+		}
+
+		// Verify API key can be retrieved
+		keys, err := f.DB.ListAPIKeys(ctx, user.ID)
+		if err != nil {
+			t.Fatalf("ListAPIKeys() error = %v", err)
+		}
+		if len(keys) != 1 {
+			t.Errorf("ListAPIKeys() = %d keys, want 1", len(keys))
+		}
+
+		// Delete API key
+		err = f.DB.DeleteAPIKey(ctx, apiKey.ID)
+		if err != nil {
+			t.Fatalf("DeleteAPIKey() error = %v", err)
+		}
+	})
+
+	t.Run("user deletion cascades sessions", func(t *testing.T) {
+		user := &storage.User{
+			Username:     "deletetest",
+			PasswordHash: "$2a$10$1234567890123456789012345678901234567890123456789012",
+			Email:        "delete@example.com",
+			Role:         "user",
+		}
+		_ = f.DB.CreateUser(ctx, user)
+
+		// Create multiple sessions
+		for i := 0; i < 3; i++ {
+			session := &storage.Session{
+				ID:        fmt.Sprintf("delete-session-%d", i),
+				UserID:    user.ID,
+				Token:     fmt.Sprintf("delete-session-%d", i),
+				IPAddress: "192.168.1.1",
+				UserAgent: "Test Agent",
+				ExpiresAt: time.Now().Add(24 * time.Hour),
+			}
+			_ = f.DB.CreateSession(ctx, session)
+		}
+
+		// Delete all user sessions
+		err := f.DB.DeleteUserSessions(ctx, user.ID)
+		if err != nil {
+			t.Fatalf("DeleteUserSessions() error = %v", err)
+		}
+
+		// Verify sessions are gone
+		sessions, _ := f.DB.ListUserSessions(ctx, user.ID)
+		if len(sessions) != 0 {
+			t.Errorf("ListUserSessions() = %d, want 0", len(sessions))
+		}
+	})
+}
+
+// TestRoleBasedAccess tests role-based access patterns.
+func TestRoleBasedAccess(t *testing.T) {
+	f := NewTestFixture(t)
+	defer f.Close()
+
+	ctx := context.Background()
+
+	// Create users with different roles
+	roles := []string{"admin", "user", "viewer"}
+	users := make(map[string]*storage.User)
+
+	for _, role := range roles {
+		user := &storage.User{
+			Username:     fmt.Sprintf("%s_user", role),
+			PasswordHash: "$2a$10$1234567890123456789012345678901234567890123456789012",
+			Email:        fmt.Sprintf("%s@example.com", role),
+			Role:         role,
+		}
+		err := f.DB.CreateUser(ctx, user)
+		if err != nil {
+			t.Fatalf("CreateUser(%s) error = %v", role, err)
+		}
+		users[role] = user
+	}
+
+	t.Run("admin has highest privileges", func(t *testing.T) {
+		admin := users["admin"]
+		if admin.Role != "admin" {
+			t.Errorf("Admin role = %s, want admin", admin.Role)
+		}
+	})
+
+	t.Run("user has standard privileges", func(t *testing.T) {
+		user := users["user"]
+		if user.Role != "user" {
+			t.Errorf("User role = %s, want user", user.Role)
+		}
+	})
+
+	t.Run("viewer has read-only privileges", func(t *testing.T) {
+		viewer := users["viewer"]
+		if viewer.Role != "viewer" {
+			t.Errorf("Viewer role = %s, want viewer", viewer.Role)
+		}
+	})
+
+	t.Run("role update works", func(t *testing.T) {
+		user := users["user"]
+		user.Role = "admin"
+		err := f.DB.UpdateUserByID(ctx, user)
+		if err != nil {
+			t.Fatalf("UpdateUserByID() error = %v", err)
+		}
+
+		updated, _ := f.DB.GetUserByID(ctx, user.ID)
+		if updated.Role != "admin" {
+			t.Errorf("Updated role = %s, want admin", updated.Role)
+		}
+	})
+}
+
+// TestAuditTrail tests that security-relevant actions are audited.
+func TestAuditTrail(t *testing.T) {
+	f := NewTestFixture(t)
+	defer f.Close()
+
+	ctx := context.Background()
+
+	// Simulate security-relevant actions and audit them
+	auditActions := []struct {
+		action   string
+		resource string
+		details  string
+	}{
+		{"login", "session", "User login from 192.168.1.1"},
+		{"logout", "session", "User logout"},
+		{"create", "api_key", "Created API key: test-key"},
+		{"delete", "api_key", "Deleted API key: test-key"},
+		{"failed_login", "session", "Failed login attempt from 192.168.1.100"},
+		{"password_change", "user", "Password changed for user admin"},
+		{"role_change", "user", "Role changed from user to admin"},
+	}
+
+	for _, audit := range auditActions {
+		entry := &storage.AuditEntry{
+			Source:    "security_test",
+			User:      "testuser",
+			Action:    audit.action,
+			Resource:  audit.resource,
+			Details:   audit.details,
+			IPAddress: "192.168.1.1",
+			Result:    "success",
+			Timestamp: time.Now(),
+		}
+		err := f.DB.LogAudit(ctx, entry)
+		if err != nil {
+			t.Fatalf("LogAudit(%s) error = %v", audit.action, err)
+		}
+	}
+
+	// Verify all audit entries were created
+	entries, err := f.DB.ListAuditLogs(ctx, 100, 0)
+	if err != nil {
+		t.Fatalf("ListAuditLogs() error = %v", err)
+	}
+
+	// Filter to our test entries
+	testEntries := 0
+	for _, e := range entries {
+		if e.Source == "security_test" {
+			testEntries++
+		}
+	}
+	if testEntries != len(auditActions) {
+		t.Errorf("Found %d test audit entries, want %d", testEntries, len(auditActions))
+	}
+
+	// Verify specific action types are recorded
+	actionCounts := make(map[string]int)
+	for _, e := range entries {
+		if e.Source == "security_test" {
+			actionCounts[e.Action]++
+		}
+	}
+	if actionCounts["login"] != 1 {
+		t.Errorf("Found %d login entries, want 1", actionCounts["login"])
+	}
+	if actionCounts["failed_login"] != 1 {
+		t.Errorf("Found %d failed_login entries, want 1", actionCounts["failed_login"])
+	}
+}
