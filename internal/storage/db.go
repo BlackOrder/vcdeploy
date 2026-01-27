@@ -418,6 +418,30 @@ func (db *DB) ListAuditLogs(ctx context.Context, limit int, offset int) ([]*Audi
 	return entries, rows.Err()
 }
 
+// ListAuditLogsSince returns audit log entries since the given time.
+func (db *DB) ListAuditLogsSince(ctx context.Context, since time.Time) ([]*AuditEntry, error) {
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, timestamp, source, user, action, resource, details, ip_address, result
+		FROM audit_logs WHERE timestamp >= ? ORDER BY timestamp DESC
+	`, since)
+	if err != nil {
+		return nil, fmt.Errorf("querying audit logs since %v: %w", since, err)
+	}
+	defer rows.Close()
+
+	var entries []*AuditEntry
+	for rows.Next() {
+		var entry AuditEntry
+		if err := rows.Scan(&entry.ID, &entry.Timestamp, &entry.Source, &entry.User,
+			&entry.Action, &entry.Resource, &entry.Details, &entry.IPAddress, &entry.Result); err != nil {
+			return nil, fmt.Errorf("scanning audit entry: %w", err)
+		}
+		entries = append(entries, &entry)
+	}
+
+	return entries, rows.Err()
+}
+
 // --- Secret operations ---
 
 // SetSecretEncrypted creates or updates a secret with pre-encrypted value.
