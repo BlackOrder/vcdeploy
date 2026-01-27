@@ -230,6 +230,19 @@ type SSHHostKey struct {
 	UpdatedAt   time.Time
 }
 
+// --- SSH Jump Server Model ---
+
+// SSHJumpServer represents a bastion/jump server for SSH connections.
+type SSHJumpServer struct {
+	ID        int64
+	Name      string
+	Host      string
+	Port      int
+	Username  string
+	SSHKeyID  *int64 // Optional foreign key to ssh_keys
+	CreatedAt time.Time
+}
+
 // --- Rate Limit Models ---
 
 // BlockedIP represents a blocked IP address.
