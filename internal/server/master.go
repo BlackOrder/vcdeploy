@@ -29,6 +29,7 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/services/hostkeys"
 	"github.com/BlackOrder/vcdeploy/internal/services/projects"
 	"github.com/BlackOrder/vcdeploy/internal/services/projecttypes"
+	"github.com/BlackOrder/vcdeploy/internal/services/provision"
 	"github.com/BlackOrder/vcdeploy/internal/services/secrets"
 	"github.com/BlackOrder/vcdeploy/internal/services/sessions"
 	"github.com/BlackOrder/vcdeploy/internal/services/settings"
@@ -70,6 +71,7 @@ type MasterServer struct {
 	agentService       services.AgentServicer
 	auditService       services.AuditServicer
 	hostKeyService     services.HostKeyServicer
+	provisionService   services.ProvisionServicer
 
 	// Webhook handling
 	webhookHandler *webhookHandlerAdapter
@@ -254,6 +256,7 @@ func (s *MasterServer) SetWebhookHandler(kms *security.KMS, processor webhooksha
 	s.agentService = agents.New(s.db)
 	s.auditService = audit.New(s.db)
 	s.hostKeyService = hostkeys.New(s.db)
+	s.provisionService = provision.New(s.db)
 
 	// Inject services into AgentServer if it exists
 	if s.agentServer != nil {
@@ -405,6 +408,22 @@ func (s *MasterServer) startHTTP() error {
 
 	// Audit API
 	mux.HandleFunc("/api/v1/audit", s.withAuth(s.handleAuditLogs))
+
+	// Host Keys API
+	mux.HandleFunc("/api/v1/hostkeys", s.withAuth(s.handleHostKeys))
+	mux.HandleFunc("/api/v1/hostkeys/", s.withAuth(s.handleHostKey))
+
+	// Jump Servers API
+	mux.HandleFunc("/api/v1/jumpservers", s.withAuth(s.handleJumpServers))
+	mux.HandleFunc("/api/v1/jumpservers/", s.withAuth(s.handleJumpServer))
+
+	// Blocked IPs API
+	mux.HandleFunc("/api/v1/blocked", s.withAuth(s.handleBlockedIPs))
+	mux.HandleFunc("/api/v1/blocked/", s.withAuth(s.handleBlockedIP))
+
+	// Provision API
+	mux.HandleFunc("/api/v1/provision", s.withAuth(s.handleProvisionJobs))
+	mux.HandleFunc("/api/v1/provision/", s.withAuth(s.handleProvisionJob))
 
 	// Webhooks
 	mux.HandleFunc("/webhook/github/", s.handleGitHubWebhook)

@@ -1,0 +1,484 @@
+package server
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/BlackOrder/vcdeploy/internal/storage"
+)
+
+// --- SSH Host Key API Tests ---
+
+func TestHandleHostKeys_List(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+	ctx := context.Background()
+
+	// Create some host keys
+	key1 := &storage.SSHHostKey{
+		Hostname:    "host1.example.com",
+		Port:        22,
+		KeyType:     "ssh-rsa",
+		PublicKey:   "AAAAB3...",
+		Fingerprint: "SHA256:...",
+		AddedBy:     "test",
+		CreatedAt:   time.Now(),
+	}
+	_ = server.hostKeyService.Create(ctx, key1)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/hostkeys", nil)
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleHostKeys(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var keys []*storage.SSHHostKey
+	if err := json.NewDecoder(rec.Body).Decode(&keys); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if len(keys) < 1 {
+		t.Error("expected at least one host key")
+	}
+}
+
+func TestHandleHostKeys_Create(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+
+	body := bytes.NewBufferString(`{
+		"hostname": "newhost.example.com",
+		"port": 22,
+		"key_type": "ssh-ed25519",
+		"public_key": "AAAAC3...",
+		"fingerprint": "SHA256:abc123",
+		"trusted": false
+	}`)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/hostkeys", body)
+	req.Header.Set("Content-Type", "application/json")
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleHostKeys(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+}
+
+func TestHandleHostKey_UpdateTrust(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+	ctx := context.Background()
+
+	// Create a host key
+	key := &storage.SSHHostKey{
+		Hostname:    "trusttest.example.com",
+		Port:        22,
+		KeyType:     "ssh-rsa",
+		PublicKey:   "AAAAB3...",
+		Fingerprint: "SHA256:...",
+		Trusted:     false,
+		AddedBy:     "test",
+		CreatedAt:   time.Now(),
+	}
+	_ = server.hostKeyService.Create(ctx, key)
+
+	body := bytes.NewBufferString(`{"trusted": true}`)
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/hostkeys/1", body)
+	req.Header.Set("Content-Type", "application/json")
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleHostKey(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+}
+
+// --- SSH Jump Server API Tests ---
+
+func TestHandleJumpServers_List(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+	ctx := context.Background()
+
+	// Create a jump server
+	js := &storage.SSHJumpServer{
+		Name:      "bastion-test",
+		Host:      "bastion.example.com",
+		Port:      22,
+		Username:  "jumpuser",
+		CreatedAt: time.Now(),
+	}
+	_ = server.db.CreateJumpServer(ctx, js)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/jumpservers", nil)
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleJumpServers(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var servers []*storage.SSHJumpServer
+	if err := json.NewDecoder(rec.Body).Decode(&servers); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if len(servers) < 1 {
+		t.Error("expected at least one jump server")
+	}
+}
+
+func TestHandleJumpServers_Create(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+
+	body := bytes.NewBufferString(`{
+		"name": "new-bastion",
+		"host": "newbastion.example.com",
+		"port": 22,
+		"username": "admin"
+	}`)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/jumpservers", body)
+	req.Header.Set("Content-Type", "application/json")
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleJumpServers(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+}
+
+func TestHandleJumpServer_Get(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+	ctx := context.Background()
+
+	// Create a jump server
+	js := &storage.SSHJumpServer{
+		Name:      "get-test-bastion",
+		Host:      "gettest.example.com",
+		Port:      22,
+		Username:  "testuser",
+		CreatedAt: time.Now(),
+	}
+	_ = server.db.CreateJumpServer(ctx, js)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/jumpservers/1", nil)
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleJumpServer(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+}
+
+func TestHandleJumpServer_Delete(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+	ctx := context.Background()
+
+	// Create a jump server
+	js := &storage.SSHJumpServer{
+		Name:      "delete-test-bastion",
+		Host:      "deltest.example.com",
+		Port:      22,
+		Username:  "deluser",
+		CreatedAt: time.Now(),
+	}
+	_ = server.db.CreateJumpServer(ctx, js)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/jumpservers/1", nil)
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleJumpServer(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+}
+
+// --- Blocked IPs API Tests ---
+
+func TestHandleBlockedIPs_List(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+	ctx := context.Background()
+
+	// Block an IP
+	block := &storage.BlockedIP{
+		IPAddress: "192.168.1.1",
+		Reason:    "test block",
+		BlockedAt: time.Now(),
+		ExpiresAt: time.Now().Add(24 * time.Hour),
+		BlockedBy: "test",
+	}
+	_ = server.db.BlockIP(ctx, block)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/blocked", nil)
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleBlockedIPs(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+}
+
+func TestHandleBlockedIPs_Block(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+
+	body := bytes.NewBufferString(`{
+		"ip_address": "10.0.0.1",
+		"reason": "automated test block",
+		"duration": "1h"
+	}`)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/blocked", body)
+	req.Header.Set("Content-Type", "application/json")
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleBlockedIPs(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+}
+
+func TestHandleBlockedIP_Unblock(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+	ctx := context.Background()
+
+	// Block an IP
+	block := &storage.BlockedIP{
+		IPAddress: "172.16.0.1",
+		Reason:    "test for unblock",
+		BlockedAt: time.Now(),
+		ExpiresAt: time.Now().Add(24 * time.Hour),
+		BlockedBy: "test",
+	}
+	_ = server.db.BlockIP(ctx, block)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/blocked/172.16.0.1", nil)
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleBlockedIP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+}
+
+// --- Provision API Tests ---
+
+func TestHandleProvisionJobs_List(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+	ctx := context.Background()
+
+	// Create a provision job
+	job := &storage.ProvisionJob{
+		TargetHost: "target.example.com",
+		TargetPort: 22,
+		TargetUser: "root",
+		Status:     "pending",
+	}
+	_ = server.provisionService.CreateJob(ctx, job)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/provision", nil)
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleProvisionJobs(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+}
+
+func TestHandleProvisionJobs_Create(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+
+	body := bytes.NewBufferString(`{
+		"target_host": "newtarget.example.com",
+		"target_port": 22,
+		"target_user": "admin"
+	}`)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/provision", body)
+	req.Header.Set("Content-Type", "application/json")
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleProvisionJobs(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+}
+
+func TestHandleProvisionJob_Get(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+	ctx := context.Background()
+
+	// Create a provision job
+	job := &storage.ProvisionJob{
+		TargetHost: "gettarget.example.com",
+		TargetPort: 22,
+		TargetUser: "root",
+		Status:     "pending",
+	}
+	_ = server.provisionService.CreateJob(ctx, job)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/provision/"+job.ID, nil)
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleProvisionJob(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+}
+
+func TestHandleProvisionJob_Cancel(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+	ctx := context.Background()
+
+	// Create a provision job
+	job := &storage.ProvisionJob{
+		TargetHost: "canceltarget.example.com",
+		TargetPort: 22,
+		TargetUser: "root",
+		Status:     "pending",
+	}
+	_ = server.provisionService.CreateJob(ctx, job)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/provision/"+job.ID, nil)
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleProvisionJob(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+}
+
+// --- Authorization Tests for New Endpoints ---
+
+func TestNewEndpoints_RequireAdminAccess(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	ctx := context.Background()
+
+	// Create a viewer user (non-admin)
+	viewer := &storage.User{
+		Username:     "viewer_test",
+		PasswordHash: "hash",
+		Email:        "viewer@example.com",
+		Role:         "viewer",
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+	_ = server.db.CreateUser(ctx, viewer)
+
+	endpoints := []struct {
+		method string
+		path   string
+	}{
+		{http.MethodGet, "/api/v1/blocked"},
+		{http.MethodPost, "/api/v1/blocked"},
+		{http.MethodGet, "/api/v1/provision"},
+		{http.MethodPost, "/api/v1/provision"},
+	}
+
+	for _, ep := range endpoints {
+		t.Run(ep.method+" "+ep.path, func(t *testing.T) {
+			var body *bytes.Buffer
+			if ep.method == http.MethodPost {
+				body = bytes.NewBufferString(`{}`)
+			}
+
+			var req *http.Request
+			if body != nil {
+				req = httptest.NewRequest(ep.method, ep.path, body)
+				req.Header.Set("Content-Type", "application/json")
+			} else {
+				req = httptest.NewRequest(ep.method, ep.path, nil)
+			}
+			req = requestWithAdminContext(req, viewer.ID)
+			rec := httptest.NewRecorder()
+
+			switch ep.path {
+			case "/api/v1/blocked":
+				server.handleBlockedIPs(rec, req)
+			case "/api/v1/provision":
+				server.handleProvisionJobs(rec, req)
+			}
+
+			// Should be forbidden for viewer
+			if rec.Code != http.StatusForbidden {
+				t.Errorf("expected 403 Forbidden for %s %s, got %d", ep.method, ep.path, rec.Code)
+			}
+		})
+	}
+}
