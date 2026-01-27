@@ -3,7 +3,9 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/BlackOrder/vcdeploy/internal/config"
@@ -11,6 +13,88 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"go.uber.org/zap"
 )
+
+// Role hierarchy: admin > user > viewer
+// admin can do everything
+// user can read and write (create/update/delete non-admin resources)
+// viewer can only read
+
+// RoleLevel returns the numeric level for a role (higher = more permissions).
+func RoleLevel(role string) int {
+	switch role {
+	case "admin":
+		return 3
+	case "user":
+		return 2
+	case "viewer":
+		return 1
+	default:
+		return 0
+	}
+}
+
+// APIScope represents an API operation scope.
+type APIScope string
+
+const (
+	// ScopeRead allows read-only operations.
+	ScopeRead APIScope = "read"
+	// ScopeWrite allows create/update/delete operations.
+	ScopeWrite APIScope = "write"
+	// ScopeAdmin allows all operations including user management.
+	ScopeAdmin APIScope = "admin"
+)
+
+// Context key for API key object
+const contextKeyAPIKey contextKey = "apiKey"
+
+// WithAPIKeyContext adds the API key to the request context.
+func WithAPIKeyContext(ctx context.Context, key *storage.APIKey) context.Context {
+	return context.WithValue(ctx, contextKeyAPIKey, key)
+}
+
+// GetAPIKeyFromContext retrieves the API key from context.
+func GetAPIKeyFromContext(ctx context.Context) (*storage.APIKey, bool) {
+	key, ok := ctx.Value(contextKeyAPIKey).(*storage.APIKey)
+	return key, ok
+}
+
+// parseScopes parses the scopes JSON from an API key.
+func parseScopes(key *storage.APIKey) ([]string, error) {
+	if key == nil || key.Scopes == "" {
+		return nil, nil
+	}
+	var scopes []string
+	if err := json.Unmarshal([]byte(key.Scopes), &scopes); err != nil {
+		return nil, err
+	}
+	return scopes, nil
+}
+
+// hasScope checks if the API key has the required scope.
+func hasScope(key *storage.APIKey, required APIScope) bool {
+	scopes, err := parseScopes(key)
+	if err != nil {
+		return false
+	}
+
+	// Empty scopes means full access (for backward compatibility)
+	if len(scopes) == 0 {
+		return true
+	}
+
+	// admin scope implies all other scopes
+	if slices.Contains(scopes, string(ScopeAdmin)) {
+		return true
+	}
+
+	// write scope implies read scope
+	if required == ScopeRead && slices.Contains(scopes, string(ScopeWrite)) {
+		return true
+	}
+
+	return slices.Contains(scopes, string(required))
+}
 
 // EnforcementMiddleware provides policy enforcement for HTTP handlers.
 type EnforcementMiddleware struct {
@@ -137,6 +221,124 @@ func (m *EnforcementMiddleware) Require2FAForAdminFunc(next http.HandlerFunc) ht
 	}
 }
 
+// RequireRole returns middleware that requires an exact role.
+// Use RequireMinRole for hierarchical role checks.
+func (m *EnforcementMiddleware) RequireRole(role string) func(http.HandlerFunc) http.HandlerFunc {
+	return func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			userID, ok := GetUserIDFromContext(r.Context())
+			if !ok {
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+
+			user, err := m.userService.GetByID(r.Context(), userID)
+			if err != nil {
+				m.logger.Error("Failed to get user for role check", zap.Int64("userID", userID), zap.Error(err))
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
+				return
+			}
+
+			if user.Role != role {
+				m.logger.Warn("User role mismatch",
+					zap.String("username", user.Username),
+					zap.String("required", role),
+					zap.String("actual", user.Role),
+					zap.String("path", r.URL.Path),
+				)
+				http.Error(w, "Forbidden: insufficient permissions", http.StatusForbidden)
+				return
+			}
+
+			// Add user to context for downstream handlers
+			ctx := WithUserContext(r.Context(), user)
+			next(w, r.WithContext(ctx))
+		}
+	}
+}
+
+// RequireMinRole returns middleware that requires at least the specified role level.
+// Role hierarchy: admin > user > viewer
+func (m *EnforcementMiddleware) RequireMinRole(minRole string) func(http.HandlerFunc) http.HandlerFunc {
+	minLevel := RoleLevel(minRole)
+	return func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			userID, ok := GetUserIDFromContext(r.Context())
+			if !ok {
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+
+			user, err := m.userService.GetByID(r.Context(), userID)
+			if err != nil {
+				m.logger.Error("Failed to get user for role check", zap.Int64("userID", userID), zap.Error(err))
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
+				return
+			}
+
+			userLevel := RoleLevel(user.Role)
+			if userLevel < minLevel {
+				m.logger.Warn("User role insufficient",
+					zap.String("username", user.Username),
+					zap.String("minRequired", minRole),
+					zap.String("actual", user.Role),
+					zap.String("path", r.URL.Path),
+				)
+				http.Error(w, "Forbidden: insufficient permissions", http.StatusForbidden)
+				return
+			}
+
+			// Add user to context for downstream handlers
+			ctx := WithUserContext(r.Context(), user)
+			next(w, r.WithContext(ctx))
+		}
+	}
+}
+
+// RequireScope returns middleware that validates API key scope.
+// This should be applied after authentication middleware has set the API key in context.
+func (m *EnforcementMiddleware) RequireScope(scope APIScope) func(http.HandlerFunc) http.HandlerFunc {
+	return func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			// Get API key from context (set by auth middleware)
+			apiKey, ok := GetAPIKeyFromContext(r.Context())
+			if !ok {
+				// No API key in context - might be session auth, allow through
+				// Role-based checks will handle authorization
+				next(w, r)
+				return
+			}
+
+			if !hasScope(apiKey, scope) {
+				m.logger.Warn("API key scope insufficient",
+					zap.String("keyPrefix", apiKey.KeyPrefix),
+					zap.String("required", string(scope)),
+					zap.String("path", r.URL.Path),
+				)
+				http.Error(w, "Forbidden: API key lacks required scope", http.StatusForbidden)
+				return
+			}
+
+			next(w, r)
+		}
+	}
+}
+
+// RequireReadScope returns middleware requiring read scope.
+func (m *EnforcementMiddleware) RequireReadScope(next http.HandlerFunc) http.HandlerFunc {
+	return m.RequireScope(ScopeRead)(next)
+}
+
+// RequireWriteScope returns middleware requiring write scope.
+func (m *EnforcementMiddleware) RequireWriteScope(next http.HandlerFunc) http.HandlerFunc {
+	return m.RequireScope(ScopeWrite)(next)
+}
+
+// RequireAdminScope returns middleware requiring admin scope.
+func (m *EnforcementMiddleware) RequireAdminScope(next http.HandlerFunc) http.HandlerFunc {
+	return m.RequireScope(ScopeAdmin)(next)
+}
+
 // LogSizeEnforcer enforces deployment log size limits.
 type LogSizeEnforcer struct {
 	maxSizeBytes int64
@@ -216,3 +418,99 @@ func GetUserFromContext(ctx context.Context) (*storage.User, bool) {
 
 // Context key for full user object
 const contextKeyUser contextKey = "user"
+
+// --- In-handler authorization helpers ---
+
+// CheckMinRole checks if the user in context has at least the specified role.
+// Returns an error message and HTTP status code if unauthorized.
+func (m *EnforcementMiddleware) CheckMinRole(ctx context.Context, minRole string) (string, int, bool) {
+	userID, ok := GetUserIDFromContext(ctx)
+	if !ok {
+		return "Unauthorized", http.StatusUnauthorized, false
+	}
+
+	user, err := m.userService.GetByID(ctx, userID)
+	if err != nil {
+		m.logger.Error("Failed to get user for role check", zap.Int64("userID", userID), zap.Error(err))
+		return "Internal server error", http.StatusInternalServerError, false
+	}
+
+	if RoleLevel(user.Role) < RoleLevel(minRole) {
+		m.logger.Warn("User role insufficient",
+			zap.String("username", user.Username),
+			zap.String("minRequired", minRole),
+			zap.String("actual", user.Role),
+		)
+		return "Forbidden: insufficient permissions", http.StatusForbidden, false
+	}
+
+	return "", 0, true
+}
+
+// CheckScope checks if the API key in context has the required scope.
+// Returns an error message and HTTP status code if unauthorized.
+func (m *EnforcementMiddleware) CheckScope(ctx context.Context, scope APIScope) (string, int, bool) {
+	apiKey, ok := GetAPIKeyFromContext(ctx)
+	if !ok {
+		// No API key in context - might be session auth, allow through
+		return "", 0, true
+	}
+
+	if !hasScope(apiKey, scope) {
+		m.logger.Warn("API key scope insufficient",
+			zap.String("keyPrefix", apiKey.KeyPrefix),
+			zap.String("required", string(scope)),
+		)
+		return "Forbidden: API key lacks required scope", http.StatusForbidden, false
+	}
+
+	return "", 0, true
+}
+
+// CheckWriteAccess checks if the request has write access (user role + API scope).
+// Use for POST, PUT, PATCH, DELETE operations.
+func (m *EnforcementMiddleware) CheckWriteAccess(ctx context.Context) (string, int, bool) {
+	// Check API key scope
+	if msg, status, ok := m.CheckScope(ctx, ScopeWrite); !ok {
+		return msg, status, false
+	}
+
+	// Check user role (must be at least "user" to write)
+	if msg, status, ok := m.CheckMinRole(ctx, "user"); !ok {
+		return msg, status, false
+	}
+
+	return "", 0, true
+}
+
+// CheckAdminAccess checks if the request has admin access (admin role + admin scope).
+// Use for user management and system configuration.
+func (m *EnforcementMiddleware) CheckAdminAccess(ctx context.Context) (string, int, bool) {
+	// Check API key scope
+	if msg, status, ok := m.CheckScope(ctx, ScopeAdmin); !ok {
+		return msg, status, false
+	}
+
+	// Check user role
+	if msg, status, ok := m.CheckMinRole(ctx, "admin"); !ok {
+		return msg, status, false
+	}
+
+	return "", 0, true
+}
+
+// CheckReadAccess checks if the request has read access (viewer role + read scope).
+// Use for GET operations.
+func (m *EnforcementMiddleware) CheckReadAccess(ctx context.Context) (string, int, bool) {
+	// Check API key scope
+	if msg, status, ok := m.CheckScope(ctx, ScopeRead); !ok {
+		return msg, status, false
+	}
+
+	// Check user role (viewer can read)
+	if msg, status, ok := m.CheckMinRole(ctx, "viewer"); !ok {
+		return msg, status, false
+	}
+
+	return "", 0, true
+}

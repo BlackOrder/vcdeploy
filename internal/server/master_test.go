@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -86,12 +87,15 @@ func newTestServer(t *testing.T) *MasterServer {
 	server.auditService = audit.New(db)
 	server.hostKeyService = hostkeys.New(db)
 
+	// Re-initialize enforcement middleware with the userService now set
+	server.enforcementMiddleware = NewEnforcementMiddleware(cfg, server.userService, logger)
+
 	return server
 }
 
 // newTestServerWithAuth creates a test server with a test user, API key, and session.
-// Returns the server, the raw API key, and the session token.
-func newTestServerWithAuth(t *testing.T) (*MasterServer, string, string) {
+// Returns the server, the raw API key, the session token, and the user ID.
+func newTestServerWithAuth(t *testing.T) (*MasterServer, string, string, int64) {
 	t.Helper()
 
 	server := newTestServer(t)
@@ -110,14 +114,15 @@ func newTestServerWithAuth(t *testing.T) (*MasterServer, string, string) {
 		t.Fatalf("failed to create test user: %v", err)
 	}
 
-	// Create a test API key
+	// Create a test API key with all scopes
 	rawAPIKey := "test-api-key-12345"
 	hash := sha256.Sum256([]byte(rawAPIKey))
 	apiKey := &storage.APIKey{
 		UserID:    user.ID,
 		Name:      "test-key",
 		KeyHash:   hex.EncodeToString(hash[:]),
-		Scopes:    `["*"]`,
+		KeyPrefix: "test-api",
+		Scopes:    `["admin"]`,
 		CreatedAt: time.Now(),
 	}
 	if err := server.db.CreateAPIKey(ctx, apiKey); err != nil {
@@ -138,7 +143,33 @@ func newTestServerWithAuth(t *testing.T) (*MasterServer, string, string) {
 		t.Fatalf("failed to create test session: %v", err)
 	}
 
-	return server, rawAPIKey, sessionToken
+	return server, rawAPIKey, sessionToken, user.ID
+}
+
+// createTestAdminUser creates an admin user in the test server and returns their ID.
+// Use this when testing handlers that require authentication without full middleware.
+func createTestAdminUser(t *testing.T, server *MasterServer) int64 {
+	t.Helper()
+	ctx := context.Background()
+
+	user := &storage.User{
+		Username:     fmt.Sprintf("testadmin_%d", time.Now().UnixNano()),
+		PasswordHash: "test-hash",
+		Email:        fmt.Sprintf("admin_%d@example.com", time.Now().UnixNano()),
+		Role:         "admin",
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+	if err := server.db.CreateUser(ctx, user); err != nil {
+		t.Fatalf("failed to create test admin user: %v", err)
+	}
+	return user.ID
+}
+
+// requestWithAdminContext creates a request with admin user context for testing.
+func requestWithAdminContext(req *http.Request, userID int64) *http.Request {
+	ctx := context.WithValue(req.Context(), contextKeyUserID, userID)
+	return req.WithContext(ctx)
 }
 
 func TestNewMasterServer(t *testing.T) {
@@ -248,8 +279,10 @@ func TestHandleSecrets(t *testing.T) {
 	t.Parallel()
 
 	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/secrets", nil)
+	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
 	server.handleSecrets(rec, req)
@@ -263,8 +296,10 @@ func TestHandleAuditLogs(t *testing.T) {
 	t.Parallel()
 
 	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/audit", nil)
+	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
 	server.handleAuditLogs(rec, req)
@@ -322,7 +357,7 @@ func TestWithAuth_InvalidHeader(t *testing.T) {
 func TestWithAuth_ValidBearer(t *testing.T) {
 	t.Parallel()
 
-	server, apiKey, _ := newTestServerWithAuth(t)
+	server, apiKey, _, _ := newTestServerWithAuth(t)
 	called := false
 	handler := server.withAuth(func(w http.ResponseWriter, r *http.Request) {
 		called = true
@@ -368,7 +403,7 @@ func TestWithUIAuth_NoCookie(t *testing.T) {
 func TestWithUIAuth_ValidCookie(t *testing.T) {
 	t.Parallel()
 
-	server, _, sessionToken := newTestServerWithAuth(t)
+	server, _, sessionToken, _ := newTestServerWithAuth(t)
 	called := false
 	handler := server.withUIAuth(func(w http.ResponseWriter, r *http.Request) {
 		called = true
@@ -688,11 +723,13 @@ func TestHandleSecretsPost(t *testing.T) {
 	t.Parallel()
 
 	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
 
 	// Test creating a secret - should succeed now that services are initialized
 	body := bytes.NewBufferString(`{"project":"test-project","scope":"env","key":"TEST_KEY","value":"secret-value"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets", body)
 	req.Header.Set("Content-Type", "application/json")
+	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
 	server.handleSecrets(rec, req)
@@ -707,11 +744,13 @@ func TestHandleSecretsPostValidation(t *testing.T) {
 	t.Parallel()
 
 	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
 
 	// Test validation - missing project
 	body := bytes.NewBufferString(`{"scope":"env","key":"TEST_KEY","value":"secret-value"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets", body)
 	req.Header.Set("Content-Type", "application/json")
+	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
 	server.handleSecrets(rec, req)
@@ -724,6 +763,7 @@ func TestHandleSecretsPostValidation(t *testing.T) {
 	body = bytes.NewBufferString(`{"project":"test-project","scope":"env","value":"secret-value"}`)
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/secrets", body)
 	req.Header.Set("Content-Type", "application/json")
+	req = requestWithAdminContext(req, adminUserID)
 	rec = httptest.NewRecorder()
 
 	server.handleSecrets(rec, req)
@@ -759,9 +799,11 @@ func TestHandleProjectTypes(t *testing.T) {
 	t.Parallel()
 
 	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
 
 	// Test listing (empty)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/project-types", nil)
+	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
 	server.handleProjectTypes(rec, req)
@@ -780,11 +822,13 @@ func TestHandleProjectTypesPost(t *testing.T) {
 	t.Parallel()
 
 	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
 
 	// Create a project type
 	body := bytes.NewBufferString(`{"name":"nodejs","description":"Node.js application","build_cmd":"npm install && npm run build"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/project-types", body)
 	req.Header.Set("Content-Type", "application/json")
+	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
 	server.handleProjectTypes(rec, req)
@@ -795,6 +839,7 @@ func TestHandleProjectTypesPost(t *testing.T) {
 
 	// Verify it was created
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/project-types", nil)
+	req = requestWithAdminContext(req, adminUserID)
 	rec = httptest.NewRecorder()
 	server.handleProjectTypes(rec, req)
 
@@ -817,6 +862,7 @@ func TestHandleProjectType(t *testing.T) {
 	t.Parallel()
 
 	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
 
 	// Create a project type directly in DB
 	pt := &storage.ProjectType{
@@ -831,6 +877,7 @@ func TestHandleProjectType(t *testing.T) {
 
 	// Test GET single project type - use correct path so handler can extract name
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/project-types/python", nil)
+	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
 	server.handleProjectType(rec, req)
@@ -853,6 +900,7 @@ func TestHandleProjectTypeDelete(t *testing.T) {
 	t.Parallel()
 
 	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
 
 	// Create a project type
 	pt := &storage.ProjectType{
@@ -866,6 +914,7 @@ func TestHandleProjectTypeDelete(t *testing.T) {
 
 	// Delete it
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/project-types/delete-me", nil)
+	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
 	server.handleProjectType(rec, req)
@@ -924,6 +973,7 @@ func TestSecretsFilterByProject(t *testing.T) {
 	t.Parallel()
 
 	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
 	ctx := context.Background()
 
 	// Create secrets for different projects
@@ -932,6 +982,7 @@ func TestSecretsFilterByProject(t *testing.T) {
 
 	// Filter by project-a
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/secrets?project=project-a", nil)
+	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
 	server.handleSecrets(rec, req)
@@ -1193,7 +1244,7 @@ func TestUIAPIKeysPage(t *testing.T) {
 func TestWithAuth_ValidXAPIKey(t *testing.T) {
 	t.Parallel()
 
-	server, apiKey, _ := newTestServerWithAuth(t)
+	server, apiKey, _, _ := newTestServerWithAuth(t)
 	called := false
 	handler := server.withAuth(func(w http.ResponseWriter, r *http.Request) {
 		called = true

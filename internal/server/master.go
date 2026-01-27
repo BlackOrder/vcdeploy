@@ -772,14 +772,15 @@ func (s *MasterServer) withAuth(handler http.HandlerFunc) http.HandlerFunc {
 
 		if strings.HasPrefix(auth, "Bearer ") {
 			token := strings.TrimPrefix(auth, "Bearer ")
-			userID, err := s.validateAPIKey(r.Context(), token)
+			apiKey, userID, err := s.validateAPIKey(r.Context(), token)
 			if err != nil {
 				s.logger.Debug("API key validation failed", zap.Error(err))
 				http.Error(w, "Invalid token", http.StatusUnauthorized)
 				return
 			}
-			// Add user ID to context for downstream handlers
+			// Add user ID and API key to context for downstream handlers
 			ctx := context.WithValue(r.Context(), contextKeyUserID, userID)
+			ctx = WithAPIKeyContext(ctx, apiKey)
 			handler(w, r.WithContext(ctx))
 			return
 		} else {
@@ -810,6 +811,41 @@ func (s *MasterServer) withUIAuth(handler http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// withAuthAndMinRole combines authentication with minimum role requirement.
+// Role hierarchy: admin > user > viewer
+func (s *MasterServer) withAuthAndMinRole(minRole string, handler http.HandlerFunc) http.HandlerFunc {
+	return s.withAuth(s.enforcementMiddleware.RequireMinRole(minRole)(handler))
+}
+
+// withAuthAndScope combines authentication with API scope requirement.
+func (s *MasterServer) withAuthAndScope(scope APIScope, handler http.HandlerFunc) http.HandlerFunc {
+	return s.withAuth(s.enforcementMiddleware.RequireScope(scope)(handler))
+}
+
+// withAuthReadOnly combines authentication with read scope for API keys.
+func (s *MasterServer) withAuthReadOnly(handler http.HandlerFunc) http.HandlerFunc {
+	return s.withAuthAndScope(ScopeRead, handler)
+}
+
+// withAuthWrite combines authentication with write scope for API keys.
+func (s *MasterServer) withAuthWrite(handler http.HandlerFunc) http.HandlerFunc {
+	return s.withAuthAndScope(ScopeWrite, handler)
+}
+
+// withAuthAdmin combines authentication with admin scope and admin role.
+func (s *MasterServer) withAuthAdmin(handler http.HandlerFunc) http.HandlerFunc {
+	return s.withAuth(
+		s.enforcementMiddleware.RequireScope(ScopeAdmin)(
+			s.enforcementMiddleware.RequireMinRole("admin")(handler),
+		),
+	)
+}
+
+// withUIAuthAndMinRole combines UI authentication with minimum role requirement.
+func (s *MasterServer) withUIAuthAndMinRole(minRole string, handler http.HandlerFunc) http.HandlerFunc {
+	return s.withUIAuth(s.enforcementMiddleware.RequireMinRole(minRole)(handler))
+}
+
 // Context key for user ID
 type contextKey string
 
@@ -821,24 +857,24 @@ func GetUserIDFromContext(ctx context.Context) (int64, bool) {
 	return userID, ok
 }
 
-// validateAPIKey validates an API key and returns the user ID if valid.
-func (s *MasterServer) validateAPIKey(ctx context.Context, key string) (int64, error) {
+// validateAPIKey validates an API key and returns the API key object and user ID if valid.
+func (s *MasterServer) validateAPIKey(ctx context.Context, key string) (*storage.APIKey, int64, error) {
 	if key == "" {
-		return 0, fmt.Errorf("empty API key")
+		return nil, 0, fmt.Errorf("empty API key")
 	}
 
 	// Look up using API key service
 	apiKey, err := s.apiKeyService.GetByRawKey(ctx, key)
 	if errors.Is(err, storage.ErrNotFound) {
-		return 0, fmt.Errorf("API key not found")
+		return nil, 0, fmt.Errorf("API key not found")
 	}
 	if err != nil {
-		return 0, fmt.Errorf("database error: %w", err)
+		return nil, 0, fmt.Errorf("database error: %w", err)
 	}
 
 	// Check if valid
 	if !apiKey.IsValid() {
-		return 0, fmt.Errorf("API key expired or revoked")
+		return nil, 0, fmt.Errorf("API key expired or revoked")
 	}
 
 	// Update last used timestamp (async to not slow down request)
@@ -853,7 +889,7 @@ func (s *MasterServer) validateAPIKey(ctx context.Context, key string) (int64, e
 		}
 	}()
 
-	return apiKey.UserID, nil
+	return apiKey, apiKey.UserID, nil
 }
 
 // validateSession validates a session token and returns the user ID if valid.
@@ -920,6 +956,12 @@ func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
+		// Read access: viewer role + read scope
+		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
+			http.Error(w, msg, status)
+			return
+		}
+
 		if s.secretService == nil {
 			s.jsonError(w, http.StatusInternalServerError, "Secret service not configured")
 			return
@@ -969,6 +1011,12 @@ func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
 		s.jsonResponse(w, result)
 
 	case http.MethodPost:
+		// Write access: user role + write scope
+		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
+			http.Error(w, msg, status)
+			return
+		}
+
 		// Create or update a secret - limit body size to 1MB
 		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 		var req struct {
@@ -1050,9 +1098,16 @@ func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
 
 // handleProjectTypes handles GET/POST for /api/v1/project-types.
 func (s *MasterServer) handleProjectTypes(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	switch r.Method {
 	case http.MethodGet:
-		ctx := r.Context()
+		// Read access: viewer role + read scope
+		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
+			http.Error(w, msg, status)
+			return
+		}
+
 		types, err := s.projectTypeService.List(ctx)
 		if err != nil {
 			s.logger.Error("Failed to list project types", zap.Error(err))
@@ -1062,6 +1117,12 @@ func (s *MasterServer) handleProjectTypes(w http.ResponseWriter, r *http.Request
 		s.jsonResponse(w, types)
 
 	case http.MethodPost:
+		// Write access: user role + write scope
+		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
+			http.Error(w, msg, status)
+			return
+		}
+
 		// Limit body size to 1MB
 		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 		var req struct {
@@ -1080,7 +1141,6 @@ func (s *MasterServer) handleProjectTypes(w http.ResponseWriter, r *http.Request
 			return
 		}
 
-		ctx := r.Context()
 		pt, err := s.projectTypeService.Create(ctx, req.Name, req.Description, req.BuildCmd)
 		if err != nil {
 			s.logger.Error("Failed to create project type", zap.Error(err))
@@ -1108,9 +1168,16 @@ func (s *MasterServer) handleProjectType(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	ctx := r.Context()
+
 	switch r.Method {
 	case http.MethodGet:
-		ctx := r.Context()
+		// Read access: viewer role + read scope
+		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
+			http.Error(w, msg, status)
+			return
+		}
+
 		pt, err := s.projectTypeService.GetByName(ctx, name)
 		if err != nil {
 			s.logger.Error("Failed to get project type", zap.Error(err))
@@ -1130,13 +1197,18 @@ func (s *MasterServer) handleProjectType(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
+		// Write access: user role + write scope
+		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
+			http.Error(w, msg, status)
+			return
+		}
+
 		pt := &storage.ProjectType{
 			Name:        name,
 			Description: req.Description,
 			BuildCmd:    req.BuildCmd,
 		}
 
-		ctx := r.Context()
 		if err := s.projectTypeService.Update(ctx, pt); err != nil {
 			s.logger.Error("Failed to update project type", zap.Error(err))
 			s.jsonError(w, http.StatusInternalServerError, "Failed to update project type")
@@ -1147,7 +1219,12 @@ func (s *MasterServer) handleProjectType(w http.ResponseWriter, r *http.Request)
 		s.jsonResponse(w, map[string]string{"status": "updated"})
 
 	case http.MethodDelete:
-		ctx := r.Context()
+		// Write access: user role + write scope
+		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
+			http.Error(w, msg, status)
+			return
+		}
+
 		if err := s.projectTypeService.Delete(ctx, name); err != nil {
 			s.logger.Error("Failed to delete project type", zap.Error(err))
 			s.jsonError(w, http.StatusInternalServerError, "Failed to delete project type")
@@ -1165,6 +1242,14 @@ func (s *MasterServer) handleProjectType(w http.ResponseWriter, r *http.Request)
 func (s *MasterServer) handleAuditLogs(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	ctx := r.Context()
+
+	// Admin-only: viewing audit logs
+	if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
+		http.Error(w, msg, status)
 		return
 	}
 
