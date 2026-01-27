@@ -21,7 +21,8 @@ type SecurityMiddleware struct {
 	csrfMu     sync.RWMutex
 
 	// stopCh signals the cleanup goroutine to stop
-	stopCh chan struct{}
+	stopCh   chan struct{}
+	stopOnce sync.Once
 }
 
 // csrfToken represents a CSRF token with expiry.
@@ -321,8 +322,11 @@ func (sm *SecurityMiddleware) cleanupExpiredTokens() {
 }
 
 // Stop stops the cleanup goroutine. Call this on server shutdown.
+// Stop is idempotent and can be called multiple times safely.
 func (sm *SecurityMiddleware) Stop() {
-	close(sm.stopCh)
+	sm.stopOnce.Do(func() {
+		close(sm.stopCh)
+	})
 }
 
 // GetCSRFToken returns the current CSRF token for a session.

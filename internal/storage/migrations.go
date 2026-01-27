@@ -154,10 +154,10 @@ var migrations = []Migration{
 				CREATE TABLE IF NOT EXISTS deployment_logs (
 					id INTEGER PRIMARY KEY AUTOINCREMENT,
 					deployment_id TEXT NOT NULL,
-					timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
 					level TEXT NOT NULL,
 					message TEXT NOT NULL,
 					source TEXT,
+					created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 					FOREIGN KEY (deployment_id) REFERENCES deployments(id) ON DELETE CASCADE
 				);
 

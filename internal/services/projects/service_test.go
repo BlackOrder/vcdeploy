@@ -361,7 +361,7 @@ func TestService_DeleteWithCleanup(t *testing.T) {
 	}
 
 	// Add a deployment log
-	_, err = conn.ExecContext(ctx, `INSERT INTO deployment_logs (deployment_id, level, message, timestamp) VALUES ('deploy-1', 'info', 'test log', datetime('now'))`)
+	_, err = conn.ExecContext(ctx, `INSERT INTO deployment_logs (deployment_id, level, message, created_at) VALUES ('deploy-1', 'info', 'test log', datetime('now'))`)
 	if err != nil {
 		t.Fatalf("Failed to insert deployment log: %v", err)
 	}
@@ -486,7 +486,7 @@ func TestService_DeleteWithCleanup_MultipleDeployments(t *testing.T) {
 
 		// Add logs for each deployment
 		for j := 1; j <= 2; j++ {
-			_, err = conn.ExecContext(ctx, `INSERT INTO deployment_logs (deployment_id, level, message, timestamp) VALUES (?, 'info', 'log message', datetime('now'))`, deployID)
+			_, err = conn.ExecContext(ctx, `INSERT INTO deployment_logs (deployment_id, level, message, created_at) VALUES (?, 'info', 'log message', datetime('now'))`, deployID)
 			if err != nil {
 				t.Fatalf("Failed to insert log for deployment %d: %v", i, err)
 			}

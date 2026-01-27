@@ -271,7 +271,7 @@ func (db *DB) DeleteAgent(ctx context.Context, id string) error {
 // --- Deployment operations ---
 
 // CreateDeployment creates a new deployment record.
-func (db *DB) CreateDeployment(ctx context.Context, d *Deployment) error {
+func (db *DB) CreateDeployment(ctx context.Context, d *DeploymentRecord) error {
 	_, err := db.conn.ExecContext(ctx, `
 		INSERT INTO deployments (id, project, target, branch, commit_hash, status, triggered_by, trigger_source)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -280,7 +280,7 @@ func (db *DB) CreateDeployment(ctx context.Context, d *Deployment) error {
 }
 
 // UpdateDeployment updates a deployment record.
-func (db *DB) UpdateDeployment(ctx context.Context, d *Deployment) error {
+func (db *DB) UpdateDeployment(ctx context.Context, d *DeploymentRecord) error {
 	_, err := db.conn.ExecContext(ctx, `
 		UPDATE deployments SET
 			status = ?, release_number = ?, completed_at = ?, error_message = ?
@@ -290,8 +290,8 @@ func (db *DB) UpdateDeployment(ctx context.Context, d *Deployment) error {
 }
 
 // GetDeployment retrieves a deployment by ID.
-func (db *DB) GetDeployment(ctx context.Context, id string) (*Deployment, error) {
-	var d Deployment
+func (db *DB) GetDeployment(ctx context.Context, id string) (*DeploymentRecord, error) {
+	var d DeploymentRecord
 	var completedAt sql.NullTime
 	var releaseNumber sql.NullInt64
 	var commitHash, triggeredBy, triggerSource, errorMessage sql.NullString
@@ -1323,7 +1323,7 @@ func (db *DB) DeleteUser(ctx context.Context, id int64) error {
 // --- Additional Deployment operations ---
 
 // ListDeploymentsRecent returns recent deployments.
-func (db *DB) ListDeploymentsRecent(ctx context.Context, limit int) ([]*Deployment, error) {
+func (db *DB) ListDeploymentsRecent(ctx context.Context, limit int) ([]*DeploymentRecord, error) {
 	rows, err := db.conn.QueryContext(ctx, `
 		SELECT id, project, target, branch, commit_hash, status, release_number,
 		       started_at, completed_at, triggered_by, trigger_source, error_message
@@ -1336,9 +1336,9 @@ func (db *DB) ListDeploymentsRecent(ctx context.Context, limit int) ([]*Deployme
 	}
 	defer rows.Close()
 
-	var deployments []*Deployment
+	var deployments []*DeploymentRecord
 	for rows.Next() {
-		var d Deployment
+		var d DeploymentRecord
 		var completedAt sql.NullTime
 		var releaseNumber sql.NullInt64
 		var commitHash, triggeredBy, triggerSource, errorMessage sql.NullString

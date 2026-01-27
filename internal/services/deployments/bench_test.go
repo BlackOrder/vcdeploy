@@ -149,9 +149,8 @@ func BenchmarkService_CountByStatus(b *testing.B) {
 	}
 }
 
-// BenchmarkService_CreateLog is skipped due to schema mismatch in test DB.
+// BenchmarkService_CreateLog benchmarks deployment log creation.
 func BenchmarkService_CreateLog(b *testing.B) {
-	b.Skip("Skipped: deployment_logs schema mismatch in current migrations")
 	db, cleanup := testutil.SetupBenchDB(b)
 	defer cleanup()
 
@@ -192,9 +191,8 @@ func BenchmarkService_CreateLog(b *testing.B) {
 	}
 }
 
-// BenchmarkService_ListLogs is skipped due to schema mismatch in test DB.
+// BenchmarkService_ListLogs benchmarks deployment log listing.
 func BenchmarkService_ListLogs(b *testing.B) {
-	b.Skip("Skipped: deployment_logs schema mismatch in current migrations")
 	db, cleanup := testutil.SetupBenchDB(b)
 	defer cleanup()
 

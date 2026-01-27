@@ -348,7 +348,7 @@ func TestCreateDeployment(t *testing.T) {
 
 	ctx := context.Background()
 
-	deployment := &Deployment{
+	deployment := &DeploymentRecord{
 		ID:            "deploy-001",
 		Project:       "myproject",
 		Target:        "production",
@@ -373,7 +373,7 @@ func TestGetDeployment(t *testing.T) {
 
 	// Create deployment with release_number set to avoid NULL scan issue
 	// Note: This tests the workaround; the real fix should be in GetDeployment to handle NULLs
-	deployment := &Deployment{
+	deployment := &DeploymentRecord{
 		ID:            "deploy-002",
 		Project:       "testproject",
 		Target:        "staging",
@@ -442,7 +442,7 @@ func TestUpdateDeployment(t *testing.T) {
 	ctx := context.Background()
 
 	// Create deployment
-	deployment := &Deployment{
+	deployment := &DeploymentRecord{
 		ID:      "deploy-003",
 		Project: "updateproject",
 		Target:  "production",
@@ -1855,22 +1855,140 @@ func TestHasSettings(t *testing.T) {
 }
 
 // --- Deployment Logs Tests ---
-// Note: These tests work around schema/code mismatch by using direct SQL.
-// The code uses 'created_at' column but the schema uses 'timestamp'.
+// Schema has been fixed to use created_at column.
 
 func TestCreateDeploymentLog(t *testing.T) {
-	// Skip because there's a schema/code mismatch: code uses 'created_at' but schema uses 'timestamp'
-	t.Skip("Schema/code mismatch: code uses 'created_at' but schema uses 'timestamp'")
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// First create a deployment
+	deployment := &DeploymentRecord{
+		ID:            "deploy-log-test",
+		Project:       "test-project",
+		Target:        "prod",
+		Branch:        "main",
+		Status:        "running",
+		ReleaseNumber: 1,
+		StartedAt:     time.Now(),
+		TriggeredBy:   "test",
+		TriggerSource: "manual",
+	}
+	if err := db.CreateDeployment(ctx, deployment); err != nil {
+		t.Fatalf("CreateDeployment() error = %v", err)
+	}
+
+	// Create a deployment log
+	log := &DeploymentLog{
+		DeploymentID: deployment.ID,
+		Level:        "info",
+		Message:      "Test log message",
+		Source:       "test",
+		CreatedAt:    time.Now(),
+	}
+
+	err := db.CreateDeploymentLog(ctx, log)
+	if err != nil {
+		t.Fatalf("CreateDeploymentLog() error = %v", err)
+	}
 }
 
 func TestListDeploymentLogs(t *testing.T) {
-	// Skip because there's a schema/code mismatch: code uses 'created_at' but schema uses 'timestamp'
-	t.Skip("Schema/code mismatch: code uses 'created_at' but schema uses 'timestamp'")
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// First create a deployment
+	deployment := &DeploymentRecord{
+		ID:            "deploy-list-logs",
+		Project:       "test-project",
+		Target:        "prod",
+		Branch:        "main",
+		Status:        "running",
+		ReleaseNumber: 1,
+		StartedAt:     time.Now(),
+		TriggeredBy:   "test",
+		TriggerSource: "manual",
+	}
+	if err := db.CreateDeployment(ctx, deployment); err != nil {
+		t.Fatalf("CreateDeployment() error = %v", err)
+	}
+
+	// Create multiple logs
+	for i := 0; i < 3; i++ {
+		log := &DeploymentLog{
+			DeploymentID: deployment.ID,
+			Level:        "info",
+			Message:      "Log message " + string(rune('A'+i)),
+			Source:       "test",
+			CreatedAt:    time.Now().Add(time.Duration(i) * time.Second),
+		}
+		if err := db.CreateDeploymentLog(ctx, log); err != nil {
+			t.Fatalf("CreateDeploymentLog() error = %v", err)
+		}
+	}
+
+	logs, err := db.ListDeploymentLogs(ctx, deployment.ID)
+	if err != nil {
+		t.Fatalf("ListDeploymentLogs() error = %v", err)
+	}
+	if len(logs) != 3 {
+		t.Errorf("ListDeploymentLogs() returned %d logs, want 3", len(logs))
+	}
 }
 
 func TestListDeploymentLogsAfter(t *testing.T) {
-	// Skip because there's a schema/code mismatch: code uses 'created_at' but schema uses 'timestamp'
-	t.Skip("Schema/code mismatch: code uses 'created_at' but schema uses 'timestamp'")
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// First create a deployment
+	deployment := &DeploymentRecord{
+		ID:            "deploy-logs-after",
+		Project:       "test-project",
+		Target:        "prod",
+		Branch:        "main",
+		Status:        "running",
+		ReleaseNumber: 1,
+		StartedAt:     time.Now(),
+		TriggeredBy:   "test",
+		TriggerSource: "manual",
+	}
+	if err := db.CreateDeployment(ctx, deployment); err != nil {
+		t.Fatalf("CreateDeployment() error = %v", err)
+	}
+
+	// Create multiple logs
+	for i := 0; i < 5; i++ {
+		log := &DeploymentLog{
+			DeploymentID: deployment.ID,
+			Level:        "info",
+			Message:      "Log message " + string(rune('A'+i)),
+			Source:       "test",
+			CreatedAt:    time.Now().Add(time.Duration(i) * time.Second),
+		}
+		if err := db.CreateDeploymentLog(ctx, log); err != nil {
+			t.Fatalf("CreateDeploymentLog() error = %v", err)
+		}
+	}
+
+	// Get all logs to find the ID of the 3rd one
+	allLogs, _ := db.ListDeploymentLogs(ctx, deployment.ID)
+	if len(allLogs) < 3 {
+		t.Fatalf("Expected at least 3 logs, got %d", len(allLogs))
+	}
+	afterID := allLogs[2].ID
+
+	logs, err := db.ListDeploymentLogsAfter(ctx, deployment.ID, afterID)
+	if err != nil {
+		t.Fatalf("ListDeploymentLogsAfter() error = %v", err)
+	}
+	if len(logs) != 2 {
+		t.Errorf("ListDeploymentLogsAfter() returned %d logs, want 2", len(logs))
+	}
 }
 
 // --- Delete Agent Tests ---
@@ -2456,8 +2574,50 @@ func TestCleanupOldDeployments(t *testing.T) {
 }
 
 func TestCleanupOldDeploymentLogs(t *testing.T) {
-	// Skip because there's a schema/code mismatch: code uses 'created_at' but schema uses 'timestamp'
-	t.Skip("Schema/code mismatch: code uses 'created_at' but schema uses 'timestamp'")
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// First create a deployment
+	deployment := &DeploymentRecord{
+		ID:            "deploy-cleanup-logs",
+		Project:       "test-project",
+		Target:        "prod",
+		Branch:        "main",
+		Status:        "completed",
+		ReleaseNumber: 1,
+		StartedAt:     time.Now().Add(-48 * time.Hour),
+		TriggeredBy:   "test",
+		TriggerSource: "manual",
+	}
+	completedAt := time.Now().Add(-47 * time.Hour)
+	deployment.CompletedAt = &completedAt
+	if err := db.CreateDeployment(ctx, deployment); err != nil {
+		t.Fatalf("CreateDeployment() error = %v", err)
+	}
+
+	// Create an old log
+	log := &DeploymentLog{
+		DeploymentID: deployment.ID,
+		Level:        "info",
+		Message:      "Old log message",
+		Source:       "test",
+		CreatedAt:    time.Now().Add(-48 * time.Hour),
+	}
+	if err := db.CreateDeploymentLog(ctx, log); err != nil {
+		t.Fatalf("CreateDeploymentLog() error = %v", err)
+	}
+
+	// Cleanup logs older than 24 hours
+	cutoff := time.Now().Add(-24 * time.Hour)
+	deleted, err := db.CleanupOldDeploymentLogs(ctx, cutoff)
+	if err != nil {
+		t.Fatalf("CleanupOldDeploymentLogs() error = %v", err)
+	}
+	if deleted < 1 {
+		t.Errorf("CleanupOldDeploymentLogs() deleted %d logs, want >= 1", deleted)
+	}
 }
 
 func TestCleanupOldAuditLogs(t *testing.T) {
@@ -3384,7 +3544,7 @@ func TestCountDeploymentsByStatus(t *testing.T) {
 	}
 
 	for _, d := range deployments {
-		deployment := &Deployment{
+		deployment := &DeploymentRecord{
 			ID:      d.id,
 			Project: "testproject",
 			Target:  "production",
@@ -4435,7 +4595,7 @@ func TestDeploymentWithErrorMessage(t *testing.T) {
 	ctx := context.Background()
 
 	// Create deployment
-	deployment := &Deployment{
+	deployment := &DeploymentRecord{
 		ID:      "error-deploy",
 		Project: "error-project",
 		Target:  "production",
