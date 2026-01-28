@@ -1418,6 +1418,124 @@ func TestJsonError(t *testing.T) {
 	}
 }
 
+// --- API Login Tests ---
+
+func TestHandleAPILogin(t *testing.T) {
+	t.Parallel()
+
+	t.Run("successful login", func(t *testing.T) {
+		t.Parallel()
+		server := newTestServer(t)
+		ctx := context.Background()
+
+		// Create a test user with a known password
+		user, err := server.userService.Create(ctx, "loginuser", "TestPass123!", "login@test.com", "admin")
+		if err != nil {
+			t.Fatalf("failed to create test user: %v", err)
+		}
+
+		body := `{"username": "loginuser", "password": "TestPass123!"}`
+		req := httptest.NewRequest("POST", "/api/v1/auth/login", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		server.handleAPILogin(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+		}
+
+		var result map[string]interface{}
+		if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+
+		if result["token"] == nil || result["token"] == "" {
+			t.Error("expected token in response")
+		}
+
+		userResp, ok := result["user"].(map[string]interface{})
+		if !ok {
+			t.Fatal("expected user object in response")
+		}
+		if userResp["username"] != "loginuser" {
+			t.Errorf("username = %v, want 'loginuser'", userResp["username"])
+		}
+		if int64(userResp["id"].(float64)) != user.ID {
+			t.Errorf("user id = %v, want %d", userResp["id"], user.ID)
+		}
+	})
+
+	t.Run("invalid credentials", func(t *testing.T) {
+		t.Parallel()
+		server := newTestServer(t)
+		ctx := context.Background()
+
+		// Create a test user
+		_, err := server.userService.Create(ctx, "loginuser2", "TestPass123!", "login2@test.com", "user")
+		if err != nil {
+			t.Fatalf("failed to create test user: %v", err)
+		}
+
+		body := `{"username": "loginuser2", "password": "WrongPassword!"}`
+		req := httptest.NewRequest("POST", "/api/v1/auth/login", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		server.handleAPILogin(rec, req)
+
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+		}
+	})
+
+	t.Run("missing credentials", func(t *testing.T) {
+		t.Parallel()
+		server := newTestServer(t)
+
+		body := `{"username": "someuser"}`
+		req := httptest.NewRequest("POST", "/api/v1/auth/login", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		server.handleAPILogin(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+		}
+	})
+
+	t.Run("invalid method", func(t *testing.T) {
+		t.Parallel()
+		server := newTestServer(t)
+
+		req := httptest.NewRequest("GET", "/api/v1/auth/login", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleAPILogin(rec, req)
+
+		if rec.Code != http.StatusMethodNotAllowed {
+			t.Errorf("status = %d, want %d", rec.Code, http.StatusMethodNotAllowed)
+		}
+	})
+
+	t.Run("user not found", func(t *testing.T) {
+		t.Parallel()
+		server := newTestServer(t)
+
+		body := `{"username": "nonexistent", "password": "SomePass123!"}`
+		req := httptest.NewRequest("POST", "/api/v1/auth/login", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		server.handleAPILogin(rec, req)
+
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+		}
+	})
+}
+
 // --- Agent Connection Tests ---
 
 func TestCheckAgentHealth_MultipleStates(t *testing.T) {

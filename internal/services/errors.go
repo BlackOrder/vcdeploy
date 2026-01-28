@@ -4,6 +4,8 @@ package services
 import (
 	"errors"
 	"fmt"
+
+	"github.com/BlackOrder/vcdeploy/internal/storage"
 )
 
 // Sentinel errors for common cases.
@@ -103,9 +105,11 @@ func Conflict(op, resource, id string) error {
 
 // Error checking helpers.
 
-// IsNotFound returns true if the error is or wraps ErrNotFound.
+// IsNotFound returns true if the error is or wraps ErrNotFound or storage.ErrNotFound.
+// This allows services to check for not-found errors regardless of whether they come
+// from the service layer or storage layer.
 func IsNotFound(err error) bool {
-	return errors.Is(err, ErrNotFound)
+	return errors.Is(err, ErrNotFound) || errors.Is(err, storage.ErrNotFound)
 }
 
 // IsDuplicate returns true if the error is or wraps ErrDuplicate.

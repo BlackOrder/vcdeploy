@@ -428,6 +428,9 @@ func (s *MasterServer) startHTTP() error {
 	// Health check
 	mux.HandleFunc("/api/v1/health", s.handleHealth)
 
+	// Auth API (for programmatic login)
+	mux.HandleFunc("/api/v1/auth/login", s.handleAPILogin)
+
 	// Stats endpoint
 	mux.HandleFunc("/api/v1/stats", s.withAuth(s.handleStats))
 
@@ -1423,6 +1426,95 @@ func (s *MasterServer) handleBitbucketWebhook(w http.ResponseWriter, r *http.Req
 
 	s.logger.Warn("Received Bitbucket webhook but no processor configured - webhook will not trigger deployment")
 	w.WriteHeader(http.StatusOK)
+}
+
+// handleAPILogin handles JSON-based authentication for API clients.
+// POST /api/v1/auth/login
+// Request: {"username": "...", "password": "...", "totp": "..."}
+// Response: {"token": "session_id", "user": {...}}
+func (s *MasterServer) handleAPILogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+		TOTP     string `json:"totp,omitempty"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req); err != nil {
+		s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
+		return
+	}
+
+	if req.Username == "" || req.Password == "" {
+		s.jsonError(w, http.StatusBadRequest, "username and password required")
+		return
+	}
+
+	ctx := r.Context()
+
+	// Look up user
+	user, err := s.userService.GetByUsername(ctx, req.Username)
+	if err != nil {
+		if services.IsNotFound(err) {
+			s.logger.Debug("API login failed: user not found", zap.String("username", req.Username))
+			s.logAudit(r, "api_login", "session", "user not found: "+req.Username, "failure")
+			s.jsonError(w, http.StatusUnauthorized, "Invalid credentials")
+			return
+		}
+		s.logger.Error("Database error during API login", zap.Error(err))
+		s.jsonError(w, http.StatusInternalServerError, "Internal error")
+		return
+	}
+
+	// Verify password
+	if !verifyPassword(user.PasswordHash, req.Password) {
+		s.logger.Debug("API login failed: invalid password", zap.String("username", req.Username))
+		s.logAudit(r, "api_login", "session", "invalid password for: "+req.Username, "failure")
+		s.jsonError(w, http.StatusUnauthorized, "Invalid credentials")
+		return
+	}
+
+	// Verify TOTP if enabled
+	if user.TOTPEnabled {
+		if req.TOTP == "" {
+			s.jsonError(w, http.StatusUnauthorized, "TOTP required")
+			return
+		}
+		if !verifyTOTP(user.TOTPSecret, req.TOTP) {
+			s.logger.Debug("API login failed: invalid TOTP", zap.String("username", req.Username))
+			s.logAudit(r, "api_login", "session", "invalid TOTP for: "+req.Username, "failure")
+			s.jsonError(w, http.StatusUnauthorized, "Invalid verification code")
+			return
+		}
+	}
+
+	// Create session using service
+	session, err := s.sessionService.Create(ctx, user.ID, extractClientIP(r), r.UserAgent(), 7*24*time.Hour)
+	if err != nil {
+		s.logger.Error("Failed to create session", zap.Error(err))
+		s.jsonError(w, http.StatusInternalServerError, "Failed to create session")
+		return
+	}
+
+	// Log successful login
+	s.logAudit(r, "api_login", "session", fmt.Sprintf("user: %s, IP: %s", req.Username, session.IPAddress), "success")
+
+	s.logger.Info("User logged in via API",
+		zap.String("username", req.Username),
+		zap.String("ip", session.IPAddress))
+
+	s.jsonResponse(w, map[string]interface{}{
+		"token": session.ID,
+		"user": map[string]interface{}{
+			"id":       user.ID,
+			"username": user.Username,
+			"email":    user.Email,
+			"role":     user.Role,
+		},
+	})
 }
 
 func (s *MasterServer) handleIndex(w http.ResponseWriter, r *http.Request) {
