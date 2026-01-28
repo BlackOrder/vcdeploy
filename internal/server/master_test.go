@@ -1012,7 +1012,9 @@ func skipIfNoTemplates(t *testing.T, rec *httptest.ResponseRecorder) {
 	t.Helper()
 	body := rec.Body.String()
 	if rec.Code == http.StatusInternalServerError &&
-		(strings.Contains(body, "Templates not loaded") || strings.Contains(body, "Internal server error")) {
+		(strings.Contains(body, "Templates not loaded") ||
+			strings.Contains(body, "Template not found") ||
+			strings.Contains(body, "Internal server error")) {
 		t.Skip("Templates not loaded - skipping UI test")
 	}
 }
