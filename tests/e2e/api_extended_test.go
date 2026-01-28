@@ -348,7 +348,7 @@ func TestAPIAgentBinaries(t *testing.T) {
 	}
 
 	t.Run("list agent binaries", func(t *testing.T) {
-		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/agents/binaries", nil, cfg.APIToken)
+		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/binaries", nil, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to list agent binaries: %v", err)
 		}
@@ -358,7 +358,7 @@ func TestAPIAgentBinaries(t *testing.T) {
 	})
 
 	t.Run("get latest agent version", func(t *testing.T) {
-		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/agents/binaries/latest", nil, cfg.APIToken)
+		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/binaries/latest", nil, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to get latest version: %v", err)
 		}
@@ -377,7 +377,7 @@ func TestAPIAgentBinaries(t *testing.T) {
 			"arch":            "amd64",
 		}
 
-		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/agents/binaries/check-update", checkReq, cfg.APIToken)
+		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/binaries/check-update", checkReq, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to check for updates: %v", err)
 		}
@@ -725,4 +725,238 @@ func expectStatusCreatedOrOK(t *testing.T, resp *http.Response) {
 		body, _ := io.ReadAll(resp.Body)
 		t.Errorf("expected status 200 or 201, got %d: %s", resp.StatusCode, string(body))
 	}
+}
+
+// TestAPIStats tests the system statistics endpoint.
+func TestAPIStats(t *testing.T) {
+	cfg := getTestConfig()
+
+	if err := waitForHTTPEndpoint(cfg.MasterHTTPURL + "/api/v1/health"); err != nil {
+		t.Skipf("Master not available: %v", err)
+	}
+
+	t.Run("get system stats", func(t *testing.T) {
+		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/stats", nil, cfg.APIToken)
+		if err != nil {
+			t.Fatalf("failed to get stats: %v", err)
+		}
+		defer resp.Body.Close()
+
+		expectStatusOK(t, resp)
+
+		var stats map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&stats); err != nil {
+			t.Errorf("failed to decode stats response: %v", err)
+		}
+
+		// Verify expected fields exist
+		requiredFields := []string{"projects", "agents", "deployments"}
+		for _, field := range requiredFields {
+			if _, ok := stats[field]; !ok {
+				t.Errorf("missing required field: %s", field)
+			}
+		}
+	})
+
+	t.Run("stats method not allowed", func(t *testing.T) {
+		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/stats", nil, cfg.APIToken)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusMethodNotAllowed {
+			t.Errorf("expected 405, got %d", resp.StatusCode)
+		}
+	})
+}
+
+// TestAPISettingsExportImport tests the settings export/import endpoints.
+func TestAPISettingsExportImport(t *testing.T) {
+	cfg := getTestConfig()
+
+	if err := waitForHTTPEndpoint(cfg.MasterHTTPURL + "/api/v1/health"); err != nil {
+		t.Skipf("Master not available: %v", err)
+	}
+
+	var exportedSettings []byte
+
+	t.Run("export settings", func(t *testing.T) {
+		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/settings/export", nil, cfg.APIToken)
+		if err != nil {
+			t.Fatalf("failed to export settings: %v", err)
+		}
+		defer resp.Body.Close()
+
+		expectStatusOK(t, resp)
+
+		// Verify content type is JSON
+		contentType := resp.Header.Get("Content-Type")
+		if !bytes.Contains([]byte(contentType), []byte("json")) {
+			t.Errorf("expected JSON content type, got %s", contentType)
+		}
+
+		exportedSettings, err = io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("failed to read response body: %v", err)
+		}
+
+		// Verify it's valid JSON
+		var settings map[string]interface{}
+		if err := json.Unmarshal(exportedSettings, &settings); err != nil {
+			t.Errorf("exported settings is not valid JSON: %v", err)
+		}
+	})
+
+	t.Run("export settings method not allowed", func(t *testing.T) {
+		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/settings/export", nil, cfg.APIToken)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusMethodNotAllowed {
+			t.Errorf("expected 405, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("import settings", func(t *testing.T) {
+		if len(exportedSettings) == 0 {
+			t.Skip("No exported settings available")
+		}
+
+		// Import the previously exported settings
+		req, err := http.NewRequest("POST", cfg.MasterHTTPURL+"/api/v1/settings/import", bytes.NewReader(exportedSettings))
+		if err != nil {
+			t.Fatalf("failed to create request: %v", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+cfg.APIToken)
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("failed to import settings: %v", err)
+		}
+		defer resp.Body.Close()
+
+		// Accept 200 OK or 409 Conflict (if settings unchanged)
+		if resp.StatusCode >= 500 {
+			body, _ := io.ReadAll(resp.Body)
+			t.Errorf("server error: %d - %s", resp.StatusCode, string(body))
+		}
+	})
+
+	t.Run("import settings method not allowed", func(t *testing.T) {
+		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/settings/import", nil, cfg.APIToken)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusMethodNotAllowed {
+			t.Errorf("expected 405, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("import invalid settings", func(t *testing.T) {
+		invalidJSON := []byte(`{"invalid": }`)
+		req, err := http.NewRequest("POST", cfg.MasterHTTPURL+"/api/v1/settings/import", bytes.NewReader(invalidJSON))
+		if err != nil {
+			t.Fatalf("failed to create request: %v", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+cfg.APIToken)
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("expected 400 for invalid JSON, got %d", resp.StatusCode)
+		}
+	})
+}
+
+// TestAPIDeploymentCancel tests the deployment cancellation endpoint.
+func TestAPIDeploymentCancel(t *testing.T) {
+	cfg := getTestConfig()
+
+	if err := waitForHTTPEndpoint(cfg.MasterHTTPURL + "/api/v1/health"); err != nil {
+		t.Skipf("Master not available: %v", err)
+	}
+
+	t.Run("cancel nonexistent deployment", func(t *testing.T) {
+		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/deployments/nonexistent-deploy-id/cancel", nil, cfg.APIToken)
+		if err != nil {
+			t.Fatalf("failed to cancel deployment: %v", err)
+		}
+		defer resp.Body.Close()
+
+		// Should return 404 for nonexistent deployment
+		if resp.StatusCode != http.StatusNotFound && resp.StatusCode != http.StatusBadRequest {
+			body, _ := io.ReadAll(resp.Body)
+			t.Errorf("expected 404 or 400 for nonexistent deployment, got %d: %s", resp.StatusCode, string(body))
+		}
+	})
+
+	t.Run("cancel method not allowed", func(t *testing.T) {
+		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/deployments/test/cancel", nil, cfg.APIToken)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusMethodNotAllowed {
+			t.Errorf("expected 405, got %d", resp.StatusCode)
+		}
+	})
+}
+
+// TestAPIAgentUpdateHistory tests the agent update history endpoint.
+func TestAPIAgentUpdateHistory(t *testing.T) {
+	cfg := getTestConfig()
+
+	if err := waitForHTTPEndpoint(cfg.MasterHTTPURL + "/api/v1/health"); err != nil {
+		t.Skipf("Master not available: %v", err)
+	}
+
+	t.Run("list update history", func(t *testing.T) {
+		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/agents/updates/history", nil, cfg.APIToken)
+		if err != nil {
+			t.Fatalf("failed to get update history: %v", err)
+		}
+		defer resp.Body.Close()
+
+		expectStatusOK(t, resp)
+
+		var result map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			t.Errorf("failed to decode response: %v", err)
+		}
+	})
+
+	t.Run("list pending updates", func(t *testing.T) {
+		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/agents/updates/pending", nil, cfg.APIToken)
+		if err != nil {
+			t.Fatalf("failed to get pending updates: %v", err)
+		}
+		defer resp.Body.Close()
+
+		expectStatusOK(t, resp)
+	})
+
+	t.Run("get agent update history", func(t *testing.T) {
+		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/agents/test-agent/updates/history", nil, cfg.APIToken)
+		if err != nil {
+			t.Fatalf("failed to get agent update history: %v", err)
+		}
+		defer resp.Body.Close()
+
+		// Accept 200 or 404
+		if resp.StatusCode >= 500 {
+			t.Errorf("server error: %d", resp.StatusCode)
+		}
+	})
 }
