@@ -202,6 +202,19 @@ func NewMasterServer(cfg *config.MasterConfig, db *storage.DB, logger *zap.Logge
 		templatesDir: sysCfg.TemplatesDir(),
 	}
 
+	// Initialize KMS for encryption services
+	kms, kmsErr := security.NewKMS(db.Conn(), logger)
+	if kmsErr != nil {
+		logger.Warn("Failed to create KMS, some features will be unavailable", zap.Error(kmsErr))
+	} else {
+		// Initialize KMS with a key if none exists
+		if initErr := kms.Initialize(context.Background()); initErr != nil {
+			logger.Warn("Failed to initialize KMS", zap.Error(initErr))
+		} else {
+			s.kms = kms
+		}
+	}
+
 	// Initialize service layer (services that don't need KMS)
 	s.userService = users.New(s.db)
 	s.sessionService = sessions.New(s.db)
@@ -213,6 +226,13 @@ func NewMasterServer(cfg *config.MasterConfig, db *storage.DB, logger *zap.Logge
 	s.auditService = audit.New(s.db)
 	s.hostKeyService = hostkeys.New(s.db)
 	s.provisionService = provision.New(s.db)
+
+	// Initialize KMS-dependent services
+	if s.kms != nil {
+		s.secretService = secrets.New(s.db, s.kms)
+		s.settingsSvc = settings.New(s.db, s.kms)
+		s.webhookService = webhooks.New(s.db, s.kms)
+	}
 
 	// Seed default admin user if no users exist
 	if err := s.seedDefaultAdmin(); err != nil {
@@ -1638,7 +1658,32 @@ func (s *MasterServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *MasterServer) handleProjectsUI(w http.ResponseWriter, r *http.Request) {
-	s.renderTemplate(w, "projects", s.withCommonData(r, map[string]interface{}{"Title": "Projects", "Active": "projects"}))
+	ctx := r.Context()
+
+	// Get projects
+	var projectsList []map[string]interface{}
+	projects, err := s.projectService.List(ctx)
+	if err != nil {
+		s.logger.Error("Failed to list projects", zap.Error(err))
+	} else {
+		for _, p := range projects {
+			projectsList = append(projectsList, map[string]interface{}{
+				"ID":         p.ID,
+				"Name":       p.Name,
+				"Type":       p.Type,
+				"Repository": p.Repository,
+				"Branch":     p.Branch,
+				"Path":       p.DeployPath,
+				"CreatedAt":  p.CreatedAt,
+			})
+		}
+	}
+
+	s.renderTemplate(w, "projects", s.withCommonData(r, map[string]interface{}{
+		"Title":    "Projects",
+		"Active":   "projects",
+		"Projects": projectsList,
+	}))
 }
 
 func (s *MasterServer) handleDeploymentsUI(w http.ResponseWriter, r *http.Request) {
@@ -1646,19 +1691,32 @@ func (s *MasterServer) handleDeploymentsUI(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *MasterServer) handleAgentsUI(w http.ResponseWriter, r *http.Request) {
-	s.agentsMu.RLock()
-	agents := make([]map[string]interface{}, 0)
-	for _, a := range s.agents {
-		agents = append(agents, map[string]interface{}{
-			"id":     a.ID,
-			"name":   a.Name,
-			"status": a.Status,
-		})
+	ctx := r.Context()
+
+	// Get agents from database
+	var agentsList []map[string]interface{}
+	agents, err := s.agentService.List(ctx)
+	if err != nil {
+		s.logger.Error("Failed to list agents", zap.Error(err))
+	} else {
+		for _, a := range agents {
+			agentsList = append(agentsList, map[string]interface{}{
+				"ID":         a.ID,
+				"Hostname":   a.Hostname,
+				"Status":     a.Status,
+				"Version":    a.Version,
+				"OS":         a.OS,
+				"Arch":       a.Arch,
+				"LastSeenAt": a.LastSeenAt,
+			})
+		}
 	}
-	s.agentsMu.RUnlock()
-	data := s.withCommonData(r, map[string]interface{}{"Title": "Agents", "Active": "agents"})
-	data["Agents"] = agents
-	s.renderTemplate(w, "agents", data)
+
+	s.renderTemplate(w, "agents", s.withCommonData(r, map[string]interface{}{
+		"Title":  "Agents",
+		"Active": "agents",
+		"Agents": agentsList,
+	}))
 }
 
 func (s *MasterServer) handleSettingsUI(w http.ResponseWriter, r *http.Request) {
@@ -1703,15 +1761,37 @@ func (s *MasterServer) handleSettingsUI(w http.ResponseWriter, r *http.Request) 
 
 func (s *MasterServer) handleSecretsUI(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
+	// Get projects for filter dropdown
 	projects, err := s.projectService.List(ctx)
 	if err != nil {
 		s.logger.Error("Failed to list projects for secrets UI", zap.Error(err))
-		// Continue with empty list rather than failing completely
 		projects = nil
 	}
+
+	// Get secrets
+	var secretsList []map[string]interface{}
+	if s.secretService != nil {
+		secrets, err := s.secretService.ListAll(ctx)
+		if err != nil {
+			s.logger.Error("Failed to list secrets", zap.Error(err))
+		} else {
+			for _, sec := range secrets {
+				secretsList = append(secretsList, map[string]interface{}{
+					"ID":        sec.ID,
+					"Project":   sec.Project,
+					"Scope":     sec.Scope,
+					"Key":       sec.Key,
+					"CreatedAt": sec.CreatedAt,
+				})
+			}
+		}
+	}
+
 	data := s.withCommonData(r, map[string]interface{}{
-		"Title":  "Secrets",
-		"Active": "secrets",
+		"Title":   "Secrets",
+		"Active":  "secrets",
+		"Secrets": secretsList,
 	})
 	data["Projects"] = projects
 	s.renderTemplate(w, "secrets", data)
@@ -1725,9 +1805,32 @@ func (s *MasterServer) handleProjectTypesUI(w http.ResponseWriter, r *http.Reque
 }
 
 func (s *MasterServer) handleAuditUI(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	// Get audit logs
+	var auditLogs []map[string]interface{}
+	entries, err := s.auditService.List(ctx, 100, 0)
+	if err != nil {
+		s.logger.Error("Failed to list audit logs", zap.Error(err))
+	} else {
+		for _, entry := range entries {
+			auditLogs = append(auditLogs, map[string]interface{}{
+				"ID":        entry.ID,
+				"Timestamp": entry.Timestamp,
+				"User":      entry.User,
+				"Action":    entry.Action,
+				"Resource":  entry.Resource,
+				"Details":   entry.Details,
+				"IPAddress": entry.IPAddress,
+				"Result":    entry.Result,
+			})
+		}
+	}
+
 	s.renderTemplate(w, "audit", s.withCommonData(r, map[string]interface{}{
-		"Title":  "Audit Log",
-		"Active": "audit",
+		"Title":     "Audit Log",
+		"Active":    "audit",
+		"AuditLogs": auditLogs,
 	}))
 }
 

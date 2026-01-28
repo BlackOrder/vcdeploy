@@ -71,9 +71,51 @@
 
     <!-- Agents Grid -->
     <div id="agents-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div class="col-span-full text-center py-12 text-dark-muted">
-            <span class="animate-pulse">Loading agents...</span>
+        {{if .Agents}}
+        {{range .Agents}}
+        <div class="bg-dark-card border border-dark-border rounded-lg p-6">
+            <div class="flex items-start justify-between">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        {{if eq .Status "connected"}}
+                        <span class="h-3 w-3 bg-green-500 rounded-full inline-block"></span>
+                        {{else if eq .Status "stale"}}
+                        <span class="h-3 w-3 bg-yellow-500 rounded-full inline-block"></span>
+                        {{else}}
+                        <span class="h-3 w-3 bg-red-500 rounded-full inline-block"></span>
+                        {{end}}
+                    </div>
+                    <div class="ml-3">
+                        <h3 class="text-lg font-medium text-dark-text">{{.Hostname}}</h3>
+                        <p class="text-sm text-dark-muted">{{.ID}}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-4 space-y-2">
+                <div class="flex justify-between text-sm">
+                    <span class="text-dark-muted">Status</span>
+                    <span class="text-dark-text">{{.Status}}</span>
+                </div>
+                <div class="flex justify-between text-sm">
+                    <span class="text-dark-muted">Version</span>
+                    <span class="text-dark-text">{{.Version}}</span>
+                </div>
+                <div class="flex justify-between text-sm">
+                    <span class="text-dark-muted">OS/Arch</span>
+                    <span class="text-dark-text">{{.OS}}/{{.Arch}}</span>
+                </div>
+            </div>
         </div>
+        {{end}}
+        {{else}}
+        <div class="col-span-full text-center py-12">
+            <svg class="mx-auto h-12 w-12 text-dark-muted mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path>
+            </svg>
+            <p class="text-dark-muted">No agents registered.</p>
+            <p class="text-dark-muted text-sm mt-1">Click "Register Agent" to get started.</p>
+        </div>
+        {{end}}
     </div>
 </div>
 
