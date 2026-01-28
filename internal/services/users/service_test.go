@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/BlackOrder/vcdeploy/internal/services"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"go.uber.org/zap"
 )
@@ -102,8 +103,11 @@ func TestService_GetByUsername_NotFound(t *testing.T) {
 	ctx := context.Background()
 
 	user, err := svc.GetByUsername(ctx, "nonexistent")
-	if err != nil {
-		t.Fatalf("GetByUsername() error = %v", err)
+	if err == nil {
+		t.Fatal("GetByUsername() expected error for nonexistent user")
+	}
+	if !services.IsNotFound(err) {
+		t.Errorf("GetByUsername() expected ErrNotFound, got: %v", err)
 	}
 	if user != nil {
 		t.Error("GetByUsername() expected nil for nonexistent user")
@@ -191,10 +195,10 @@ func TestService_Delete(t *testing.T) {
 		t.Fatalf("Delete() error = %v", err)
 	}
 
-	// Verify deleted
+	// Verify deleted - should return NotFound error
 	found, err := svc.GetByID(ctx, user.ID)
-	if err != nil {
-		t.Fatalf("GetByID() error = %v", err)
+	if !services.IsNotFound(err) {
+		t.Errorf("GetByID() error = %v, want NotFound", err)
 	}
 	if found != nil {
 		t.Error("Delete() user still exists")
@@ -291,8 +295,11 @@ func TestService_GetByID_NotFound(t *testing.T) {
 	ctx := context.Background()
 
 	user, err := svc.GetByID(ctx, 99999)
-	if err != nil {
-		t.Fatalf("GetByID() error = %v", err)
+	if err == nil {
+		t.Fatal("GetByID() expected error for nonexistent user")
+	}
+	if !services.IsNotFound(err) {
+		t.Errorf("GetByID() expected ErrNotFound, got: %v", err)
 	}
 	if user != nil {
 		t.Error("GetByID() expected nil for nonexistent user")
@@ -335,8 +342,11 @@ func TestService_VerifyPassword_UserNotFound(t *testing.T) {
 	ctx := context.Background()
 
 	user, err := svc.VerifyPassword(ctx, "nonexistent", "password")
-	if err != nil {
-		t.Errorf("VerifyPassword() error = %v, expected nil for nonexistent user", err)
+	if err == nil {
+		t.Fatal("VerifyPassword() expected error for nonexistent user")
+	}
+	if !services.IsNotFound(err) {
+		t.Errorf("VerifyPassword() expected ErrNotFound, got: %v", err)
 	}
 	if user != nil {
 		t.Error("VerifyPassword() expected nil for nonexistent user")
@@ -598,10 +608,10 @@ func TestService_DeleteWithCleanup(t *testing.T) {
 		t.Fatalf("DeleteWithCleanup() error = %v", err)
 	}
 
-	// Verify user is deleted
+	// Verify user is deleted - should return NotFound error
 	found, err := svc.GetByID(ctx, user.ID)
-	if err != nil {
-		t.Fatalf("GetByID() error = %v", err)
+	if !services.IsNotFound(err) {
+		t.Errorf("GetByID() error = %v, want NotFound", err)
 	}
 	if found != nil {
 		t.Error("DeleteWithCleanup() user still exists")
@@ -657,10 +667,10 @@ func TestService_DeleteWithCleanup_NoAssociatedData(t *testing.T) {
 		t.Fatalf("DeleteWithCleanup() error = %v", err)
 	}
 
-	// Verify user is deleted
+	// Verify user is deleted - should return NotFound error
 	found, err := svc.GetByID(ctx, user.ID)
-	if err != nil {
-		t.Fatalf("GetByID() error = %v", err)
+	if !services.IsNotFound(err) {
+		t.Errorf("GetByID() error = %v, want NotFound", err)
 	}
 	if found != nil {
 		t.Error("DeleteWithCleanup() user still exists")
@@ -787,13 +797,13 @@ func TestService_GetByUsername_CaseSensitive(t *testing.T) {
 	}
 
 	// Try to find with different case - should not find
+	// Now returns NotFound error instead of nil when user not found
 	user, err := svc.GetByUsername(ctx, "LOWERCASE")
-	if err != nil {
-		t.Fatalf("GetByUsername() error = %v", err)
-	}
 	// Depending on SQLite collation, this may or may not find the user
-	// This test documents the actual behavior
-	_ = user
+	// This test documents the actual behavior - either user is found or NotFound error
+	if user == nil && err != nil && !services.IsNotFound(err) {
+		t.Errorf("GetByUsername() unexpected error = %v", err)
+	}
 }
 
 func TestService_VerifyPassword_EmptyPassword(t *testing.T) {
@@ -1192,10 +1202,10 @@ func TestService_GetByID_AfterDelete(t *testing.T) {
 		t.Fatalf("Delete() error = %v", err)
 	}
 
-	// GetByID should return nil
+	// GetByID should return NotFound error
 	found, err := svc.GetByID(ctx, userID)
-	if err != nil {
-		t.Fatalf("GetByID() error = %v", err)
+	if !services.IsNotFound(err) {
+		t.Errorf("GetByID() error = %v, want NotFound", err)
 	}
 	if found != nil {
 		t.Error("GetByID() should return nil for deleted user")
@@ -1220,10 +1230,10 @@ func TestService_GetByUsername_AfterDelete(t *testing.T) {
 		t.Fatalf("Delete() error = %v", err)
 	}
 
-	// GetByUsername should return nil
+	// GetByUsername should return NotFound error
 	found, err := svc.GetByUsername(ctx, username)
-	if err != nil {
-		t.Fatalf("GetByUsername() error = %v", err)
+	if !services.IsNotFound(err) {
+		t.Errorf("GetByUsername() error = %v, want NotFound", err)
 	}
 	if found != nil {
 		t.Error("GetByUsername() should return nil for deleted user")

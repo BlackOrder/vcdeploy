@@ -133,7 +133,7 @@
 <body class="bg-dark-bg text-dark-text min-h-screen flex flex-col">
     {{if .ShowNav}}
     <nav class="bg-dark-card border-b border-dark-border">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between h-16">
                 <div class="flex items-center">
                     <div class="flex-shrink-0">
@@ -161,13 +161,13 @@
     </nav>
     {{end}}
     
-    <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 flex-grow">
+    <main class="max-w-screen-2xl mx-auto py-6 px-4 sm:px-6 lg:px-8 flex-grow">
         {{template "content" .}}
     </main>
     
     {{if .ShowNav}}
     <footer class="bg-dark-card border-t border-dark-border">
-        <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
+        <div class="max-w-screen-2xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
             <p class="text-center text-dark-muted text-sm">vcdeploy - Open Source Deployment Platform</p>
         </div>
     </footer>

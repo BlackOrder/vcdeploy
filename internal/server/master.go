@@ -1461,14 +1461,14 @@ func (s *MasterServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 		// Look up user
 		user, err := s.userService.GetByUsername(ctx, username)
 		if err != nil {
+			if services.IsNotFound(err) {
+				s.logger.Debug("Login failed: user not found", zap.String("username", username))
+				s.logAudit(r, "login", "session", "user not found: "+username, "failure")
+				s.renderTemplate(w, "login", map[string]interface{}{"Error": "Invalid credentials"})
+				return
+			}
 			s.logger.Error("Database error during login", zap.Error(err))
 			s.renderTemplate(w, "login", map[string]interface{}{"Error": "Internal error"})
-			return
-		}
-		if user == nil {
-			s.logger.Debug("Login failed: user not found", zap.String("username", username))
-			s.logAudit(r, "login", "session", "user not found: "+username, "failure")
-			s.renderTemplate(w, "login", map[string]interface{}{"Error": "Invalid credentials"})
 			return
 		}
 
@@ -1600,8 +1600,8 @@ func (s *MasterServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		stats["ConnectedAgents"] = connectedCount
 	}
 
-	// Get recent deployments and calculate stats
-	deployments, err := s.deploymentService.ListRecent(ctx, 10)
+	// Get recent deployments and calculate stats (limited to 5 for dashboard display)
+	deployments, err := s.deploymentService.ListRecent(ctx, 5)
 	var recentDeployments []map[string]interface{}
 	if err == nil {
 		var successCount, totalCount int
@@ -1632,8 +1632,8 @@ func (s *MasterServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Get recent audit logs
-	auditLogs, err := s.auditService.List(ctx, 10, 0)
+	// Get recent audit logs (limited to 5 for dashboard)
+	auditLogs, err := s.auditService.List(ctx, 5, 0)
 	var recentActivity []map[string]interface{}
 	if err == nil {
 		for _, log := range auditLogs {

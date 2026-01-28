@@ -604,7 +604,11 @@ func (h *Handler) handleBitbucketPush(w http.ResponseWriter, body []byte, projec
 					} `json:"target"`
 				} `json:"new"`
 				Old struct {
-					Name string `json:"name"`
+					Name   string `json:"name"`
+					Type   string `json:"type"`
+					Target struct {
+						Hash string `json:"hash"`
+					} `json:"target"`
 				} `json:"old"`
 				Forced bool `json:"forced"`
 			} `json:"changes"`
@@ -625,27 +629,66 @@ func (h *Handler) handleBitbucketPush(w http.ResponseWriter, body []byte, projec
 		return
 	}
 
-	for _, change := range payload.Push.Changes {
-		if change.New.Type != "branch" {
+	for i := range payload.Push.Changes {
+		change := &payload.Push.Changes[i]
+		// Handle deletions (New.Type is empty, Old.Type has the deleted type)
+		if change.New.Type == "" && change.Old.Type == "tag" {
+			event := &TagEvent{
+				Provider:   "bitbucket",
+				ProjectID:  projectID,
+				Repository: payload.Repository.Links.HTML.Href,
+				Tag:        change.Old.Name,
+				Commit:     change.Old.Target.Hash,
+				Deleted:    true,
+			}
+
+			if err := h.processor.ProcessTag(event); err != nil {
+				h.logger.Error("Failed to process tag deletion", zap.Error(err))
+				http.Error(w, "Processing failed", http.StatusInternalServerError)
+				return
+			}
 			continue
 		}
 
-		event := &PushEvent{
-			Provider:   "bitbucket",
-			ProjectID:  projectID,
-			Repository: payload.Repository.Links.HTML.Href,
-			Branch:     change.New.Name,
-			Commit:     change.New.Target.Hash,
-			Author:     change.New.Target.Author.User.DisplayName,
-			Message:    change.New.Target.Message,
-			Timestamp:  change.New.Target.Date,
-			ForcePush:  change.Forced,
-		}
+		switch change.New.Type {
+		case "branch":
+			event := &PushEvent{
+				Provider:   "bitbucket",
+				ProjectID:  projectID,
+				Repository: payload.Repository.Links.HTML.Href,
+				Branch:     change.New.Name,
+				Commit:     change.New.Target.Hash,
+				Author:     change.New.Target.Author.User.DisplayName,
+				Message:    change.New.Target.Message,
+				Timestamp:  change.New.Target.Date,
+				ForcePush:  change.Forced,
+			}
 
-		if err := h.processor.ProcessPush(event); err != nil {
-			h.logger.Error("Failed to process push", zap.Error(err))
-			http.Error(w, "Processing failed", http.StatusInternalServerError)
-			return
+			if err := h.processor.ProcessPush(event); err != nil {
+				h.logger.Error("Failed to process push", zap.Error(err))
+				http.Error(w, "Processing failed", http.StatusInternalServerError)
+				return
+			}
+		case "tag":
+			event := &TagEvent{
+				Provider:   "bitbucket",
+				ProjectID:  projectID,
+				Repository: payload.Repository.Links.HTML.Href,
+				Tag:        change.New.Name,
+				Commit:     change.New.Target.Hash,
+				Author:     change.New.Target.Author.User.DisplayName,
+				Deleted:    false,
+			}
+
+			if err := h.processor.ProcessTag(event); err != nil {
+				h.logger.Error("Failed to process tag", zap.Error(err))
+				http.Error(w, "Processing failed", http.StatusInternalServerError)
+				return
+			}
+		default:
+			h.logger.Debug("Ignoring Bitbucket push for non-branch/tag",
+				zap.String("type", change.New.Type),
+				zap.String("name", change.New.Name))
 		}
 	}
 
