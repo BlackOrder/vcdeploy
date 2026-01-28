@@ -549,6 +549,10 @@ func (s *MasterServer) handleTriggerAgentUpdate(w http.ResponseWriter, r *http.R
 	// Get agent
 	agent, err := s.agentService.GetByID(ctx, agentID)
 	if err != nil {
+		if err == storage.ErrNotFound {
+			http.Error(w, "Agent not found", http.StatusNotFound)
+			return
+		}
 		s.logger.Error("Failed to get agent", zap.Error(err))
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
