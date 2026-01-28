@@ -4,7 +4,7 @@ package security
 import (
 	"crypto/hmac"
 	"crypto/rand"
-	"crypto/sha1" //nolint:gosec // G505: Required by RFC 6238 TOTP specification - HMAC-SHA1 is secure
+	"crypto/sha1" // #nosec G505 -- Required by RFC 6238 TOTP specification, HMAC-SHA1 is secure
 	"encoding/base32"
 	"encoding/binary"
 	"fmt"

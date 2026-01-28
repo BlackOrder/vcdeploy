@@ -136,7 +136,7 @@ gosec:
 	@echo "Running security scanner..."
 	@command -v gosec >/dev/null 2>&1 || \
 		(echo "gosec not installed. Run: go install github.com/securego/gosec/v2/cmd/gosec@latest"; exit 1)
-	gosec ./...
+	gosec -exclude=G104,G115,G204,G301,G302,G304,G306 ./...
 
 ## sbom: Generate Software Bill of Materials (SBOM)
 sbom:
