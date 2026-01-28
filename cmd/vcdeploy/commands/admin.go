@@ -119,6 +119,17 @@ func init() {
 	agentTokenCmd.Flags().StringP("label", "l", "", "Agent label for the token")
 	agentCmd.AddCommand(agentTokenCmd)
 
+	agentUpdateCmd := &cobra.Command{
+		Use:   "update [agent-id]",
+		Short: "Update an agent to the latest version",
+		Long:  "Trigger a self-update of the specified agent to the latest available version.",
+		Args:  cobra.MaximumNArgs(1),
+		RunE:  runAgentUpdate,
+	}
+	agentUpdateCmd.Flags().Bool("all", false, "Update all agents")
+	agentUpdateCmd.Flags().String("version", "", "Specific version to update to")
+	agentCmd.AddCommand(agentUpdateCmd)
+
 	// Deployment subcommands
 	triggerCmd := &cobra.Command{
 		Use:   "trigger [project]",
