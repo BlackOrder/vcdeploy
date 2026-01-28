@@ -94,7 +94,7 @@ export class APIHelper {
    * Authenticate and get API token
    */
   async authenticate(username: string, password: string) {
-    const response = await fetch(`${this.baseURL}/api/auth/login`, {
+    const response = await fetch(`${this.baseURL}/api/v1/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
@@ -138,7 +138,7 @@ export class APIHelper {
    * Create a test user via API
    */
   async createTestUser(username: string, email: string, password: string, role: string = 'user') {
-    return this.request('POST', '/api/users', {
+    return this.request('POST', '/api/v1/users', {
       username,
       email,
       password,
@@ -150,14 +150,14 @@ export class APIHelper {
    * Delete a user via API
    */
   async deleteUser(userId: string) {
-    return this.request('DELETE', `/api/users/${userId}`);
+    return this.request('DELETE', `/api/v1/users/${userId}`);
   }
 
   /**
    * Create a test project via API
    */
   async createTestProject(name: string, gitRepoUrl?: string) {
-    return this.request('POST', '/api/projects', {
+    return this.request('POST', '/api/v1/projects', {
       name,
       git_repo_url: gitRepoUrl || 'https://github.com/example/test.git',
     });
@@ -167,7 +167,7 @@ export class APIHelper {
    * Delete a project via API
    */
   async deleteProject(projectId: string) {
-    return this.request('DELETE', `/api/projects/${projectId}`);
+    return this.request('DELETE', `/api/v1/projects/${projectId}`);
   }
 }
 

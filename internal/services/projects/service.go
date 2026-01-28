@@ -113,9 +113,9 @@ func (s *Service) DeleteWithCleanup(ctx context.Context, name string) error {
 			return fmt.Errorf("deleting deployments: %w", err)
 		}
 
-		// Delete scheduled deployments
-		if _, err := tx.ExecContext(ctx, `DELETE FROM scheduled_deployments WHERE project = ?`, name); err != nil {
-			return fmt.Errorf("deleting scheduled deployments: %w", err)
+		// Cancel any pending scheduled deployments (scheduled_at is on deployments table)
+		if _, err := tx.ExecContext(ctx, `UPDATE deployments SET status = 'cancelled' WHERE project = ? AND scheduled_at IS NOT NULL AND status IN ('scheduled', 'pending')`, name); err != nil {
+			return fmt.Errorf("cancelling scheduled deployments: %w", err)
 		}
 
 		// Delete the project

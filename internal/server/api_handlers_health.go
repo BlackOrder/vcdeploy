@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/BlackOrder/vcdeploy/internal/services"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"go.uber.org/zap"
 )
@@ -135,7 +135,7 @@ func (s *MasterServer) handleGetHealthCheckConfig(w http.ResponseWriter, r *http
 	ctx := r.Context()
 
 	config, err := s.db.GetHealthCheckConfig(ctx, id)
-	if errors.Is(err, storage.ErrNotFound) {
+	if services.IsNotFound(err) {
 		http.Error(w, "Health check config not found", http.StatusNotFound)
 		return
 	}
@@ -155,7 +155,7 @@ func (s *MasterServer) handleUpdateHealthCheckConfig(w http.ResponseWriter, r *h
 
 	// Get existing config
 	existing, err := s.db.GetHealthCheckConfig(ctx, id)
-	if errors.Is(err, storage.ErrNotFound) {
+	if services.IsNotFound(err) {
 		http.Error(w, "Health check config not found", http.StatusNotFound)
 		return
 	}
@@ -238,7 +238,7 @@ func (s *MasterServer) handleDeleteHealthCheckConfig(w http.ResponseWriter, r *h
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if errors.Is(err, storage.ErrNotFound) {
+		if services.IsNotFound(err) {
 			http.Error(w, "Health check config not found", http.StatusNotFound)
 			return
 		}
@@ -255,7 +255,7 @@ func (s *MasterServer) handleGlobalHealthCheck(w http.ResponseWriter, r *http.Re
 	ctx := r.Context()
 
 	config, err := s.db.GetGlobalHealthCheckConfig(ctx)
-	if errors.Is(err, storage.ErrNotFound) {
+	if services.IsNotFound(err) {
 		http.Error(w, "Global health check config not found", http.StatusNotFound)
 		return
 	}
@@ -277,7 +277,7 @@ func (s *MasterServer) handleProjectHealthConfig(w http.ResponseWriter, r *http.
 	case http.MethodGet:
 		// Get health check config for project (uses global if none set)
 		config, err := s.db.GetHealthCheckConfigForProject(ctx, projectID)
-		if errors.Is(err, storage.ErrNotFound) {
+		if services.IsNotFound(err) {
 			http.Error(w, "No health check config found", http.StatusNotFound)
 			return
 		}
@@ -304,7 +304,7 @@ func (s *MasterServer) handleProjectHealthConfig(w http.ResponseWriter, r *http.
 		// Validate health check ID if provided
 		if req.HealthCheckID != nil && *req.HealthCheckID > 0 {
 			_, err := s.db.GetHealthCheckConfig(ctx, *req.HealthCheckID)
-			if errors.Is(err, storage.ErrNotFound) {
+			if services.IsNotFound(err) {
 				http.Error(w, "Health check config not found", http.StatusBadRequest)
 				return
 			}
@@ -381,7 +381,7 @@ func (s *MasterServer) handleRollbackRecord(w http.ResponseWriter, r *http.Reque
 	ctx := r.Context()
 
 	rollback, err := s.db.GetDeploymentRollback(ctx, id)
-	if errors.Is(err, storage.ErrNotFound) {
+	if services.IsNotFound(err) {
 		http.Error(w, "Rollback not found", http.StatusNotFound)
 		return
 	}
@@ -401,7 +401,7 @@ func (s *MasterServer) handleTestHealthCheck(w http.ResponseWriter, r *http.Requ
 	ctx := r.Context()
 
 	config, err := s.db.GetHealthCheckConfig(ctx, id)
-	if errors.Is(err, storage.ErrNotFound) {
+	if services.IsNotFound(err) {
 		http.Error(w, "Health check config not found", http.StatusNotFound)
 		return
 	}

@@ -24,11 +24,11 @@ import (
 // handleStats returns dashboard statistics.
 func (s *MasterServer) handleStats(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
 	// Gather statistics - log warnings on errors but continue with zero values
@@ -91,7 +91,7 @@ func (s *MasterServer) handleStats(w http.ResponseWriter, r *http.Request) {
 
 // handleUsers handles user list and creation.
 func (s *MasterServer) handleUsers(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
 	switch r.Method {
@@ -105,7 +105,7 @@ func (s *MasterServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 		users, err := s.userService.List(ctx)
 		if err != nil {
 			s.logger.Error("Failed to list users", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
@@ -136,7 +136,7 @@ func (s *MasterServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 			Role     string `json:"role"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
-			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
 			return
 		}
 
@@ -173,7 +173,7 @@ func (s *MasterServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 		})
 
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
 }
 
@@ -182,17 +182,17 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 	// Extract user ID from path: /api/v1/users/{id}
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/users/")
 	if path == "" {
-		http.Error(w, "User ID required", http.StatusBadRequest)
+		s.jsonError(w, http.StatusBadRequest, "User ID required")
 		return
 	}
 
 	userID, err := strconv.ParseInt(path, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		s.jsonError(w, http.StatusBadRequest, "Invalid user ID")
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
 	switch r.Method {
@@ -206,11 +206,11 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 		user, err := s.userService.GetByID(ctx, userID)
 		if err != nil {
 			if services.IsNotFound(err) {
-				http.Error(w, "User not found", http.StatusNotFound)
+				s.jsonError(w, http.StatusNotFound, "User not found")
 				return
 			}
 			s.logger.Error("Failed to get user", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 		s.jsonResponse(w, map[string]interface{}{
@@ -234,18 +234,18 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 			Password string `json:"password,omitempty"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
-			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
 			return
 		}
 
 		user, err := s.userService.GetByID(ctx, userID)
 		if err != nil {
 			if services.IsNotFound(err) {
-				http.Error(w, "User not found", http.StatusNotFound)
+				s.jsonError(w, http.StatusNotFound, "User not found")
 				return
 			}
 			s.logger.Error("Failed to get user", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
@@ -268,7 +268,7 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 
 		if err := s.userService.Update(ctx, user); err != nil {
 			s.logger.Error("Failed to update user", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
@@ -285,17 +285,17 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 		user, err := s.userService.GetByID(ctx, userID)
 		if err != nil {
 			if services.IsNotFound(err) {
-				http.Error(w, "User not found", http.StatusNotFound)
+				s.jsonError(w, http.StatusNotFound, "User not found")
 				return
 			}
 			s.logger.Error("Failed to get user", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
 		if err := s.userService.Delete(ctx, userID); err != nil {
 			s.logger.Error("Failed to delete user", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
@@ -303,7 +303,7 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 		s.jsonResponse(w, map[string]string{"status": "deleted"})
 
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
 }
 
@@ -316,11 +316,11 @@ func (s *MasterServer) handleSettingsCategory(w http.ResponseWriter, r *http.Req
 	category := strings.Split(path, "/")[0]
 
 	if category == "" {
-		http.Error(w, "Category required", http.StatusBadRequest)
+		s.jsonError(w, http.StatusBadRequest, "Category required")
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
 	switch r.Method {
@@ -332,14 +332,14 @@ func (s *MasterServer) handleSettingsCategory(w http.ResponseWriter, r *http.Req
 		}
 
 		if s.settingsSvc == nil {
-			http.Error(w, "Settings service not configured", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Settings service not configured")
 			return
 		}
 
 		settings, err := s.settingsSvc.ListByCategory(ctx, category)
 		if err != nil {
 			s.logger.Error("Failed to list settings", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
@@ -357,20 +357,20 @@ func (s *MasterServer) handleSettingsCategory(w http.ResponseWriter, r *http.Req
 		}
 
 		if s.settingsSvc == nil {
-			http.Error(w, "Settings service not configured", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Settings service not configured")
 			return
 		}
 
 		var req map[string]string
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
-			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
 			return
 		}
 
 		for key, value := range req {
 			if err := s.settingsSvc.Set(ctx, category, key, value, false); err != nil {
 				s.logger.Error("Failed to set setting", zap.String("key", key), zap.Error(err))
-				http.Error(w, "Internal server error", http.StatusInternalServerError)
+				s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 				return
 			}
 		}
@@ -379,18 +379,18 @@ func (s *MasterServer) handleSettingsCategory(w http.ResponseWriter, r *http.Req
 		s.jsonResponse(w, map[string]string{"status": "updated"})
 
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
 }
 
 // handleSettingsExport exports all settings as JSON.
 func (s *MasterServer) handleSettingsExport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
 	// Admin-only: exporting settings
@@ -400,14 +400,14 @@ func (s *MasterServer) handleSettingsExport(w http.ResponseWriter, r *http.Reque
 	}
 
 	if s.settingsSvc == nil {
-		http.Error(w, "Settings service not configured", http.StatusInternalServerError)
+		s.jsonError(w, http.StatusInternalServerError, "Settings service not configured")
 		return
 	}
 
 	settings, err := s.settingsSvc.ListAll(ctx)
 	if err != nil {
 		s.logger.Error("Failed to list settings", zap.Error(err))
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -431,11 +431,11 @@ func (s *MasterServer) handleSettingsExport(w http.ResponseWriter, r *http.Reque
 // handleSettingsImport imports settings from JSON.
 func (s *MasterServer) handleSettingsImport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutLong)
 	defer cancel()
 
 	// Admin-only: importing settings
@@ -445,7 +445,7 @@ func (s *MasterServer) handleSettingsImport(w http.ResponseWriter, r *http.Reque
 	}
 
 	if s.settingsSvc == nil {
-		http.Error(w, "Settings service not configured", http.StatusServiceUnavailable)
+		s.jsonError(w, http.StatusServiceUnavailable, "Settings service not configured")
 		return
 	}
 
@@ -455,7 +455,7 @@ func (s *MasterServer) handleSettingsImport(w http.ResponseWriter, r *http.Reque
 		Encrypted bool   `json:"encrypted"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 10<<20)).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
 		return
 	}
 
@@ -485,7 +485,7 @@ func (s *MasterServer) handleSettingsImport(w http.ResponseWriter, r *http.Reque
 
 // handleProjectsAPI handles project list and creation with full implementation.
 func (s *MasterServer) handleProjectsAPI(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
 	switch r.Method {
@@ -499,7 +499,7 @@ func (s *MasterServer) handleProjectsAPI(w http.ResponseWriter, r *http.Request)
 		projects, err := s.projectService.List(ctx)
 		if err != nil {
 			s.logger.Error("Failed to list projects", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 		s.jsonResponse(w, projects)
@@ -519,7 +519,7 @@ func (s *MasterServer) handleProjectsAPI(w http.ResponseWriter, r *http.Request)
 			Type       string `json:"type"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
-			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
 			return
 		}
 
@@ -543,7 +543,7 @@ func (s *MasterServer) handleProjectsAPI(w http.ResponseWriter, r *http.Request)
 		s.jsonResponse(w, project)
 
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
 }
 
@@ -555,7 +555,7 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 	projectName := parts[0]
 
 	if projectName == "" {
-		http.Error(w, "Project name required", http.StatusBadRequest)
+		s.jsonError(w, http.StatusBadRequest, "Project name required")
 		return
 	}
 
@@ -573,7 +573,7 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 			ctx := r.Context()
 			project, err := s.projectService.GetByName(ctx, projectName)
 			if err != nil {
-				http.Error(w, "Project not found", http.StatusNotFound)
+				s.jsonError(w, http.StatusNotFound, "Project not found")
 				return
 			}
 			s.handleProjectHealthConfig(w, r, project.ID)
@@ -581,7 +581,7 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
 	switch r.Method {
@@ -594,7 +594,7 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 
 		project, err := s.projectService.GetByName(ctx, projectName)
 		if err != nil {
-			http.Error(w, "Project not found", http.StatusNotFound)
+			s.jsonError(w, http.StatusNotFound, "Project not found")
 			return
 		}
 		s.jsonResponse(w, project)
@@ -613,13 +613,13 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 			Type       string `json:"type"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
-			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
 			return
 		}
 
 		project, err := s.projectService.GetByName(ctx, projectName)
 		if err != nil {
-			http.Error(w, "Project not found", http.StatusNotFound)
+			s.jsonError(w, http.StatusNotFound, "Project not found")
 			return
 		}
 
@@ -639,7 +639,7 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 
 		if err := s.projectService.Update(ctx, project); err != nil {
 			s.logger.Error("Failed to update project", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
@@ -655,7 +655,7 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 
 		if err := s.projectService.Delete(ctx, projectName); err != nil {
 			s.logger.Error("Failed to delete project", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
@@ -663,18 +663,18 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 		s.jsonResponse(w, map[string]string{"status": "deleted"})
 
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
 }
 
 // handleProjectWebhooks handles webhook configuration for a project.
 func (s *MasterServer) handleProjectWebhooks(w http.ResponseWriter, r *http.Request, projectName string) {
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
 	project, err := s.projectService.GetByName(ctx, projectName)
 	if err != nil {
-		http.Error(w, "Project not found", http.StatusNotFound)
+		s.jsonError(w, http.StatusNotFound, "Project not found")
 		return
 	}
 
@@ -713,7 +713,7 @@ func (s *MasterServer) handleProjectWebhooks(w http.ResponseWriter, r *http.Requ
 			RequireSecret *bool  `json:"require_secret"` // Pointer to detect if field was provided
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
-			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
 			return
 		}
 
@@ -730,7 +730,7 @@ func (s *MasterServer) handleProjectWebhooks(w http.ResponseWriter, r *http.Requ
 
 		if err := s.webhookService.Set(ctx, project.ID, req.Provider, []byte(req.Secret), req.Enabled, requireSecret); err != nil {
 			s.logger.Error("Failed to set webhook", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
@@ -739,23 +739,23 @@ func (s *MasterServer) handleProjectWebhooks(w http.ResponseWriter, r *http.Requ
 		s.jsonResponse(w, map[string]string{"status": "created"})
 
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
 }
 
 // handleProjectDeploy triggers a deployment for a project.
 func (s *MasterServer) handleProjectDeploy(w http.ResponseWriter, r *http.Request, projectName string) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
 	project, err := s.projectService.GetByName(ctx, projectName)
 	if err != nil {
-		http.Error(w, "Project not found", http.StatusNotFound)
+		s.jsonError(w, http.StatusNotFound, "Project not found")
 		return
 	}
 
@@ -797,7 +797,7 @@ func (s *MasterServer) handleProjectDeploy(w http.ResponseWriter, r *http.Reques
 
 		if err := s.deploymentService.CreateScheduled(ctx, deploymentID, project.Name, req.Target, req.Branch, scheduledTime, username); err != nil {
 			s.logger.Error("Failed to create scheduled deployment", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
@@ -824,7 +824,7 @@ func (s *MasterServer) handleProjectDeploy(w http.ResponseWriter, r *http.Reques
 
 	if err := s.deploymentService.Create(ctx, deployment); err != nil {
 		s.logger.Error("Failed to create deployment", zap.Error(err))
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -838,11 +838,11 @@ func (s *MasterServer) handleProjectDeploy(w http.ResponseWriter, r *http.Reques
 // handleAgentsAPI handles agent list.
 func (s *MasterServer) handleAgentsAPI(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
 	// Read access: viewer role + read scope
@@ -854,7 +854,7 @@ func (s *MasterServer) handleAgentsAPI(w http.ResponseWriter, r *http.Request) {
 	agents, err := s.agentService.List(ctx)
 	if err != nil {
 		s.logger.Error("Failed to list agents", zap.Error(err))
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 	s.jsonResponse(w, agents)
@@ -874,7 +874,7 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if agentID == "" {
-		http.Error(w, "Agent ID required", http.StatusBadRequest)
+		s.jsonError(w, http.StatusBadRequest, "Agent ID required")
 		return
 	}
 
@@ -902,7 +902,7 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
 	switch r.Method {
@@ -916,11 +916,11 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 		agent, err := s.agentService.GetByID(ctx, agentID)
 		if err != nil {
 			s.logger.Error("Failed to get agent", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 		if agent == nil {
-			http.Error(w, "Agent not found", http.StatusNotFound)
+			s.jsonError(w, http.StatusNotFound, "Agent not found")
 			return
 		}
 		s.jsonResponse(w, agent)
@@ -937,13 +937,13 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 			Status string            `json:"status"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
-			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
 			return
 		}
 
 		agent, err := s.agentService.GetByID(ctx, agentID)
 		if err != nil || agent == nil {
-			http.Error(w, "Agent not found", http.StatusNotFound)
+			s.jsonError(w, http.StatusNotFound, "Agent not found")
 			return
 		}
 
@@ -956,7 +956,7 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 
 		if err := s.agentService.Upsert(ctx, agent); err != nil {
 			s.logger.Error("Failed to update agent", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
@@ -972,7 +972,7 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 
 		if err := s.agentService.Delete(ctx, agentID); err != nil {
 			s.logger.Error("Failed to delete agent", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
@@ -980,14 +980,14 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 		s.jsonResponse(w, map[string]string{"status": "deleted"})
 
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
 }
 
 // handleAgentToken handles POST /api/v1/agents/{id}/token to generate a registration token.
 func (s *MasterServer) handleAgentToken(w http.ResponseWriter, r *http.Request, agentID string) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
@@ -1018,7 +1018,7 @@ func (s *MasterServer) handleAgentToken(w http.ResponseWriter, r *http.Request, 
 
 // handleDeploymentsAPI handles deployment list and creation.
 func (s *MasterServer) handleDeploymentsAPI(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
 	switch r.Method {
@@ -1035,7 +1035,7 @@ func (s *MasterServer) handleDeploymentsAPI(w http.ResponseWriter, r *http.Reque
 		deployments, err := s.deploymentService.ListRecent(ctx, p.Limit)
 		if err != nil {
 			s.logger.Error("Failed to list deployments", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 		s.jsonResponse(w, deployments)
@@ -1054,7 +1054,7 @@ func (s *MasterServer) handleDeploymentsAPI(w http.ResponseWriter, r *http.Reque
 			ScheduledAt string `json:"scheduled_at,omitempty"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
-			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
 			return
 		}
 
@@ -1067,7 +1067,7 @@ func (s *MasterServer) handleDeploymentsAPI(w http.ResponseWriter, r *http.Reque
 		s.handleProjectDeploy(w, r, req.Project)
 
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
 }
 
@@ -1079,7 +1079,7 @@ func (s *MasterServer) handleDeploymentAPI(w http.ResponseWriter, r *http.Reques
 	deploymentID := parts[0]
 
 	if deploymentID == "" {
-		http.Error(w, "Deployment ID required", http.StatusBadRequest)
+		s.jsonError(w, http.StatusBadRequest, "Deployment ID required")
 		return
 	}
 
@@ -1103,7 +1103,7 @@ func (s *MasterServer) handleDeploymentAPI(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
 	switch r.Method {
@@ -1111,11 +1111,11 @@ func (s *MasterServer) handleDeploymentAPI(w http.ResponseWriter, r *http.Reques
 		deployment, err := s.deploymentService.GetByID(ctx, deploymentID)
 		if err != nil {
 			s.logger.Error("Failed to get deployment", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 		if deployment == nil {
-			http.Error(w, "Deployment not found", http.StatusNotFound)
+			s.jsonError(w, http.StatusNotFound, "Deployment not found")
 			return
 		}
 		s.jsonResponse(w, deployment)
@@ -1124,14 +1124,14 @@ func (s *MasterServer) handleDeploymentAPI(w http.ResponseWriter, r *http.Reques
 		// Cancel if running, otherwise just acknowledge
 		deployment, err := s.deploymentService.GetByID(ctx, deploymentID)
 		if err != nil || deployment == nil {
-			http.Error(w, "Deployment not found", http.StatusNotFound)
+			s.jsonError(w, http.StatusNotFound, "Deployment not found")
 			return
 		}
 
 		if deployment.Status == "scheduled" {
 			if err := s.deploymentService.CancelScheduled(ctx, deploymentID); err != nil {
 				s.logger.Error("Failed to cancel deployment", zap.Error(err))
-				http.Error(w, "Internal server error", http.StatusInternalServerError)
+				s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 				return
 			}
 		}
@@ -1140,23 +1140,23 @@ func (s *MasterServer) handleDeploymentAPI(w http.ResponseWriter, r *http.Reques
 		s.jsonResponse(w, map[string]string{"status": "cancelled"})
 
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
 }
 
 // handleDeploymentCancel cancels a running deployment.
 func (s *MasterServer) handleDeploymentCancel(w http.ResponseWriter, r *http.Request, deploymentID string) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
 	deployment, err := s.deploymentService.GetByID(ctx, deploymentID)
 	if err != nil || deployment == nil {
-		http.Error(w, "Deployment not found", http.StatusNotFound)
+		s.jsonError(w, http.StatusNotFound, "Deployment not found")
 		return
 	}
 
@@ -1202,7 +1202,7 @@ func (s *MasterServer) handleDeploymentCancel(w http.ResponseWriter, r *http.Req
 	deployment.CompletedAt = &now
 	if err := s.deploymentService.Update(ctx, deployment); err != nil {
 		s.logger.Error("Failed to cancel deployment", zap.Error(err))
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -1213,16 +1213,16 @@ func (s *MasterServer) handleDeploymentCancel(w http.ResponseWriter, r *http.Req
 // handleDeploymentRollback triggers a rollback for a deployment.
 func (s *MasterServer) handleDeploymentRollback(w http.ResponseWriter, r *http.Request, deploymentID string) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
 	deployment, err := s.deploymentService.GetByID(ctx, deploymentID)
 	if err != nil || deployment == nil {
-		http.Error(w, "Deployment not found", http.StatusNotFound)
+		s.jsonError(w, http.StatusNotFound, "Deployment not found")
 		return
 	}
 
@@ -1249,7 +1249,7 @@ func (s *MasterServer) handleDeploymentRollback(w http.ResponseWriter, r *http.R
 
 	if err := s.deploymentService.Create(ctx, rollback); err != nil {
 		s.logger.Error("Failed to create rollback", zap.Error(err))
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -1316,17 +1316,17 @@ func (s *MasterServer) handleDeploymentRollback(w http.ResponseWriter, r *http.R
 // handleDeploymentLogs returns logs for a deployment.
 func (s *MasterServer) handleDeploymentLogs(w http.ResponseWriter, r *http.Request, deploymentID string) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
 	logs, err := s.deploymentService.ListLogs(ctx, deploymentID)
 	if err != nil {
 		s.logger.Error("Failed to get deployment logs", zap.Error(err))
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 	s.jsonResponse(w, logs)
@@ -1336,7 +1336,7 @@ func (s *MasterServer) handleDeploymentLogs(w http.ResponseWriter, r *http.Reque
 // This allows real-time log streaming without WebSocket dependencies.
 func (s *MasterServer) handleDeploymentLogsStream(w http.ResponseWriter, r *http.Request, deploymentID string) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
@@ -1348,7 +1348,7 @@ func (s *MasterServer) handleDeploymentLogsStream(w http.ResponseWriter, r *http
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
+		s.jsonError(w, http.StatusInternalServerError, "Streaming not supported")
 		return
 	}
 
@@ -1434,13 +1434,13 @@ func (s *MasterServer) handleDeploymentLogsStream(w http.ResponseWriter, r *http
 
 // handleAPIKeys handles API key list and creation.
 func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
 	// Get current user
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		s.jsonError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 
@@ -1455,7 +1455,7 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 		keys, err := s.apiKeyService.List(ctx, userID)
 		if err != nil {
 			s.logger.Error("Failed to list API keys", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
@@ -1484,7 +1484,7 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 			ExpiresIn int    `json:"expires_in_days"` // 0 = no expiry
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
-			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
 			return
 		}
 
@@ -1503,7 +1503,7 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 		rawKey, apiKey, err := s.apiKeyService.Create(ctx, userID, req.Name, []string{"*"}, expiresAt)
 		if err != nil {
 			s.logger.Error("Failed to create API key", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
@@ -1519,7 +1519,7 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 		})
 
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
 }
 
@@ -1529,18 +1529,18 @@ func (s *MasterServer) handleAPIKey(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/apikeys/")
 	keyID, err := strconv.ParseInt(path, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid key ID", http.StatusBadRequest)
+		s.jsonError(w, http.StatusBadRequest, "Invalid key ID")
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
 	switch r.Method {
 	case http.MethodDelete:
 		if err := s.apiKeyService.Delete(ctx, keyID); err != nil {
 			s.logger.Error("Failed to revoke API key", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
@@ -1548,7 +1548,7 @@ func (s *MasterServer) handleAPIKey(w http.ResponseWriter, r *http.Request) {
 		s.jsonResponse(w, map[string]string{"status": "revoked"})
 
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
 }
 
