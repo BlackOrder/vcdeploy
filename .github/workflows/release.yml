@@ -29,11 +29,11 @@ jobs:
       - name: Run tests
         run: go test -race ./...
 
+      - name: Install golangci-lint
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
       - name: Run lints
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
-          args: --timeout=5m
+        run: golangci-lint run --timeout=5m
 
   release:
     name: Release
