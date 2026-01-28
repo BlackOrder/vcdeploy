@@ -1460,15 +1460,15 @@ func (s *MasterServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 		// Look up user
 		user, err := s.userService.GetByUsername(ctx, username)
-		if errors.Is(err, storage.ErrNotFound) {
-			s.logger.Debug("Login failed: user not found", zap.String("username", username))
-			s.logAudit(r, "login", "session", "user not found: "+username, "failure")
-			s.renderTemplate(w, "login", map[string]interface{}{"Error": "Invalid credentials"})
-			return
-		}
 		if err != nil {
 			s.logger.Error("Database error during login", zap.Error(err))
 			s.renderTemplate(w, "login", map[string]interface{}{"Error": "Internal error"})
+			return
+		}
+		if user == nil {
+			s.logger.Debug("Login failed: user not found", zap.String("username", username))
+			s.logAudit(r, "login", "session", "user not found: "+username, "failure")
+			s.renderTemplate(w, "login", map[string]interface{}{"Error": "Invalid credentials"})
 			return
 		}
 

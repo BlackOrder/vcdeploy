@@ -8,7 +8,7 @@ const authFile = path.join(__dirname, '../.auth/user.json');
  * Global setup: authenticate once and save storage state for all tests.
  */
 setup('authenticate', async ({ page }) => {
-  const baseURL = process.env.E2E_BASE_URL || 'http://localhost:18080';
+  const baseURL = process.env.E2E_BASE_URL || 'http://localhost:8080';
   
   // Create auth directory if it doesn't exist
   const authDir = path.dirname(authFile);
@@ -24,7 +24,7 @@ setup('authenticate', async ({ page }) => {
   
   // Fill in credentials (from environment or defaults)
   const username = process.env.E2E_USERNAME || 'admin';
-  const password = process.env.E2E_PASSWORD || 'admin';
+  const password = process.env.E2E_PASSWORD || 'Changeme12345!';
   
   await page.fill('input[name="username"]', username);
   await page.fill('input[name="password"]', password);
