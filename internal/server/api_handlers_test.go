@@ -22,18 +22,6 @@ func requestWithUserContext(req *http.Request, userID int64) *http.Request {
 	return req.WithContext(ctx)
 }
 
-// requestWithFullContext creates a new request with user ID and API key set in context.
-// The API key should have admin scope for full access.
-//
-//nolint:unused // Helper function for tests that need API key context
-func requestWithFullContext(req *http.Request, userID int64, apiKey *storage.APIKey) *http.Request {
-	ctx := context.WithValue(req.Context(), contextKeyUserID, userID)
-	if apiKey != nil {
-		ctx = context.WithValue(ctx, contextKeyAPIKey, apiKey)
-	}
-	return req.WithContext(ctx)
-}
-
 // TestHandleStats tests the stats endpoint.
 func TestHandleStats(t *testing.T) {
 	t.Parallel()
