@@ -283,6 +283,48 @@ func init() {
 		Args:  cobra.ExactArgs(1),
 		RunE:  runSecretRestore,
 	})
+
+	// Health check subcommand
+	healthCheckCmd := &cobra.Command{
+		Use:   "health-check [name]",
+		Short: "Run health check for a project",
+		Args:  cobra.ExactArgs(1),
+		RunE:  runProjectHealthCheck,
+	}
+	healthCheckCmd.Flags().String("url", "", "Override health check URL")
+	healthCheckCmd.Flags().Int("timeout", 30, "Health check timeout in seconds")
+	projectCmd.AddCommand(healthCheckCmd)
+
+	// Settings subcommands
+	settingsCmd := &cobra.Command{
+		Use:   "settings",
+		Short: "Settings management",
+		Long:  "Commands for managing vcdeploy settings (appearance, security, notifications, etc.).",
+	}
+	rootCmd.AddCommand(settingsCmd)
+
+	settingsCmd.AddCommand(&cobra.Command{
+		Use:   "list [category]",
+		Short: "List settings in a category",
+		Long:  "List all settings in a category (e.g., appearance, security, notifications, server, logs).",
+		Args:  cobra.ExactArgs(1),
+		RunE:  runSettingsList,
+	})
+
+	settingsCmd.AddCommand(&cobra.Command{
+		Use:   "get [category] [key]",
+		Short: "Get a setting value",
+		Args:  cobra.ExactArgs(2),
+		RunE:  runSettingsGet,
+	})
+
+	settingsSetCmd := &cobra.Command{
+		Use:   "set [category] [key] [value]",
+		Short: "Set a setting value",
+		Args:  cobra.ExactArgs(3),
+		RunE:  runSettingsSet,
+	}
+	settingsCmd.AddCommand(settingsSetCmd)
 }
 
 var masterBackupCmd = &cobra.Command{
@@ -1904,5 +1946,392 @@ func runSecretRestore(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("\nRestored %d/%d secrets successfully.\n", restored, totalSecrets)
+	return nil
+}
+
+// runProjectHealthCheck runs a health check for a project
+func runProjectHealthCheck(cmd *cobra.Command, args []string) error {
+	projectName := args[0]
+	healthURL, _ := cmd.Flags().GetString("url")
+	timeout, _ := cmd.Flags().GetInt("timeout")
+
+	// Get master address
+	masterAddr, _ := cmd.Flags().GetString("master")
+	if masterAddr == "" {
+		masterAddr = os.Getenv("VCDEPLOY_MASTER")
+	}
+	if masterAddr == "" {
+		masterAddr = "localhost:9000"
+	}
+
+	// Get API token
+	apiToken, _ := cmd.Flags().GetString("token")
+	if apiToken == "" {
+		apiToken = os.Getenv("VCDEPLOY_TOKEN")
+	}
+
+	fmt.Printf("🏥 Running health check for project: %s\n", projectName)
+
+	client := &http.Client{Timeout: time.Duration(timeout) * time.Second}
+	baseURL := "http://" + masterAddr
+
+	// If URL override provided, do a direct check
+	if healthURL != "" {
+		fmt.Printf("   URL: %s\n", healthURL)
+		fmt.Printf("   Timeout: %ds\n\n", timeout)
+
+		healthClient := &http.Client{Timeout: time.Duration(timeout) * time.Second}
+		resp, err := healthClient.Get(healthURL)
+		if err != nil {
+			fmt.Printf("❌ Health check FAILED: %v\n", err)
+			return fmt.Errorf("health check failed: %w", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			fmt.Printf("✅ Health check PASSED (status: %d)\n", resp.StatusCode)
+			return nil
+		}
+		fmt.Printf("❌ Health check FAILED (status: %d)\n", resp.StatusCode)
+		return fmt.Errorf("health check returned status %d", resp.StatusCode)
+	}
+
+	// Get project health config from API
+	configReq, _ := http.NewRequest("GET", baseURL+"/api/v1/projects/"+projectName+"/health-config", nil)
+	if apiToken != "" {
+		configReq.Header.Set("Authorization", "Bearer "+apiToken)
+	}
+
+	configResp, err := client.Do(configReq)
+	if err != nil {
+		return fmt.Errorf("master not reachable at %s: %w", masterAddr, err)
+	}
+	defer configResp.Body.Close()
+
+	if configResp.StatusCode == http.StatusUnauthorized {
+		return fmt.Errorf("authentication required. Provide --token or set VCDEPLOY_TOKEN")
+	}
+
+	if configResp.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("no health check configuration found for project %s", projectName)
+	}
+
+	var config struct {
+		URL            string `json:"url"`
+		ExpectedStatus int    `json:"expected_status"`
+		TimeoutSeconds int    `json:"timeout_seconds"`
+		Enabled        bool   `json:"enabled"`
+	}
+	if err := json.NewDecoder(configResp.Body).Decode(&config); err != nil {
+		return fmt.Errorf("failed to parse health config: %w", err)
+	}
+
+	if !config.Enabled {
+		fmt.Println("⚠️  Health check is disabled for this project")
+		return nil
+	}
+
+	if config.URL == "" {
+		return fmt.Errorf("no health check URL configured for project %s", projectName)
+	}
+
+	fmt.Printf("   URL: %s\n", config.URL)
+	fmt.Printf("   Expected status: %d\n", config.ExpectedStatus)
+	fmt.Printf("   Timeout: %ds\n\n", config.TimeoutSeconds)
+
+	// Perform the health check
+	healthClient := &http.Client{Timeout: time.Duration(config.TimeoutSeconds) * time.Second}
+	resp, err := healthClient.Get(config.URL)
+	if err != nil {
+		fmt.Printf("❌ Health check FAILED: %v\n", err)
+		return fmt.Errorf("health check failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	expectedStatus := config.ExpectedStatus
+	if expectedStatus == 0 {
+		expectedStatus = 200
+	}
+
+	if resp.StatusCode == expectedStatus || (expectedStatus == 0 && resp.StatusCode >= 200 && resp.StatusCode < 300) {
+		fmt.Printf("✅ Health check PASSED (status: %d)\n", resp.StatusCode)
+		return nil
+	}
+
+	fmt.Printf("❌ Health check FAILED (expected: %d, got: %d)\n", expectedStatus, resp.StatusCode)
+	return fmt.Errorf("health check failed: expected status %d, got %d", expectedStatus, resp.StatusCode)
+}
+
+// runSettingsList lists settings in a category
+func runSettingsList(cmd *cobra.Command, args []string) error {
+	category := args[0]
+
+	// Get master address
+	masterAddr, _ := cmd.Flags().GetString("master")
+	if masterAddr == "" {
+		masterAddr = os.Getenv("VCDEPLOY_MASTER")
+	}
+	if masterAddr == "" {
+		masterAddr = "localhost:9000"
+	}
+
+	// Get API token
+	apiToken, _ := cmd.Flags().GetString("token")
+	if apiToken == "" {
+		apiToken = os.Getenv("VCDEPLOY_TOKEN")
+	}
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	baseURL := "http://" + masterAddr
+
+	req, _ := http.NewRequest("GET", baseURL+"/api/v1/settings/"+category, nil)
+	if apiToken != "" {
+		req.Header.Set("Authorization", "Bearer "+apiToken)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("master not reachable at %s: %w", masterAddr, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		return fmt.Errorf("authentication required. Provide --token or set VCDEPLOY_TOKEN")
+	}
+
+	var settings map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&settings); err != nil {
+		return fmt.Errorf("failed to parse settings: %w", err)
+	}
+
+	fmt.Printf("Settings for category '%s':\n\n", category)
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "KEY\tVALUE")
+	fmt.Fprintln(w, "---\t-----")
+	for key, value := range settings {
+		fmt.Fprintf(w, "%s\t%v\n", key, value)
+	}
+	w.Flush()
+
+	return nil
+}
+
+// runSettingsGet gets a single setting value
+func runSettingsGet(cmd *cobra.Command, args []string) error {
+	category := args[0]
+	key := args[1]
+
+	// Get master address
+	masterAddr, _ := cmd.Flags().GetString("master")
+	if masterAddr == "" {
+		masterAddr = os.Getenv("VCDEPLOY_MASTER")
+	}
+	if masterAddr == "" {
+		masterAddr = "localhost:9000"
+	}
+
+	// Get API token
+	apiToken, _ := cmd.Flags().GetString("token")
+	if apiToken == "" {
+		apiToken = os.Getenv("VCDEPLOY_TOKEN")
+	}
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	baseURL := "http://" + masterAddr
+
+	req, _ := http.NewRequest("GET", baseURL+"/api/v1/settings/"+category, nil)
+	if apiToken != "" {
+		req.Header.Set("Authorization", "Bearer "+apiToken)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("master not reachable at %s: %w", masterAddr, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		return fmt.Errorf("authentication required. Provide --token or set VCDEPLOY_TOKEN")
+	}
+
+	var settings map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&settings); err != nil {
+		return fmt.Errorf("failed to parse settings: %w", err)
+	}
+
+	if value, ok := settings[key]; ok {
+		fmt.Printf("%v\n", value)
+	} else {
+		return fmt.Errorf("setting '%s.%s' not found", category, key)
+	}
+
+	return nil
+}
+
+// runSettingsSet sets a single setting value
+func runSettingsSet(cmd *cobra.Command, args []string) error {
+	category := args[0]
+	key := args[1]
+	value := args[2]
+
+	// Get master address
+	masterAddr, _ := cmd.Flags().GetString("master")
+	if masterAddr == "" {
+		masterAddr = os.Getenv("VCDEPLOY_MASTER")
+	}
+	if masterAddr == "" {
+		masterAddr = "localhost:9000"
+	}
+
+	// Get API token
+	apiToken, _ := cmd.Flags().GetString("token")
+	if apiToken == "" {
+		apiToken = os.Getenv("VCDEPLOY_TOKEN")
+	}
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	baseURL := "http://" + masterAddr
+
+	// Build request body
+	body := map[string]string{key: value}
+	bodyBytes, _ := json.Marshal(body)
+
+	req, _ := http.NewRequest("PUT", baseURL+"/api/v1/settings/"+category, strings.NewReader(string(bodyBytes)))
+	req.Header.Set("Content-Type", "application/json")
+	if apiToken != "" {
+		req.Header.Set("Authorization", "Bearer "+apiToken)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("master not reachable at %s: %w", masterAddr, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		return fmt.Errorf("authentication required. Provide --token or set VCDEPLOY_TOKEN")
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to set setting: %s", string(body))
+	}
+
+	fmt.Printf("✅ Setting '%s.%s' updated to '%s'\n", category, key, value)
+	return nil
+}
+
+// runAgentUpdate updates an agent to the latest version
+func runAgentUpdate(cmd *cobra.Command, args []string) error {
+	updateAll, _ := cmd.Flags().GetBool("all")
+	version, _ := cmd.Flags().GetString("version")
+
+	// Get master address
+	masterAddr, _ := cmd.Flags().GetString("master")
+	if masterAddr == "" {
+		masterAddr = os.Getenv("VCDEPLOY_MASTER")
+	}
+	if masterAddr == "" {
+		masterAddr = "localhost:9000"
+	}
+
+	// Get API token
+	apiToken, _ := cmd.Flags().GetString("token")
+	if apiToken == "" {
+		apiToken = os.Getenv("VCDEPLOY_TOKEN")
+	}
+
+	client := &http.Client{Timeout: 60 * time.Second}
+	baseURL := "http://" + masterAddr
+
+	if updateAll {
+		// Get all agents first
+		req, _ := http.NewRequest("GET", baseURL+"/api/v1/agents", nil)
+		if apiToken != "" {
+			req.Header.Set("Authorization", "Bearer "+apiToken)
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return fmt.Errorf("master not reachable at %s: %w", masterAddr, err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode == http.StatusUnauthorized {
+			return fmt.Errorf("authentication required. Provide --token or set VCDEPLOY_TOKEN")
+		}
+
+		var agents []struct {
+			ID       string `json:"id"`
+			Hostname string `json:"hostname"`
+			Status   string `json:"status"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&agents); err != nil {
+			return fmt.Errorf("failed to parse agents: %w", err)
+		}
+
+		fmt.Printf("🔄 Updating all %d agents...\n\n", len(agents))
+
+		for _, agent := range agents {
+			if agent.Status != "connected" && agent.Status != "online" {
+				fmt.Printf("⏭️  Skipping %s (%s) - not online\n", agent.Hostname, agent.ID)
+				continue
+			}
+
+			fmt.Printf("🔄 Updating %s (%s)...\n", agent.Hostname, agent.ID)
+			if err := triggerAgentUpdate(client, baseURL, apiToken, agent.ID, version); err != nil {
+				fmt.Printf("   ❌ Failed: %v\n", err)
+			} else {
+				fmt.Println("   ✅ Update triggered")
+			}
+		}
+		return nil
+	}
+
+	// Update specific agent
+	if len(args) == 0 {
+		return fmt.Errorf("agent ID required, or use --all to update all agents")
+	}
+
+	agentID := args[0]
+	fmt.Printf("🔄 Updating agent %s...\n", agentID)
+
+	if err := triggerAgentUpdate(client, baseURL, apiToken, agentID, version); err != nil {
+		return fmt.Errorf("failed to trigger update: %w", err)
+	}
+
+	fmt.Println("✅ Update triggered successfully")
+	return nil
+}
+
+// triggerAgentUpdate triggers an update for a specific agent
+func triggerAgentUpdate(client *http.Client, baseURL, apiToken, agentID, version string) error {
+	body := map[string]string{}
+	if version != "" {
+		body["version"] = version
+	}
+	bodyBytes, _ := json.Marshal(body)
+
+	req, _ := http.NewRequest("POST", baseURL+"/api/v1/agents/"+agentID+"/update", strings.NewReader(string(bodyBytes)))
+	req.Header.Set("Content-Type", "application/json")
+	if apiToken != "" {
+		req.Header.Set("Authorization", "Bearer "+apiToken)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		return fmt.Errorf("authentication required")
+	}
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("update failed: %s", string(body))
+	}
+
 	return nil
 }
