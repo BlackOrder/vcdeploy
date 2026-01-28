@@ -302,18 +302,11 @@ func (s *MasterServer) loadTemplates() error {
 		return nil
 	}
 
-	// Parse all found template files
-	for _, file := range files {
-		content, err := os.ReadFile(file)
-		if err != nil {
-			return fmt.Errorf("reading template %s: %w", file, err)
-		}
-
-		name := filepath.Base(file)
-		_, err = s.templates.New(name).Parse(string(content))
-		if err != nil {
-			return fmt.Errorf("parsing template %s: %w", name, err)
-		}
+	// Parse all template files together so they can reference each other
+	// This allows templates to use {{template "base" .}} and {{define "content"}}
+	_, err = s.templates.ParseFiles(files...)
+	if err != nil {
+		return fmt.Errorf("parsing templates: %w", err)
 	}
 
 	return nil
