@@ -212,7 +212,7 @@ func (r *SSHRunner) buildJumpConfig() (*ssh.ClientConfig, error) {
 func (r *SSHRunner) buildHostKeyCallback() (ssh.HostKeyCallback, error) {
 	// For testing only: skip host key verification entirely
 	if r.config.InsecureIgnoreHostKey {
-		return ssh.InsecureIgnoreHostKey(), nil
+		return ssh.InsecureIgnoreHostKey(), nil // #nosec G106 -- user explicitly enabled insecure mode
 	}
 
 	// Determine known_hosts file path
