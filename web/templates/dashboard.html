@@ -4,13 +4,13 @@
 <div class="space-y-6">
     <div class="flex items-center justify-between">
         <h1 class="text-2xl font-bold">Dashboard</h1>
-        <button hx-post="/api/v1/deployments" hx-target="#recent-deployments" 
+        <a href="/projects" 
             class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-accent-600 hover:bg-accent-700">
             <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
             </svg>
-            Quick Deploy
-        </button>
+            New Project
+        </a>
     </div>
 
     <!-- Stats Grid -->
@@ -26,9 +26,7 @@
                     <div class="ml-5 w-0 flex-1">
                         <dl>
                             <dt class="text-sm font-medium text-dark-muted truncate">Total Projects</dt>
-                            <dd class="text-lg font-semibold text-dark-text" hx-get="/api/v1/stats/projects" hx-trigger="load" hx-swap="innerHTML">
-                                {{.Stats.Projects}}
-                            </dd>
+                            <dd class="text-lg font-semibold text-dark-text">{{.Stats.TotalProjects}}</dd>
                         </dl>
                     </div>
                 </div>
@@ -64,7 +62,7 @@
                     <div class="ml-5 w-0 flex-1">
                         <dl>
                             <dt class="text-sm font-medium text-dark-muted truncate">Active Agents</dt>
-                            <dd class="text-lg font-semibold text-dark-text">{{.Stats.ActiveAgents}}</dd>
+                            <dd class="text-lg font-semibold text-dark-text">{{.Stats.ConnectedAgents}}</dd>
                         </dl>
                     </div>
                 </div>
@@ -95,23 +93,61 @@
         <div class="px-6 py-4 border-b border-dark-border">
             <h2 class="text-lg font-medium">Recent Deployments</h2>
         </div>
-        <div id="recent-deployments" hx-get="/api/v1/deployments?limit=10" hx-trigger="load" hx-swap="innerHTML">
-            <div class="p-6 text-center text-dark-muted">
-                <span class="animate-pulse">Loading...</span>
-            </div>
+        <div class="divide-y divide-dark-border">
+            {{if .RecentDeployments}}
+                {{range .RecentDeployments}}
+                <div class="px-6 py-4 flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                            {{if eq .Status "success"}}bg-green-900/50 text-green-400
+                            {{else if eq .Status "failed"}}bg-red-900/50 text-red-400
+                            {{else if eq .Status "running"}}bg-blue-900/50 text-blue-400
+                            {{else}}bg-gray-900/50 text-gray-400{{end}}">
+                            {{.Status}}
+                        </span>
+                        <div>
+                            <p class="text-sm font-medium text-dark-text">{{.ProjectName}}</p>
+                            <p class="text-xs text-dark-muted">{{.Branch}} • {{formatTime .CreatedAt}}</p>
+                        </div>
+                    </div>
+                    <a href="/deployments/{{.ID}}" class="text-accent-500 hover:text-accent-400 text-sm">View</a>
+                </div>
+                {{end}}
+            {{else}}
+                <div class="p-6 text-center text-dark-muted">
+                    <p>No deployments yet</p>
+                    <a href="/projects" class="text-accent-500 hover:text-accent-400 text-sm">Create a project to get started</a>
+                </div>
+            {{end}}
         </div>
     </div>
 
-    <!-- Agent Status -->
+    <!-- Agent Status & Recent Activity -->
     <div class="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <div class="bg-dark-card rounded-lg border border-dark-border">
             <div class="px-6 py-4 border-b border-dark-border">
                 <h2 class="text-lg font-medium">Agent Status</h2>
             </div>
-            <div id="agent-status" hx-get="/api/v1/agents" hx-trigger="load, every 30s" hx-swap="innerHTML">
-                <div class="p-6 text-center text-dark-muted">
-                    <span class="animate-pulse">Loading...</span>
-                </div>
+            <div class="divide-y divide-dark-border">
+                {{if .Agents}}
+                    {{range .Agents}}
+                    <div class="px-6 py-4 flex items-center justify-between">
+                        <div class="flex items-center space-x-4">
+                            <span class="inline-flex h-2 w-2 rounded-full {{if eq .Status "connected"}}bg-green-500{{else}}bg-gray-500{{end}}"></span>
+                            <div>
+                                <p class="text-sm font-medium text-dark-text">{{.Name}}</p>
+                                <p class="text-xs text-dark-muted">{{.Hostname}}</p>
+                            </div>
+                        </div>
+                        <span class="text-xs text-dark-muted capitalize">{{.Status}}</span>
+                    </div>
+                    {{end}}
+                {{else}}
+                    <div class="p-6 text-center text-dark-muted">
+                        <p>No agents registered</p>
+                        <a href="/agents" class="text-accent-500 hover:text-accent-400 text-sm">Register an agent</a>
+                    </div>
+                {{end}}
             </div>
         </div>
 
@@ -119,10 +155,19 @@
             <div class="px-6 py-4 border-b border-dark-border">
                 <h2 class="text-lg font-medium">Recent Activity</h2>
             </div>
-            <div id="recent-activity" hx-get="/api/v1/audit?limit=10" hx-trigger="load" hx-swap="innerHTML">
-                <div class="p-6 text-center text-dark-muted">
-                    <span class="animate-pulse">Loading...</span>
-                </div>
+            <div class="divide-y divide-dark-border">
+                {{if .RecentActivity}}
+                    {{range .RecentActivity}}
+                    <div class="px-6 py-4">
+                        <p class="text-sm text-dark-text">{{.Action}}</p>
+                        <p class="text-xs text-dark-muted">{{.Username}} • {{formatTime .CreatedAt}}</p>
+                    </div>
+                    {{end}}
+                {{else}}
+                    <div class="p-6 text-center text-dark-muted">
+                        <p>No recent activity</p>
+                    </div>
+                {{end}}
             </div>
         </div>
     </div>

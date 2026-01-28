@@ -835,13 +835,9 @@ func (s *MasterServer) loggingMiddleware(next http.Handler) http.Handler {
 
 func (s *MasterServer) withAuth(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// First try API key in Authorization header
 		auth := r.Header.Get("Authorization")
-		if auth == "" {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
-
-		if strings.HasPrefix(auth, "Bearer ") {
+		if auth != "" && strings.HasPrefix(auth, "Bearer ") {
 			token := strings.TrimPrefix(auth, "Bearer ")
 			apiKey, userID, err := s.validateAPIKey(r.Context(), token)
 			if err != nil {
@@ -854,10 +850,21 @@ func (s *MasterServer) withAuth(handler http.HandlerFunc) http.HandlerFunc {
 			ctx = WithAPIKeyContext(ctx, apiKey)
 			handler(w, r.WithContext(ctx))
 			return
-		} else {
-			http.Error(w, "Invalid authorization header", http.StatusUnauthorized)
-			return
 		}
+
+		// Fall back to session cookie (for htmx requests from browser)
+		cookie, err := r.Cookie("session")
+		if err == nil {
+			userID, err := s.validateSession(r.Context(), cookie.Value)
+			if err == nil {
+				ctx := context.WithValue(r.Context(), contextKeyUserID, userID)
+				handler(w, r.WithContext(ctx))
+				return
+			}
+			s.logger.Debug("Session validation failed", zap.Error(err))
+		}
+
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 	}
 }
 
@@ -1539,15 +1546,103 @@ func (s *MasterServer) handleLogout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *MasterServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
-	s.renderTemplate(w, "dashboard", map[string]interface{}{"Title": "Dashboard"})
+	ctx := r.Context()
+
+	// Fetch stats
+	stats := map[string]interface{}{
+		"TotalProjects":    0,
+		"DeploymentsToday": 0,
+		"ConnectedAgents":  0,
+		"SuccessRate":      0,
+	}
+
+	// Get projects count
+	projects, err := s.projectService.List(ctx)
+	if err == nil {
+		stats["TotalProjects"] = len(projects)
+	}
+
+	// Get agents and count connected
+	agents, err := s.agentService.List(ctx)
+	var agentData []map[string]interface{}
+	if err == nil {
+		var connectedCount int
+		for _, a := range agents {
+			if a.Status == "connected" {
+				connectedCount++
+			}
+			agentData = append(agentData, map[string]interface{}{
+				"Name":     a.Hostname,
+				"Hostname": a.Hostname,
+				"Status":   a.Status,
+			})
+		}
+		stats["ConnectedAgents"] = connectedCount
+	}
+
+	// Get recent deployments and calculate stats
+	deployments, err := s.deploymentService.ListRecent(ctx, 10)
+	var recentDeployments []map[string]interface{}
+	if err == nil {
+		var successCount, totalCount int
+		today := time.Now().Truncate(24 * time.Hour)
+		var deploymentsToday int
+
+		for _, d := range deployments {
+			if d.StartedAt.After(today) {
+				deploymentsToday++
+			}
+			if d.Status == "success" {
+				successCount++
+			}
+			totalCount++
+
+			recentDeployments = append(recentDeployments, map[string]interface{}{
+				"ID":          d.ID,
+				"ProjectName": d.Project,
+				"Branch":      d.Branch,
+				"Status":      d.Status,
+				"CreatedAt":   d.StartedAt,
+			})
+		}
+
+		stats["DeploymentsToday"] = deploymentsToday
+		if totalCount > 0 {
+			stats["SuccessRate"] = (successCount * 100) / totalCount
+		}
+	}
+
+	// Get recent audit logs
+	auditLogs, err := s.auditService.List(ctx, 10, 0)
+	var recentActivity []map[string]interface{}
+	if err == nil {
+		for _, log := range auditLogs {
+			recentActivity = append(recentActivity, map[string]interface{}{
+				"Action":    log.Action,
+				"Username":  log.User,
+				"CreatedAt": log.Timestamp,
+			})
+		}
+	}
+
+	data := s.withCommonData(r, map[string]interface{}{
+		"Title":             "Dashboard",
+		"Active":            "dashboard",
+		"Stats":             stats,
+		"RecentDeployments": recentDeployments,
+		"Agents":            agentData,
+		"RecentActivity":    recentActivity,
+	})
+
+	s.renderTemplate(w, "dashboard", data)
 }
 
 func (s *MasterServer) handleProjectsUI(w http.ResponseWriter, r *http.Request) {
-	s.renderTemplate(w, "projects", map[string]interface{}{"Title": "Projects"})
+	s.renderTemplate(w, "projects", s.withCommonData(r, map[string]interface{}{"Title": "Projects", "Active": "projects"}))
 }
 
 func (s *MasterServer) handleDeploymentsUI(w http.ResponseWriter, r *http.Request) {
-	s.renderTemplate(w, "deployments", map[string]interface{}{"Title": "Deployments"})
+	s.renderTemplate(w, "deployments", s.withCommonData(r, map[string]interface{}{"Title": "Deployments", "Active": "deployments"}))
 }
 
 func (s *MasterServer) handleAgentsUI(w http.ResponseWriter, r *http.Request) {
@@ -1561,7 +1656,9 @@ func (s *MasterServer) handleAgentsUI(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	s.agentsMu.RUnlock()
-	s.renderTemplate(w, "agents", map[string]interface{}{"Title": "Agents", "Agents": agents})
+	data := s.withCommonData(r, map[string]interface{}{"Title": "Agents", "Active": "agents"})
+	data["Agents"] = agents
+	s.renderTemplate(w, "agents", data)
 }
 
 func (s *MasterServer) handleSettingsUI(w http.ResponseWriter, r *http.Request) {
@@ -1596,11 +1693,12 @@ func (s *MasterServer) handleSettingsUI(w http.ResponseWriter, r *http.Request) 
 		settings["ThemeColor"], _ = s.settingsSvc.GetString(ctx, "appearance", "theme_color", "green")
 	}
 
-	s.renderTemplate(w, "settings", map[string]interface{}{
-		"Title":    "Settings",
-		"Active":   "settings",
-		"Settings": settings,
+	data := s.withCommonData(r, map[string]interface{}{
+		"Title":  "Settings",
+		"Active": "settings",
 	})
+	data["Settings"] = settings
+	s.renderTemplate(w, "settings", data)
 }
 
 func (s *MasterServer) handleSecretsUI(w http.ResponseWriter, r *http.Request) {
@@ -1611,32 +1709,51 @@ func (s *MasterServer) handleSecretsUI(w http.ResponseWriter, r *http.Request) {
 		// Continue with empty list rather than failing completely
 		projects = nil
 	}
-	s.renderTemplate(w, "secrets", map[string]interface{}{
-		"Title":    "Secrets",
-		"Active":   "secrets",
-		"Projects": projects,
+	data := s.withCommonData(r, map[string]interface{}{
+		"Title":  "Secrets",
+		"Active": "secrets",
 	})
+	data["Projects"] = projects
+	s.renderTemplate(w, "secrets", data)
 }
 
 func (s *MasterServer) handleProjectTypesUI(w http.ResponseWriter, r *http.Request) {
-	s.renderTemplate(w, "project-types", map[string]interface{}{
+	s.renderTemplate(w, "project-types", s.withCommonData(r, map[string]interface{}{
 		"Title":  "Project Types",
 		"Active": "project-types",
-	})
+	}))
 }
 
 func (s *MasterServer) handleAuditUI(w http.ResponseWriter, r *http.Request) {
-	s.renderTemplate(w, "audit", map[string]interface{}{
+	s.renderTemplate(w, "audit", s.withCommonData(r, map[string]interface{}{
 		"Title":  "Audit Log",
 		"Active": "audit",
-	})
+	}))
 }
 
 func (s *MasterServer) handleAPIKeysUI(w http.ResponseWriter, r *http.Request) {
-	s.renderTemplate(w, "apikeys", map[string]interface{}{
+	s.renderTemplate(w, "apikeys", s.withCommonData(r, map[string]interface{}{
 		"Title":  "API Keys",
 		"Active": "apikeys",
-	})
+	}))
+}
+
+// withCommonData adds common template data like ShowNav, Username for authenticated pages
+func (s *MasterServer) withCommonData(r *http.Request, data map[string]interface{}) map[string]interface{} {
+	if data == nil {
+		data = make(map[string]interface{})
+	}
+	data["ShowNav"] = true
+
+	// Get username from context
+	if userID, ok := GetUserIDFromContext(r.Context()); ok {
+		user, err := s.userService.GetByID(r.Context(), userID)
+		if err == nil && user != nil {
+			data["Username"] = user.Username
+		}
+	}
+
+	return data
 }
 
 func (s *MasterServer) renderTemplate(w http.ResponseWriter, name string, data interface{}) {
