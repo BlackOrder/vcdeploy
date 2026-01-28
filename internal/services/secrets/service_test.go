@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/BlackOrder/vcdeploy/internal/security"
+	"github.com/BlackOrder/vcdeploy/internal/services"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"go.uber.org/zap"
 )
@@ -170,11 +171,14 @@ func TestService_GetEntry_NotFound(t *testing.T) {
 	ctx := context.Background()
 
 	entry, err := svc.GetEntry(ctx, "myproject", "production", "NONEXISTENT")
-	if err != nil {
-		t.Fatalf("GetEntry() error = %v", err)
+	if err == nil {
+		t.Fatal("GetEntry() expected error for not found")
+	}
+	if !services.IsNotFound(err) {
+		t.Errorf("GetEntry() expected ErrNotFound, got: %v", err)
 	}
 	if entry != nil {
-		t.Error("GetEntry() expected nil for not found")
+		t.Error("GetEntry() expected nil entry for not found")
 	}
 }
 

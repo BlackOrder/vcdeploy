@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/BlackOrder/vcdeploy/internal/proto"
+	"github.com/BlackOrder/vcdeploy/internal/services"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"github.com/BlackOrder/vcdeploy/internal/validation"
 	"go.uber.org/zap"
@@ -204,12 +205,12 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 
 		user, err := s.userService.GetByID(ctx, userID)
 		if err != nil {
+			if services.IsNotFound(err) {
+				http.Error(w, "User not found", http.StatusNotFound)
+				return
+			}
 			s.logger.Error("Failed to get user", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
-			return
-		}
-		if user == nil {
-			http.Error(w, "User not found", http.StatusNotFound)
 			return
 		}
 		s.jsonResponse(w, map[string]interface{}{
@@ -239,12 +240,12 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 
 		user, err := s.userService.GetByID(ctx, userID)
 		if err != nil {
+			if services.IsNotFound(err) {
+				http.Error(w, "User not found", http.StatusNotFound)
+				return
+			}
 			s.logger.Error("Failed to get user", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
-			return
-		}
-		if user == nil {
-			http.Error(w, "User not found", http.StatusNotFound)
 			return
 		}
 
@@ -283,12 +284,12 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 
 		user, err := s.userService.GetByID(ctx, userID)
 		if err != nil {
+			if services.IsNotFound(err) {
+				http.Error(w, "User not found", http.StatusNotFound)
+				return
+			}
 			s.logger.Error("Failed to get user", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
-			return
-		}
-		if user == nil {
-			http.Error(w, "User not found", http.StatusNotFound)
 			return
 		}
 

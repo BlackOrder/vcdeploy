@@ -91,7 +91,7 @@ func (s *Service) Get(ctx context.Context, project, scope, key string) (string, 
 func (s *Service) GetEntry(ctx context.Context, project, scope, key string) (*Entry, error) {
 	secret, err := s.db.GetSecret(ctx, project, scope, key)
 	if errors.Is(err, storage.ErrNotFound) {
-		return nil, nil
+		return nil, services.NotFound("secrets.GetEntry", "secret", project+"/"+scope+"/"+key)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("retrieving secret: %w", err)
