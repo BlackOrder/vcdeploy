@@ -8,6 +8,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -532,4 +533,312 @@ func createTestMultipartRequest(t *testing.T, url, version, osType, arch string,
 	req := httptest.NewRequest("POST", url, body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	return req
+}
+
+func TestHandleAgentBinary(t *testing.T) {
+	s, _, _, userID := newTestServerWithAuth(t)
+
+	ctx := context.Background()
+	// Create a test binary
+	binary := &storage.AgentBinary{
+		Version:        "1.0.0",
+		OS:             "linux",
+		Arch:           "amd64",
+		Path:           "/tmp/test-binary-file",
+		ChecksumSHA256: "abc123",
+		SizeBytes:      1024,
+		UploadedAt:     time.Now(),
+		IsCurrent:      false,
+	}
+	if err := s.db.CreateAgentBinary(ctx, binary); err != nil {
+		t.Fatalf("Failed to create binary: %v", err)
+	}
+
+	t.Run("GET - get binary by id", func(t *testing.T) {
+		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/binaries/1", nil), userID)
+		rr := httptest.NewRecorder()
+		s.handleAgentBinary(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status %d, got %d: %s", http.StatusOK, rr.Code, rr.Body.String())
+		}
+
+		var result storage.AgentBinary
+		if err := json.NewDecoder(rr.Body).Decode(&result); err != nil {
+			t.Fatalf("Failed to decode response: %v", err)
+		}
+
+		if result.Version != "1.0.0" {
+			t.Errorf("Expected version 1.0.0, got %s", result.Version)
+		}
+	})
+
+	t.Run("GET - binary not found", func(t *testing.T) {
+		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/binaries/9999", nil), userID)
+		rr := httptest.NewRecorder()
+		s.handleAgentBinary(rr, req)
+
+		if rr.Code != http.StatusNotFound {
+			t.Errorf("Expected status %d, got %d: %s", http.StatusNotFound, rr.Code, rr.Body.String())
+		}
+	})
+
+	t.Run("GET - invalid binary ID", func(t *testing.T) {
+		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/binaries/invalid", nil), userID)
+		rr := httptest.NewRecorder()
+		s.handleAgentBinary(rr, req)
+
+		if rr.Code != http.StatusBadRequest {
+			t.Errorf("Expected status %d, got %d: %s", http.StatusBadRequest, rr.Code, rr.Body.String())
+		}
+	})
+
+	t.Run("GET - empty binary ID", func(t *testing.T) {
+		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/binaries/", nil), userID)
+		rr := httptest.NewRecorder()
+		s.handleAgentBinary(rr, req)
+
+		if rr.Code != http.StatusBadRequest {
+			t.Errorf("Expected status %d, got %d: %s", http.StatusBadRequest, rr.Code, rr.Body.String())
+		}
+	})
+
+	t.Run("DELETE - delete binary not found", func(t *testing.T) {
+		req := requestWithAdminContext(httptest.NewRequest("DELETE", "/api/v1/binaries/9999", nil), userID)
+		rr := httptest.NewRecorder()
+		s.handleAgentBinary(rr, req)
+
+		if rr.Code != http.StatusNotFound {
+			t.Errorf("Expected status %d, got %d: %s", http.StatusNotFound, rr.Code, rr.Body.String())
+		}
+	})
+
+	t.Run("DELETE - delete binary success", func(t *testing.T) {
+		// Create a binary to delete
+		binaryToDelete := &storage.AgentBinary{
+			Version:        "0.9.0",
+			OS:             "linux",
+			Arch:           "amd64",
+			Path:           "/tmp/nonexistent-binary", // File doesn't need to exist for test
+			ChecksumSHA256: "xyz789",
+			SizeBytes:      512,
+			UploadedAt:     time.Now(),
+			IsCurrent:      false,
+		}
+		if err := s.db.CreateAgentBinary(ctx, binaryToDelete); err != nil {
+			t.Fatalf("Failed to create binary to delete: %v", err)
+		}
+
+		req := requestWithAdminContext(httptest.NewRequest("DELETE", "/api/v1/binaries/2", nil), userID)
+		rr := httptest.NewRecorder()
+		s.handleAgentBinary(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status %d, got %d: %s", http.StatusOK, rr.Code, rr.Body.String())
+		}
+
+		var result map[string]string
+		if err := json.NewDecoder(rr.Body).Decode(&result); err != nil {
+			t.Fatalf("Failed to decode response: %v", err)
+		}
+
+		if result["status"] != "deleted" {
+			t.Errorf("Expected status 'deleted', got %s", result["status"])
+		}
+
+		// Verify deletion
+		_, err := s.db.GetAgentBinary(ctx, binaryToDelete.ID)
+		if err != storage.ErrNotFound {
+			t.Errorf("Expected ErrNotFound, got %v", err)
+		}
+	})
+
+	t.Run("PUT - method not allowed", func(t *testing.T) {
+		req := requestWithAdminContext(httptest.NewRequest("PUT", "/api/v1/binaries/1", nil), userID)
+		rr := httptest.NewRecorder()
+		s.handleAgentBinary(rr, req)
+
+		if rr.Code != http.StatusMethodNotAllowed {
+			t.Errorf("Expected status %d, got %d: %s", http.StatusMethodNotAllowed, rr.Code, rr.Body.String())
+		}
+	})
+}
+
+func TestHandleAgentBinaryDownload(t *testing.T) {
+	s, _, _, userID := newTestServerWithAuth(t)
+
+	ctx := context.Background()
+
+	// Create a temp file to serve as binary
+	tmpFile, err := createTempFile(t, "test-binary-content-for-download")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+
+	// Create a test binary
+	binary := &storage.AgentBinary{
+		Version:        "1.0.0",
+		OS:             "linux",
+		Arch:           "amd64",
+		Path:           tmpFile,
+		ChecksumSHA256: "abc123",
+		SizeBytes:      int64(len("test-binary-content-for-download")),
+		UploadedAt:     time.Now(),
+		IsCurrent:      false,
+	}
+	if err := s.db.CreateAgentBinary(ctx, binary); err != nil {
+		t.Fatalf("Failed to create binary: %v", err)
+	}
+
+	t.Run("GET - download binary success", func(t *testing.T) {
+		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/binaries/1/download", nil), userID)
+		rr := httptest.NewRecorder()
+		s.handleAgentBinary(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status %d, got %d: %s", http.StatusOK, rr.Code, rr.Body.String())
+		}
+
+		// Check headers
+		contentDisposition := rr.Header().Get("Content-Disposition")
+		if contentDisposition == "" {
+			t.Error("Expected Content-Disposition header")
+		}
+
+		contentType := rr.Header().Get("Content-Type")
+		if contentType != "application/octet-stream" {
+			t.Errorf("Expected Content-Type 'application/octet-stream', got %s", contentType)
+		}
+
+		checksum := rr.Header().Get("X-Checksum-SHA256")
+		if checksum != "abc123" {
+			t.Errorf("Expected checksum 'abc123', got %s", checksum)
+		}
+	})
+
+	t.Run("GET - download binary not found", func(t *testing.T) {
+		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/binaries/9999/download", nil), userID)
+		rr := httptest.NewRecorder()
+		s.handleAgentBinary(rr, req)
+
+		if rr.Code != http.StatusNotFound {
+			t.Errorf("Expected status %d, got %d: %s", http.StatusNotFound, rr.Code, rr.Body.String())
+		}
+	})
+
+	t.Run("POST - method not allowed for download", func(t *testing.T) {
+		req := requestWithAdminContext(httptest.NewRequest("POST", "/api/v1/binaries/1/download", nil), userID)
+		rr := httptest.NewRecorder()
+		s.handleAgentBinary(rr, req)
+
+		if rr.Code != http.StatusMethodNotAllowed {
+			t.Errorf("Expected status %d, got %d: %s", http.StatusMethodNotAllowed, rr.Code, rr.Body.String())
+		}
+	})
+}
+
+func TestHandleSetCurrentBinary(t *testing.T) {
+	s, _, _, userID := newTestServerWithAuth(t)
+
+	ctx := context.Background()
+
+	// Create test binaries
+	binary1 := &storage.AgentBinary{
+		Version:        "1.0.0",
+		OS:             "linux",
+		Arch:           "amd64",
+		Path:           "/tmp/binary1",
+		ChecksumSHA256: "abc123",
+		SizeBytes:      1024,
+		UploadedAt:     time.Now(),
+		IsCurrent:      true,
+	}
+	if err := s.db.CreateAgentBinary(ctx, binary1); err != nil {
+		t.Fatalf("Failed to create binary1: %v", err)
+	}
+
+	binary2 := &storage.AgentBinary{
+		Version:        "2.0.0",
+		OS:             "linux",
+		Arch:           "amd64",
+		Path:           "/tmp/binary2",
+		ChecksumSHA256: "def456",
+		SizeBytes:      2048,
+		UploadedAt:     time.Now(),
+		IsCurrent:      false,
+	}
+	if err := s.db.CreateAgentBinary(ctx, binary2); err != nil {
+		t.Fatalf("Failed to create binary2: %v", err)
+	}
+
+	t.Run("POST - set current binary success", func(t *testing.T) {
+		req := requestWithAdminContext(httptest.NewRequest("POST", "/api/v1/binaries/2/current", nil), userID)
+		rr := httptest.NewRecorder()
+		s.handleAgentBinary(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status %d, got %d: %s", http.StatusOK, rr.Code, rr.Body.String())
+		}
+
+		var result map[string]string
+		if err := json.NewDecoder(rr.Body).Decode(&result); err != nil {
+			t.Fatalf("Failed to decode response: %v", err)
+		}
+
+		if result["status"] != "current" {
+			t.Errorf("Expected status 'current', got %s", result["status"])
+		}
+
+		if result["version"] != "2.0.0" {
+			t.Errorf("Expected version '2.0.0', got %s", result["version"])
+		}
+
+		// Verify in database
+		updatedBinary, err := s.db.GetAgentBinary(ctx, binary2.ID)
+		if err != nil {
+			t.Fatalf("Failed to get binary: %v", err)
+		}
+
+		if !updatedBinary.IsCurrent {
+			t.Error("Expected binary2 to be current")
+		}
+	})
+
+	t.Run("POST - set current binary not found", func(t *testing.T) {
+		req := requestWithAdminContext(httptest.NewRequest("POST", "/api/v1/binaries/9999/current", nil), userID)
+		rr := httptest.NewRecorder()
+		s.handleAgentBinary(rr, req)
+
+		if rr.Code != http.StatusNotFound {
+			t.Errorf("Expected status %d, got %d: %s", http.StatusNotFound, rr.Code, rr.Body.String())
+		}
+	})
+
+	t.Run("GET - method not allowed for set current", func(t *testing.T) {
+		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/binaries/1/current", nil), userID)
+		rr := httptest.NewRecorder()
+		s.handleAgentBinary(rr, req)
+
+		if rr.Code != http.StatusMethodNotAllowed {
+			t.Errorf("Expected status %d, got %d: %s", http.StatusMethodNotAllowed, rr.Code, rr.Body.String())
+		}
+	})
+}
+
+// createTempFile creates a temporary file with the given content and returns its path.
+func createTempFile(t *testing.T, content string) (string, error) {
+	t.Helper()
+	tmpFile, err := os.CreateTemp("", "test-binary-*")
+	if err != nil {
+		return "", err
+	}
+	if _, err := tmpFile.WriteString(content); err != nil {
+		tmpFile.Close()
+		return "", err
+	}
+	tmpFile.Close()
+	t.Cleanup(func() {
+		_ = os.Remove(tmpFile.Name())
+	})
+	return tmpFile.Name(), nil
 }
