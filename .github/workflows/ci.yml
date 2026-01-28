@@ -127,11 +127,8 @@ jobs:
     needs: [lint, test]
     strategy:
       matrix:
-        os: [linux, darwin, windows]
+        os: [linux, darwin]
         arch: [amd64, arm64]
-        exclude:
-          - os: windows
-            arch: arm64
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -147,18 +144,14 @@ jobs:
           GOOS: ${{ matrix.os }}
           GOARCH: ${{ matrix.arch }}
           CGO_ENABLED: 0
-        run: |
-          EXT="${{ matrix.os == 'windows' && '.exe' || '' }}"
-          go build -ldflags="-s -w" -o vcdeploy-${{ matrix.os }}-${{ matrix.arch }}${EXT} ./cmd/vcdeploy
+        run: go build -ldflags="-s -w" -o vcdeploy-${{ matrix.os }}-${{ matrix.arch }} ./cmd/vcdeploy
 
       - name: Build vcdeploy-agent
         env:
           GOOS: ${{ matrix.os }}
           GOARCH: ${{ matrix.arch }}
           CGO_ENABLED: 0
-        run: |
-          EXT="${{ matrix.os == 'windows' && '.exe' || '' }}"
-          go build -ldflags="-s -w" -o vcdeploy-agent-${{ matrix.os }}-${{ matrix.arch }}${EXT} ./cmd/vcdeploy-agent
+        run: go build -ldflags="-s -w" -o vcdeploy-agent-${{ matrix.os }}-${{ matrix.arch }} ./cmd/vcdeploy-agent
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

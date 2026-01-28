@@ -1,5 +1,7 @@
 # VCDeploy Master Development Configuration
 # For local development and testing
+# Note: System paths are configured via environment variables in `make dev`:
+#   VCDEPLOY_DATA_DIR, VCDEPLOY_CONFIG_DIR, VCDEPLOY_RUN_DIR, VCDEPLOY_LOG_DIR
 
 server:
   listen: ":8080"

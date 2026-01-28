@@ -202,6 +202,18 @@ func NewMasterServer(cfg *config.MasterConfig, db *storage.DB, logger *zap.Logge
 		templatesDir: sysCfg.TemplatesDir(),
 	}
 
+	// Initialize service layer (services that don't need KMS)
+	s.userService = users.New(s.db)
+	s.sessionService = sessions.New(s.db)
+	s.apiKeyService = apikeys.New(s.db)
+	s.projectService = projects.New(s.db)
+	s.projectTypeService = projecttypes.New(s.db)
+	s.deploymentService = deployments.New(s.db)
+	s.agentService = agents.New(s.db)
+	s.auditService = audit.New(s.db)
+	s.hostKeyService = hostkeys.New(s.db)
+	s.provisionService = provision.New(s.db)
+
 	// Load templates from disk
 	if err := s.loadTemplates(); err != nil {
 		logger.Warn("Failed to load templates, using defaults", zap.Error(err))
@@ -243,20 +255,10 @@ func (s *MasterServer) SetWebhookHandler(kms *security.KMS, processor webhooksha
 	// Also set KMS on the server for secrets API
 	s.kms = kms
 
-	// Initialize service layer
+	// Initialize KMS-dependent services
 	s.secretService = secrets.New(s.db, kms)
 	s.settingsSvc = settings.New(s.db, kms)
-	s.userService = users.New(s.db)
-	s.sessionService = sessions.New(s.db)
-	s.apiKeyService = apikeys.New(s.db)
-	s.projectService = projects.New(s.db)
-	s.projectTypeService = projecttypes.New(s.db)
 	s.webhookService = webhooks.New(s.db, kms)
-	s.deploymentService = deployments.New(s.db)
-	s.agentService = agents.New(s.db)
-	s.auditService = audit.New(s.db)
-	s.hostKeyService = hostkeys.New(s.db)
-	s.provisionService = provision.New(s.db)
 
 	// Inject services into AgentServer if it exists
 	if s.agentServer != nil {
