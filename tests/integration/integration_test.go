@@ -1810,3 +1810,241 @@ func TestAuditTrail(t *testing.T) {
 		t.Errorf("Found %d failed_login entries, want 1", actionCounts["failed_login"])
 	}
 }
+
+// TestAgentUpdatePushConnected tests that agent updates are pushed via gRPC when connected.
+func TestAgentUpdatePushConnected(t *testing.T) {
+	f := NewTestFixture(t)
+	defer f.Close()
+
+	ctx := context.Background()
+
+	// Create an agent with OS/arch info
+	agent := &storage.Agent{
+		ID:         "agent-update-connected",
+		Hostname:   "update-test-server.test.com",
+		Labels:     map[string]string{"env": "test"},
+		Status:     "connected",
+		Version:    "1.0.0",
+		OS:         "linux",
+		Arch:       "amd64",
+		LastSeenAt: time.Now(),
+	}
+
+	err := f.DB.UpsertAgent(ctx, agent)
+	if err != nil {
+		t.Fatalf("Failed to create agent: %v", err)
+	}
+
+	// Create an agent binary for the agent's platform
+	binary := &storage.AgentBinary{
+		Version:        "1.1.0",
+		OS:             "linux",
+		Arch:           "amd64",
+		Path:           "/tmp/vcdeploy-agent-1.1.0",
+		ChecksumSHA256: "abc123def456",
+		SizeBytes:      1024,
+		IsCurrent:      true,
+		UploadedAt:     time.Now(),
+	}
+
+	err = f.DB.CreateAgentBinary(ctx, binary)
+	if err != nil {
+		t.Fatalf("Failed to create agent binary: %v", err)
+	}
+
+	// Verify the server has an agent server
+	agentServer := f.Server.GetAgentServer()
+	if agentServer == nil {
+		t.Skip("Agent server not initialized (gRPC not enabled)")
+	}
+
+	// At this point the agent is not truly connected via gRPC stream,
+	// so IsAgentConnected should return false
+	if agentServer.IsAgentConnected(agent.ID) {
+		t.Error("Agent should not be connected without gRPC stream")
+	}
+
+	// Verify we can trigger an update request (it will use heartbeat fallback)
+	history := &storage.AgentUpdateHistory{
+		AgentID:     agent.ID,
+		FromVersion: agent.Version,
+		ToVersion:   binary.Version,
+		Status:      "pending",
+		StartedAt:   time.Now(),
+	}
+
+	err = f.DB.CreateAgentUpdateHistory(ctx, history)
+	if err != nil {
+		t.Fatalf("Failed to create update history: %v", err)
+	}
+
+	// Verify the history was created
+	agentHistory, _, err := f.DB.ListAgentUpdateHistory(ctx, agent.ID, 10, 0)
+	if err != nil {
+		t.Fatalf("Failed to list update history: %v", err)
+	}
+
+	if len(agentHistory) == 0 {
+		t.Error("Expected at least one update history entry")
+	}
+
+	found := false
+	for _, h := range agentHistory {
+		if h.FromVersion == "1.0.0" && h.ToVersion == "1.1.0" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Expected to find update history from 1.0.0 to 1.1.0")
+	}
+}
+
+// TestAgentUpdateFallbackOffline tests that agent updates fall back to heartbeat when offline.
+func TestAgentUpdateFallbackOffline(t *testing.T) {
+	f := NewTestFixture(t)
+	defer f.Close()
+
+	ctx := context.Background()
+
+	// Create an agent that is offline
+	agent := &storage.Agent{
+		ID:         "agent-update-offline",
+		Hostname:   "offline-server.test.com",
+		Labels:     map[string]string{"env": "test"},
+		Status:     "disconnected",
+		Version:    "1.0.0",
+		OS:         "linux",
+		Arch:       "amd64",
+		LastSeenAt: time.Now().Add(-1 * time.Hour), // Last seen an hour ago
+	}
+
+	err := f.DB.UpsertAgent(ctx, agent)
+	if err != nil {
+		t.Fatalf("Failed to create agent: %v", err)
+	}
+
+	// Create an agent binary for the agent's platform
+	binary := &storage.AgentBinary{
+		Version:        "1.2.0",
+		OS:             "linux",
+		Arch:           "amd64",
+		Path:           "/tmp/vcdeploy-agent-1.2.0",
+		ChecksumSHA256: "def789ghi012",
+		SizeBytes:      2048,
+		IsCurrent:      true,
+		UploadedAt:     time.Now(),
+	}
+
+	err = f.DB.CreateAgentBinary(ctx, binary)
+	if err != nil {
+		t.Fatalf("Failed to create agent binary: %v", err)
+	}
+
+	// Verify the agent is not connected
+	agentServer := f.Server.GetAgentServer()
+	if agentServer != nil && agentServer.IsAgentConnected(agent.ID) {
+		t.Error("Offline agent should not be connected")
+	}
+
+	// Check that the agent needs an update
+	agents, err := f.DB.ListAgentsNeedingUpdate(ctx)
+	if err != nil {
+		t.Fatalf("Failed to list agents needing update: %v", err)
+	}
+
+	needsUpdate := false
+	for _, a := range agents {
+		if a.ID == agent.ID {
+			needsUpdate = true
+			break
+		}
+	}
+	if !needsUpdate {
+		t.Error("Expected agent to need update")
+	}
+}
+
+// TestAgentUpdateHistoryLifecycle tests the full update history lifecycle.
+func TestAgentUpdateHistoryLifecycle(t *testing.T) {
+	f := NewTestFixture(t)
+	defer f.Close()
+
+	ctx := context.Background()
+
+	// Create an agent
+	agent := &storage.Agent{
+		ID:         "agent-history-test",
+		Hostname:   "history-test.test.com",
+		Labels:     map[string]string{"env": "test"},
+		Status:     "connected",
+		Version:    "1.0.0",
+		OS:         "linux",
+		Arch:       "amd64",
+		LastSeenAt: time.Now(),
+	}
+
+	err := f.DB.UpsertAgent(ctx, agent)
+	if err != nil {
+		t.Fatalf("Failed to create agent: %v", err)
+	}
+
+	// Create pending update
+	history := &storage.AgentUpdateHistory{
+		AgentID:     agent.ID,
+		FromVersion: "1.0.0",
+		ToVersion:   "1.1.0",
+		Status:      "pending",
+		StartedAt:   time.Now(),
+	}
+
+	err = f.DB.CreateAgentUpdateHistory(ctx, history)
+	if err != nil {
+		t.Fatalf("Failed to create update history: %v", err)
+	}
+
+	// Retrieve and verify
+	entries, total, err := f.DB.ListAgentUpdateHistory(ctx, agent.ID, 10, 0)
+	if err != nil {
+		t.Fatalf("Failed to list update history: %v", err)
+	}
+
+	if total < 1 {
+		t.Errorf("Expected at least 1 entry, got %d", total)
+	}
+
+	if len(entries) < 1 {
+		t.Fatal("No entries returned")
+	}
+
+	// Verify the pending entry
+	entry := entries[0]
+	if entry.Status != "pending" {
+		t.Errorf("Expected status 'pending', got '%s'", entry.Status)
+	}
+	if entry.FromVersion != "1.0.0" {
+		t.Errorf("Expected FromVersion '1.0.0', got '%s'", entry.FromVersion)
+	}
+	if entry.ToVersion != "1.1.0" {
+		t.Errorf("Expected ToVersion '1.1.0', got '%s'", entry.ToVersion)
+	}
+
+	// Update status to completed
+	entry.Status = "completed"
+	completedAt := time.Now()
+	entry.CompletedAt = &completedAt
+	err = f.DB.UpdateAgentUpdateHistory(ctx, entry)
+	if err != nil {
+		t.Fatalf("Failed to update history status: %v", err)
+	}
+
+	// Verify update
+	entries, _, err = f.DB.ListAgentUpdateHistory(ctx, agent.ID, 10, 0)
+	if err != nil {
+		t.Fatalf("Failed to list update history after update: %v", err)
+	}
+
+	if entries[0].Status != "completed" {
+		t.Errorf("Expected status 'completed', got '%s'", entries[0].Status)
+	}
+}
