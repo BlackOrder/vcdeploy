@@ -86,8 +86,8 @@ type MasterServer struct {
 	agents   map[string]*AgentConnection
 	agentsMu sync.RWMutex
 
-	// Templates (loaded from disk)
-	templates    *template.Template
+	// Templates (loaded from disk) - map of page name to compiled template
+	templates    map[string]*template.Template
 	templatesDir string
 
 	// Shutdown handling
@@ -282,7 +282,7 @@ func (s *MasterServer) GetAgentServer() *AgentServer {
 }
 
 func (s *MasterServer) loadTemplates() error {
-	s.templates = template.New("").Funcs(s.templateFuncs())
+	s.templates = make(map[string]*template.Template)
 
 	// Check if templates directory exists
 	if _, err := os.Stat(s.templatesDir); os.IsNotExist(err) {
@@ -290,23 +290,33 @@ func (s *MasterServer) loadTemplates() error {
 		return nil
 	}
 
-	// Load all template files from the templates directory
+	// Find base template
+	basePath := filepath.Join(s.templatesDir, "base.html")
+	if _, err := os.Stat(basePath); os.IsNotExist(err) {
+		return fmt.Errorf("base template not found: %s", basePath)
+	}
+
+	// Load all page template files from the templates directory
 	pattern := filepath.Join(s.templatesDir, "*.html")
 	files, err := filepath.Glob(pattern)
 	if err != nil {
 		return fmt.Errorf("globbing templates: %w", err)
 	}
 
-	if len(files) == 0 {
-		// No template files found - using defaults
-		return nil
-	}
+	// Parse each page template together with base template
+	// This creates separate template instances so {{define "content"}} doesn't conflict
+	for _, file := range files {
+		name := filepath.Base(file)
+		if name == "base.html" {
+			continue // Skip base template, it's included with each page
+		}
 
-	// Parse all template files together so they can reference each other
-	// This allows templates to use {{template "base" .}} and {{define "content"}}
-	_, err = s.templates.ParseFiles(files...)
-	if err != nil {
-		return fmt.Errorf("parsing templates: %w", err)
+		// Create a new template for this page, parsing base first then the page
+		tmpl, err := template.New("").Funcs(s.templateFuncs()).ParseFiles(basePath, file)
+		if err != nil {
+			return fmt.Errorf("parsing template %s: %w", name, err)
+		}
+		s.templates[name] = tmpl
 	}
 
 	return nil
@@ -1602,6 +1612,13 @@ func (s *MasterServer) renderTemplate(w http.ResponseWriter, name string, data i
 		return
 	}
 
+	tmpl, ok := s.templates[name+".html"]
+	if !ok {
+		s.logger.Error("Template not found", zap.String("template", name))
+		http.Error(w, "Template not found", http.StatusInternalServerError)
+		return
+	}
+
 	// Convert data to a map and add common theme settings
 	dataMap, ok := data.(map[string]interface{})
 	if !ok {
@@ -1625,7 +1642,8 @@ func (s *MasterServer) renderTemplate(w http.ResponseWriter, name string, data i
 		dataMap["Theme"] = "dark"
 	}
 
-	if err := s.templates.ExecuteTemplate(w, name+".html", dataMap); err != nil {
+	// Execute the page template (which includes base via {{template "base" .}})
+	if err := tmpl.ExecuteTemplate(w, name+".html", dataMap); err != nil {
 		s.logger.Error("Template render error", zap.String("template", name), zap.Error(err))
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
