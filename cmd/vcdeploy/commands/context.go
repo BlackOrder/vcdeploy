@@ -311,7 +311,15 @@ func (r *MasterStatusRunner) Run() error {
 	client := &http.Client{Timeout: 5 * time.Second}
 
 	// Check health endpoint
-	healthResp, err := client.Get(healthURL)
+	healthCtx, healthCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer healthCancel()
+	healthReq, err := http.NewRequestWithContext(healthCtx, "GET", healthURL, http.NoBody)
+	if err != nil {
+		r.ctx.Println("Master server status: OFFLINE")
+		r.ctx.Printf("  Could not connect to %s\n", r.masterAddr)
+		return nil
+	}
+	healthResp, err := client.Do(healthReq)
 	if err != nil {
 		r.ctx.Println("Master server status: OFFLINE")
 		r.ctx.Printf("  Could not connect to %s\n", r.masterAddr)
@@ -329,7 +337,10 @@ func (r *MasterStatusRunner) Run() error {
 	r.ctx.Println("Master server status: ONLINE")
 
 	// Get stats for more details
-	statsResp, err := client.Get(statsURL)
+	statsCtx, statsCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer statsCancel()
+	statsReq, _ := http.NewRequestWithContext(statsCtx, "GET", statsURL, http.NoBody)
+	statsResp, err := client.Do(statsReq)
 	if err == nil {
 		defer statsResp.Body.Close()
 		if statsResp.StatusCode == http.StatusOK {

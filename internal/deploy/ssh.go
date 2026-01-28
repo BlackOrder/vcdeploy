@@ -230,13 +230,13 @@ func (r *SSHRunner) buildHostKeyCallback() (ssh.HostKeyCallback, error) {
 
 	// Ensure the directory exists
 	knownHostsDir := filepath.Dir(knownHostsPath)
-	if err := os.MkdirAll(knownHostsDir, 0700); err != nil {
+	if err := os.MkdirAll(knownHostsDir, 0o700); err != nil {
 		return nil, fmt.Errorf("creating known_hosts directory: %w", err)
 	}
 
 	// Create known_hosts file if it doesn't exist
 	if _, err := os.Stat(knownHostsPath); os.IsNotExist(err) {
-		f, err := os.OpenFile(knownHostsPath, os.O_CREATE|os.O_RDONLY, 0600)
+		f, err := os.OpenFile(knownHostsPath, os.O_CREATE|os.O_RDONLY, 0o600)
 		if err != nil {
 			return nil, fmt.Errorf("creating known_hosts file: %w", err)
 		}
@@ -299,7 +299,7 @@ func (r *SSHRunner) tofuCallback(wrapped ssh.HostKeyCallback, knownHostsPath str
 
 // addToKnownHosts appends a host key to the known_hosts file.
 func (r *SSHRunner) addToKnownHosts(knownHostsPath, hostname string, key ssh.PublicKey) error {
-	f, err := os.OpenFile(knownHostsPath, os.O_APPEND|os.O_WRONLY, 0600)
+	f, err := os.OpenFile(knownHostsPath, os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("opening known_hosts: %w", err)
 	}

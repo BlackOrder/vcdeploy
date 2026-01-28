@@ -176,13 +176,12 @@ backup:
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
 			tmpDir := t.TempDir()
 			configPath := filepath.Join(tmpDir, "master.yaml")
-			if err := os.WriteFile(configPath, []byte(tt.content), 0644); err != nil {
+			if err := os.WriteFile(configPath, []byte(tt.content), 0o644); err != nil {
 				t.Fatalf("failed to write config file: %v", err)
 			}
 
@@ -226,7 +225,7 @@ server:
 grpc:
   listen: ":7001"
 `
-	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
@@ -353,7 +352,6 @@ func TestMasterConfigValidate(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 

@@ -113,14 +113,13 @@ master:
 	}
 
 	for _, tt := range tests {
-		tt := tt // capture range variable
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
 			// Create temp file
 			tmpDir := t.TempDir()
 			configPath := filepath.Join(tmpDir, "agent.yaml")
-			if err := os.WriteFile(configPath, []byte(tt.content), 0644); err != nil {
+			if err := os.WriteFile(configPath, []byte(tt.content), 0o644); err != nil {
 				t.Fatalf("failed to write config file: %v", err)
 			}
 
@@ -322,7 +321,6 @@ func TestAgentConfigValidate(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -370,7 +368,7 @@ func TestSaveAgentConfig_MarshalAndWrite(t *testing.T) {
 		t.Fatalf("failed to stat config file: %v", err)
 	}
 	// File should be 0600 (owner read/write only)
-	if info.Mode().Perm() != 0600 {
+	if info.Mode().Perm() != 0o600 {
 		t.Errorf("unexpected file permissions: %v, want 0600", info.Mode().Perm())
 	}
 }
@@ -446,7 +444,6 @@ func TestAgentConfigValidateErrorMessages(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -518,7 +515,7 @@ graceful_shutdown:
 
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "agent.yaml")
-	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
 		t.Fatalf("failed to write config file: %v", err)
 	}
 

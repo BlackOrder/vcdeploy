@@ -2,6 +2,8 @@
 package commands
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -262,7 +264,9 @@ func newAPIClient(cmd *cobra.Command) (*apiClient, error) {
 }
 
 func (c *apiClient) do(method, path string, body io.Reader) (*http.Response, error) {
-	req, err := http.NewRequest(method, c.baseURL+path, body)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
 	if err != nil {
 		return nil, err
 	}
@@ -338,7 +342,7 @@ func runUserCreate(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Println()
 
-		if string(pwBytes) != string(pwBytes2) {
+		if !bytes.Equal(pwBytes, pwBytes2) {
 			return fmt.Errorf("passwords do not match")
 		}
 		password = string(pwBytes)
@@ -377,7 +381,7 @@ func runUserDelete(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Are you sure you want to delete user '%s'? (y/N): ", username)
 	var confirm string
 	_, _ = fmt.Scanln(&confirm)
-	if strings.ToLower(confirm) != "y" {
+	if !strings.EqualFold(confirm, "y") {
 		return fmt.Errorf("aborted")
 	}
 
@@ -442,7 +446,7 @@ func runUserPasswd(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println()
 
-	if string(pwBytes) != string(pwBytes2) {
+	if !bytes.Equal(pwBytes, pwBytes2) {
 		return fmt.Errorf("passwords do not match")
 	}
 
@@ -579,7 +583,7 @@ func runAgentDelete(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Are you sure you want to remove agent '%s'? (y/N): ", agentID)
 	var confirm string
 	_, _ = fmt.Scanln(&confirm)
-	if strings.ToLower(confirm) != "y" {
+	if !strings.EqualFold(confirm, "y") {
 		return fmt.Errorf("aborted")
 	}
 
@@ -1046,7 +1050,7 @@ func runAPIKeyRevoke(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Are you sure you want to revoke API key '%s'? (y/N): ", keyID)
 	var confirm string
 	_, _ = fmt.Scanln(&confirm)
-	if strings.ToLower(confirm) != "y" {
+	if !strings.EqualFold(confirm, "y") {
 		return fmt.Errorf("aborted")
 	}
 

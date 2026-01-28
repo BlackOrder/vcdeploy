@@ -157,7 +157,7 @@ func TestGetSystemConfigWithCustomPaths(t *testing.T) {
   run_dir: /custom/run
   log_dir: /custom/log
 `
-	if err := os.WriteFile(customConfigPath, []byte(customConfig), 0644); err != nil {
+	if err := os.WriteFile(customConfigPath, []byte(customConfig), 0o644); err != nil {
 		t.Fatalf("Failed to write custom config: %v", err)
 	}
 

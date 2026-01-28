@@ -213,6 +213,7 @@ func (s *Service) ExportEnvFile(ctx context.Context, project, scope string) (str
 		escaped := strings.ReplaceAll(value, "\\", "\\\\")
 		escaped = strings.ReplaceAll(escaped, "\"", "\\\"")
 		escaped = strings.ReplaceAll(escaped, "\n", "\\n")
+		//nolint:gocritic // Using explicit quotes for env file format, not %q
 		lines = append(lines, fmt.Sprintf("%s=\"%s\"", key, escaped))
 	}
 	return strings.Join(lines, "\n"), nil

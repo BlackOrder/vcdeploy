@@ -350,6 +350,7 @@ func (e *EmailNotifier) defaultTemplate(event Event) string {
 
 	buttonSection := ""
 	if event.URL != "" {
+		//nolint:gocritic // Using explicit quotes for HTML href attribute, not %q
 		buttonSection = fmt.Sprintf(`<p><a href="%s" class="button">View Deployment</a></p>`, event.URL)
 	}
 

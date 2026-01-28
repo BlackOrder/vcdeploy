@@ -209,10 +209,10 @@ func (s *Scheduler) GetJobStatus() map[string]JobStatus {
 	status := make(map[string]JobStatus)
 	for name, entry := range s.jobs {
 		status[name] = JobStatus{
-			Name:     name,
-			Enabled:  entry.job.Enabled(),
-			LastRun:  entry.lastRun,
-			NextRun:  entry.nextRun,
+			Name:    name,
+			Enabled: entry.job.Enabled(),
+			LastRun: entry.lastRun,
+			NextRun: entry.nextRun,
 		}
 	}
 	return status
@@ -307,12 +307,12 @@ func ParseCron(expr string) (*CronSchedule, error) {
 }
 
 // parseField parses a single cron field.
-func parseField(field string, min, max int) ([]int, error) {
+func parseField(field string, minVal, maxVal int) ([]int, error) {
 	var values []int
 
 	// Handle *
 	if field == "*" {
-		for i := min; i <= max; i++ {
+		for i := minVal; i <= maxVal; i++ {
 			values = append(values, i)
 		}
 		return values, nil
@@ -324,7 +324,7 @@ func parseField(field string, min, max int) ([]int, error) {
 		if err != nil || step <= 0 {
 			return nil, fmt.Errorf("invalid step value: %s", field)
 		}
-		for i := min; i <= max; i += step {
+		for i := minVal; i <= maxVal; i += step {
 			values = append(values, i)
 		}
 		return values, nil
@@ -347,7 +347,7 @@ func parseField(field string, min, max int) ([]int, error) {
 			if err != nil {
 				return nil, fmt.Errorf("invalid range end: %s", rangeParts[1])
 			}
-			if start < min || end > max || start > end {
+			if start < minVal || end > maxVal || start > end {
 				return nil, fmt.Errorf("range out of bounds: %s", part)
 			}
 			for i := start; i <= end; i++ {
@@ -359,8 +359,8 @@ func parseField(field string, min, max int) ([]int, error) {
 			if err != nil {
 				return nil, fmt.Errorf("invalid value: %s", part)
 			}
-			if val < min || val > max {
-				return nil, fmt.Errorf("value out of bounds: %d (must be %d-%d)", val, min, max)
+			if val < minVal || val > maxVal {
+				return nil, fmt.Errorf("value out of bounds: %d (must be %d-%d)", val, minVal, maxVal)
 			}
 			values = append(values, val)
 		}

@@ -246,11 +246,11 @@ func (v *HostKeyVerifier) ExportToKnownHostsFile(ctx context.Context, filePath s
 
 	// Ensure directory exists
 	dir := filepath.Dir(filePath)
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("creating directory: %w", err)
 	}
 
-	f, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	f, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("creating known_hosts file: %w", err)
 	}
@@ -337,11 +337,11 @@ func (e *KnownHostsExporter) ExportHost(ctx context.Context, hostname string, po
 func (e *KnownHostsExporter) ExportAll(ctx context.Context, filePath string) error {
 	// Ensure directory exists
 	dir := filepath.Dir(filePath)
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("creating directory: %w", err)
 	}
 
-	f, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	f, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("creating file: %w", err)
 	}

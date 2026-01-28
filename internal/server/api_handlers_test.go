@@ -24,6 +24,8 @@ func requestWithUserContext(req *http.Request, userID int64) *http.Request {
 
 // requestWithFullContext creates a new request with user ID and API key set in context.
 // The API key should have admin scope for full access.
+//
+//nolint:unused // Helper function for tests that need API key context
 func requestWithFullContext(req *http.Request, userID int64, apiKey *storage.APIKey) *http.Request {
 	ctx := context.WithValue(req.Context(), contextKeyUserID, userID)
 	if apiKey != nil {
@@ -590,7 +592,6 @@ func TestHandleUsers_CreateWeakPassword(t *testing.T) {
 	}
 
 	for _, tc := range weakPasswords {
-		tc := tc // capture range variable
 		t.Run(tc.description, func(t *testing.T) {
 			t.Parallel()
 
@@ -609,7 +610,7 @@ func TestHandleUsers_CreateWeakPassword(t *testing.T) {
 			req.Header.Set("X-API-Key", apiKey)
 			w := httptest.NewRecorder()
 
-	req = requestWithUserContext(req, userID)
+			req = requestWithUserContext(req, userID)
 			server.handleUsers(w, req)
 
 			if w.Code != http.StatusBadRequest {

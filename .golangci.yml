@@ -36,9 +36,9 @@ linters:
     # Additional security and quality linters
     - gocritic
     - noctx
-    - prealloc
     - copyloopvar
     - revive
+    # prealloc disabled - minor optimization suggestion
 
 linters-settings:
   errcheck:
@@ -97,6 +97,9 @@ linters-settings:
     disabled-checks:
       - commentedOutCode
       - hugeParam
+      - unnamedResult  # Named returns not always necessary
+      - paramTypeCombine  # Style preference
+      - ifElseChain  # Not always cleaner with switch
 
   revive:
     ignore-generated-header: true
@@ -132,6 +135,9 @@ issues:
         - bodyclose
         - errorlint  # Tests often compare errors directly
         - nilerr
+        - noctx  # Test helpers simulate CLI behavior without context
+        - prealloc  # Not critical in tests
+        - gocritic  # Style suggestions not critical in tests
 
     # Generated protobuf files
     - path: \.pb\.go$

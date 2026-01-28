@@ -31,6 +31,8 @@ type Executor interface {
 }
 
 // DeployCommand contains all information needed for a deployment.
+//
+//nolint:revive // Keeping explicit naming for clarity
 type DeployCommand struct {
 	DeploymentID    string
 	Project         string
@@ -48,6 +50,8 @@ type DeployCommand struct {
 }
 
 // DeploySettings contains deployment configuration.
+//
+//nolint:revive // Keeping explicit naming for clarity
 type DeploySettings struct {
 	Strategy       string // symlink | inplace
 	KeepReleases   int
@@ -77,6 +81,8 @@ type RollbackCommand struct {
 }
 
 // DeployResult contains the result of a deployment.
+//
+//nolint:revive // Keeping explicit naming for clarity
 type DeployResult struct {
 	Success       bool
 	ReleaseNumber int

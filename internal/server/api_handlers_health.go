@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -71,7 +72,7 @@ func (s *MasterServer) handleListHealthCheckConfigs(w http.ResponseWriter, r *ht
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(configs)
+	_ = json.NewEncoder(w).Encode(configs)
 }
 
 // handleCreateHealthCheckConfig creates a new health check configuration.
@@ -126,7 +127,7 @@ func (s *MasterServer) handleCreateHealthCheckConfig(w http.ResponseWriter, r *h
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(config)
+	_ = json.NewEncoder(w).Encode(config)
 }
 
 // handleGetHealthCheckConfig retrieves a health check configuration.
@@ -134,7 +135,7 @@ func (s *MasterServer) handleGetHealthCheckConfig(w http.ResponseWriter, r *http
 	ctx := r.Context()
 
 	config, err := s.db.GetHealthCheckConfig(ctx, id)
-	if err == storage.ErrNotFound {
+	if errors.Is(err, storage.ErrNotFound) {
 		http.Error(w, "Health check config not found", http.StatusNotFound)
 		return
 	}
@@ -145,7 +146,7 @@ func (s *MasterServer) handleGetHealthCheckConfig(w http.ResponseWriter, r *http
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(config)
+	_ = json.NewEncoder(w).Encode(config)
 }
 
 // handleUpdateHealthCheckConfig updates a health check configuration.
@@ -154,7 +155,7 @@ func (s *MasterServer) handleUpdateHealthCheckConfig(w http.ResponseWriter, r *h
 
 	// Get existing config
 	existing, err := s.db.GetHealthCheckConfig(ctx, id)
-	if err == storage.ErrNotFound {
+	if errors.Is(err, storage.ErrNotFound) {
 		http.Error(w, "Health check config not found", http.StatusNotFound)
 		return
 	}
@@ -225,7 +226,7 @@ func (s *MasterServer) handleUpdateHealthCheckConfig(w http.ResponseWriter, r *h
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(existing)
+	_ = json.NewEncoder(w).Encode(existing)
 }
 
 // handleDeleteHealthCheckConfig deletes a health check configuration.
@@ -237,7 +238,7 @@ func (s *MasterServer) handleDeleteHealthCheckConfig(w http.ResponseWriter, r *h
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if err == storage.ErrNotFound {
+		if errors.Is(err, storage.ErrNotFound) {
 			http.Error(w, "Health check config not found", http.StatusNotFound)
 			return
 		}
@@ -254,7 +255,7 @@ func (s *MasterServer) handleGlobalHealthCheck(w http.ResponseWriter, r *http.Re
 	ctx := r.Context()
 
 	config, err := s.db.GetGlobalHealthCheckConfig(ctx)
-	if err == storage.ErrNotFound {
+	if errors.Is(err, storage.ErrNotFound) {
 		http.Error(w, "Global health check config not found", http.StatusNotFound)
 		return
 	}
@@ -265,7 +266,7 @@ func (s *MasterServer) handleGlobalHealthCheck(w http.ResponseWriter, r *http.Re
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(config)
+	_ = json.NewEncoder(w).Encode(config)
 }
 
 // handleProjectHealthConfig handles /api/v1/projects/{id}/health-config
@@ -276,7 +277,7 @@ func (s *MasterServer) handleProjectHealthConfig(w http.ResponseWriter, r *http.
 	case http.MethodGet:
 		// Get health check config for project (uses global if none set)
 		config, err := s.db.GetHealthCheckConfigForProject(ctx, projectID)
-		if err == storage.ErrNotFound {
+		if errors.Is(err, storage.ErrNotFound) {
 			http.Error(w, "No health check config found", http.StatusNotFound)
 			return
 		}
@@ -287,7 +288,7 @@ func (s *MasterServer) handleProjectHealthConfig(w http.ResponseWriter, r *http.
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(config)
+		_ = json.NewEncoder(w).Encode(config)
 
 	case http.MethodPut:
 		var req struct {
@@ -303,7 +304,7 @@ func (s *MasterServer) handleProjectHealthConfig(w http.ResponseWriter, r *http.
 		// Validate health check ID if provided
 		if req.HealthCheckID != nil && *req.HealthCheckID > 0 {
 			_, err := s.db.GetHealthCheckConfig(ctx, *req.HealthCheckID)
-			if err == storage.ErrNotFound {
+			if errors.Is(err, storage.ErrNotFound) {
 				http.Error(w, "Health check config not found", http.StatusBadRequest)
 				return
 			}
@@ -331,7 +332,7 @@ func (s *MasterServer) handleProjectHealthConfig(w http.ResponseWriter, r *http.
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"health_check_id":         req.HealthCheckID,
 			"auto_rollback_enabled":   autoRollback,
 			"rollback_on_health_fail": rollbackOnHealthFail,
@@ -372,7 +373,7 @@ func (s *MasterServer) handleRollbackRecords(w http.ResponseWriter, r *http.Requ
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"items":  rollbacks,
 		"total":  total,
 		"limit":  limit,
@@ -394,7 +395,7 @@ func (s *MasterServer) handleRollbackRecord(w http.ResponseWriter, r *http.Reque
 	ctx := r.Context()
 
 	rollback, err := s.db.GetDeploymentRollback(ctx, id)
-	if err == storage.ErrNotFound {
+	if errors.Is(err, storage.ErrNotFound) {
 		http.Error(w, "Rollback not found", http.StatusNotFound)
 		return
 	}
@@ -405,7 +406,7 @@ func (s *MasterServer) handleRollbackRecord(w http.ResponseWriter, r *http.Reque
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(rollback)
+	_ = json.NewEncoder(w).Encode(rollback)
 }
 
 // handleTestHealthCheck handles POST /api/v1/health-checks/{id}/test
@@ -414,7 +415,7 @@ func (s *MasterServer) handleTestHealthCheck(w http.ResponseWriter, r *http.Requ
 	ctx := r.Context()
 
 	config, err := s.db.GetHealthCheckConfig(ctx, id)
-	if err == storage.ErrNotFound {
+	if errors.Is(err, storage.ErrNotFound) {
 		http.Error(w, "Health check config not found", http.StatusNotFound)
 		return
 	}
@@ -436,7 +437,7 @@ func (s *MasterServer) handleTestHealthCheck(w http.ResponseWriter, r *http.Requ
 	result := s.performHealthCheck(ctx, config)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	_ = json.NewEncoder(w).Encode(result)
 }
 
 // performHealthCheck performs a health check from the master server (for testing).

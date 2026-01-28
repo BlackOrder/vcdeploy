@@ -17,7 +17,7 @@ func TestHandleHealthCheckConfigs(t *testing.T) {
 	s, _, _, userID := newTestServerWithAuth(t)
 
 	t.Run("GET - list configs", func(t *testing.T) {
-		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/health-checks", nil), userID)
+		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/health-checks", http.NoBody), userID)
 		rr := httptest.NewRecorder()
 		s.handleHealthCheckConfigs(rr, req)
 
@@ -108,7 +108,7 @@ func TestHandleHealthCheckConfig(t *testing.T) {
 	}
 
 	t.Run("GET - get config by ID", func(t *testing.T) {
-		req := requestWithAdminContext(httptest.NewRequest("GET", fmt.Sprintf("/api/v1/health-checks/%d", config.ID), nil), userID)
+		req := requestWithAdminContext(httptest.NewRequest("GET", fmt.Sprintf("/api/v1/health-checks/%d", config.ID), http.NoBody), userID)
 		rr := httptest.NewRecorder()
 		s.handleHealthCheckConfig(rr, req)
 
@@ -177,7 +177,7 @@ func TestHandleHealthCheckConfig(t *testing.T) {
 			t.Fatalf("Failed to create config to delete: %v", err)
 		}
 
-		req := requestWithAdminContext(httptest.NewRequest("DELETE", fmt.Sprintf("/api/v1/health-checks/%d", toDelete.ID), nil), userID)
+		req := requestWithAdminContext(httptest.NewRequest("DELETE", fmt.Sprintf("/api/v1/health-checks/%d", toDelete.ID), http.NoBody), userID)
 		rr := httptest.NewRecorder()
 		s.handleHealthCheckConfig(rr, req)
 
@@ -193,7 +193,7 @@ func TestHandleHealthCheckConfig(t *testing.T) {
 	})
 
 	t.Run("GET - not found", func(t *testing.T) {
-		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/health-checks/99999", nil), userID)
+		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/health-checks/99999", http.NoBody), userID)
 		rr := httptest.NewRecorder()
 		s.handleHealthCheckConfig(rr, req)
 
@@ -207,7 +207,7 @@ func TestHandleGlobalHealthCheck(t *testing.T) {
 	s, _, _, userID := newTestServerWithAuth(t)
 
 	t.Run("GET - get global config", func(t *testing.T) {
-		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/health-checks/global", nil), userID)
+		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/health-checks/global", http.NoBody), userID)
 		rr := httptest.NewRecorder()
 		s.handleGlobalHealthCheck(rr, req)
 
@@ -244,7 +244,7 @@ func TestHandleProjectHealthConfig(t *testing.T) {
 	}
 
 	t.Run("GET - get project health config", func(t *testing.T) {
-		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/projects/health-test-project/health-config", nil), userID)
+		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/projects/health-test-project/health-config", http.NoBody), userID)
 		rr := httptest.NewRecorder()
 		s.handleProjectHealthConfig(rr, req, project.ID)
 
@@ -364,7 +364,7 @@ func TestHandleRollbackRecords(t *testing.T) {
 	}
 
 	t.Run("GET - list rollbacks", func(t *testing.T) {
-		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/rollbacks", nil), userID)
+		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/rollbacks", http.NoBody), userID)
 		rr := httptest.NewRecorder()
 		s.handleRollbackRecords(rr, req)
 
@@ -388,7 +388,7 @@ func TestHandleRollbackRecords(t *testing.T) {
 	})
 
 	t.Run("GET - filter by project", func(t *testing.T) {
-		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/rollbacks?project="+project.Name, nil), userID)
+		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/rollbacks?project="+project.Name, http.NoBody), userID)
 		rr := httptest.NewRecorder()
 		s.handleRollbackRecords(rr, req)
 
@@ -412,7 +412,7 @@ func TestHandleRollbackRecords(t *testing.T) {
 	})
 
 	t.Run("GET - filter by non-existent project", func(t *testing.T) {
-		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/rollbacks?project=nonexistent", nil), userID)
+		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/rollbacks?project=nonexistent", http.NoBody), userID)
 		rr := httptest.NewRecorder()
 		s.handleRollbackRecords(rr, req)
 
@@ -482,7 +482,7 @@ func TestHandleRollbackRecord(t *testing.T) {
 	}
 
 	t.Run("GET - get rollback by ID", func(t *testing.T) {
-		req := requestWithAdminContext(httptest.NewRequest("GET", fmt.Sprintf("/api/v1/rollbacks/%d", rollback.ID), nil), userID)
+		req := requestWithAdminContext(httptest.NewRequest("GET", fmt.Sprintf("/api/v1/rollbacks/%d", rollback.ID), http.NoBody), userID)
 		rr := httptest.NewRecorder()
 		s.handleRollbackRecord(rr, req)
 
@@ -504,7 +504,7 @@ func TestHandleRollbackRecord(t *testing.T) {
 	})
 
 	t.Run("GET - not found", func(t *testing.T) {
-		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/rollbacks/99999", nil), userID)
+		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/rollbacks/99999", http.NoBody), userID)
 		rr := httptest.NewRecorder()
 		s.handleRollbackRecord(rr, req)
 
@@ -545,7 +545,7 @@ func TestHandleTestHealthCheck(t *testing.T) {
 	}
 
 	t.Run("POST - test health check success", func(t *testing.T) {
-		req := requestWithAdminContext(httptest.NewRequest("POST", fmt.Sprintf("/api/v1/health-checks/%d/test", config.ID), nil), userID)
+		req := requestWithAdminContext(httptest.NewRequest("POST", fmt.Sprintf("/api/v1/health-checks/%d/test", config.ID), http.NoBody), userID)
 		rr := httptest.NewRecorder()
 		s.handleHealthCheckConfig(rr, req)
 
@@ -582,7 +582,7 @@ func TestHandleTestHealthCheck(t *testing.T) {
 	}
 
 	t.Run("POST - test health check failure", func(t *testing.T) {
-		req := requestWithAdminContext(httptest.NewRequest("POST", fmt.Sprintf("/api/v1/health-checks/%d/test", failConfig.ID), nil), userID)
+		req := requestWithAdminContext(httptest.NewRequest("POST", fmt.Sprintf("/api/v1/health-checks/%d/test", failConfig.ID), http.NoBody), userID)
 		rr := httptest.NewRecorder()
 		s.handleHealthCheckConfig(rr, req)
 

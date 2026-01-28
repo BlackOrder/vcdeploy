@@ -148,7 +148,7 @@ func LoadProjectConfig(path string) (*ProjectConfig, error) {
 // SaveProjectConfig saves a project configuration to a file.
 func SaveProjectConfig(config *ProjectConfig, path string) error {
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("creating project directory: %w", err)
 	}
 
@@ -157,7 +157,7 @@ func SaveProjectConfig(config *ProjectConfig, path string) error {
 		return fmt.Errorf("marshaling project: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return fmt.Errorf("writing project file: %w", err)
 	}
 

@@ -995,7 +995,6 @@ func TestSlackNotifierStatusColors(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.status, func(t *testing.T) {
 			t.Parallel()
 
@@ -1046,7 +1045,6 @@ func TestSlackNotifierEventTypes(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.eventType, func(t *testing.T) {
 			t.Parallel()
 
@@ -1195,7 +1193,7 @@ func TestEmailNotifierSendWithTemplate(t *testing.T) {
 
 // Helper function to write test template files
 func writeTestTemplate(path, content string) error {
-	return os.WriteFile(path, []byte(content), 0644)
+	return os.WriteFile(path, []byte(content), 0o644)
 }
 
 func TestWebhookNotifierSendWithDifferentMethods(t *testing.T) {
@@ -1204,7 +1202,6 @@ func TestWebhookNotifierSendWithDifferentMethods(t *testing.T) {
 	methods := []string{"POST", "PUT", "PATCH"}
 
 	for _, method := range methods {
-		method := method
 		t.Run(method, func(t *testing.T) {
 			t.Parallel()
 
@@ -1407,7 +1404,6 @@ func TestWebhookNotifierStatusCodes(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(http.StatusText(tc.statusCode), func(t *testing.T) {
 			t.Parallel()
 
@@ -2039,10 +2035,10 @@ func TestDiscordNotifierStatusColors(t *testing.T) {
 		status        string
 		expectedColor float64 // JSON numbers are float64
 	}{
-		{"success", 3066993},   // green
-		{"failed", 15158332},   // red
-		{"pending", 16776960},  // yellow
-		{"running", 16776960},  // yellow
+		{"success", 3066993},      // green
+		{"failed", 15158332},      // red
+		{"pending", 16776960},     // yellow
+		{"running", 16776960},     // yellow
 		{"rolled_back", 15105570}, // orange
 	}
 
