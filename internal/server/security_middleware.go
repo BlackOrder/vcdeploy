@@ -108,7 +108,7 @@ func DefaultSecurityConfig() SecurityConfig {
 func defaultCSPDirectives() map[string]string {
 	return map[string]string{
 		"default-src": "'self'",
-		"script-src":  "'self' 'unsafe-inline'", // Required for template inline handlers; consider nonce migration
+		"script-src":  "'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.tailwindcss.com", // CDN scripts for htmx and tailwind
 		"style-src":   "'self' 'unsafe-inline'", // Required for template inline styles; consider nonce migration
 		"img-src":     "'self' data:",           // Allow data URIs for images
 		"font-src":    "'self'",
