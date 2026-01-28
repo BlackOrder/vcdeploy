@@ -79,7 +79,7 @@ func (s *MasterServer) handleAgentBinaries(w http.ResponseWriter, r *http.Reques
 		// Create binaries directory if it doesn't exist
 		sysCfg := config.MustGetSystemConfig()
 		binDir := filepath.Join(sysCfg.Paths.DataDir, "binaries")
-		if err := os.MkdirAll(binDir, 0755); err != nil {
+		if err := os.MkdirAll(binDir, 0o755); err != nil {
 			s.logger.Error("Failed to create binaries directory", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
@@ -112,7 +112,7 @@ func (s *MasterServer) handleAgentBinaries(w http.ResponseWriter, r *http.Reques
 		checksum := hex.EncodeToString(hasher.Sum(nil))
 
 		// Make binary executable
-		if err := os.Chmod(destPath, 0755); err != nil {
+		if err := os.Chmod(destPath, 0o755); err != nil {
 			s.logger.Error("Failed to make binary executable", zap.Error(err))
 		}
 
@@ -515,9 +515,9 @@ func (s *MasterServer) handleAgentUpdateHistory(w http.ResponseWriter, r *http.R
 	}
 
 	s.jsonResponse(w, map[string]interface{}{
-		"items": history,
-		"total": total,
-		"limit": limit,
+		"items":  history,
+		"total":  total,
+		"limit":  limit,
 		"offset": offset,
 	})
 }
@@ -542,9 +542,8 @@ func (s *MasterServer) handleTriggerAgentUpdate(w http.ResponseWriter, r *http.R
 		Force bool `json:"force"`
 	}
 	if r.Body != nil && r.ContentLength > 0 {
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
-			// Ignore decode errors for optional body
-		}
+		// Decode is optional - ignore errors for missing/invalid body
+		_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req)
 	}
 
 	// Get agent
@@ -636,12 +635,12 @@ func (s *MasterServer) handleTriggerAgentUpdate(w http.ResponseWriter, r *http.R
 		agentID, agent.Version, binary.Version, updateDelivery), "success")
 
 	s.jsonResponse(w, map[string]interface{}{
-		"status":          "pending",
-		"from_version":    agent.Version,
-		"to_version":      binary.Version,
-		"force":           req.Force,
-		"update_id":       history.ID,
-		"delivery":        updateDelivery,
+		"status":       "pending",
+		"from_version": agent.Version,
+		"to_version":   binary.Version,
+		"force":        req.Force,
+		"update_id":    history.ID,
+		"delivery":     updateDelivery,
 	})
 }
 
