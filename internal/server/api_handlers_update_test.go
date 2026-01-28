@@ -432,10 +432,8 @@ func TestHandleTriggerAgentUpdate(t *testing.T) {
 		rr := httptest.NewRecorder()
 		s.handleTriggerAgentUpdate(rr, req, "nonexistent-agent")
 
-		// Handler returns 500 when agent is not found due to error from agent service
-		// (agentService.GetByID returns ErrNotFound which causes the error path to be taken)
-		if rr.Code != http.StatusInternalServerError && rr.Code != http.StatusNotFound {
-			t.Errorf("Expected status 404 or 500, got %d: %s", rr.Code, rr.Body.String())
+		if rr.Code != http.StatusNotFound {
+			t.Errorf("Expected status %d, got %d: %s", http.StatusNotFound, rr.Code, rr.Body.String())
 		}
 	})
 
