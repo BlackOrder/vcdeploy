@@ -2,8 +2,11 @@
 # ==================
 
 .PHONY: all build build-master build-agent clean test test-unit test-integration \
-        test-systemd test-e2e test-all test-coverage test-bench lint proto \
-        install install-systemd dev dev-agent help vuln gosec sbom security
+        test-systemd test-e2e test-all test-coverage test-coverage-ci test-bench \
+        lint fmt vet proto vuln gosec sbom security \
+        install install-systemd uninstall dev dev-agent \
+        docker-build docker-up docker-down \
+        check verify help
 
 # ------------------------------------------------------------------------------
 # Configuration
@@ -151,6 +154,12 @@ sbom:
 ## security: Run all security checks (vuln + gosec)
 security: vuln gosec
 
+## check: Run all quality checks (lint + vet + test) - good for CI
+check: lint vet test
+
+## verify: Run full verification (lint + security + test) - thorough check
+verify: lint security test
+
 # ------------------------------------------------------------------------------
 # Code quality
 # ------------------------------------------------------------------------------
@@ -258,7 +267,10 @@ help:
 	@grep -E '^## test' Makefile | sed 's/## /  /'
 	@echo ""
 	@echo "Code Quality:"
-	@grep -E '^## (lint|fmt|vet):' Makefile | sed 's/## /  /'
+	@grep -E '^## (lint|fmt|vet|check|verify):' Makefile | sed 's/## /  /'
+	@echo ""
+	@echo "Security:"
+	@grep -E '^## (vuln|gosec|sbom|security):' Makefile | sed 's/## /  /'
 	@echo ""
 	@echo "Installation:"
 	@grep -E '^## (install|uninstall)' Makefile | sed 's/## /  /'
