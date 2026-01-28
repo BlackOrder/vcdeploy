@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/BlackOrder/vcdeploy/internal/config"
+	"github.com/BlackOrder/vcdeploy/internal/proto"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"github.com/BlackOrder/vcdeploy/internal/validation"
 	"go.uber.org/zap"
@@ -598,12 +599,41 @@ func (s *MasterServer) handleTriggerAgentUpdate(w http.ResponseWriter, r *http.R
 		// Continue anyway - update history is not critical
 	}
 
-	// TODO: Send update command to agent via gRPC stream
-	// For now, we'll mark the update as pending and let the heartbeat mechanism
-	// pick it up and notify the agent
+	// Build download URL using request host
+	scheme := "http"
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	host := r.Host
+	if fwdHost := r.Header.Get("X-Forwarded-Host"); fwdHost != "" {
+		host = fwdHost
+	}
+	downloadURL := fmt.Sprintf("%s://%s/api/v1/binaries/%d/download", scheme, host, binary.ID)
 
-	s.logAudit(r, "trigger", "agent_update", fmt.Sprintf("Triggered update for agent %s from %s to %s",
-		agentID, agent.Version, binary.Version), "success")
+	// Try to send update command via gRPC if agent is connected
+	updateDelivery := "heartbeat"
+	if s.agentServer != nil && s.agentServer.IsAgentConnected(agentID) {
+		updateCmd := &proto.UpdateCommand{
+			Version:        binary.Version,
+			DownloadUrl:    downloadURL,
+			ChecksumSha256: binary.ChecksumSHA256,
+			SizeBytes:      binary.SizeBytes,
+			Force:          req.Force,
+		}
+		if err := s.agentServer.SendUpdateCommand(agentID, updateCmd); err != nil {
+			s.logger.Warn("Failed to send update command via gRPC, will use heartbeat fallback",
+				zap.String("agent_id", agentID),
+				zap.Error(err))
+		} else {
+			updateDelivery = "grpc_push"
+			s.logger.Info("Sent update command via gRPC",
+				zap.String("agent_id", agentID),
+				zap.String("version", binary.Version))
+		}
+	}
+
+	s.logAudit(r, "trigger", "agent_update", fmt.Sprintf("Triggered update for agent %s from %s to %s (delivery: %s)",
+		agentID, agent.Version, binary.Version, updateDelivery), "success")
 
 	s.jsonResponse(w, map[string]interface{}{
 		"status":          "pending",
@@ -611,6 +641,7 @@ func (s *MasterServer) handleTriggerAgentUpdate(w http.ResponseWriter, r *http.R
 		"to_version":      binary.Version,
 		"force":           req.Force,
 		"update_id":       history.ID,
+		"delivery":        updateDelivery,
 	})
 }
 

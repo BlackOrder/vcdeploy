@@ -405,6 +405,15 @@ func (s *AgentServer) SendCancelCommand(agentID string, cmd *proto.CancelCommand
 	})
 }
 
+// SendUpdateCommand sends an update command to an agent.
+func (s *AgentServer) SendUpdateCommand(agentID string, cmd *proto.UpdateCommand) error {
+	return s.SendCommand(agentID, &proto.MasterMessage{
+		Message: &proto.MasterMessage_UpdateCommand{
+			UpdateCommand: cmd,
+		},
+	})
+}
+
 // IsAgentConnected checks if an agent is currently connected.
 func (s *AgentServer) IsAgentConnected(agentID string) bool {
 	s.connectionMutex.RLock()
