@@ -257,7 +257,7 @@ test.describe('User Roles', () => {
     expect(roleSelect || true).toBeTruthy();
   });
 
-  test('should filter users by role if available', async () => {
+  test('should filter users by role if available', async ({ page }) => {
     const usersPage = new UsersPage(page);
     await usersPage.goto();
     
