@@ -4,7 +4,7 @@
 <div class="min-h-screen flex items-center justify-center -mt-16">
     <div class="max-w-md w-full space-y-8">
         <div>
-            <h1 class="text-center text-4xl font-bold text-green-500">vcdeploy</h1>
+            <h1 class="text-center text-4xl font-bold text-accent-500">vcdeploy</h1>
             <h2 class="mt-6 text-center text-2xl font-bold text-dark-text">Sign in to your account</h2>
         </div>
         
@@ -19,19 +19,19 @@
                 <div>
                     <label for="username" class="block text-sm font-medium text-dark-muted">Username</label>
                     <input id="username" name="username" type="text" required 
-                        class="mt-1 block w-full px-3 py-2 bg-dark-card border border-dark-border rounded-md text-dark-text placeholder-dark-muted focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        class="mt-1 block w-full px-3 py-2 bg-dark-card border border-dark-border rounded-md text-dark-text placeholder-dark-muted focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent"
                         placeholder="admin">
                 </div>
                 <div>
                     <label for="password" class="block text-sm font-medium text-dark-muted">Password</label>
                     <input id="password" name="password" type="password" required
-                        class="mt-1 block w-full px-3 py-2 bg-dark-card border border-dark-border rounded-md text-dark-text placeholder-dark-muted focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        class="mt-1 block w-full px-3 py-2 bg-dark-card border border-dark-border rounded-md text-dark-text placeholder-dark-muted focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent"
                         placeholder="••••••••">
                 </div>
                 <div id="totp-field" class="hidden">
                     <label for="totp" class="block text-sm font-medium text-dark-muted">2FA Code</label>
                     <input id="totp" name="totp" type="text" pattern="[0-9]{6}" maxlength="6"
-                        class="mt-1 block w-full px-3 py-2 bg-dark-card border border-dark-border rounded-md text-dark-text placeholder-dark-muted focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        class="mt-1 block w-full px-3 py-2 bg-dark-card border border-dark-border rounded-md text-dark-text placeholder-dark-muted focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent"
                         placeholder="123456">
                 </div>
             </div>
@@ -39,14 +39,14 @@
             <div class="flex items-center justify-between">
                 <div class="flex items-center">
                     <input id="remember" name="remember" type="checkbox"
-                        class="h-4 w-4 bg-dark-card border-dark-border rounded text-green-500 focus:ring-green-500">
+                        class="h-4 w-4 bg-dark-card border-dark-border rounded text-accent-500 focus:ring-accent-500">
                     <label for="remember" class="ml-2 block text-sm text-dark-muted">Remember me</label>
                 </div>
             </div>
 
             <div>
                 <button type="submit"
-                    class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                    class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-accent-600 hover:bg-accent-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-accent-500">
                     <span data-ready>Sign in</span>
                     <span data-loading class="animate-spin">⟳</span>
                 </button>

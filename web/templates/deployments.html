@@ -6,14 +6,14 @@
         <h1 class="text-2xl font-bold">Deployments</h1>
         <div class="flex space-x-3">
             <select id="project-filter" onchange="loadDeployments()"
-                class="px-3 py-2 bg-dark-card border border-dark-border rounded-md text-dark-text focus:outline-none focus:ring-2 focus:ring-green-500">
+                class="px-3 py-2 bg-dark-card border border-dark-border rounded-md text-dark-text focus:outline-none focus:ring-2 focus:ring-accent-500">
                 <option value="">All Projects</option>
                 {{range .Projects}}
                 <option value="{{.ID}}">{{.Name}}</option>
                 {{end}}
             </select>
             <select id="status-filter" onchange="loadDeployments()"
-                class="px-3 py-2 bg-dark-card border border-dark-border rounded-md text-dark-text focus:outline-none focus:ring-2 focus:ring-green-500">
+                class="px-3 py-2 bg-dark-card border border-dark-border rounded-md text-dark-text focus:outline-none focus:ring-2 focus:ring-accent-500">
                 <option value="">All Status</option>
                 <option value="success">Success</option>
                 <option value="failed">Failed</option>
@@ -128,7 +128,7 @@ function renderDeployments(deployments) {
     }
 
     container.innerHTML = deployments.map(d => `
-        <div class="bg-dark-card border border-dark-border rounded-lg p-4 hover:border-green-500/50 transition-colors cursor-pointer"
+        <div class="bg-dark-card border border-dark-border rounded-lg p-4 hover:border-accent-500/50 transition-colors cursor-pointer"
             onclick="showDeploymentDetail('${escapeHtml(d.id)}')">
             <div class="flex items-center justify-between">
                 <div class="flex items-center space-x-4">
@@ -231,7 +231,7 @@ function showDeploymentDetail(deploymentId) {
                 `;
             } else if (deployment.status === 'failed' || deployment.status === 'success') {
                 actionsDiv.innerHTML = `
-                    <button onclick="retryDeployment('${deploymentId}')" class="px-4 py-2 text-sm font-medium text-green-500 hover:text-green-400 border border-green-500 rounded-md">
+                    <button onclick="retryDeployment('${deploymentId}')" class="px-4 py-2 text-sm font-medium text-accent-500 hover:text-accent-400 border border-accent-500 rounded-md">
                         Retry Deployment
                     </button>
                 `;

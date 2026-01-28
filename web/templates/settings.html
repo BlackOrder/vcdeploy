@@ -8,8 +8,12 @@
     <div class="border-b border-dark-border">
         <nav class="-mb-px flex space-x-8">
             <button onclick="showTab('general')" id="tab-general"
-                class="settings-tab border-green-500 text-white border-b-2 whitespace-nowrap py-4 px-1 font-medium text-sm">
+                class="settings-tab border-accent-500 text-white border-b-2 whitespace-nowrap py-4 px-1 font-medium text-sm">
                 General
+            </button>
+            <button onclick="showTab('appearance')" id="tab-appearance"
+                class="settings-tab border-transparent text-dark-muted hover:text-white hover:border-dark-border border-b-2 whitespace-nowrap py-4 px-1 font-medium text-sm">
+                Appearance
             </button>
             <button onclick="showTab('security')" id="tab-security"
                 class="settings-tab border-transparent text-dark-muted hover:text-white hover:border-dark-border border-b-2 whitespace-nowrap py-4 px-1 font-medium text-sm">
@@ -28,7 +32,7 @@
 
     <!-- General Settings -->
     <div id="panel-general" class="settings-panel">
-        <form hx-put="/api/v1/settings/general" hx-target="#settings-status" class="space-y-6">
+        <form hx-ext="json-enc" hx-put="/api/v1/settings/general" hx-target="#settings-status" class="space-y-6">
             <div class="bg-dark-card border border-dark-border rounded-lg p-6 space-y-6">
                 <h2 class="text-lg font-medium">Server Configuration</h2>
                 
@@ -36,7 +40,7 @@
                     <div>
                         <label class="block text-sm font-medium text-dark-muted mb-1">Master URL</label>
                         <input type="url" name="master_url" value="{{.Settings.MasterURL}}"
-                            class="w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text focus:ring-green-500 focus:border-green-500">
+                            class="w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text focus:ring-accent-500 focus:border-accent-500">
                         <p class="mt-1 text-xs text-dark-muted">URL used by agents to connect</p>
                     </div>
                     <div>
@@ -66,7 +70,63 @@
 
             <div class="flex justify-end">
                 <button type="submit"
-                    class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md">
+                    class="px-4 py-2 bg-accent-600 hover:bg-accent-700 text-white text-sm font-medium rounded-md">
+                    Save Changes
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Appearance Settings -->
+    <div id="panel-appearance" class="settings-panel hidden">
+        <form hx-ext="json-enc" hx-put="/api/v1/settings/appearance" hx-target="#settings-status" class="space-y-6"
+              hx-vals='js:{dark_mode: document.querySelector("input[name=\"dark_mode_toggle\"]").checked ? "true" : "false"}'>
+            <div class="bg-dark-card border border-dark-border rounded-lg p-6 space-y-6">
+                <h2 class="text-lg font-medium">Appearance</h2>
+                
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-dark-text">Dark Mode</p>
+                            <p class="text-xs text-dark-muted">Use dark color scheme across the UI</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" name="dark_mode_toggle" class="sr-only peer" {{if .Settings.DarkMode}}checked{{end}}>
+                            <div class="w-11 h-6 bg-dark-border rounded-full peer peer-checked:bg-accent-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                        </label>
+                    </div>
+
+                    <div class="pt-4 border-t border-dark-border">
+                        <label class="block text-sm font-medium text-dark-muted mb-3">Theme Color</label>
+                        <div class="flex flex-wrap gap-3">
+                            <label class="relative cursor-pointer">
+                                <input type="radio" name="theme_color" value="green" class="sr-only peer" {{if eq .Settings.ThemeColor "green"}}checked{{end}}>
+                                <div class="w-10 h-10 rounded-full bg-green-500 ring-2 ring-transparent peer-checked:ring-white peer-checked:ring-offset-2 peer-checked:ring-offset-dark-bg"></div>
+                            </label>
+                            <label class="relative cursor-pointer">
+                                <input type="radio" name="theme_color" value="blue" class="sr-only peer" {{if eq .Settings.ThemeColor "blue"}}checked{{end}}>
+                                <div class="w-10 h-10 rounded-full bg-blue-500 ring-2 ring-transparent peer-checked:ring-white peer-checked:ring-offset-2 peer-checked:ring-offset-dark-bg"></div>
+                            </label>
+                            <label class="relative cursor-pointer">
+                                <input type="radio" name="theme_color" value="purple" class="sr-only peer" {{if eq .Settings.ThemeColor "purple"}}checked{{end}}>
+                                <div class="w-10 h-10 rounded-full bg-purple-500 ring-2 ring-transparent peer-checked:ring-white peer-checked:ring-offset-2 peer-checked:ring-offset-dark-bg"></div>
+                            </label>
+                            <label class="relative cursor-pointer">
+                                <input type="radio" name="theme_color" value="red" class="sr-only peer" {{if eq .Settings.ThemeColor "red"}}checked{{end}}>
+                                <div class="w-10 h-10 rounded-full bg-red-500 ring-2 ring-transparent peer-checked:ring-white peer-checked:ring-offset-2 peer-checked:ring-offset-dark-bg"></div>
+                            </label>
+                            <label class="relative cursor-pointer">
+                                <input type="radio" name="theme_color" value="orange" class="sr-only peer" {{if eq .Settings.ThemeColor "orange"}}checked{{end}}>
+                                <div class="w-10 h-10 rounded-full bg-orange-500 ring-2 ring-transparent peer-checked:ring-white peer-checked:ring-offset-2 peer-checked:ring-offset-dark-bg"></div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end">
+                <button type="submit"
+                    class="px-4 py-2 bg-accent-600 hover:bg-accent-700 text-white text-sm font-medium rounded-md">
                     Save Changes
                 </button>
             </div>
@@ -75,7 +135,7 @@
 
     <!-- Security Settings -->
     <div id="panel-security" class="settings-panel hidden">
-        <form hx-put="/api/v1/settings/security" hx-target="#settings-status" class="space-y-6">
+        <form hx-ext="json-enc" hx-put="/api/v1/settings/security" hx-target="#settings-status" class="space-y-6">
             <div class="bg-dark-card border border-dark-border rounded-lg p-6 space-y-6">
                 <h2 class="text-lg font-medium">Security Configuration</h2>
                 
@@ -87,7 +147,7 @@
                         </div>
                         <label class="relative inline-flex items-center cursor-pointer">
                             <input type="checkbox" name="require_2fa" class="sr-only peer" {{if .Settings.Require2FA}}checked{{end}}>
-                            <div class="w-11 h-6 bg-dark-border rounded-full peer peer-checked:bg-green-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                            <div class="w-11 h-6 bg-dark-border rounded-full peer peer-checked:bg-accent-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
                         </label>
                     </div>
                     
@@ -98,7 +158,7 @@
                         </div>
                         <label class="relative inline-flex items-center cursor-pointer">
                             <input type="checkbox" name="force_https" class="sr-only peer" {{if .Settings.ForceHTTPS}}checked{{end}}>
-                            <div class="w-11 h-6 bg-dark-border rounded-full peer peer-checked:bg-green-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                            <div class="w-11 h-6 bg-dark-border rounded-full peer peer-checked:bg-accent-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
                         </label>
                     </div>
 
@@ -109,7 +169,7 @@
                         </div>
                         <label class="relative inline-flex items-center cursor-pointer">
                             <input type="checkbox" name="audit_log" class="sr-only peer" {{if .Settings.AuditLog}}checked{{end}}>
-                            <div class="w-11 h-6 bg-dark-border rounded-full peer peer-checked:bg-green-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                            <div class="w-11 h-6 bg-dark-border rounded-full peer peer-checked:bg-accent-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
                         </label>
                     </div>
                 </div>
@@ -123,7 +183,7 @@
 
             <div class="flex justify-end">
                 <button type="submit"
-                    class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md">
+                    class="px-4 py-2 bg-accent-600 hover:bg-accent-700 text-white text-sm font-medium rounded-md">
                     Save Changes
                 </button>
             </div>
@@ -132,7 +192,7 @@
 
     <!-- Notifications Settings -->
     <div id="panel-notifications" class="settings-panel hidden">
-        <form hx-put="/api/v1/settings/notifications" hx-target="#settings-status" class="space-y-6">
+        <form hx-ext="json-enc" hx-put="/api/v1/settings/notifications" hx-target="#settings-status" class="space-y-6">
             <div class="bg-dark-card border border-dark-border rounded-lg p-6 space-y-6">
                 <h2 class="text-lg font-medium">Slack</h2>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -182,7 +242,7 @@
 
             <div class="flex justify-end">
                 <button type="submit"
-                    class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md">
+                    class="px-4 py-2 bg-accent-600 hover:bg-accent-700 text-white text-sm font-medium rounded-md">
                     Save Changes
                 </button>
             </div>
@@ -195,7 +255,7 @@
             <div class="flex justify-between items-center">
                 <h2 class="text-lg font-medium">User Management</h2>
                 <button onclick="document.getElementById('add-user-modal').classList.remove('hidden')"
-                    class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md">
+                    class="px-4 py-2 bg-accent-600 hover:bg-accent-700 text-white text-sm font-medium rounded-md">
                     Add User
                 </button>
             </div>
@@ -265,7 +325,7 @@
                     Cancel
                 </button>
                 <button type="submit"
-                    class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md">
+                    class="px-4 py-2 bg-accent-600 hover:bg-accent-700 text-white text-sm font-medium rounded-md">
                     Create User
                 </button>
             </div>
@@ -279,14 +339,14 @@ function showTab(tabName) {
     document.querySelectorAll('.settings-panel').forEach(p => p.classList.add('hidden'));
     // Reset all tabs
     document.querySelectorAll('.settings-tab').forEach(t => {
-        t.classList.remove('border-green-500', 'text-white');
+        t.classList.remove('border-accent-500', 'text-white');
         t.classList.add('border-transparent', 'text-dark-muted');
     });
     // Show selected panel
     document.getElementById('panel-' + tabName).classList.remove('hidden');
     // Highlight selected tab
     const tab = document.getElementById('tab-' + tabName);
-    tab.classList.add('border-green-500', 'text-white');
+    tab.classList.add('border-accent-500', 'text-white');
     tab.classList.remove('border-transparent', 'text-dark-muted');
 }
 </script>

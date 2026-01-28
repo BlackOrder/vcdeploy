@@ -19,7 +19,7 @@
     <div class="flex flex-wrap gap-4">
         <div>
             <select id="filter-action" onchange="applyFilters()" 
-                class="px-3 py-2 bg-dark-card border border-dark-border rounded-md text-dark-text focus:outline-none focus:ring-2 focus:ring-green-500">
+                class="px-3 py-2 bg-dark-card border border-dark-border rounded-md text-dark-text focus:outline-none focus:ring-2 focus:ring-accent-500">
                 <option value="">All Actions</option>
                 <option value="create">Create</option>
                 <option value="update">Update</option>
@@ -31,7 +31,7 @@
         </div>
         <div>
             <select id="filter-resource" onchange="applyFilters()"
-                class="px-3 py-2 bg-dark-card border border-dark-border rounded-md text-dark-text focus:outline-none focus:ring-2 focus:ring-green-500">
+                class="px-3 py-2 bg-dark-card border border-dark-border rounded-md text-dark-text focus:outline-none focus:ring-2 focus:ring-accent-500">
                 <option value="">All Resources</option>
                 <option value="user">Users</option>
                 <option value="project">Projects</option>
@@ -44,16 +44,16 @@
         </div>
         <div>
             <input type="text" id="filter-user" placeholder="Filter by user..." onkeyup="debounceFilters()"
-                class="px-3 py-2 bg-dark-card border border-dark-border rounded-md text-dark-text placeholder-dark-muted focus:outline-none focus:ring-2 focus:ring-green-500">
+                class="px-3 py-2 bg-dark-card border border-dark-border rounded-md text-dark-text placeholder-dark-muted focus:outline-none focus:ring-2 focus:ring-accent-500">
         </div>
         <div>
             <input type="date" id="filter-from" onchange="applyFilters()"
-                class="px-3 py-2 bg-dark-card border border-dark-border rounded-md text-dark-text focus:outline-none focus:ring-2 focus:ring-green-500">
+                class="px-3 py-2 bg-dark-card border border-dark-border rounded-md text-dark-text focus:outline-none focus:ring-2 focus:ring-accent-500">
         </div>
         <span class="text-dark-muted self-center">to</span>
         <div>
             <input type="date" id="filter-to" onchange="applyFilters()"
-                class="px-3 py-2 bg-dark-card border border-dark-border rounded-md text-dark-text focus:outline-none focus:ring-2 focus:ring-green-500">
+                class="px-3 py-2 bg-dark-card border border-dark-border rounded-md text-dark-text focus:outline-none focus:ring-2 focus:ring-accent-500">
         </div>
     </div>
 

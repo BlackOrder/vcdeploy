@@ -1,11 +1,12 @@
 {{define "base"}}
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en" class="{{if .DarkMode}}dark{{end}}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.Title}} - vcdeploy</title>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/json-enc.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -19,6 +20,25 @@
                             border: '#30363d',
                             text: '#c9d1d9',
                             muted: '#8b949e',
+                        },
+                        light: {
+                            bg: '#ffffff',
+                            card: '#f6f8fa',
+                            border: '#d0d7de',
+                            text: '#24292f',
+                            muted: '#57606a',
+                        },
+                        accent: {
+                            50: 'var(--accent-50)',
+                            100: 'var(--accent-100)',
+                            200: 'var(--accent-200)',
+                            300: 'var(--accent-300)',
+                            400: 'var(--accent-400)',
+                            500: 'var(--accent-500)',
+                            600: 'var(--accent-600)',
+                            700: 'var(--accent-700)',
+                            800: 'var(--accent-800)',
+                            900: 'var(--accent-900)',
                         }
                     }
                 }
@@ -29,6 +49,85 @@
         [data-loading] { display: none; }
         .htmx-request [data-loading] { display: inline-block; }
         .htmx-request [data-ready] { display: none; }
+
+        /* Theme color definitions */
+        :root {
+            /* Default to green accent */
+            --accent-50: #f0fdf4;
+            --accent-100: #dcfce7;
+            --accent-200: #bbf7d0;
+            --accent-300: #86efac;
+            --accent-400: #4ade80;
+            --accent-500: #22c55e;
+            --accent-600: #16a34a;
+            --accent-700: #15803d;
+            --accent-800: #166534;
+            --accent-900: #14532d;
+        }
+        {{if eq .ThemeColor "blue"}}
+        :root {
+            --accent-50: #eff6ff;
+            --accent-100: #dbeafe;
+            --accent-200: #bfdbfe;
+            --accent-300: #93c5fd;
+            --accent-400: #60a5fa;
+            --accent-500: #3b82f6;
+            --accent-600: #2563eb;
+            --accent-700: #1d4ed8;
+            --accent-800: #1e40af;
+            --accent-900: #1e3a8a;
+        }
+        {{else if eq .ThemeColor "purple"}}
+        :root {
+            --accent-50: #faf5ff;
+            --accent-100: #f3e8ff;
+            --accent-200: #e9d5ff;
+            --accent-300: #d8b4fe;
+            --accent-400: #c084fc;
+            --accent-500: #a855f7;
+            --accent-600: #9333ea;
+            --accent-700: #7e22ce;
+            --accent-800: #6b21a8;
+            --accent-900: #581c87;
+        }
+        {{else if eq .ThemeColor "red"}}
+        :root {
+            --accent-50: #fef2f2;
+            --accent-100: #fee2e2;
+            --accent-200: #fecaca;
+            --accent-300: #fca5a5;
+            --accent-400: #f87171;
+            --accent-500: #ef4444;
+            --accent-600: #dc2626;
+            --accent-700: #b91c1c;
+            --accent-800: #991b1b;
+            --accent-900: #7f1d1d;
+        }
+        {{else if eq .ThemeColor "orange"}}
+        :root {
+            --accent-50: #fff7ed;
+            --accent-100: #ffedd5;
+            --accent-200: #fed7aa;
+            --accent-300: #fdba74;
+            --accent-400: #fb923c;
+            --accent-500: #f97316;
+            --accent-600: #ea580c;
+            --accent-700: #c2410c;
+            --accent-800: #9a3412;
+            --accent-900: #7c2d12;
+        }
+        {{end}}
+
+        /* Light mode overrides */
+        html:not(.dark) body {
+            background-color: var(--light-bg, #ffffff);
+            color: var(--light-text, #24292f);
+        }
+        html:not(.dark) .bg-dark-bg { background-color: #ffffff; }
+        html:not(.dark) .bg-dark-card { background-color: #f6f8fa; }
+        html:not(.dark) .border-dark-border { border-color: #d0d7de; }
+        html:not(.dark) .text-dark-text { color: #24292f; }
+        html:not(.dark) .text-dark-muted { color: #57606a; }
     </style>
 </head>
 <body class="bg-dark-bg text-dark-text min-h-screen">
@@ -38,18 +137,18 @@
             <div class="flex items-center justify-between h-16">
                 <div class="flex items-center">
                     <div class="flex-shrink-0">
-                        <span class="text-xl font-bold text-green-500">vcdeploy</span>
+                        <span class="text-xl font-bold text-accent-500">vcdeploy</span>
                     </div>
                     <div class="hidden md:block ml-10">
                         <div class="flex items-baseline space-x-4">
-                            <a href="/dashboard" class="{{if eq .Active "dashboard"}}bg-dark-border text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Dashboard</a>
-                            <a href="/projects" class="{{if eq .Active "projects"}}bg-dark-border text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Projects</a>
-                            <a href="/deployments" class="{{if eq .Active "deployments"}}bg-dark-border text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Deployments</a>
-                            <a href="/agents" class="{{if eq .Active "agents"}}bg-dark-border text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Agents</a>
-                            <a href="/secrets" class="{{if eq .Active "secrets"}}bg-dark-border text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Secrets</a>
-                            <a href="/project-types" class="{{if eq .Active "project-types"}}bg-dark-border text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Types</a>
-                            <a href="/audit" class="{{if eq .Active "audit"}}bg-dark-border text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Audit</a>
-                            <a href="/settings" class="{{if eq .Active "settings"}}bg-dark-border text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Settings</a>
+                            <a href="/dashboard" class="{{if eq .Active "dashboard"}}bg-dark-border text-white dark:text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white dark:hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Dashboard</a>
+                            <a href="/projects" class="{{if eq .Active "projects"}}bg-dark-border text-white dark:text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white dark:hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Projects</a>
+                            <a href="/deployments" class="{{if eq .Active "deployments"}}bg-dark-border text-white dark:text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white dark:hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Deployments</a>
+                            <a href="/agents" class="{{if eq .Active "agents"}}bg-dark-border text-white dark:text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white dark:hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Agents</a>
+                            <a href="/secrets" class="{{if eq .Active "secrets"}}bg-dark-border text-white dark:text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white dark:hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Secrets</a>
+                            <a href="/project-types" class="{{if eq .Active "project-types"}}bg-dark-border text-white dark:text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white dark:hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Types</a>
+                            <a href="/audit" class="{{if eq .Active "audit"}}bg-dark-border text-white dark:text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white dark:hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Audit</a>
+                            <a href="/settings" class="{{if eq .Active "settings"}}bg-dark-border text-white dark:text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white dark:hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Settings</a>
                         </div>
                     </div>
                 </div>
