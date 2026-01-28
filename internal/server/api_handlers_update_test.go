@@ -509,7 +509,9 @@ func TestHandleTriggerAgentUpdate(t *testing.T) {
 	})
 }
 
-// createTestMultipartRequest creates a multipart form request for binary upload
+// createTestMultipartRequest creates a multipart form request for binary upload.
+//
+//nolint:unused // Helper function for binary upload tests
 func createTestMultipartRequest(t *testing.T, url, version, osType, arch string, content []byte) *http.Request {
 	t.Helper()
 	body := &bytes.Buffer{}
