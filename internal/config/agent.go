@@ -40,6 +40,11 @@ type ReconnectConfig struct {
 type AgentIdentityConfig struct {
 	ID     string            `yaml:"id"`
 	Labels map[string]string `yaml:"labels"`
+
+	// Update configuration
+	UpdatePolicy      string `yaml:"update_policy"`       // "immediate", "scheduled", "manual" (default: immediate)
+	UpdateWindowStart string `yaml:"update_window_start"` // HH:MM format for scheduled updates
+	UpdateWindowEnd   string `yaml:"update_window_end"`   // HH:MM format for scheduled updates
 }
 
 // AgentPathsConfig defines local paths.

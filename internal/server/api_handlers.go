@@ -856,6 +856,12 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(path, "/")
 	agentID := parts[0]
 
+	// Handle special paths that don't require agent ID
+	if agentID == "updates" && len(parts) > 1 && parts[1] == "pending" {
+		s.handleAgentsNeedingUpdate(w, r)
+		return
+	}
+
 	if agentID == "" {
 		http.Error(w, "Agent ID required", http.StatusBadRequest)
 		return
@@ -864,6 +870,24 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 	// Handle token sub-resource: POST /api/v1/agents/{id}/token
 	if len(parts) > 1 && parts[1] == "token" {
 		s.handleAgentToken(w, r, agentID)
+		return
+	}
+
+	// Handle update-config sub-resource
+	if len(parts) > 1 && parts[1] == "update-config" {
+		s.handleAgentUpdateConfig(w, r, agentID)
+		return
+	}
+
+	// Handle update-history sub-resource
+	if len(parts) > 1 && parts[1] == "update-history" {
+		s.handleAgentUpdateHistory(w, r, agentID)
+		return
+	}
+
+	// Handle update trigger: POST /api/v1/agents/{id}/update
+	if len(parts) > 1 && parts[1] == "update" {
+		s.handleTriggerAgentUpdate(w, r, agentID)
 		return
 	}
 

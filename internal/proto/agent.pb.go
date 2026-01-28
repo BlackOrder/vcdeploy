@@ -213,6 +213,9 @@ type HeartbeatRequest struct {
 	Timestamp         int64               `json:"timestamp,omitempty"`
 	Stats             *AgentStats         `json:"stats,omitempty"`
 	ActiveDeployments []*DeploymentStatus `json:"active_deployments,omitempty"`
+	Version           string              `json:"version,omitempty"`
+	Os                string              `json:"os,omitempty"`
+	Arch              string              `json:"arch,omitempty"`
 }
 
 func (x *HeartbeatRequest) GetAgentId() string {
@@ -241,6 +244,27 @@ func (x *HeartbeatRequest) GetActiveDeployments() []*DeploymentStatus {
 		return x.ActiveDeployments
 	}
 	return nil
+}
+
+func (x *HeartbeatRequest) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *HeartbeatRequest) GetOs() string {
+	if x != nil {
+		return x.Os
+	}
+	return ""
+}
+
+func (x *HeartbeatRequest) GetArch() string {
+	if x != nil {
+		return x.Arch
+	}
+	return ""
 }
 
 func (x *HeartbeatRequest) Reset()        { *x = HeartbeatRequest{} }
@@ -295,8 +319,9 @@ func (x *AgentStats) ProtoMessage() {}
 
 // HeartbeatResponse acknowledges heartbeat.
 type HeartbeatResponse struct {
-	Ok              bool  `json:"ok,omitempty"`
-	ServerTimestamp int64 `json:"server_timestamp,omitempty"`
+	Ok              bool                `json:"ok,omitempty"`
+	ServerTimestamp int64               `json:"server_timestamp,omitempty"`
+	UpdateAvailable *UpdateNotification `json:"update_available,omitempty"`
 }
 
 func (x *HeartbeatResponse) GetOk() bool {
@@ -313,8 +338,62 @@ func (x *HeartbeatResponse) GetServerTimestamp() int64 {
 	return 0
 }
 
+func (x *HeartbeatResponse) GetUpdateAvailable() *UpdateNotification {
+	if x != nil {
+		return x.UpdateAvailable
+	}
+	return nil
+}
+
 func (x *HeartbeatResponse) Reset()        { *x = HeartbeatResponse{} }
 func (x *HeartbeatResponse) ProtoMessage() {}
+
+// UpdateNotification tells the agent about an available update.
+type UpdateNotification struct {
+	Version        string `json:"version,omitempty"`
+	DownloadUrl    string `json:"download_url,omitempty"`
+	ChecksumSha256 string `json:"checksum_sha256,omitempty"`
+	SizeBytes      int64  `json:"size_bytes,omitempty"`
+	Force          bool   `json:"force,omitempty"`
+}
+
+func (x *UpdateNotification) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *UpdateNotification) GetDownloadUrl() string {
+	if x != nil {
+		return x.DownloadUrl
+	}
+	return ""
+}
+
+func (x *UpdateNotification) GetChecksumSha256() string {
+	if x != nil {
+		return x.ChecksumSha256
+	}
+	return ""
+}
+
+func (x *UpdateNotification) GetSizeBytes() int64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
+func (x *UpdateNotification) GetForce() bool {
+	if x != nil {
+		return x.Force
+	}
+	return false
+}
+
+func (x *UpdateNotification) Reset()        { *x = UpdateNotification{} }
+func (x *UpdateNotification) ProtoMessage() {}
 
 // AgentMessage is sent from agent to master over the stream.
 type AgentMessage struct {
@@ -324,6 +403,7 @@ type AgentMessage struct {
 	//	*AgentMessage_DeploymentLog
 	//	*AgentMessage_CommandResult
 	//	*AgentMessage_AgentReady
+	//	*AgentMessage_UpdateResult
 	Message isAgentMessage_Message
 }
 
@@ -351,6 +431,13 @@ func (x *AgentMessage) GetCommandResult() *CommandResult {
 func (x *AgentMessage) GetAgentReady() *AgentReady {
 	if x, ok := x.GetMessage().(*AgentMessage_AgentReady); ok {
 		return x.AgentReady
+	}
+	return nil
+}
+
+func (x *AgentMessage) GetUpdateResult() *UpdateResult {
+	if x, ok := x.GetMessage().(*AgentMessage_UpdateResult); ok {
+		return x.UpdateResult
 	}
 	return nil
 }
@@ -385,10 +472,62 @@ type AgentMessage_AgentReady struct {
 	AgentReady *AgentReady
 }
 
+type AgentMessage_UpdateResult struct {
+	UpdateResult *UpdateResult
+}
+
 func (*AgentMessage_DeploymentStatus) isAgentMessage_Message() {}
 func (*AgentMessage_DeploymentLog) isAgentMessage_Message()    {}
 func (*AgentMessage_CommandResult) isAgentMessage_Message()    {}
 func (*AgentMessage_AgentReady) isAgentMessage_Message()       {}
+func (*AgentMessage_UpdateResult) isAgentMessage_Message()     {}
+
+// UpdateResult reports the result of an agent update.
+type UpdateResult struct {
+	FromVersion string `json:"from_version,omitempty"`
+	ToVersion   string `json:"to_version,omitempty"`
+	Success     bool   `json:"success,omitempty"`
+	Error       string `json:"error,omitempty"`
+	RolledBack  bool   `json:"rolled_back,omitempty"`
+}
+
+func (x *UpdateResult) GetFromVersion() string {
+	if x != nil {
+		return x.FromVersion
+	}
+	return ""
+}
+
+func (x *UpdateResult) GetToVersion() string {
+	if x != nil {
+		return x.ToVersion
+	}
+	return ""
+}
+
+func (x *UpdateResult) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *UpdateResult) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+func (x *UpdateResult) GetRolledBack() bool {
+	if x != nil {
+		return x.RolledBack
+	}
+	return false
+}
+
+func (x *UpdateResult) Reset()        { *x = UpdateResult{} }
+func (x *UpdateResult) ProtoMessage() {}
 
 // MasterMessage is sent from master to agent over the stream.
 type MasterMessage struct {
@@ -398,6 +537,7 @@ type MasterMessage struct {
 	//	*MasterMessage_RollbackCommand
 	//	*MasterMessage_CancelCommand
 	//	*MasterMessage_HealthCheckCommand
+	//	*MasterMessage_UpdateCommand
 	Message isMasterMessage_Message
 }
 
@@ -425,6 +565,13 @@ func (x *MasterMessage) GetCancelCommand() *CancelCommand {
 func (x *MasterMessage) GetHealthCheckCommand() *HealthCheckCommand {
 	if x, ok := x.GetMessage().(*MasterMessage_HealthCheckCommand); ok {
 		return x.HealthCheckCommand
+	}
+	return nil
+}
+
+func (x *MasterMessage) GetUpdateCommand() *UpdateCommand {
+	if x, ok := x.GetMessage().(*MasterMessage_UpdateCommand); ok {
+		return x.UpdateCommand
 	}
 	return nil
 }
@@ -459,10 +606,62 @@ type MasterMessage_HealthCheckCommand struct {
 	HealthCheckCommand *HealthCheckCommand
 }
 
+type MasterMessage_UpdateCommand struct {
+	UpdateCommand *UpdateCommand
+}
+
 func (*MasterMessage_DeployCommand) isMasterMessage_Message()      {}
 func (*MasterMessage_RollbackCommand) isMasterMessage_Message()    {}
 func (*MasterMessage_CancelCommand) isMasterMessage_Message()      {}
 func (*MasterMessage_HealthCheckCommand) isMasterMessage_Message() {}
+func (*MasterMessage_UpdateCommand) isMasterMessage_Message()      {}
+
+// UpdateCommand instructs agent to update itself.
+type UpdateCommand struct {
+	Version        string `json:"version,omitempty"`
+	DownloadUrl    string `json:"download_url,omitempty"`
+	ChecksumSha256 string `json:"checksum_sha256,omitempty"`
+	SizeBytes      int64  `json:"size_bytes,omitempty"`
+	Force          bool   `json:"force,omitempty"`
+}
+
+func (x *UpdateCommand) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *UpdateCommand) GetDownloadUrl() string {
+	if x != nil {
+		return x.DownloadUrl
+	}
+	return ""
+}
+
+func (x *UpdateCommand) GetChecksumSha256() string {
+	if x != nil {
+		return x.ChecksumSha256
+	}
+	return ""
+}
+
+func (x *UpdateCommand) GetSizeBytes() int64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
+func (x *UpdateCommand) GetForce() bool {
+	if x != nil {
+		return x.Force
+	}
+	return false
+}
+
+func (x *UpdateCommand) Reset()        { *x = UpdateCommand{} }
+func (x *UpdateCommand) ProtoMessage() {}
 
 // DeployCommand instructs agent to deploy a project.
 type DeployCommand struct {

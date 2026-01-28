@@ -31,6 +31,38 @@ type Agent struct {
 	LastSeenAt   time.Time
 	RegisteredAt time.Time
 	Certificate  string
+
+	// Version and platform info
+	Version string
+	OS      string
+	Arch    string
+
+	// Update configuration
+	UpdatePolicy      string // "immediate", "scheduled", "manual"
+	UpdateWindowStart string // HH:MM format for scheduled updates
+	UpdateWindowEnd   string // HH:MM format for scheduled updates
+	LastUpdateAt      *time.Time
+	LastUpdateError   string
+}
+
+// AgentUpdatePolicy constants
+const (
+	AgentUpdatePolicyImmediate = "immediate" // Update as soon as new version is available
+	AgentUpdatePolicyScheduled = "scheduled" // Update only within maintenance window
+	AgentUpdatePolicyManual    = "manual"    // Don't auto-update, wait for manual trigger
+)
+
+// AgentUpdateHistory represents a record of an agent update attempt.
+type AgentUpdateHistory struct {
+	ID           int64
+	AgentID      string
+	FromVersion  string
+	ToVersion    string
+	Status       string // "pending", "in_progress", "completed", "failed", "rolled_back"
+	ErrorMessage string
+	StartedAt    time.Time
+	CompletedAt  *time.Time
+	RolledBack   bool
 }
 
 // --- Deployment Models ---
