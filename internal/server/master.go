@@ -214,6 +214,11 @@ func NewMasterServer(cfg *config.MasterConfig, db *storage.DB, logger *zap.Logge
 	s.hostKeyService = hostkeys.New(s.db)
 	s.provisionService = provision.New(s.db)
 
+	// Seed default admin user if no users exist
+	if err := s.seedDefaultAdmin(); err != nil {
+		logger.Warn("Failed to seed default admin", zap.Error(err))
+	}
+
 	// Load templates from disk
 	if err := s.loadTemplates(); err != nil {
 		logger.Warn("Failed to load templates, using defaults", zap.Error(err))
@@ -318,6 +323,34 @@ func (s *MasterServer) loadTemplates() error {
 		}
 		s.templates[name] = tmpl
 	}
+
+	return nil
+}
+
+// seedDefaultAdmin creates a default admin user if no users exist.
+func (s *MasterServer) seedDefaultAdmin() error {
+	ctx := context.Background()
+
+	// Check if any users exist
+	users, err := s.userService.List(ctx)
+	if err != nil {
+		return fmt.Errorf("listing users: %w", err)
+	}
+
+	if len(users) > 0 {
+		return nil // Users already exist, no need to seed
+	}
+
+	// Create default admin user
+	defaultPassword := "Changeme12345!" // User should change this immediately
+	user, err := s.userService.Create(ctx, "admin", defaultPassword, "admin@localhost", "admin")
+	if err != nil {
+		return fmt.Errorf("creating default admin: %w", err)
+	}
+
+	s.logger.Info("Created default admin user",
+		zap.String("username", user.Username),
+		zap.String("password", defaultPassword+" (CHANGE THIS IMMEDIATELY)"))
 
 	return nil
 }
