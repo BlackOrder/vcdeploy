@@ -19,10 +19,10 @@ export default defineConfig({
   /* Use single worker to reduce resource usage */
   workers: 1,
   
-  /* Reporter to use */
+  /* Reporter to use - 'never' prevents auto-opening browser on failure */
   reporter: [
     ['list'],
-    ['html', { outputFolder: 'playwright-report' }],
+    ['html', { outputFolder: 'playwright-report', open: 'never' }],
     ['json', { outputFile: 'test-results/results.json' }]
   ],
   
