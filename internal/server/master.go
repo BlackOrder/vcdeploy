@@ -1562,7 +1562,42 @@ func (s *MasterServer) handleAgentsUI(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *MasterServer) handleSettingsUI(w http.ResponseWriter, r *http.Request) {
-	s.renderTemplate(w, "settings", map[string]interface{}{"Title": "Settings"})
+	ctx := r.Context()
+
+	// Build settings map for template
+	settings := map[string]interface{}{}
+
+	if s.settingsSvc != nil {
+		// Server settings
+		settings["MasterURL"], _ = s.settingsSvc.GetString(ctx, "server", "master_url", "")
+		settings["LogLevel"], _ = s.settingsSvc.GetString(ctx, "logs", "app_level", "info")
+		settings["RetentionDays"], _ = s.settingsSvc.GetInt(ctx, "logs", "deploy_retention", 90)
+		settings["MaxConcurrent"], _ = s.settingsSvc.GetInt(ctx, "deployments", "max_concurrent", 10)
+
+		// Security settings
+		settings["Require2FA"], _ = s.settingsSvc.GetBool(ctx, "security", "require_2fa", false)
+		settings["ForceHTTPS"], _ = s.settingsSvc.GetBool(ctx, "security", "force_https", false)
+		settings["AuditLog"], _ = s.settingsSvc.GetBool(ctx, "security", "audit_log", true)
+		settings["SessionTimeout"], _ = s.settingsSvc.GetInt(ctx, "security", "session_timeout", 60)
+
+		// Notification settings
+		settings["SlackWebhook"], _ = s.settingsSvc.GetString(ctx, "notifications", "slack_webhook", "")
+		settings["SlackChannel"], _ = s.settingsSvc.GetString(ctx, "notifications", "slack_channel", "")
+		settings["SMTPHost"], _ = s.settingsSvc.GetString(ctx, "notifications", "smtp_host", "")
+		settings["SMTPPort"], _ = s.settingsSvc.GetInt(ctx, "notifications", "smtp_port", 587)
+		settings["SMTPUser"], _ = s.settingsSvc.GetString(ctx, "notifications", "smtp_user", "")
+		settings["SMTPFrom"], _ = s.settingsSvc.GetString(ctx, "notifications", "smtp_from", "")
+
+		// Appearance settings
+		settings["DarkMode"], _ = s.settingsSvc.GetBool(ctx, "appearance", "dark_mode", true)
+		settings["ThemeColor"], _ = s.settingsSvc.GetString(ctx, "appearance", "theme_color", "green")
+	}
+
+	s.renderTemplate(w, "settings", map[string]interface{}{
+		"Title":    "Settings",
+		"Active":   "settings",
+		"Settings": settings,
+	})
 }
 
 func (s *MasterServer) handleSecretsUI(w http.ResponseWriter, r *http.Request) {
@@ -1606,7 +1641,31 @@ func (s *MasterServer) renderTemplate(w http.ResponseWriter, name string, data i
 		http.Error(w, "Templates not loaded", http.StatusInternalServerError)
 		return
 	}
-	if err := s.templates.ExecuteTemplate(w, name+".html", data); err != nil {
+
+	// Convert data to a map and add common theme settings
+	dataMap, ok := data.(map[string]interface{})
+	if !ok {
+		dataMap = map[string]interface{}{}
+	}
+
+	// Add appearance settings if settings service is available
+	if s.settingsSvc != nil {
+		ctx := context.Background()
+		darkMode, _ := s.settingsSvc.GetBool(ctx, "appearance", "dark_mode", true)
+		themeColor, _ := s.settingsSvc.GetString(ctx, "appearance", "theme_color", "green")
+		theme, _ := s.settingsSvc.GetString(ctx, "appearance", "theme", "dark")
+
+		dataMap["DarkMode"] = darkMode
+		dataMap["ThemeColor"] = themeColor
+		dataMap["Theme"] = theme
+	} else {
+		// Defaults if settings service not available
+		dataMap["DarkMode"] = true
+		dataMap["ThemeColor"] = "green"
+		dataMap["Theme"] = "dark"
+	}
+
+	if err := s.templates.ExecuteTemplate(w, name+".html", dataMap); err != nil {
 		s.logger.Error("Template render error", zap.String("template", name), zap.Error(err))
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
