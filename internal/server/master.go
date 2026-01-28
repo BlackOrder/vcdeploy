@@ -430,6 +430,15 @@ func (s *MasterServer) startHTTP() error {
 	mux.HandleFunc("/api/v1/binaries/latest", s.withAuth(s.handleAgentBinaryLatest))
 	mux.HandleFunc("/api/v1/binaries/", s.withAuth(s.handleAgentBinary))
 
+	// Health Check Configuration API
+	mux.HandleFunc("/api/v1/health-checks", s.withAuth(s.handleHealthCheckConfigs))
+	mux.HandleFunc("/api/v1/health-checks/global", s.withAuth(s.handleGlobalHealthCheck))
+	mux.HandleFunc("/api/v1/health-checks/", s.withAuth(s.handleHealthCheckConfig))
+
+	// Rollback Records API
+	mux.HandleFunc("/api/v1/rollbacks", s.withAuth(s.handleRollbackRecords))
+	mux.HandleFunc("/api/v1/rollbacks/", s.withAuth(s.handleRollbackRecord))
+
 	// Webhooks
 	mux.HandleFunc("/webhook/github/", s.handleGitHubWebhook)
 	mux.HandleFunc("/webhook/gitlab/", s.handleGitLabWebhook)

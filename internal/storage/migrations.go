@@ -747,6 +747,119 @@ var migrations = []Migration{
 			return err
 		},
 	},
+	{
+		Version:     16,
+		Description: "Health check configuration and deployment rollback tracking",
+		Up: func(tx *sql.Tx) error {
+			// Health check configurations - both global and per-project
+			_, err := tx.Exec(`
+				CREATE TABLE IF NOT EXISTS health_check_configs (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					project_id INTEGER,
+					name TEXT NOT NULL,
+					url TEXT NOT NULL,
+					method TEXT NOT NULL DEFAULT 'GET',
+					expected_status INTEGER DEFAULT 200,
+					timeout_seconds INTEGER DEFAULT 10,
+					retries INTEGER DEFAULT 3,
+					retry_delay_seconds INTEGER DEFAULT 5,
+					headers TEXT,
+					body TEXT,
+					body_contains TEXT,
+					enabled INTEGER DEFAULT 1,
+					is_global INTEGER DEFAULT 0,
+					created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+					updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+					FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+				)
+			`)
+			if err != nil {
+				return fmt.Errorf("creating health_check_configs table: %w", err)
+			}
+
+			// Add health check reference to projects
+			alterStatements := []string{
+				`ALTER TABLE projects ADD COLUMN health_check_id INTEGER REFERENCES health_check_configs(id)`,
+				`ALTER TABLE projects ADD COLUMN auto_rollback_enabled INTEGER DEFAULT 1`,
+				`ALTER TABLE projects ADD COLUMN rollback_on_health_fail INTEGER DEFAULT 1`,
+			}
+
+			for _, stmt := range alterStatements {
+				_, err := tx.Exec(stmt)
+				if err != nil {
+					if !strings.Contains(err.Error(), "duplicate column name") {
+						return fmt.Errorf("executing %s: %w", stmt, err)
+					}
+				}
+			}
+
+			// Deployment rollbacks table to track rollback events
+			_, err = tx.Exec(`
+				CREATE TABLE IF NOT EXISTS deployment_rollbacks (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					deployment_id TEXT NOT NULL,
+					project_name TEXT NOT NULL,
+					from_release INTEGER NOT NULL,
+					to_release INTEGER NOT NULL,
+					reason TEXT NOT NULL,
+					triggered_by TEXT NOT NULL,
+					health_check_failed INTEGER DEFAULT 0,
+					health_check_error TEXT,
+					status TEXT NOT NULL DEFAULT 'pending',
+					error_message TEXT,
+					started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+					completed_at DATETIME,
+					FOREIGN KEY (deployment_id) REFERENCES deployments(id) ON DELETE CASCADE
+				)
+			`)
+			if err != nil {
+				return fmt.Errorf("creating deployment_rollbacks table: %w", err)
+			}
+
+			// Indexes
+			_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_health_check_configs_project ON health_check_configs(project_id)`)
+			if err != nil {
+				return fmt.Errorf("creating health check index: %w", err)
+			}
+
+			_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_health_check_configs_global ON health_check_configs(is_global)`)
+			if err != nil {
+				return fmt.Errorf("creating global health check index: %w", err)
+			}
+
+			_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_deployment_rollbacks_deployment ON deployment_rollbacks(deployment_id)`)
+			if err != nil {
+				return fmt.Errorf("creating deployment rollbacks index: %w", err)
+			}
+
+			_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_deployment_rollbacks_project ON deployment_rollbacks(project_name)`)
+			if err != nil {
+				return fmt.Errorf("creating project rollbacks index: %w", err)
+			}
+
+			// Insert default global health check configuration
+			_, err = tx.Exec(`
+				INSERT OR IGNORE INTO health_check_configs (
+					name, url, method, expected_status, timeout_seconds, retries, 
+					retry_delay_seconds, enabled, is_global
+				) VALUES (
+					'Global Default', '{{.URL}}', 'GET', 200, 10, 3, 5, 1, 1
+				)
+			`)
+			if err != nil {
+				return fmt.Errorf("inserting default global health check: %w", err)
+			}
+
+			return nil
+		},
+		Down: func(tx *sql.Tx) error {
+			_, err := tx.Exec(`
+				DROP TABLE IF EXISTS deployment_rollbacks;
+				DROP TABLE IF EXISTS health_check_configs;
+			`)
+			return err
+		},
+	},
 }
 
 // MigrateUp runs all pending migrations.

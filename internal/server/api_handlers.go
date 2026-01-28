@@ -567,6 +567,16 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 		case "deploy":
 			s.handleProjectDeploy(w, r, projectName)
 			return
+		case "health-config":
+			// Get project ID first
+			ctx := r.Context()
+			project, err := s.projectService.GetByName(ctx, projectName)
+			if err != nil {
+				http.Error(w, "Project not found", http.StatusNotFound)
+				return
+			}
+			s.handleProjectHealthConfig(w, r, project.ID)
+			return
 		}
 	}
 

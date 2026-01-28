@@ -2465,3 +2465,336 @@ func (db *DB) ListAgentsNeedingUpdate(ctx context.Context) ([]*Agent, error) {
 	}
 	return agents, rows.Err()
 }
+
+// --- Health Check Configuration Operations ---
+
+// CreateHealthCheckConfig creates a new health check configuration.
+func (db *DB) CreateHealthCheckConfig(ctx context.Context, config *HealthCheckConfig) error {
+	result, err := db.conn.ExecContext(ctx, `
+		INSERT INTO health_check_configs (project_id, name, url, method, expected_status, timeout_seconds, 
+			retries, retry_delay_seconds, headers, body, body_contains, enabled, is_global)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, config.ProjectID, config.Name, config.URL, config.Method, config.ExpectedStatus, config.TimeoutSeconds,
+		config.Retries, config.RetryDelaySeconds, config.Headers, config.Body, config.BodyContains,
+		config.Enabled, config.IsGlobal)
+	if err != nil {
+		return fmt.Errorf("creating health check config: %w", err)
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("getting health check config id: %w", err)
+	}
+	config.ID = id
+	return nil
+}
+
+// GetHealthCheckConfig retrieves a health check configuration by ID.
+func (db *DB) GetHealthCheckConfig(ctx context.Context, id int64) (*HealthCheckConfig, error) {
+	var config HealthCheckConfig
+	var projectID sql.NullInt64
+	var headers, body, bodyContains sql.NullString
+
+	err := db.conn.QueryRowContext(ctx, `
+		SELECT id, project_id, name, url, method, expected_status, timeout_seconds, retries, 
+			retry_delay_seconds, headers, body, body_contains, enabled, is_global, created_at, updated_at
+		FROM health_check_configs WHERE id = ?
+	`, id).Scan(&config.ID, &projectID, &config.Name, &config.URL, &config.Method, &config.ExpectedStatus,
+		&config.TimeoutSeconds, &config.Retries, &config.RetryDelaySeconds, &headers, &body, &bodyContains,
+		&config.Enabled, &config.IsGlobal, &config.CreatedAt, &config.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("getting health check config: %w", err)
+	}
+	if projectID.Valid {
+		config.ProjectID = &projectID.Int64
+	}
+	config.Headers = headers.String
+	config.Body = body.String
+	config.BodyContains = bodyContains.String
+	return &config, nil
+}
+
+// GetGlobalHealthCheckConfig retrieves the global health check configuration.
+func (db *DB) GetGlobalHealthCheckConfig(ctx context.Context) (*HealthCheckConfig, error) {
+	var config HealthCheckConfig
+	var projectID sql.NullInt64
+	var headers, body, bodyContains sql.NullString
+
+	err := db.conn.QueryRowContext(ctx, `
+		SELECT id, project_id, name, url, method, expected_status, timeout_seconds, retries, 
+			retry_delay_seconds, headers, body, body_contains, enabled, is_global, created_at, updated_at
+		FROM health_check_configs WHERE is_global = 1 LIMIT 1
+	`).Scan(&config.ID, &projectID, &config.Name, &config.URL, &config.Method, &config.ExpectedStatus,
+		&config.TimeoutSeconds, &config.Retries, &config.RetryDelaySeconds, &headers, &body, &bodyContains,
+		&config.Enabled, &config.IsGlobal, &config.CreatedAt, &config.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("getting global health check config: %w", err)
+	}
+	if projectID.Valid {
+		config.ProjectID = &projectID.Int64
+	}
+	config.Headers = headers.String
+	config.Body = body.String
+	config.BodyContains = bodyContains.String
+	return &config, nil
+}
+
+// GetHealthCheckConfigForProject retrieves the health check config for a project.
+// Returns the project-specific config if set, otherwise the global config.
+func (db *DB) GetHealthCheckConfigForProject(ctx context.Context, projectID int64) (*HealthCheckConfig, error) {
+	// First try to get project-specific config
+	var config HealthCheckConfig
+	var pid sql.NullInt64
+	var headers, body, bodyContains sql.NullString
+
+	err := db.conn.QueryRowContext(ctx, `
+		SELECT id, project_id, name, url, method, expected_status, timeout_seconds, retries, 
+			retry_delay_seconds, headers, body, body_contains, enabled, is_global, created_at, updated_at
+		FROM health_check_configs WHERE project_id = ? AND enabled = 1
+	`, projectID).Scan(&config.ID, &pid, &config.Name, &config.URL, &config.Method, &config.ExpectedStatus,
+		&config.TimeoutSeconds, &config.Retries, &config.RetryDelaySeconds, &headers, &body, &bodyContains,
+		&config.Enabled, &config.IsGlobal, &config.CreatedAt, &config.UpdatedAt)
+	if err == nil {
+		if pid.Valid {
+			config.ProjectID = &pid.Int64
+		}
+		config.Headers = headers.String
+		config.Body = body.String
+		config.BodyContains = bodyContains.String
+		return &config, nil
+	}
+	if err != sql.ErrNoRows {
+		return nil, fmt.Errorf("getting project health check config: %w", err)
+	}
+
+	// Fall back to global config
+	return db.GetGlobalHealthCheckConfig(ctx)
+}
+
+// UpdateHealthCheckConfig updates a health check configuration.
+func (db *DB) UpdateHealthCheckConfig(ctx context.Context, config *HealthCheckConfig) error {
+	_, err := db.conn.ExecContext(ctx, `
+		UPDATE health_check_configs SET
+			name = ?, url = ?, method = ?, expected_status = ?, timeout_seconds = ?,
+			retries = ?, retry_delay_seconds = ?, headers = ?, body = ?, body_contains = ?,
+			enabled = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE id = ?
+	`, config.Name, config.URL, config.Method, config.ExpectedStatus, config.TimeoutSeconds,
+		config.Retries, config.RetryDelaySeconds, config.Headers, config.Body, config.BodyContains,
+		config.Enabled, config.ID)
+	if err != nil {
+		return fmt.Errorf("updating health check config: %w", err)
+	}
+	return nil
+}
+
+// ListHealthCheckConfigs retrieves all health check configurations.
+func (db *DB) ListHealthCheckConfigs(ctx context.Context) ([]*HealthCheckConfig, error) {
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, project_id, name, url, method, expected_status, timeout_seconds, retries, 
+			retry_delay_seconds, headers, body, body_contains, enabled, is_global, created_at, updated_at
+		FROM health_check_configs ORDER BY is_global DESC, name
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("listing health check configs: %w", err)
+	}
+	defer rows.Close()
+
+	var configs []*HealthCheckConfig
+	for rows.Next() {
+		var config HealthCheckConfig
+		var projectID sql.NullInt64
+		var headers, body, bodyContains sql.NullString
+
+		if err := rows.Scan(&config.ID, &projectID, &config.Name, &config.URL, &config.Method, &config.ExpectedStatus,
+			&config.TimeoutSeconds, &config.Retries, &config.RetryDelaySeconds, &headers, &body, &bodyContains,
+			&config.Enabled, &config.IsGlobal, &config.CreatedAt, &config.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scanning health check config: %w", err)
+		}
+		if projectID.Valid {
+			config.ProjectID = &projectID.Int64
+		}
+		config.Headers = headers.String
+		config.Body = body.String
+		config.BodyContains = bodyContains.String
+		configs = append(configs, &config)
+	}
+	return configs, rows.Err()
+}
+
+// DeleteHealthCheckConfig deletes a health check configuration.
+func (db *DB) DeleteHealthCheckConfig(ctx context.Context, id int64) error {
+	// Don't allow deleting the global config
+	var isGlobal bool
+	err := db.conn.QueryRowContext(ctx, `SELECT is_global FROM health_check_configs WHERE id = ?`, id).Scan(&isGlobal)
+	if err == sql.ErrNoRows {
+		return ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("checking global config: %w", err)
+	}
+	if isGlobal {
+		return fmt.Errorf("cannot delete global health check config")
+	}
+
+	_, err = db.conn.ExecContext(ctx, `DELETE FROM health_check_configs WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("deleting health check config: %w", err)
+	}
+	return nil
+}
+
+// --- Deployment Rollback Operations ---
+
+// CreateDeploymentRollback creates a new rollback record.
+func (db *DB) CreateDeploymentRollback(ctx context.Context, rollback *DeploymentRollback) error {
+	result, err := db.conn.ExecContext(ctx, `
+		INSERT INTO deployment_rollbacks (deployment_id, project_name, from_release, to_release, reason, 
+			triggered_by, health_check_failed, health_check_error, status)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, rollback.DeploymentID, rollback.ProjectName, rollback.FromRelease, rollback.ToRelease,
+		rollback.Reason, rollback.TriggeredBy, rollback.HealthCheckFailed, rollback.HealthCheckError, rollback.Status)
+	if err != nil {
+		return fmt.Errorf("creating deployment rollback: %w", err)
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("getting rollback id: %w", err)
+	}
+	rollback.ID = id
+	return nil
+}
+
+// GetDeploymentRollback retrieves a rollback record by ID.
+func (db *DB) GetDeploymentRollback(ctx context.Context, id int64) (*DeploymentRollback, error) {
+	var rollback DeploymentRollback
+	var completedAt sql.NullTime
+	var errorMsg, healthError sql.NullString
+
+	err := db.conn.QueryRowContext(ctx, `
+		SELECT id, deployment_id, project_name, from_release, to_release, reason, triggered_by,
+			health_check_failed, health_check_error, status, error_message, started_at, completed_at
+		FROM deployment_rollbacks WHERE id = ?
+	`, id).Scan(&rollback.ID, &rollback.DeploymentID, &rollback.ProjectName, &rollback.FromRelease,
+		&rollback.ToRelease, &rollback.Reason, &rollback.TriggeredBy, &rollback.HealthCheckFailed,
+		&healthError, &rollback.Status, &errorMsg, &rollback.StartedAt, &completedAt)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("getting deployment rollback: %w", err)
+	}
+	rollback.ErrorMessage = errorMsg.String
+	rollback.HealthCheckError = healthError.String
+	if completedAt.Valid {
+		rollback.CompletedAt = &completedAt.Time
+	}
+	return &rollback, nil
+}
+
+// UpdateDeploymentRollback updates a rollback record status.
+func (db *DB) UpdateDeploymentRollback(ctx context.Context, rollback *DeploymentRollback) error {
+	_, err := db.conn.ExecContext(ctx, `
+		UPDATE deployment_rollbacks SET status = ?, error_message = ?, completed_at = ? WHERE id = ?
+	`, rollback.Status, rollback.ErrorMessage, rollback.CompletedAt, rollback.ID)
+	if err != nil {
+		return fmt.Errorf("updating deployment rollback: %w", err)
+	}
+	return nil
+}
+
+// ListDeploymentRollbacks retrieves rollback records with optional filtering.
+func (db *DB) ListDeploymentRollbacks(ctx context.Context, projectName string, limit, offset int) ([]*DeploymentRollback, int64, error) {
+	// Build query based on filter
+	countQuery := `SELECT COUNT(*) FROM deployment_rollbacks`
+	selectQuery := `
+		SELECT id, deployment_id, project_name, from_release, to_release, reason, triggered_by,
+			health_check_failed, health_check_error, status, error_message, started_at, completed_at
+		FROM deployment_rollbacks`
+	orderQuery := ` ORDER BY started_at DESC LIMIT ? OFFSET ?`
+
+	var args []interface{}
+	if projectName != "" {
+		countQuery += ` WHERE project_name = ?`
+		selectQuery += ` WHERE project_name = ?`
+		args = append(args, projectName)
+	}
+
+	// Get total count
+	var total int64
+	err := db.conn.QueryRowContext(ctx, countQuery, args...).Scan(&total)
+	if err != nil {
+		return nil, 0, fmt.Errorf("counting rollbacks: %w", err)
+	}
+
+	args = append(args, limit, offset)
+	rows, err := db.conn.QueryContext(ctx, selectQuery+orderQuery, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("listing deployment rollbacks: %w", err)
+	}
+	defer rows.Close()
+
+	var rollbacks []*DeploymentRollback
+	for rows.Next() {
+		var rollback DeploymentRollback
+		var completedAt sql.NullTime
+		var errorMsg, healthError sql.NullString
+
+		if err := rows.Scan(&rollback.ID, &rollback.DeploymentID, &rollback.ProjectName, &rollback.FromRelease,
+			&rollback.ToRelease, &rollback.Reason, &rollback.TriggeredBy, &rollback.HealthCheckFailed,
+			&healthError, &rollback.Status, &errorMsg, &rollback.StartedAt, &completedAt); err != nil {
+			return nil, 0, fmt.Errorf("scanning rollback: %w", err)
+		}
+		rollback.ErrorMessage = errorMsg.String
+		rollback.HealthCheckError = healthError.String
+		if completedAt.Valid {
+			rollback.CompletedAt = &completedAt.Time
+		}
+		rollbacks = append(rollbacks, &rollback)
+	}
+	return rollbacks, total, rows.Err()
+}
+
+// GetLatestRollbackForDeployment returns the most recent rollback for a deployment.
+func (db *DB) GetLatestRollbackForDeployment(ctx context.Context, deploymentID string) (*DeploymentRollback, error) {
+	var rollback DeploymentRollback
+	var completedAt sql.NullTime
+	var errorMsg, healthError sql.NullString
+
+	err := db.conn.QueryRowContext(ctx, `
+		SELECT id, deployment_id, project_name, from_release, to_release, reason, triggered_by,
+			health_check_failed, health_check_error, status, error_message, started_at, completed_at
+		FROM deployment_rollbacks WHERE deployment_id = ? ORDER BY started_at DESC LIMIT 1
+	`, deploymentID).Scan(&rollback.ID, &rollback.DeploymentID, &rollback.ProjectName, &rollback.FromRelease,
+		&rollback.ToRelease, &rollback.Reason, &rollback.TriggeredBy, &rollback.HealthCheckFailed,
+		&healthError, &rollback.Status, &errorMsg, &rollback.StartedAt, &completedAt)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("getting latest rollback for deployment: %w", err)
+	}
+	rollback.ErrorMessage = errorMsg.String
+	rollback.HealthCheckError = healthError.String
+	if completedAt.Valid {
+		rollback.CompletedAt = &completedAt.Time
+	}
+	return &rollback, nil
+}
+
+// UpdateProjectHealthCheck updates a project's health check configuration reference.
+func (db *DB) UpdateProjectHealthCheck(ctx context.Context, projectID int64, healthCheckID *int64, autoRollback, rollbackOnHealthFail bool) error {
+	_, err := db.conn.ExecContext(ctx, `
+		UPDATE projects SET health_check_id = ?, auto_rollback_enabled = ?, rollback_on_health_fail = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE id = ?
+	`, healthCheckID, autoRollback, rollbackOnHealthFail, projectID)
+	if err != nil {
+		return fmt.Errorf("updating project health check: %w", err)
+	}
+	return nil
+}
