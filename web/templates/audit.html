@@ -126,7 +126,7 @@
     </div>
 </div>
 
-<script>
+<script{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}>
 let currentOffset = 0;
 const pageSize = 50;
 let filterTimeout;

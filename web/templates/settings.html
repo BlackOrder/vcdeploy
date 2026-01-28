@@ -333,7 +333,7 @@
     </div>
 </div>
 
-<script>
+<script{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}>
 function showTab(tabName) {
     // Hide all panels
     document.querySelectorAll('.settings-panel').forEach(p => p.classList.add('hidden'));

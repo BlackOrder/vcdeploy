@@ -77,6 +77,7 @@ type MasterServer struct {
 
 	// Security middleware
 	securityMiddleware    *SecurityMiddleware
+	cspMiddleware         *CSPMiddleware
 	rateLimiter           *RateLimiter
 	enforcementMiddleware *EnforcementMiddleware
 	logSizeEnforcer       *LogSizeEnforcer
@@ -245,6 +246,11 @@ func NewMasterServer(cfg *config.MasterConfig, db *storage.DB, logger *zap.Logge
 
 	// Initialize security middleware
 	s.securityMiddleware = NewSecurityMiddleware(DefaultSecurityConfig())
+
+	// Initialize CSP middleware with nonces enabled
+	cspConfig := DefaultCSPConfigWithUnsafeInline()
+	cspConfig.EnableNonces = true
+	s.cspMiddleware = NewCSPMiddleware(cspConfig)
 
 	// Initialize enforcement middleware
 	s.enforcementMiddleware = NewEnforcementMiddleware(cfg, s.userService, logger)
@@ -524,9 +530,14 @@ func (s *MasterServer) startHTTP() error {
 	}
 	s.logger.Info("Starting HTTP server", zap.String("addr", addr))
 
-	// Build middleware chain: logging -> security headers -> rate limiting -> handler
+	// Build middleware chain: logging -> CSP -> security headers -> rate limiting -> handler
 	var handler http.Handler = mux
 	handler = s.loggingMiddleware(handler)
+
+	// Add CSP middleware (must be before security headers to set CSP header)
+	if s.cspMiddleware != nil {
+		handler = s.cspMiddleware.Handler(handler)
+	}
 
 	// Add security headers middleware
 	if s.securityMiddleware != nil {
@@ -1917,12 +1928,17 @@ func (s *MasterServer) handleAPIKeysUI(w http.ResponseWriter, r *http.Request) {
 	}))
 }
 
-// withCommonData adds common template data like ShowNav, Username for authenticated pages
+// withCommonData adds common template data like ShowNav, Username, CSPNonce for authenticated pages
 func (s *MasterServer) withCommonData(r *http.Request, data map[string]interface{}) map[string]interface{} {
 	if data == nil {
 		data = make(map[string]interface{})
 	}
 	data["ShowNav"] = true
+
+	// Add CSP nonce for inline scripts
+	if nonce := GetCSPNonce(r); nonce != "" {
+		data["CSPNonce"] = nonce
+	}
 
 	// Get username from context
 	if userID, ok := GetUserIDFromContext(r.Context()); ok {

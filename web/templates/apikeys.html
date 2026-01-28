@@ -130,7 +130,7 @@
     </div>
 </div>
 
-<script>
+<script{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}>
 async function createApiKey(e) {
     e.preventDefault();
     const form = e.target;

@@ -193,7 +193,7 @@
     </div>
 </div>
 
-<script>
+<script{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}>
 let currentAgentId = null;
 let refreshInterval = null;
 

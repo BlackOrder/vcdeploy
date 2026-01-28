@@ -86,7 +86,7 @@
     </div>
 </div>
 
-<script>
+<script{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}>
 let currentDeploymentId = null;
 let eventSource = null;
 let logsVisible = false;
