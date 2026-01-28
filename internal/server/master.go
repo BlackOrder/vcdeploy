@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -1317,27 +1316,12 @@ func (s *MasterServer) handleAuditLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse pagination params
-	limitStr := r.URL.Query().Get("limit")
-	offsetStr := r.URL.Query().Get("offset")
-
-	limit := 50
-	offset := 0
-
-	if limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 1000 {
-			limit = l
-		}
-	}
-	if offsetStr != "" {
-		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
-			offset = o
-		}
-	}
+	p := parsePagination(r)
 
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	entries, err := s.auditService.List(ctx, limit, offset)
+	entries, err := s.auditService.List(ctx, p.Limit, p.Offset)
 	if err != nil {
 		s.logger.Error("Failed to list audit logs", zap.Error(err))
 		http.Error(w, "Internal error", http.StatusInternalServerError)

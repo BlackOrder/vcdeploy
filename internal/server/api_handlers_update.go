@@ -495,20 +495,9 @@ func (s *MasterServer) handleAgentUpdateHistory(w http.ResponseWriter, r *http.R
 	}
 
 	// Parse pagination
-	limit := 20
-	offset := 0
-	if l := r.URL.Query().Get("limit"); l != "" {
-		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
-			limit = parsed
-		}
-	}
-	if o := r.URL.Query().Get("offset"); o != "" {
-		if parsed, err := strconv.Atoi(o); err == nil && parsed >= 0 {
-			offset = parsed
-		}
-	}
+	p := parsePaginationWithDefaults(r, 20)
 
-	history, total, err := s.db.ListAgentUpdateHistory(ctx, agentID, limit, offset)
+	history, total, err := s.db.ListAgentUpdateHistory(ctx, agentID, p.Limit, p.Offset)
 	if err != nil {
 		s.logger.Error("Failed to get agent update history", zap.Error(err))
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -518,8 +507,8 @@ func (s *MasterServer) handleAgentUpdateHistory(w http.ResponseWriter, r *http.R
 	s.jsonResponse(w, map[string]interface{}{
 		"items":  history,
 		"total":  total,
-		"limit":  limit,
-		"offset": offset,
+		"limit":  p.Limit,
+		"offset": p.Offset,
 	})
 }
 
