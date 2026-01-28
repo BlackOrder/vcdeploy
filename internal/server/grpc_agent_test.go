@@ -385,6 +385,71 @@ func TestAgentServer_SendCancelCommand(t *testing.T) {
 	}
 }
 
+func TestAgentServer_SendUpdateCommand(t *testing.T) {
+	server, _ := newTestAgentServer(t)
+
+	// Set up connection and command channel
+	cmdChan := make(chan *proto.MasterMessage, 10)
+	server.connectionMutex.Lock()
+	server.connections["agent-1"] = &GRPCAgentConnection{AgentID: "agent-1"}
+	server.connectionMutex.Unlock()
+	server.pendingCommandMutex.Lock()
+	server.pendingCommands["agent-1"] = cmdChan
+	server.pendingCommandMutex.Unlock()
+
+	// Send update command
+	cmd := &proto.UpdateCommand{
+		Version:        "2.0.0",
+		DownloadUrl:    "https://example.com/agent/2.0.0/linux/amd64",
+		ChecksumSha256: "abc123def456",
+		SizeBytes:      1024000,
+		Force:          false,
+	}
+	err := server.SendUpdateCommand("agent-1", cmd)
+	if err != nil {
+		t.Fatalf("Failed to send update command: %v", err)
+	}
+
+	// Check command was queued
+	select {
+	case msg := <-cmdChan:
+		updateCmd := msg.GetUpdateCommand()
+		if updateCmd == nil {
+			t.Fatal("Expected update command")
+		}
+		if updateCmd.Version != "2.0.0" {
+			t.Errorf("Expected version '2.0.0', got %q", updateCmd.Version)
+		}
+		if updateCmd.DownloadUrl != "https://example.com/agent/2.0.0/linux/amd64" {
+			t.Errorf("Expected download URL to match, got %q", updateCmd.DownloadUrl)
+		}
+		if updateCmd.ChecksumSha256 != "abc123def456" {
+			t.Errorf("Expected checksum to match, got %q", updateCmd.ChecksumSha256)
+		}
+		if updateCmd.SizeBytes != 1024000 {
+			t.Errorf("Expected size 1024000, got %d", updateCmd.SizeBytes)
+		}
+	default:
+		t.Error("Expected command in channel")
+	}
+}
+
+func TestAgentServer_SendUpdateCommand_NotConnected(t *testing.T) {
+	server, _ := newTestAgentServer(t)
+
+	cmd := &proto.UpdateCommand{
+		Version:        "2.0.0",
+		DownloadUrl:    "https://example.com/agent",
+		ChecksumSha256: "abc123",
+		SizeBytes:      1024,
+	}
+
+	err := server.SendUpdateCommand("nonexistent-agent", cmd)
+	if err == nil {
+		t.Error("Expected error when sending to disconnected agent")
+	}
+}
+
 func TestAgentServer_ValidateToken_ConstantTimeComparison(t *testing.T) {
 	server, _ := newTestAgentServer(t)
 

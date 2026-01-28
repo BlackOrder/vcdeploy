@@ -360,6 +360,155 @@ func TestHandleAgentsNeedingUpdate(t *testing.T) {
 	})
 }
 
+func TestHandleTriggerAgentUpdate(t *testing.T) {
+	s, _, _, userID := newTestServerWithAuth(t)
+
+	ctx := context.Background()
+
+	// Create an agent with version info
+	agent := &storage.Agent{
+		ID:       "trigger-test-agent",
+		Hostname: "trigger-test-host",
+		Status:   "online",
+		Version:  "1.0.0",
+		OS:       "linux",
+		Arch:     "amd64",
+	}
+	if err := s.db.UpsertAgent(ctx, agent); err != nil {
+		t.Fatalf("Failed to create agent: %v", err)
+	}
+
+	// Create an agent binary (newer version)
+	binary := &storage.AgentBinary{
+		Version:        "2.0.0",
+		OS:             "linux",
+		Arch:           "amd64",
+		Path:           "/tmp/test-binary",
+		ChecksumSHA256: "abc123def456",
+		SizeBytes:      2048,
+		UploadedAt:     time.Now(),
+		IsCurrent:      true,
+	}
+	if err := s.db.CreateAgentBinary(ctx, binary); err != nil {
+		t.Fatalf("Failed to create binary: %v", err)
+	}
+
+	t.Run("POST - trigger update success", func(t *testing.T) {
+		body := bytes.NewBufferString(`{"version": "2.0.0"}`)
+		req := requestWithAdminContext(httptest.NewRequest("POST", "/api/v1/agents/trigger-test-agent/update", body), userID)
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		s.handleTriggerAgentUpdate(rr, req, "trigger-test-agent")
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status %d, got %d: %s", http.StatusOK, rr.Code, rr.Body.String())
+		}
+
+		var response map[string]interface{}
+		if err := json.NewDecoder(rr.Body).Decode(&response); err != nil {
+			t.Fatalf("Failed to decode response: %v", err)
+		}
+
+		// Verify response fields
+		if response["status"] != "pending" {
+			t.Errorf("Expected status 'pending', got %v", response["status"])
+		}
+		if response["from_version"] != "1.0.0" {
+			t.Errorf("Expected from_version '1.0.0', got %v", response["from_version"])
+		}
+		if response["to_version"] != "2.0.0" {
+			t.Errorf("Expected to_version '2.0.0', got %v", response["to_version"])
+		}
+		// When agent is not connected via gRPC, delivery should be heartbeat
+		if response["delivery"] != "heartbeat" {
+			t.Errorf("Expected delivery 'heartbeat', got %v", response["delivery"])
+		}
+	})
+
+	t.Run("POST - agent not found", func(t *testing.T) {
+		body := bytes.NewBufferString(`{"version": "2.0.0"}`)
+		req := requestWithAdminContext(httptest.NewRequest("POST", "/api/v1/agents/nonexistent-agent/update", body), userID)
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		s.handleTriggerAgentUpdate(rr, req, "nonexistent-agent")
+
+		// Handler returns 500 when agent is not found due to error from agent service
+		// (agentService.GetByID returns ErrNotFound which causes the error path to be taken)
+		if rr.Code != http.StatusInternalServerError && rr.Code != http.StatusNotFound {
+			t.Errorf("Expected status 404 or 500, got %d: %s", rr.Code, rr.Body.String())
+		}
+	})
+
+	t.Run("POST - agent already up to date", func(t *testing.T) {
+		// Create an agent that's already on the latest version
+		agentUpToDate := &storage.Agent{
+			ID:       "up-to-date-agent",
+			Hostname: "up-to-date-host",
+			Status:   "online",
+			Version:  "2.0.0",
+			OS:       "linux",
+			Arch:     "amd64",
+		}
+		if err := s.db.UpsertAgent(ctx, agentUpToDate); err != nil {
+			t.Fatalf("Failed to create agent: %v", err)
+		}
+
+		body := bytes.NewBufferString(`{"version": "2.0.0"}`)
+		req := requestWithAdminContext(httptest.NewRequest("POST", "/api/v1/agents/up-to-date-agent/update", body), userID)
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		s.handleTriggerAgentUpdate(rr, req, "up-to-date-agent")
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status %d, got %d: %s", http.StatusOK, rr.Code, rr.Body.String())
+		}
+
+		var response map[string]interface{}
+		if err := json.NewDecoder(rr.Body).Decode(&response); err != nil {
+			t.Fatalf("Failed to decode response: %v", err)
+		}
+
+		if response["status"] != "up_to_date" {
+			t.Errorf("Expected status 'up_to_date', got %v", response["status"])
+		}
+	})
+
+	t.Run("POST - force update even if up to date", func(t *testing.T) {
+		body := bytes.NewBufferString(`{"version": "2.0.0", "force": true}`)
+		req := requestWithAdminContext(httptest.NewRequest("POST", "/api/v1/agents/up-to-date-agent/update", body), userID)
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		s.handleTriggerAgentUpdate(rr, req, "up-to-date-agent")
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status %d, got %d: %s", http.StatusOK, rr.Code, rr.Body.String())
+		}
+
+		var response map[string]interface{}
+		if err := json.NewDecoder(rr.Body).Decode(&response); err != nil {
+			t.Fatalf("Failed to decode response: %v", err)
+		}
+
+		// Should trigger update even when same version because force=true
+		if response["status"] != "pending" {
+			t.Errorf("Expected status 'pending', got %v", response["status"])
+		}
+		if response["force"] != true {
+			t.Errorf("Expected force true, got %v", response["force"])
+		}
+	})
+
+	t.Run("GET - method not allowed", func(t *testing.T) {
+		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/agents/trigger-test-agent/update", nil), userID)
+		rr := httptest.NewRecorder()
+		s.handleTriggerAgentUpdate(rr, req, "trigger-test-agent")
+
+		if rr.Code != http.StatusMethodNotAllowed {
+			t.Errorf("Expected status %d, got %d", http.StatusMethodNotAllowed, rr.Code)
+		}
+	})
+}
+
 // createTestMultipartRequest creates a multipart form request for binary upload
 func createTestMultipartRequest(t *testing.T, url, version, osType, arch string, content []byte) *http.Request {
 	t.Helper()
