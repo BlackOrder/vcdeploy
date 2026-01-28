@@ -47,6 +47,9 @@ message HeartbeatRequest {
   int64 timestamp = 2;
   AgentStats stats = 3;
   repeated DeploymentStatus active_deployments = 4;
+  string version = 5;     // Current agent version
+  string os = 6;          // Agent OS (linux, darwin, windows)
+  string arch = 7;        // Agent architecture (amd64, arm64)
 }
 
 // AgentStats contains agent resource statistics.
@@ -62,6 +65,16 @@ message AgentStats {
 message HeartbeatResponse {
   bool ok = 1;
   int64 server_timestamp = 2;
+  UpdateNotification update_available = 3;  // Present if agent should update
+}
+
+// UpdateNotification tells the agent about an available update.
+message UpdateNotification {
+  string version = 1;          // New version to update to
+  string download_url = 2;     // URL to download the binary from
+  string checksum_sha256 = 3;  // SHA256 checksum for verification
+  int64 size_bytes = 4;        // Expected file size
+  bool force = 5;              // If true, ignore update policy and update immediately
 }
 
 // AgentMessage is sent from agent to master over the stream.
@@ -71,7 +84,17 @@ message AgentMessage {
     DeploymentLog deployment_log = 2;
     CommandResult command_result = 3;
     AgentReady agent_ready = 4;
+    UpdateResult update_result = 5;
   }
+}
+
+// UpdateResult reports the result of an agent update.
+message UpdateResult {
+  string from_version = 1;
+  string to_version = 2;
+  bool success = 3;
+  string error = 4;
+  bool rolled_back = 5;  // True if update failed and agent rolled back
 }
 
 // MasterMessage is sent from master to agent over the stream.
@@ -81,7 +104,17 @@ message MasterMessage {
     RollbackCommand rollback_command = 2;
     CancelCommand cancel_command = 3;
     HealthCheckCommand health_check_command = 4;
+    UpdateCommand update_command = 5;
   }
+}
+
+// UpdateCommand instructs agent to update itself.
+message UpdateCommand {
+  string version = 1;          // Version to update to
+  string download_url = 2;     // URL to download the binary from
+  string checksum_sha256 = 3;  // SHA256 checksum for verification
+  int64 size_bytes = 4;        // Expected file size
+  bool force = 5;              // If true, restart even if health check fails
 }
 
 // DeployCommand instructs agent to deploy a project.

@@ -3,10 +3,15 @@ package agent
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
@@ -22,6 +27,20 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
+
+// Version information (set at build time via ldflags)
+var (
+	AgentVersion   = "dev"
+	AgentCommit    = "unknown"
+	AgentBuildTime = "unknown"
+)
+
+// SetVersionInfo sets the version information for the agent.
+func SetVersionInfo(version, commit, buildTime string) {
+	AgentVersion = version
+	AgentCommit = commit
+	AgentBuildTime = buildTime
+}
 
 // Agent is the deployment agent daemon.
 type Agent struct {
@@ -42,6 +61,10 @@ type Agent struct {
 	// Active deployments tracking
 	activeDeployments map[string]*activeDeployment
 	deployMu          sync.RWMutex
+
+	// Self-update state
+	updateInProgress bool
+	updateMu         sync.RWMutex
 
 	// State
 	running  bool
@@ -291,12 +314,16 @@ func (a *Agent) sendHeartbeat(ctx context.Context) error {
 		Timestamp:         time.Now().Unix(),
 		Stats:             stats,
 		ActiveDeployments: activeStatuses,
+		Version:           AgentVersion,
+		Os:                runtime.GOOS,
+		Arch:              runtime.GOARCH,
 	}
 
 	hostname, _ := os.Hostname()
 	a.logger.Debug("Sending heartbeat",
 		zap.String("hostname", hostname),
 		zap.Int("active_deployments", len(activeStatuses)),
+		zap.String("version", AgentVersion),
 	)
 
 	resp, err := client.Heartbeat(ctx, req)
@@ -306,6 +333,11 @@ func (a *Agent) sendHeartbeat(ctx context.Context) error {
 
 	if !resp.Ok {
 		return fmt.Errorf("heartbeat rejected by master")
+	}
+
+	// Check for update notification
+	if resp.UpdateAvailable != nil {
+		a.handleUpdateNotification(resp.UpdateAvailable)
 	}
 
 	return nil
@@ -973,4 +1005,272 @@ func (a *Agent) Status() string {
 		return "disconnected"
 	}
 	return "connected"
+}
+
+// --- Self-Update Methods ---
+
+// handleUpdateNotification processes an update notification from the master.
+func (a *Agent) handleUpdateNotification(notification *pb.UpdateNotification) {
+	if notification == nil {
+		return
+	}
+
+	// Check if we're already updating
+	a.updateMu.RLock()
+	if a.updateInProgress {
+		a.updateMu.RUnlock()
+		a.logger.Debug("Update already in progress, ignoring notification")
+		return
+	}
+	a.updateMu.RUnlock()
+
+	a.logger.Info("Update available",
+		zap.String("current_version", AgentVersion),
+		zap.String("new_version", notification.Version),
+		zap.Bool("force", notification.Force),
+	)
+
+	// Skip if same version
+	if notification.Version == AgentVersion && !notification.Force {
+		a.logger.Debug("Already at target version")
+		return
+	}
+
+	// Check update policy from config
+	updatePolicy := a.config.Agent.UpdatePolicy
+	if updatePolicy == "" {
+		updatePolicy = "immediate" // Default to immediate
+	}
+
+	switch updatePolicy {
+	case "immediate":
+		// Update immediately
+		go a.performSelfUpdate(notification)
+
+	case "scheduled":
+		// Check if within update window
+		if a.isWithinUpdateWindow() {
+			go a.performSelfUpdate(notification)
+		} else {
+			a.logger.Info("Update deferred - outside maintenance window",
+				zap.String("window_start", a.config.Agent.UpdateWindowStart),
+				zap.String("window_end", a.config.Agent.UpdateWindowEnd),
+			)
+		}
+
+	case "manual":
+		// Only update if force flag is set
+		if notification.Force {
+			go a.performSelfUpdate(notification)
+		} else {
+			a.logger.Info("Update available but policy is manual - skipping")
+		}
+	}
+}
+
+// isWithinUpdateWindow checks if current time is within the configured update window.
+func (a *Agent) isWithinUpdateWindow() bool {
+	start := a.config.Agent.UpdateWindowStart
+	end := a.config.Agent.UpdateWindowEnd
+
+	if start == "" || end == "" {
+		return true // No window configured, allow updates anytime
+	}
+
+	now := time.Now()
+	nowMinutes := now.Hour()*60 + now.Minute()
+
+	// Parse HH:MM format
+	var startH, startM, endH, endM int
+	if _, err := fmt.Sscanf(start, "%d:%d", &startH, &startM); err != nil {
+		return true
+	}
+	if _, err := fmt.Sscanf(end, "%d:%d", &endH, &endM); err != nil {
+		return true
+	}
+
+	startMinutes := startH*60 + startM
+	endMinutes := endH*60 + endM
+
+	// Handle window crossing midnight
+	if startMinutes <= endMinutes {
+		return nowMinutes >= startMinutes && nowMinutes <= endMinutes
+	}
+	return nowMinutes >= startMinutes || nowMinutes <= endMinutes
+}
+
+// performSelfUpdate downloads and applies the update.
+func (a *Agent) performSelfUpdate(notification *pb.UpdateNotification) {
+	a.updateMu.Lock()
+	if a.updateInProgress {
+		a.updateMu.Unlock()
+		return
+	}
+	a.updateInProgress = true
+	a.updateMu.Unlock()
+
+	defer func() {
+		a.updateMu.Lock()
+		a.updateInProgress = false
+		a.updateMu.Unlock()
+	}()
+
+	a.logger.Info("Starting self-update",
+		zap.String("from_version", AgentVersion),
+		zap.String("to_version", notification.Version),
+	)
+
+	// Get current executable path
+	execPath, err := os.Executable()
+	if err != nil {
+		a.logger.Error("Failed to get executable path", zap.Error(err))
+		return
+	}
+	execPath, err = filepath.EvalSymlinks(execPath)
+	if err != nil {
+		a.logger.Error("Failed to resolve executable path", zap.Error(err))
+		return
+	}
+
+	// Create temp directory for download
+	tmpDir, err := os.MkdirTemp("", "vcdeploy-update-*")
+	if err != nil {
+		a.logger.Error("Failed to create temp directory", zap.Error(err))
+		return
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Download new binary
+	newBinaryPath := filepath.Join(tmpDir, "vcdeploy-agent-new")
+	if err := a.downloadBinary(notification.DownloadUrl, newBinaryPath, notification.ChecksumSha256, notification.SizeBytes); err != nil {
+		a.logger.Error("Failed to download update", zap.Error(err))
+		return
+	}
+
+	// Make it executable
+	if err := os.Chmod(newBinaryPath, 0755); err != nil {
+		a.logger.Error("Failed to make new binary executable", zap.Error(err))
+		return
+	}
+
+	// Verify new binary can run
+	cmd := exec.Command(newBinaryPath, "version")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		a.logger.Error("New binary failed verification",
+			zap.Error(err),
+			zap.String("output", string(output)),
+		)
+		return
+	}
+
+	// Backup current binary
+	backupPath := execPath + ".backup"
+	if err := os.Rename(execPath, backupPath); err != nil {
+		a.logger.Error("Failed to backup current binary", zap.Error(err))
+		return
+	}
+
+	// Move new binary into place
+	if err := copyFile(newBinaryPath, execPath); err != nil {
+		// Rollback
+		a.logger.Error("Failed to install new binary, rolling back", zap.Error(err))
+		if rbErr := os.Rename(backupPath, execPath); rbErr != nil {
+			a.logger.Error("CRITICAL: Rollback failed", zap.Error(rbErr))
+		}
+		return
+	}
+
+	// Make the new binary executable again (in case copyFile didn't preserve permissions)
+	if err := os.Chmod(execPath, 0755); err != nil {
+		a.logger.Warn("Failed to set executable permissions", zap.Error(err))
+	}
+
+	a.logger.Info("Update installed successfully, requesting restart",
+		zap.String("from_version", AgentVersion),
+		zap.String("to_version", notification.Version),
+	)
+
+	// Clean up backup
+	os.Remove(backupPath)
+
+	// Trigger restart - the systemd service or supervisor should restart us
+	// We send SIGTERM to ourselves and rely on the process manager to restart
+	go func() {
+		time.Sleep(2 * time.Second) // Give time for logs to flush
+		a.logger.Info("Exiting for restart...")
+		os.Exit(0) // Exit with success code so systemd restarts us
+	}()
+}
+
+// downloadBinary downloads the binary from the URL and verifies the checksum.
+func (a *Agent) downloadBinary(url, destPath, expectedChecksum string, expectedSize int64) error {
+	a.logger.Info("Downloading update",
+		zap.String("url", url),
+		zap.Int64("expected_size", expectedSize),
+	)
+
+	resp, err := a.httpClient.Get(url)
+	if err != nil {
+		return fmt.Errorf("download request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download failed with status: %d", resp.StatusCode)
+	}
+
+	// Create destination file
+	dest, err := os.Create(destPath)
+	if err != nil {
+		return fmt.Errorf("create destination file: %w", err)
+	}
+	defer dest.Close()
+
+	// Download and calculate checksum
+	hasher := sha256.New()
+	multiWriter := io.MultiWriter(dest, hasher)
+
+	written, err := io.Copy(multiWriter, resp.Body)
+	if err != nil {
+		return fmt.Errorf("download failed: %w", err)
+	}
+
+	// Verify size
+	if expectedSize > 0 && written != expectedSize {
+		return fmt.Errorf("size mismatch: got %d, expected %d", written, expectedSize)
+	}
+
+	// Verify checksum
+	actualChecksum := hex.EncodeToString(hasher.Sum(nil))
+	if expectedChecksum != "" && actualChecksum != expectedChecksum {
+		return fmt.Errorf("checksum mismatch: got %s, expected %s", actualChecksum, expectedChecksum)
+	}
+
+	a.logger.Info("Download complete",
+		zap.Int64("bytes", written),
+		zap.String("checksum", actualChecksum),
+	)
+
+	return nil
+}
+
+// copyFile copies a file from src to dst.
+func copyFile(src, dst string) error {
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	dstFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer dstFile.Close()
+
+	if _, err := io.Copy(dstFile, srcFile); err != nil {
+		return err
+	}
+
+	return dstFile.Sync()
 }

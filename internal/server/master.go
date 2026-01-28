@@ -425,6 +425,11 @@ func (s *MasterServer) startHTTP() error {
 	mux.HandleFunc("/api/v1/provision", s.withAuth(s.handleProvisionJobs))
 	mux.HandleFunc("/api/v1/provision/", s.withAuth(s.handleProvisionJob))
 
+	// Agent Binaries API
+	mux.HandleFunc("/api/v1/binaries", s.withAuth(s.handleAgentBinaries))
+	mux.HandleFunc("/api/v1/binaries/latest", s.withAuth(s.handleAgentBinaryLatest))
+	mux.HandleFunc("/api/v1/binaries/", s.withAuth(s.handleAgentBinary))
+
 	// Webhooks
 	mux.HandleFunc("/webhook/github/", s.handleGitHubWebhook)
 	mux.HandleFunc("/webhook/gitlab/", s.handleGitLabWebhook)

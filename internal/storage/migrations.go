@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -676,6 +677,73 @@ var migrations = []Migration{
 		},
 		Down: func(tx *sql.Tx) error {
 			_, err := tx.Exec(`DROP TABLE IF EXISTS ssh_host_keys`)
+			return err
+		},
+	},
+	{
+		Version:     15,
+		Description: "Agent self-update configuration and version tracking",
+		Up: func(tx *sql.Tx) error {
+			// Add update configuration columns to agents table one at a time
+			// SQLite requires separate statements for each ALTER TABLE
+			alterStatements := []string{
+				`ALTER TABLE agents ADD COLUMN version TEXT DEFAULT ''`,
+				`ALTER TABLE agents ADD COLUMN os TEXT DEFAULT ''`,
+				`ALTER TABLE agents ADD COLUMN arch TEXT DEFAULT ''`,
+				`ALTER TABLE agents ADD COLUMN update_policy TEXT DEFAULT 'immediate'`,
+				`ALTER TABLE agents ADD COLUMN update_window_start TEXT DEFAULT ''`,
+				`ALTER TABLE agents ADD COLUMN update_window_end TEXT DEFAULT ''`,
+				`ALTER TABLE agents ADD COLUMN last_update_at DATETIME`,
+				`ALTER TABLE agents ADD COLUMN last_update_error TEXT DEFAULT ''`,
+			}
+
+			for _, stmt := range alterStatements {
+				// Check if column already exists to make migration idempotent
+				// We'll just try to add it and ignore "duplicate column name" errors
+				_, err := tx.Exec(stmt)
+				if err != nil {
+					// SQLite error for duplicate column contains "duplicate column name"
+					if !strings.Contains(err.Error(), "duplicate column name") {
+						return fmt.Errorf("executing %s: %w", stmt, err)
+					}
+				}
+			}
+
+			// Agent update history table
+			_, err := tx.Exec(`
+				CREATE TABLE IF NOT EXISTS agent_update_history (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					agent_id TEXT NOT NULL,
+					from_version TEXT NOT NULL,
+					to_version TEXT NOT NULL,
+					status TEXT NOT NULL,
+					error_message TEXT DEFAULT '',
+					started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+					completed_at DATETIME,
+					rolled_back INTEGER DEFAULT 0,
+					FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
+				)
+			`)
+			if err != nil {
+				return fmt.Errorf("creating agent_update_history table: %w", err)
+			}
+
+			// Indexes
+			_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_agent_update_history_agent ON agent_update_history(agent_id)`)
+			if err != nil {
+				return fmt.Errorf("creating agent index: %w", err)
+			}
+
+			_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_agent_update_history_status ON agent_update_history(status)`)
+			if err != nil {
+				return fmt.Errorf("creating status index: %w", err)
+			}
+
+			return nil
+		},
+		Down: func(tx *sql.Tx) error {
+			// SQLite doesn't support DROP COLUMN, so we just drop the new table
+			_, err := tx.Exec(`DROP TABLE IF EXISTS agent_update_history`)
 			return err
 		},
 	},
