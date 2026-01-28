@@ -153,12 +153,12 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 	// Ensure PID directory exists
 	pidDir := filepath.Dir(pidFile)
-	if err := os.MkdirAll(pidDir, 0755); err != nil {
+	if err := os.MkdirAll(pidDir, 0o755); err != nil {
 		logger.Warn("Failed to create PID directory", zap.String("dir", pidDir), zap.Error(err))
 	}
 
 	// Write current PID
-	if err := os.WriteFile(pidFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0644); err != nil {
+	if err := os.WriteFile(pidFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0o644); err != nil {
 		logger.Warn("Failed to write PID file", zap.String("path", pidFile), zap.Error(err))
 	}
 
@@ -325,19 +325,19 @@ func runRegister(cmd *cobra.Command, args []string) error {
 	certPath := agentCertsDir + "/cert.pem"
 	caPath := agentCertsDir + "/ca.pem"
 
-	if err := os.MkdirAll(agentCertsDir, 0755); err != nil {
+	if err := os.MkdirAll(agentCertsDir, 0o755); err != nil {
 		return fmt.Errorf("creating agent directory: %w", err)
 	}
 
 	if len(cert) > 0 {
-		if err := os.WriteFile(certPath, cert, 0600); err != nil {
+		if err := os.WriteFile(certPath, cert, 0o600); err != nil {
 			return fmt.Errorf("saving certificate: %w", err)
 		}
 		cfg.Master.Cert = certPath
 	}
 
 	if len(caCert) > 0 {
-		if err := os.WriteFile(caPath, caCert, 0600); err != nil {
+		if err := os.WriteFile(caPath, caCert, 0o600); err != nil {
 			return fmt.Errorf("saving CA certificate: %w", err)
 		}
 	}

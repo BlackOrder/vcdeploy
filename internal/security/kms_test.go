@@ -1,6 +1,7 @@
 package security
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"os"
@@ -8,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	_ "modernc.org/sqlite"
+	_ "modernc.org/sqlite" // sqlite driver for database/sql
 )
 
 func setupTestKMSDB(t *testing.T) *sql.DB {
@@ -130,7 +131,7 @@ func TestKMSEncryptDecrypt(t *testing.T) {
 		t.Fatalf("Decrypt() error: %v", err)
 	}
 
-	if string(decrypted) != string(plaintext) {
+	if !bytes.Equal(decrypted, plaintext) {
 		t.Errorf("decrypted = %s, want %s", decrypted, plaintext)
 	}
 }
@@ -210,7 +211,7 @@ func TestKMSKeyRotation(t *testing.T) {
 		t.Fatalf("Decrypt(old ciphertext) error: %v", err)
 	}
 
-	if string(decrypted) != string(plaintext) {
+	if !bytes.Equal(decrypted, plaintext) {
 		t.Errorf("decrypted = %s, want %s", decrypted, plaintext)
 	}
 
@@ -272,7 +273,7 @@ func TestKMSReEncrypt(t *testing.T) {
 		t.Fatalf("Decrypt(ciphertext2): %v", err)
 	}
 
-	if string(decrypted1) != string(decrypted2) {
+	if !bytes.Equal(decrypted1, decrypted2) {
 		t.Error("both ciphertexts should decrypt to same plaintext")
 	}
 }
@@ -685,7 +686,7 @@ func TestKMSPersistence(t *testing.T) {
 		t.Fatalf("Decrypt() after reopen error: %v", err)
 	}
 
-	if string(decrypted) != string(plaintext) {
+	if !bytes.Equal(decrypted, plaintext) {
 		t.Error("decrypted data should match")
 	}
 }

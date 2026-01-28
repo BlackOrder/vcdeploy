@@ -60,7 +60,6 @@ func TestMasterKeyEncryptDecrypt(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -181,8 +180,8 @@ func TestMasterKeySaveAndLoad(t *testing.T) {
 	if err != nil {
 		t.Fatalf("os.Stat(): %v", err)
 	}
-	if info.Mode().Perm() != 0600 {
-		t.Errorf("Key file permissions = %o, want 0600", info.Mode().Perm())
+	if info.Mode().Perm() != 0o600 {
+		t.Errorf("Key file permissions = %o, want 0o600", info.Mode().Perm())
 	}
 
 	// Load and verify
@@ -441,7 +440,7 @@ func TestDecryptWithPassphrase(t *testing.T) {
 		t.Fatalf("DecryptWithPassphrase failed: %v", err)
 	}
 
-	if string(decrypted) != string(plaintext) {
+	if !bytes.Equal(decrypted, plaintext) {
 		t.Errorf("decrypted = %q, want %q", string(decrypted), string(plaintext))
 	}
 }

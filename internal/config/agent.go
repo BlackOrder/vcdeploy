@@ -130,7 +130,7 @@ func LoadAgentConfig(path string) (*AgentConfig, error) {
 // SaveAgentConfig saves the agent configuration to a file.
 func SaveAgentConfig(config *AgentConfig, path string) error {
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("creating config directory: %w", err)
 	}
 
@@ -139,7 +139,7 @@ func SaveAgentConfig(config *AgentConfig, path string) error {
 		return fmt.Errorf("marshaling config: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0600); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("writing config file: %w", err)
 	}
 

@@ -84,17 +84,17 @@ func ValidateRequired(field, value string) error {
 	return nil
 }
 
-// ValidateMaxLength checks string length does not exceed max.
-func ValidateMaxLength(field, value string, max int) error {
-	if utf8.RuneCountInString(value) > max {
+// ValidateMaxLength checks string length does not exceed maxLen.
+func ValidateMaxLength(field, value string, maxLen int) error {
+	if utf8.RuneCountInString(value) > maxLen {
 		return InvalidInput("validation", field+" exceeds maximum length")
 	}
 	return nil
 }
 
 // ValidateMinLength checks string length meets minimum.
-func ValidateMinLength(field, value string, min int) error {
-	if utf8.RuneCountInString(value) < min {
+func ValidateMinLength(field, value string, minLen int) error {
+	if utf8.RuneCountInString(value) < minLen {
 		return InvalidInput("validation", field+" does not meet minimum length")
 	}
 	return nil

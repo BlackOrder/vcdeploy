@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
@@ -187,7 +188,7 @@ func TestLogRotationJob(t *testing.T) {
 		// Create a large log file
 		logFile := filepath.Join(tmpDir, "test.log")
 		content := make([]byte, 2*1024*1024) // 2MB
-		if err := os.WriteFile(logFile, content, 0644); err != nil {
+		if err := os.WriteFile(logFile, content, 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -230,7 +231,7 @@ func TestLogRotationJob(t *testing.T) {
 
 		// Create an old rotated log file
 		oldLog := filepath.Join(tmpDir, "test.rotated.20200101-000000.log")
-		if err := os.WriteFile(oldLog, []byte("old log"), 0644); err != nil {
+		if err := os.WriteFile(oldLog, []byte("old log"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		// Set modification time to past
@@ -308,7 +309,7 @@ func TestBackupCleanupJob(t *testing.T) {
 
 		// Create an old backup file
 		oldBackup := filepath.Join(tmpDir, "backup-old.db")
-		if err := os.WriteFile(oldBackup, []byte("old backup"), 0644); err != nil {
+		if err := os.WriteFile(oldBackup, []byte("old backup"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		oldTime := time.Now().Add(-48 * time.Hour)
@@ -316,7 +317,7 @@ func TestBackupCleanupJob(t *testing.T) {
 
 		// Create a new backup file
 		newBackup := filepath.Join(tmpDir, "backup-new.db")
-		if err := os.WriteFile(newBackup, []byte("new backup"), 0644); err != nil {
+		if err := os.WriteFile(newBackup, []byte("new backup"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -347,7 +348,7 @@ func TestBackupCleanupJob(t *testing.T) {
 		// Create multiple backup files
 		for i := 0; i < 5; i++ {
 			path := filepath.Join(tmpDir, "backup-"+string(rune('a'+i))+".db")
-			if err := os.WriteFile(path, []byte("backup"), 0644); err != nil {
+			if err := os.WriteFile(path, []byte("backup"), 0o644); err != nil {
 				t.Fatal(err)
 			}
 			// Stagger modification times
@@ -438,7 +439,7 @@ func TestDatabaseBackupJob_CleanOldBackups(t *testing.T) {
 
 		// Create an old backup with correct prefix
 		oldBackup := filepath.Join(tmpDir, "vcdeploy-backup-20200101-000000.db")
-		if err := os.WriteFile(oldBackup, []byte("old backup"), 0644); err != nil {
+		if err := os.WriteFile(oldBackup, []byte("old backup"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		oldTime := time.Now().Add(-48 * time.Hour)
@@ -446,7 +447,7 @@ func TestDatabaseBackupJob_CleanOldBackups(t *testing.T) {
 
 		// Create a new backup with correct prefix
 		newBackup := filepath.Join(tmpDir, "vcdeploy-backup-20241231-235959.db")
-		if err := os.WriteFile(newBackup, []byte("new backup"), 0644); err != nil {
+		if err := os.WriteFile(newBackup, []byte("new backup"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -478,7 +479,7 @@ func TestDatabaseBackupJob_CleanOldBackups(t *testing.T) {
 
 		// Create a directory with matching prefix
 		subDir := filepath.Join(tmpDir, "vcdeploy-backup-subdir")
-		if err := os.Mkdir(subDir, 0755); err != nil {
+		if err := os.Mkdir(subDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
 
@@ -504,7 +505,7 @@ func TestDatabaseBackupJob_CleanOldBackups(t *testing.T) {
 
 		// Create a file without the correct prefix
 		otherFile := filepath.Join(tmpDir, "other-backup.db")
-		if err := os.WriteFile(otherFile, []byte("other"), 0644); err != nil {
+		if err := os.WriteFile(otherFile, []byte("other"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		oldTime := time.Now().Add(-48 * time.Hour)
@@ -573,7 +574,7 @@ func TestLogRotationJob_RotateFile(t *testing.T) {
 	// Create source file
 	srcPath := filepath.Join(tmpDir, "source.log")
 	content := []byte("test log content")
-	if err := os.WriteFile(srcPath, content, 0644); err != nil {
+	if err := os.WriteFile(srcPath, content, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -588,7 +589,7 @@ func TestLogRotationJob_RotateFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(rotated) != string(content) {
+	if !bytes.Equal(rotated, content) {
 		t.Errorf("Rotated content mismatch: got %q, want %q", rotated, content)
 	}
 

@@ -92,6 +92,8 @@ func NewOrchestrator(cfg OrchestratorConfig) *Orchestrator {
 }
 
 // DeployRequest contains the information needed to start a deployment.
+//
+//nolint:revive // Keeping explicit naming for clarity
 type DeployRequest struct {
 	ProjectID       string
 	TargetID        string

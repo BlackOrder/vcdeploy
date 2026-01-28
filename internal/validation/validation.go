@@ -14,12 +14,16 @@ import (
 )
 
 // ValidationError represents a field-level validation error.
+//
+//nolint:revive // Keeping explicit naming for clarity
 type ValidationError struct {
 	Field   string `json:"field"`
 	Message string `json:"message"`
 }
 
 // ValidationErrors is a collection of validation errors.
+//
+//nolint:revive // Keeping explicit naming for clarity
 type ValidationErrors struct {
 	Errors []ValidationError `json:"errors"`
 }
@@ -83,17 +87,17 @@ func (v *Validator) Required(field, value string) *Validator {
 }
 
 // MinLength validates minimum string length.
-func (v *Validator) MinLength(field, value string, min int) *Validator {
-	if len(value) < min {
-		v.errors.Add(field, fmt.Sprintf("must be at least %d characters", min))
+func (v *Validator) MinLength(field, value string, minLen int) *Validator {
+	if len(value) < minLen {
+		v.errors.Add(field, fmt.Sprintf("must be at least %d characters", minLen))
 	}
 	return v
 }
 
 // MaxLength validates maximum string length.
-func (v *Validator) MaxLength(field, value string, max int) *Validator {
-	if len(value) > max {
-		v.errors.Add(field, fmt.Sprintf("must be at most %d characters", max))
+func (v *Validator) MaxLength(field, value string, maxLen int) *Validator {
+	if len(value) > maxLen {
+		v.errors.Add(field, fmt.Sprintf("must be at most %d characters", maxLen))
 	}
 	return v
 }
@@ -256,9 +260,9 @@ func (v *Validator) Positive(field string, value int) *Validator {
 }
 
 // Range validates that an integer is within a range.
-func (v *Validator) Range(field string, value, min, max int) *Validator {
-	if value < min || value > max {
-		v.errors.Add(field, fmt.Sprintf("must be between %d and %d", min, max))
+func (v *Validator) Range(field string, value, minVal, maxVal int) *Validator {
+	if value < minVal || value > maxVal {
+		v.errors.Add(field, fmt.Sprintf("must be between %d and %d", minVal, maxVal))
 	}
 	return v
 }
@@ -369,7 +373,7 @@ func ValidateUnixUsername(username string) *ValidationErrors {
 // IsValidUnixUsername returns true if the username is a valid Unix username.
 // This is a convenience function for quick validation without error details.
 func IsValidUnixUsername(username string) bool {
-	if len(username) == 0 || len(username) > 32 {
+	if username == "" || len(username) > 32 {
 		return false
 	}
 	return UnixUsernamePattern.MatchString(username)
@@ -387,7 +391,7 @@ func ValidateServiceName(name string) *ValidationErrors {
 // IsValidServiceName returns true if the name is a valid systemd service name.
 // This is a convenience function for quick validation without error details.
 func IsValidServiceName(name string) bool {
-	if len(name) == 0 || len(name) > 256 {
+	if name == "" || len(name) > 256 {
 		return false
 	}
 	return ServiceNamePattern.MatchString(name)

@@ -107,7 +107,7 @@ func (j *DatabaseBackupJob) Run(ctx context.Context) error {
 	}
 
 	// Ensure backup directory exists
-	if err := os.MkdirAll(backupDir, 0750); err != nil {
+	if err := os.MkdirAll(backupDir, 0o750); err != nil {
 		return fmt.Errorf("creating backup directory: %w", err)
 	}
 
@@ -205,7 +205,7 @@ func (j *AuditExportJob) Run(ctx context.Context) error {
 	}
 
 	// Ensure export directory exists
-	if err := os.MkdirAll(dest, 0750); err != nil {
+	if err := os.MkdirAll(dest, 0o750); err != nil {
 		return fmt.Errorf("creating export directory: %w", err)
 	}
 

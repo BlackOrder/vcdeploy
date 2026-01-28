@@ -89,6 +89,8 @@ type DatabaseBackupConfig struct {
 }
 
 // ConfigBackupConfig defines config file backup settings.
+//
+//nolint:revive // Keeping explicit naming for clarity
 type ConfigBackupConfig struct {
 	Versions int `yaml:"versions"`
 }
@@ -321,7 +323,7 @@ func LoadMaster(path string) (*MasterConfig, error) {
 func SaveMasterConfig(config *MasterConfig, path string) error {
 	// Ensure directory exists
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("creating config directory: %w", err)
 	}
 
@@ -330,7 +332,7 @@ func SaveMasterConfig(config *MasterConfig, path string) error {
 		return fmt.Errorf("marshaling config: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return fmt.Errorf("writing config file: %w", err)
 	}
 

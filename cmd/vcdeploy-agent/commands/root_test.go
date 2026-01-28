@@ -167,7 +167,7 @@ func TestCheckAgentProcess(t *testing.T) {
 		tmpDir := t.TempDir()
 		pidFile := filepath.Join(tmpDir, "test.pid")
 
-		if err := os.WriteFile(pidFile, []byte("not a number"), 0644); err != nil {
+		if err := os.WriteFile(pidFile, []byte("not a number"), 0o644); err != nil {
 			t.Fatalf("failed to write test file: %v", err)
 		}
 
@@ -185,7 +185,7 @@ func TestCheckAgentProcess(t *testing.T) {
 		pidFile := filepath.Join(tmpDir, "test.pid")
 
 		// Use a very high PID that's unlikely to exist
-		if err := os.WriteFile(pidFile, []byte("999999999"), 0644); err != nil {
+		if err := os.WriteFile(pidFile, []byte("999999999"), 0o644); err != nil {
 			t.Fatalf("failed to write test file: %v", err)
 		}
 
@@ -201,7 +201,7 @@ func TestCheckAgentProcess(t *testing.T) {
 
 		// Write the current process's PID
 		currentPID := os.Getpid()
-		if err := os.WriteFile(pidFile, []byte(strconv.Itoa(currentPID)), 0644); err != nil {
+		if err := os.WriteFile(pidFile, []byte(strconv.Itoa(currentPID)), 0o644); err != nil {
 			t.Fatalf("failed to write test file: %v", err)
 		}
 

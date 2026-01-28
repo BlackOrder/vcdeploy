@@ -196,10 +196,10 @@ func InvalidYAMLFixture() string {
 func WriteFixtureFile(t *testing.T, dir, name, content string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatalf("failed to create directory: %v", err)
 	}
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("failed to write fixture file: %v", err)
 	}
 	return path
@@ -220,7 +220,7 @@ func CreateTestProjectStructure(t *testing.T, baseDir string) string {
 	}
 
 	for _, d := range dirs {
-		if err := os.MkdirAll(filepath.Join(projectDir, d), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Join(projectDir, d), 0o755); err != nil {
 			t.Fatalf("failed to create directory %s: %v", d, err)
 		}
 	}
@@ -235,13 +235,14 @@ func CreateTestProjectStructure(t *testing.T, baseDir string) string {
 
 	for f, content := range files {
 		path := filepath.Join(projectDir, f)
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatalf("failed to create file %s: %v", f, err)
 		}
 	}
 
 	// Create current symlink
 	currentLink := filepath.Join(projectDir, "current")
+	//nolint:gocritic // Intentionally creating path with separator for release directory
 	releasePath := filepath.Join(projectDir, "releases/20240102120000")
 	if err := os.Symlink(releasePath, currentLink); err != nil {
 		t.Fatalf("failed to create current symlink: %v", err)
@@ -260,18 +261,19 @@ func CreateTestGitRepo(t *testing.T, dir string) string {
 	// Create minimal .git structure
 	dirs := []string{
 		filepath.Join(gitDir, "objects"),
+		//nolint:gocritic // Intentionally creating path with separator for git refs
 		filepath.Join(gitDir, "refs/heads"),
 	}
 
 	for _, d := range dirs {
-		if err := os.MkdirAll(d, 0755); err != nil {
+		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatalf("failed to create git directory: %v", err)
 		}
 	}
 
 	// Create HEAD file
 	headFile := filepath.Join(gitDir, "HEAD")
-	if err := os.WriteFile(headFile, []byte("ref: refs/heads/main\n"), 0644); err != nil {
+	if err := os.WriteFile(headFile, []byte("ref: refs/heads/main\n"), 0o644); err != nil {
 		t.Fatalf("failed to create HEAD file: %v", err)
 	}
 
@@ -288,13 +290,13 @@ func CreateTestGitRepo(t *testing.T, dir string) string {
 	remote = origin
 	merge = refs/heads/main
 `
-	if err := os.WriteFile(configFile, []byte(config), 0644); err != nil {
+	if err := os.WriteFile(configFile, []byte(config), 0o644); err != nil {
 		t.Fatalf("failed to create config file: %v", err)
 	}
 
 	// Create a test file
 	testFile := filepath.Join(repoDir, "README.md")
-	if err := os.WriteFile(testFile, []byte("# Test Repository\n"), 0644); err != nil {
+	if err := os.WriteFile(testFile, []byte("# Test Repository\n"), 0o644); err != nil {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 

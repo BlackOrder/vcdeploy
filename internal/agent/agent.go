@@ -691,11 +691,6 @@ func (a *Agent) handleHealthCheckCommand(ctx context.Context, stream pb.AgentSer
 		retryDelay = 5
 	}
 
-	expectedStatus := cmd.ExpectedStatus
-	if expectedStatus == 0 {
-		expectedStatus = 200
-	}
-
 	var result *pb.HealthCheckResult
 	var attempt int32
 
@@ -794,7 +789,7 @@ func (a *Agent) performHealthCheckWithConfig(ctx context.Context, cmd *pb.Health
 	}
 	defer resp.Body.Close()
 
-	result.StatusCode = int32(resp.StatusCode)
+	result.StatusCode = int32(resp.StatusCode) //nolint:gosec // G115: HTTP status codes are always small positive integers
 
 	// Read the response body
 	body, err := io.ReadAll(resp.Body)
@@ -809,7 +804,7 @@ func (a *Agent) performHealthCheckWithConfig(ctx context.Context, cmd *pb.Health
 		expectedStatus = 200
 	}
 
-	if int32(resp.StatusCode) != expectedStatus {
+	if resp.StatusCode != int(expectedStatus) {
 		result.Error = fmt.Sprintf("Health check failed: got status %d, expected %d (after %v)",
 			resp.StatusCode, expectedStatus, duration)
 		return result
@@ -855,7 +850,7 @@ func (a *Agent) performHealthCheck(ctx context.Context, url string, timeout int3
 	defer cancel()
 
 	// Create request with context
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return false, fmt.Sprintf("Failed to create request: %v", err)
 	}
@@ -1276,7 +1271,7 @@ func (a *Agent) performSelfUpdate(notification *pb.UpdateNotification) {
 	}
 
 	// Make it executable
-	if err := os.Chmod(newBinaryPath, 0755); err != nil {
+	if err := os.Chmod(newBinaryPath, 0o755); err != nil {
 		a.logger.Error("Failed to make new binary executable", zap.Error(err))
 		return
 	}
@@ -1309,7 +1304,7 @@ func (a *Agent) performSelfUpdate(notification *pb.UpdateNotification) {
 	}
 
 	// Make the new binary executable again (in case copyFile didn't preserve permissions)
-	if err := os.Chmod(execPath, 0755); err != nil {
+	if err := os.Chmod(execPath, 0o755); err != nil {
 		a.logger.Warn("Failed to set executable permissions", zap.Error(err))
 	}
 
@@ -1337,7 +1332,13 @@ func (a *Agent) downloadBinary(url, destPath, expectedChecksum string, expectedS
 		zap.Int64("expected_size", expectedSize),
 	)
 
-	resp, err := a.httpClient.Get(url)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, "GET", url, http.NoBody)
+	if err != nil {
+		return fmt.Errorf("create download request: %w", err)
+	}
+	resp, err := a.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("download request failed: %w", err)
 	}

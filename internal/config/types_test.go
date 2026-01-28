@@ -89,7 +89,7 @@ hooks:
   post_deploy:
     - php artisan migrate
 `
-	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -121,7 +121,7 @@ func TestLoadTypeConfigDefaults(t *testing.T) {
 	// Config without keep_releases
 	configPath := filepath.Join(tmpDir, "minimal.yaml")
 	configContent := `name: minimal`
-	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
 		t.Fatalf("Failed to write config: %v", err)
 	}
 
@@ -147,7 +147,7 @@ func TestLoadTypeConfigInvalid(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	configPath := filepath.Join(tmpDir, "invalid.yaml")
-	if err := os.WriteFile(configPath, []byte("invalid: [yaml: content"), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte("invalid: [yaml: content"), 0o644); err != nil {
 		t.Fatalf("Failed to write config: %v", err)
 	}
 
@@ -321,7 +321,7 @@ hooks:
     - npm install
     - npm run build
 `
-	_ = os.WriteFile(configPath, []byte(configContent), 0644)
+	_ = os.WriteFile(configPath, []byte(configContent), 0o644)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

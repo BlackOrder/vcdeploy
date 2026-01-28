@@ -3,6 +3,7 @@ package commands
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -471,7 +472,9 @@ func runMasterStop(cmd *cobra.Command, args []string) error {
 	shutdownURL := fmt.Sprintf("http://%s/api/v1/shutdown", masterAddr)
 	client := &http.Client{Timeout: 5 * time.Second}
 
-	req, err := http.NewRequest(http.MethodPost, shutdownURL, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, shutdownURL, http.NoBody)
 	if err != nil {
 		// If API fails, try PID file approach
 		return tryPidFileStop()
@@ -543,7 +546,15 @@ func runMasterStatus(cmd *cobra.Command, args []string) error {
 	client := &http.Client{Timeout: 5 * time.Second}
 
 	// Check health endpoint
-	healthResp, err := client.Get(healthURL)
+	healthCtx, healthCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer healthCancel()
+	healthReq, err := http.NewRequestWithContext(healthCtx, "GET", healthURL, http.NoBody)
+	if err != nil {
+		fmt.Println("Status: OFFLINE")
+		fmt.Printf("  Could not connect to %s\n", masterAddr)
+		return nil
+	}
+	healthResp, err := client.Do(healthReq)
 	if err != nil {
 		fmt.Println("Status: OFFLINE")
 		fmt.Printf("  Could not connect to %s\n", masterAddr)
@@ -567,7 +578,10 @@ func runMasterStatus(cmd *cobra.Command, args []string) error {
 	fmt.Println("Status: ONLINE")
 
 	// Get stats for more details
-	statsResp, err := client.Get(statsURL)
+	statsCtx, statsCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer statsCancel()
+	statsReq, _ := http.NewRequestWithContext(statsCtx, "GET", statsURL, http.NoBody)
+	statsResp, err := client.Do(statsReq)
 	if err == nil {
 		defer statsResp.Body.Close()
 		if statsResp.StatusCode == http.StatusOK {
@@ -716,7 +730,7 @@ func runBackupCreate(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Creating backup: %s\n", backupFile)
 
 	// Ensure backup directory exists
-	if err := os.MkdirAll(backupPath, 0750); err != nil {
+	if err := os.MkdirAll(backupPath, 0o750); err != nil {
 		return fmt.Errorf("create backup directory: %w", err)
 	}
 
@@ -818,7 +832,7 @@ func runBackupRestore(cmd *cobra.Command, args []string) error {
 	if _, err := os.Stat(dbPath); err == nil {
 		backupCurrent := dbPath + ".pre-restore." + time.Now().Format("20060102-150405")
 		if currentData, err := os.ReadFile(dbPath); err == nil {
-			if err := os.WriteFile(backupCurrent, currentData, 0600); err != nil {
+			if err := os.WriteFile(backupCurrent, currentData, 0o600); err != nil {
 				fmt.Printf("Warning: could not backup current database: %v\n", err)
 			} else {
 				fmt.Printf("Current database backed up to: %s\n", backupCurrent)
@@ -827,7 +841,7 @@ func runBackupRestore(cmd *cobra.Command, args []string) error {
 	}
 
 	// Write the backup to the database location
-	if err := os.WriteFile(dbPath, backupData, 0600); err != nil {
+	if err := os.WriteFile(dbPath, backupData, 0o600); err != nil {
 		return fmt.Errorf("write database file: %w", err)
 	}
 
@@ -1194,7 +1208,9 @@ func runProjectDeploy(cmd *cobra.Command, args []string) error {
 	}
 
 	reqJSON, _ := json.Marshal(reqBody)
-	req, err := http.NewRequest("POST", baseURL+"/api/v1/deployments", strings.NewReader(string(reqJSON)))
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/v1/deployments", strings.NewReader(string(reqJSON)))
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
 	}
@@ -1243,12 +1259,14 @@ func runProjectDeploy(cmd *cobra.Command, args []string) error {
 		case <-time.After(5 * time.Second):
 		}
 
-		statusReq, _ := http.NewRequest("GET", baseURL+"/api/v1/deployments/"+deployResp.ID, nil)
+		statusCtx, statusCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		statusReq, _ := http.NewRequestWithContext(statusCtx, "GET", baseURL+"/api/v1/deployments/"+deployResp.ID, http.NoBody)
 		if apiToken != "" {
 			statusReq.Header.Set("Authorization", "Bearer "+apiToken)
 		}
 
 		statusResp, err := client.Do(statusReq)
+		statusCancel()
 		if err != nil {
 			continue
 		}
@@ -1322,7 +1340,9 @@ func runProjectRollback(cmd *cobra.Command, args []string) error {
 	baseURL := "http://" + masterAddr
 
 	// Get latest deployment for this project
-	listReq, _ := http.NewRequest("GET", baseURL+"/api/v1/deployments?project="+projectName+"&limit=1", nil)
+	listCtx, listCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer listCancel()
+	listReq, _ := http.NewRequestWithContext(listCtx, "GET", baseURL+"/api/v1/deployments?project="+projectName+"&limit=1", http.NoBody)
 	if apiToken != "" {
 		listReq.Header.Set("Authorization", "Bearer "+apiToken)
 	}
@@ -1357,7 +1377,9 @@ func runProjectRollback(cmd *cobra.Command, args []string) error {
 	}
 
 	reqJSON, _ := json.Marshal(reqBody)
-	req, err := http.NewRequest("POST", baseURL+"/api/v1/deployments/"+deploymentID+"/rollback", strings.NewReader(string(reqJSON)))
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/v1/deployments/"+deploymentID+"/rollback", strings.NewReader(string(reqJSON)))
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
 	}
@@ -1789,7 +1811,7 @@ func runSecretBackup(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println()
 
-	if string(passphrase1) != string(passphrase2) {
+	if !bytes.Equal(passphrase1, passphrase2) {
 		return fmt.Errorf("passphrases do not match")
 	}
 
@@ -1833,7 +1855,7 @@ func runSecretBackup(cmd *cobra.Command, args []string) error {
 
 	// Write to file with header
 	backupData := fmt.Sprintf("VCDEPLOY-SECRETS-V1\n%s", encoded)
-	if err := os.WriteFile(output, []byte(backupData), 0600); err != nil {
+	if err := os.WriteFile(output, []byte(backupData), 0o600); err != nil {
 		return fmt.Errorf("write backup: %w", err)
 	}
 
@@ -1981,7 +2003,10 @@ func runProjectHealthCheck(cmd *cobra.Command, args []string) error {
 		fmt.Printf("   Timeout: %ds\n\n", timeout)
 
 		healthClient := &http.Client{Timeout: time.Duration(timeout) * time.Second}
-		resp, err := healthClient.Get(healthURL)
+		healthCtx, healthCancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
+		defer healthCancel()
+		healthReq, _ := http.NewRequestWithContext(healthCtx, "GET", healthURL, http.NoBody)
+		resp, err := healthClient.Do(healthReq)
 		if err != nil {
 			fmt.Printf("❌ Health check FAILED: %v\n", err)
 			return fmt.Errorf("health check failed: %w", err)
@@ -1997,7 +2022,9 @@ func runProjectHealthCheck(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get project health config from API
-	configReq, _ := http.NewRequest("GET", baseURL+"/api/v1/projects/"+projectName+"/health-config", nil)
+	configCtx, configCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer configCancel()
+	configReq, _ := http.NewRequestWithContext(configCtx, "GET", baseURL+"/api/v1/projects/"+projectName+"/health-config", http.NoBody)
 	if apiToken != "" {
 		configReq.Header.Set("Authorization", "Bearer "+apiToken)
 	}
@@ -2041,7 +2068,10 @@ func runProjectHealthCheck(cmd *cobra.Command, args []string) error {
 
 	// Perform the health check
 	healthClient := &http.Client{Timeout: time.Duration(config.TimeoutSeconds) * time.Second}
-	resp, err := healthClient.Get(config.URL)
+	healthCtx, healthCancel := context.WithTimeout(context.Background(), time.Duration(config.TimeoutSeconds)*time.Second)
+	defer healthCancel()
+	healthReq, _ := http.NewRequestWithContext(healthCtx, "GET", config.URL, http.NoBody)
+	resp, err := healthClient.Do(healthReq)
 	if err != nil {
 		fmt.Printf("❌ Health check FAILED: %v\n", err)
 		return fmt.Errorf("health check failed: %w", err)
@@ -2084,7 +2114,9 @@ func runSettingsList(cmd *cobra.Command, args []string) error {
 	client := &http.Client{Timeout: 30 * time.Second}
 	baseURL := "http://" + masterAddr
 
-	req, _ := http.NewRequest("GET", baseURL+"/api/v1/settings/"+category, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/v1/settings/"+category, http.NoBody)
 	if apiToken != "" {
 		req.Header.Set("Authorization", "Bearer "+apiToken)
 	}
@@ -2139,7 +2171,9 @@ func runSettingsGet(cmd *cobra.Command, args []string) error {
 	client := &http.Client{Timeout: 30 * time.Second}
 	baseURL := "http://" + masterAddr
 
-	req, _ := http.NewRequest("GET", baseURL+"/api/v1/settings/"+category, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/v1/settings/"+category, http.NoBody)
 	if apiToken != "" {
 		req.Header.Set("Authorization", "Bearer "+apiToken)
 	}
@@ -2196,7 +2230,9 @@ func runSettingsSet(cmd *cobra.Command, args []string) error {
 	body := map[string]string{key: value}
 	bodyBytes, _ := json.Marshal(body)
 
-	req, _ := http.NewRequest("PUT", baseURL+"/api/v1/settings/"+category, strings.NewReader(string(bodyBytes)))
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, "PUT", baseURL+"/api/v1/settings/"+category, strings.NewReader(string(bodyBytes)))
 	req.Header.Set("Content-Type", "application/json")
 	if apiToken != "" {
 		req.Header.Set("Authorization", "Bearer "+apiToken)
@@ -2246,7 +2282,9 @@ func runAgentUpdate(cmd *cobra.Command, args []string) error {
 
 	if updateAll {
 		// Get all agents first
-		req, _ := http.NewRequest("GET", baseURL+"/api/v1/agents", nil)
+		listCtx, listCancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer listCancel()
+		req, _ := http.NewRequestWithContext(listCtx, "GET", baseURL+"/api/v1/agents", http.NoBody)
 		if apiToken != "" {
 			req.Header.Set("Authorization", "Bearer "+apiToken)
 		}
@@ -2312,7 +2350,9 @@ func triggerAgentUpdate(client *http.Client, baseURL, apiToken, agentID, version
 	}
 	bodyBytes, _ := json.Marshal(body)
 
-	req, _ := http.NewRequest("POST", baseURL+"/api/v1/agents/"+agentID+"/update", strings.NewReader(string(bodyBytes)))
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/v1/agents/"+agentID+"/update", strings.NewReader(string(bodyBytes)))
 	req.Header.Set("Content-Type", "application/json")
 	if apiToken != "" {
 		req.Header.Set("Authorization", "Bearer "+apiToken)

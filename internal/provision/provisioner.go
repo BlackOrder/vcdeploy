@@ -48,6 +48,8 @@ func NewProvisioner(agents services.AgentServicer, ca *security.CAManager, ssh *
 }
 
 // ProvisionRequest contains the information needed to provision a new agent.
+//
+//nolint:revive // Keeping explicit naming for clarity
 type ProvisionRequest struct {
 	// AgentID is the unique identifier for the agent
 	AgentID string
@@ -68,6 +70,8 @@ type ProvisionRequest struct {
 }
 
 // ProvisionResult contains the result of a provisioning operation.
+//
+//nolint:revive // Keeping explicit naming for clarity
 type ProvisionResult struct {
 	// AgentID is the provisioned agent's ID
 	AgentID string

@@ -286,7 +286,7 @@ func TestACMEClientHTTPHandler(t *testing.T) {
 	})
 
 	handler := testClient.HTTPHandler(fallback)
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest("GET", "/test", http.NoBody)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 

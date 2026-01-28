@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -204,7 +205,7 @@ func (s *MasterServer) handleAgentBinary(w http.ResponseWriter, r *http.Request)
 
 		binary, err := s.db.GetAgentBinary(ctx, id)
 		if err != nil {
-			if err == storage.ErrNotFound {
+			if errors.Is(err, storage.ErrNotFound) {
 				http.Error(w, "Binary not found", http.StatusNotFound)
 				return
 			}
@@ -224,7 +225,7 @@ func (s *MasterServer) handleAgentBinary(w http.ResponseWriter, r *http.Request)
 		// Get binary to find file path
 		binary, err := s.db.GetAgentBinary(ctx, id)
 		if err != nil {
-			if err == storage.ErrNotFound {
+			if errors.Is(err, storage.ErrNotFound) {
 				http.Error(w, "Binary not found", http.StatusNotFound)
 				return
 			}
@@ -275,7 +276,7 @@ func (s *MasterServer) handleAgentBinaryDownload(w http.ResponseWriter, r *http.
 
 	binary, err := s.db.GetAgentBinary(ctx, id)
 	if err != nil {
-		if err == storage.ErrNotFound {
+		if errors.Is(err, storage.ErrNotFound) {
 			http.Error(w, "Binary not found", http.StatusNotFound)
 			return
 		}
@@ -322,7 +323,7 @@ func (s *MasterServer) handleSetCurrentBinary(w http.ResponseWriter, r *http.Req
 	// Verify binary exists
 	binary, err := s.db.GetAgentBinary(ctx, id)
 	if err != nil {
-		if err == storage.ErrNotFound {
+		if errors.Is(err, storage.ErrNotFound) {
 			http.Error(w, "Binary not found", http.StatusNotFound)
 			return
 		}
@@ -370,7 +371,7 @@ func (s *MasterServer) handleAgentBinaryLatest(w http.ResponseWriter, r *http.Re
 
 	binary, err := s.db.GetCurrentAgentBinary(ctx, osType, arch)
 	if err != nil {
-		if err == storage.ErrNotFound {
+		if errors.Is(err, storage.ErrNotFound) {
 			http.Error(w, "No current binary found for this platform", http.StatusNotFound)
 			return
 		}
@@ -549,7 +550,7 @@ func (s *MasterServer) handleTriggerAgentUpdate(w http.ResponseWriter, r *http.R
 	// Get agent
 	agent, err := s.agentService.GetByID(ctx, agentID)
 	if err != nil {
-		if err == storage.ErrNotFound {
+		if errors.Is(err, storage.ErrNotFound) {
 			http.Error(w, "Agent not found", http.StatusNotFound)
 			return
 		}
@@ -571,7 +572,7 @@ func (s *MasterServer) handleTriggerAgentUpdate(w http.ResponseWriter, r *http.R
 	// Get current binary for agent's platform
 	binary, err := s.db.GetCurrentAgentBinary(ctx, agent.OS, agent.Arch)
 	if err != nil {
-		if err == storage.ErrNotFound {
+		if errors.Is(err, storage.ErrNotFound) {
 			http.Error(w, "No current binary available for agent's platform", http.StatusNotFound)
 			return
 		}

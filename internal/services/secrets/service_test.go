@@ -870,7 +870,7 @@ func TestNew(t *testing.T) {
 
 // Helper function for string contains check
 func containsSubstring(s, substr string) bool {
-	return len(s) >= len(substr) && (len(substr) == 0 || findSubstring(s, substr))
+	return len(s) >= len(substr) && (substr == "" || findSubstring(s, substr))
 }
 
 func findSubstring(s, substr string) bool {

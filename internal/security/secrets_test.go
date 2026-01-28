@@ -380,7 +380,7 @@ func TestSecretServiceExportEnvFile(t *testing.T) {
 	}
 
 	// Should contain proper formatting
-	if len(envFile) == 0 {
+	if envFile == "" {
 		t.Error("env file should not be empty")
 	}
 }

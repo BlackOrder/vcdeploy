@@ -68,7 +68,7 @@ func GenerateMasterKey() (*MasterKey, error) {
 // SaveToFile saves the master key to a file with restricted permissions.
 func (k *MasterKey) SaveToFile(path string) error {
 	encoded := base64.StdEncoding.EncodeToString(k.key)
-	if err := os.WriteFile(path, []byte(encoded), 0600); err != nil {
+	if err := os.WriteFile(path, []byte(encoded), 0o600); err != nil {
 		return fmt.Errorf("writing master key: %w", err)
 	}
 	return nil

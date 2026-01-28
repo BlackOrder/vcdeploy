@@ -846,26 +846,36 @@ func (s *MasterServer) withUIAuth(handler http.HandlerFunc) http.HandlerFunc {
 
 // withAuthAndMinRole combines authentication with minimum role requirement.
 // Role hierarchy: admin > user > viewer
+//
+//nolint:unused // Reserved for future API endpoint authorization
 func (s *MasterServer) withAuthAndMinRole(minRole string, handler http.HandlerFunc) http.HandlerFunc {
 	return s.withAuth(s.enforcementMiddleware.RequireMinRole(minRole)(handler))
 }
 
 // withAuthAndScope combines authentication with API scope requirement.
+//
+//nolint:unused // Reserved for future API endpoint authorization
 func (s *MasterServer) withAuthAndScope(scope APIScope, handler http.HandlerFunc) http.HandlerFunc {
 	return s.withAuth(s.enforcementMiddleware.RequireScope(scope)(handler))
 }
 
 // withAuthReadOnly combines authentication with read scope for API keys.
+//
+//nolint:unused // Reserved for future API endpoint authorization
 func (s *MasterServer) withAuthReadOnly(handler http.HandlerFunc) http.HandlerFunc {
 	return s.withAuthAndScope(ScopeRead, handler)
 }
 
 // withAuthWrite combines authentication with write scope for API keys.
+//
+//nolint:unused // Reserved for future API endpoint authorization
 func (s *MasterServer) withAuthWrite(handler http.HandlerFunc) http.HandlerFunc {
 	return s.withAuthAndScope(ScopeWrite, handler)
 }
 
 // withAuthAdmin combines authentication with admin scope and admin role.
+//
+//nolint:unused // Reserved for future API endpoint authorization
 func (s *MasterServer) withAuthAdmin(handler http.HandlerFunc) http.HandlerFunc {
 	return s.withAuth(
 		s.enforcementMiddleware.RequireScope(ScopeAdmin)(
@@ -875,6 +885,8 @@ func (s *MasterServer) withAuthAdmin(handler http.HandlerFunc) http.HandlerFunc 
 }
 
 // withUIAuthAndMinRole combines UI authentication with minimum role requirement.
+//
+//nolint:unused // Reserved for future UI endpoint authorization
 func (s *MasterServer) withUIAuthAndMinRole(minRole string, handler http.HandlerFunc) http.HandlerFunc {
 	return s.withUIAuth(s.enforcementMiddleware.RequireMinRole(minRole)(handler))
 }

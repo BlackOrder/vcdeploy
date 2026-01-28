@@ -21,11 +21,10 @@ func TestNewLocalRunner(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
-
 	if runner == nil {
 		t.Fatal("NewLocalRunner() returned nil")
 	}
+	runner.SkipValidation = true
 
 	if runner.logger == nil {
 		t.Error("NewLocalRunner() did not set logger")

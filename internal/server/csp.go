@@ -163,6 +163,7 @@ func NonceScriptTag(nonce string) string {
 	if nonce == "" {
 		return "<script>"
 	}
+	//nolint:gocritic // Using explicit quotes for HTML attribute, not %q
 	return fmt.Sprintf(`<script nonce="%s">`, nonce)
 }
 
@@ -172,6 +173,7 @@ func NonceStyleTag(nonce string) string {
 	if nonce == "" {
 		return "<style>"
 	}
+	//nolint:gocritic // Using explicit quotes for HTML attribute, not %q
 	return fmt.Sprintf(`<style nonce="%s">`, nonce)
 }
 

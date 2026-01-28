@@ -884,7 +884,7 @@ func TestE2E_UserListCommand(t *testing.T) {
 			token, _ := cmd.Flags().GetString("token")
 
 			client := &http.Client{Timeout: 10 * time.Second}
-			req, err := http.NewRequest("GET", masterURL+"/api/v1/users", nil)
+			req, err := http.NewRequest("GET", masterURL+"/api/v1/users", http.NoBody)
 			if err != nil {
 				return err
 			}
@@ -940,7 +940,7 @@ func TestE2E_AgentListCommand(t *testing.T) {
 			token, _ := cmd.Flags().GetString("token")
 
 			client := &http.Client{Timeout: 10 * time.Second}
-			req, err := http.NewRequest("GET", masterURL+"/api/v1/agents", nil)
+			req, err := http.NewRequest("GET", masterURL+"/api/v1/agents", http.NoBody)
 			if err != nil {
 				return err
 			}
@@ -992,7 +992,7 @@ func TestE2E_DeploymentListCommand(t *testing.T) {
 			token, _ := cmd.Flags().GetString("token")
 
 			client := &http.Client{Timeout: 10 * time.Second}
-			req, err := http.NewRequest("GET", masterURL+"/api/v1/deployments", nil)
+			req, err := http.NewRequest("GET", masterURL+"/api/v1/deployments", http.NoBody)
 			if err != nil {
 				return err
 			}
@@ -1044,7 +1044,7 @@ func TestE2E_ConfigShowCommand(t *testing.T) {
 			token, _ := cmd.Flags().GetString("token")
 
 			client := &http.Client{Timeout: 10 * time.Second}
-			req, err := http.NewRequest("GET", masterURL+"/api/v1/config", nil)
+			req, err := http.NewRequest("GET", masterURL+"/api/v1/config", http.NoBody)
 			if err != nil {
 				return err
 			}
@@ -1096,7 +1096,7 @@ func TestE2E_APIKeyListCommand(t *testing.T) {
 			token, _ := cmd.Flags().GetString("token")
 
 			client := &http.Client{Timeout: 10 * time.Second}
-			req, err := http.NewRequest("GET", masterURL+"/api/v1/apikeys", nil)
+			req, err := http.NewRequest("GET", masterURL+"/api/v1/apikeys", http.NoBody)
 			if err != nil {
 				return err
 			}
@@ -1147,7 +1147,9 @@ func TestE2E_APIKeyCreateCommand(t *testing.T) {
 
 			data, _ := json.Marshal(map[string]string{"name": args[0]})
 			client := &http.Client{Timeout: 10 * time.Second}
-			req, err := http.NewRequest("POST", masterURL+"/api/v1/apikeys", bytes.NewReader(data))
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			req, err := http.NewRequestWithContext(ctx, "POST", masterURL+"/api/v1/apikeys", bytes.NewReader(data))
 			if err != nil {
 				return err
 			}
@@ -1203,7 +1205,7 @@ func TestE2E_AgentShowCommand(t *testing.T) {
 			token, _ := cmd.Flags().GetString("token")
 
 			client := &http.Client{Timeout: 10 * time.Second}
-			req, err := http.NewRequest("GET", masterURL+"/api/v1/agents/"+args[0], nil)
+			req, err := http.NewRequest("GET", masterURL+"/api/v1/agents/"+args[0], http.NoBody)
 			if err != nil {
 				return err
 			}
@@ -1256,7 +1258,8 @@ func TestE2E_DeploymentStatusCommand(t *testing.T) {
 			token, _ := cmd.Flags().GetString("token")
 
 			client := &http.Client{Timeout: 10 * time.Second}
-			req, err := http.NewRequest("GET", masterURL+"/api/v1/deployments/"+args[0], nil)
+			//nolint:noctx // Test helper simulating CLI behavior
+			req, err := http.NewRequest("GET", masterURL+"/api/v1/deployments/"+args[0], http.NoBody)
 			if err != nil {
 				return err
 			}
@@ -1309,7 +1312,8 @@ func TestE2E_DeploymentLogsCommand(t *testing.T) {
 			token, _ := cmd.Flags().GetString("token")
 
 			client := &http.Client{Timeout: 10 * time.Second}
-			req, err := http.NewRequest("GET", masterURL+"/api/v1/deployments/"+args[0]+"/logs", nil)
+			//nolint:noctx // Test helper simulating CLI behavior
+			req, err := http.NewRequest("GET", masterURL+"/api/v1/deployments/"+args[0]+"/logs", http.NoBody)
 			if err != nil {
 				return err
 			}
@@ -1368,7 +1372,9 @@ func TestE2E_AgentTokenCommand(t *testing.T) {
 			body, _ := json.Marshal(data)
 
 			client := &http.Client{Timeout: 10 * time.Second}
-			req, err := http.NewRequest("POST", masterURL+"/api/v1/agents/tokens", bytes.NewReader(body))
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			req, err := http.NewRequestWithContext(ctx, "POST", masterURL+"/api/v1/agents/tokens", bytes.NewReader(body))
 			if err != nil {
 				return err
 			}
@@ -1423,7 +1429,7 @@ func TestE2E_APIServerError(t *testing.T) {
 			token, _ := cmd.Flags().GetString("token")
 
 			client := &http.Client{Timeout: 10 * time.Second}
-			req, err := http.NewRequest("GET", masterURL+"/api/v1/users", nil)
+			req, err := http.NewRequest("GET", masterURL+"/api/v1/users", http.NoBody)
 			if err != nil {
 				return err
 			}
@@ -1472,7 +1478,8 @@ func TestE2E_ConnectionTimeout(t *testing.T) {
 
 			// Use a very short timeout for testing
 			client := &http.Client{Timeout: 100 * time.Millisecond}
-			req, err := http.NewRequest("GET", masterURL+"/api/v1/users", nil)
+			//nolint:noctx // Test helper simulating CLI behavior
+			req, err := http.NewRequest("GET", masterURL+"/api/v1/users", http.NoBody)
 			if err != nil {
 				return err
 			}

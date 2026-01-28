@@ -85,7 +85,7 @@ func generateTOTP(secret string, timestamp int64, config TOTPConfig) string {
 	for i := 0; i < config.Digits; i++ {
 		mod *= 10
 	}
-	code = code % mod
+	code %= mod
 
 	// Format with leading zeros
 	format := fmt.Sprintf("%%0%dd", config.Digits)

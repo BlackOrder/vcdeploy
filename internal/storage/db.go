@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-	_ "modernc.org/sqlite"
+	_ "modernc.org/sqlite" // sqlite driver for database/sql
 )
 
 // ErrNotFound is returned when a requested record does not exist.
@@ -2632,7 +2632,7 @@ func (db *DB) DeleteHealthCheckConfig(ctx context.Context, id int64) error {
 	// Don't allow deleting the global config
 	var isGlobal bool
 	err := db.conn.QueryRowContext(ctx, `SELECT is_global FROM health_check_configs WHERE id = ?`, id).Scan(&isGlobal)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	}
 	if err != nil {

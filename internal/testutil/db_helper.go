@@ -37,7 +37,7 @@ func NewTestDB(t *testing.T) *TestDB {
 	// Create the database with migrations
 	db, err := storage.New(dbPath, zap.NewNop())
 	if err != nil {
-		os.RemoveAll(tmpDir) //nolint:errcheck
+		os.RemoveAll(tmpDir) //nolint:errcheck // Best effort cleanup in test
 		t.Fatalf("failed to create test database: %v", err)
 	}
 
@@ -131,7 +131,7 @@ func InMemoryDB(t *testing.T) *TestDB {
 
 	db, err := storage.New(dbPath, zap.NewNop())
 	if err != nil {
-		os.RemoveAll(tmpDir) //nolint:errcheck
+		os.RemoveAll(tmpDir) //nolint:errcheck // Best effort cleanup in test
 		t.Fatalf("failed to create in-memory database: %v", err)
 	}
 

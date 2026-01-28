@@ -63,7 +63,7 @@ func LoadTypeConfig(path string) (*TypeConfig, error) {
 // SaveTypeConfig saves a type configuration to a file.
 func SaveTypeConfig(config *TypeConfig, path string) error {
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("creating type directory: %w", err)
 	}
 
@@ -72,7 +72,7 @@ func SaveTypeConfig(config *TypeConfig, path string) error {
 		return fmt.Errorf("marshaling type: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return fmt.Errorf("writing type file: %w", err)
 	}
 

@@ -3,6 +3,7 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -318,7 +319,7 @@ func (s *MasterServer) handleJumpServer(w http.ResponseWriter, r *http.Request) 
 
 		server, err := s.db.GetJumpServer(ctx, id)
 		if err != nil {
-			if err == storage.ErrNotFound {
+			if errors.Is(err, storage.ErrNotFound) {
 				http.Error(w, "Jump server not found", http.StatusNotFound)
 				return
 			}
@@ -502,7 +503,7 @@ func (s *MasterServer) handleBlockedIP(w http.ResponseWriter, r *http.Request) {
 
 		blocked, err := s.db.GetBlockedIP(ctx, ip)
 		if err != nil {
-			if err == storage.ErrNotFound {
+			if errors.Is(err, storage.ErrNotFound) {
 				http.Error(w, "IP not blocked", http.StatusNotFound)
 				return
 			}

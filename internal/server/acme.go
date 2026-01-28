@@ -80,7 +80,7 @@ func NewACMEClient(cfg ACMEClientConfig) (*ACMEClient, error) {
 	}
 
 	// Ensure cache directory exists
-	if err := os.MkdirAll(cacheDir, 0700); err != nil {
+	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
 		return nil, fmt.Errorf("create certificate cache directory: %w", err)
 	}
 
@@ -235,10 +235,10 @@ func (c *ACMEClient) generateSelfSignedCertificate(ctx context.Context) (*tls.Ce
 	if c.cacheDir != "" {
 		certPath := filepath.Join(c.cacheDir, "self-signed.crt")
 		keyPath := filepath.Join(c.cacheDir, "self-signed.key")
-		if err := os.WriteFile(certPath, certPEM, 0644); err != nil {
+		if err := os.WriteFile(certPath, certPEM, 0o644); err != nil {
 			c.logger.Warn("failed to save self-signed certificate", zap.Error(err))
 		}
-		if err := os.WriteFile(keyPath, keyPEM, 0600); err != nil {
+		if err := os.WriteFile(keyPath, keyPEM, 0o600); err != nil {
 			c.logger.Warn("failed to save self-signed key", zap.Error(err))
 		}
 	}

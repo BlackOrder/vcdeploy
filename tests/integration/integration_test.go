@@ -430,7 +430,10 @@ func TestHTTPEndpoints(t *testing.T) {
 	defer ts.Close()
 
 	// Test health endpoint
-	resp, err := http.Get(ts.URL + "/api/v1/health")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, "GET", ts.URL+"/api/v1/health", nil)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("Failed to call health endpoint: %v", err)
 	}
