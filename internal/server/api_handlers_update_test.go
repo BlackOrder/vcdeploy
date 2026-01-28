@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
-	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -506,33 +504,6 @@ func TestHandleTriggerAgentUpdate(t *testing.T) {
 			t.Errorf("Expected status %d, got %d", http.StatusMethodNotAllowed, rr.Code)
 		}
 	})
-}
-
-// createTestMultipartRequest creates a multipart form request for binary upload.
-//
-//nolint:unused // Helper function for binary upload tests
-func createTestMultipartRequest(t *testing.T, url, version, osType, arch string, content []byte) *http.Request {
-	t.Helper()
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-
-	// Add form fields
-	_ = writer.WriteField("version", version)
-	_ = writer.WriteField("os", osType)
-	_ = writer.WriteField("arch", arch)
-
-	// Add file
-	part, err := writer.CreateFormFile("binary", "vcdeploy-agent")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, _ = io.Copy(part, bytes.NewReader(content))
-
-	writer.Close()
-
-	req := httptest.NewRequest("POST", url, body)
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-	return req
 }
 
 func TestHandleAgentBinary(t *testing.T) {
