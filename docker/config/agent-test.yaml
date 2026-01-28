@@ -1,0 +1,25 @@
+# VCDeploy Agent Test Configuration
+# Used for E2E testing
+
+agent:
+  name: "test-agent"
+  labels:
+    env: test
+    region: local
+    os: linux
+
+master:
+  address: "master:9090"
+  insecure: true
+
+heartbeat:
+  interval: 5s
+
+deploy:
+  work_dir: "/deploy"
+  cleanup: true
+
+logging:
+  level: debug
+  format: json
+  output: stdout

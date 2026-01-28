@@ -1,0 +1,157 @@
+# VCDeploy E2E Test Environment
+# This compose file extends the main docker-compose for testing
+
+services:
+  # VCDeploy Master (Test Mode)
+  master:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        VERSION: test
+        COMMIT: test
+        BUILD_TIME: test
+    image: vcdeploy:test
+    container_name: vcdeploy-master-test
+    restart: "no"
+    ports:
+      - "${VCDEPLOY_HTTP_PORT:-8080}:8080"
+      - "${VCDEPLOY_GRPC_PORT:-9090}:9090"
+    volumes:
+      - ./config/master-test.yaml:/etc/vcdeploy/master.yaml:ro
+      - test-data:/var/lib/vcdeploy
+      - test-logs:/var/log/vcdeploy
+    environment:
+      - TZ=UTC
+      - VCDEPLOY_LOG_LEVEL=debug
+      - VCDEPLOY_TEST_MODE=true
+      - VCDEPLOY_ADMIN_PASSWORD=${TEST_ADMIN_PASSWORD:-Changeme12345!}
+    networks:
+      - vcdeploy-test
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/api/v1/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  # VCDeploy Agent (Test Mode)
+  agent:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.agent
+      args:
+        VERSION: test
+    image: vcdeploy-agent:test
+    container_name: vcdeploy-agent-test
+    restart: "no"
+    depends_on:
+      master:
+        condition: service_healthy
+    volumes:
+      - ./config/agent-test.yaml:/etc/vcdeploy/agent.yaml:ro
+      - agent-test-data:/var/lib/vcdeploy-agent
+      - agent-test-logs:/var/log/vcdeploy-agent
+      - ./test-deploy:/deploy
+    environment:
+      - TZ=UTC
+      - VCDEPLOY_MASTER_ADDR=master:9090
+      - VCDEPLOY_AGENT_LABELS=env=test,region=local
+    networks:
+      - vcdeploy-test
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+
+  # Gitea for Git repository tests
+  gitea:
+    image: gitea/gitea:1.21-rootless
+    container_name: vcdeploy-gitea-test
+    restart: "no"
+    ports:
+      - "${GITEA_HTTP_PORT:-3000}:3000"
+      - "${GITEA_SSH_PORT:-2222}:22"
+    volumes:
+      - gitea-data:/var/lib/gitea
+      - gitea-config:/etc/gitea
+    environment:
+      - GITEA__server__ROOT_URL=http://gitea:3000
+      - GITEA__server__DOMAIN=gitea
+      - GITEA__database__DB_TYPE=sqlite3
+      - GITEA__service__DISABLE_REGISTRATION=false
+      - GITEA__security__INSTALL_LOCK=true
+      - GITEA__service__REQUIRE_SIGNIN_VIEW=false
+    networks:
+      - vcdeploy-test
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # SSH target server for deployment tests
+  ssh-target:
+    image: lscr.io/linuxserver/openssh-server:latest
+    container_name: vcdeploy-ssh-target-test
+    restart: "no"
+    ports:
+      - "${SSH_TARGET_PORT:-2223}:2222"
+    volumes:
+      - ssh-target-data:/config
+      - ./test-deploy:/deploy
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+      - SUDO_ACCESS=true
+      - PASSWORD_ACCESS=true
+      - USER_PASSWORD=testpassword
+      - USER_NAME=deploy
+    networks:
+      - vcdeploy-test
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2222"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Playwright test runner
+  playwright:
+    image: mcr.microsoft.com/playwright:v1.40.0-jammy
+    container_name: vcdeploy-playwright-test
+    working_dir: /app/tests/ui
+    volumes:
+      - ../:/app:ro
+      - playwright-results:/app/tests/ui/test-results
+      - playwright-reports:/app/tests/ui/playwright-report
+    environment:
+      - VCDEPLOY_WEB_URL=http://master:8080
+      - VCDEPLOY_API_URL=http://master:8080/api
+      - TEST_ADMIN_USERNAME=admin
+      - TEST_ADMIN_PASSWORD=${TEST_ADMIN_PASSWORD:-Changeme12345!}
+      - CI=true
+    networks:
+      - vcdeploy-test
+    depends_on:
+      master:
+        condition: service_healthy
+    profiles:
+      - ui-tests
+    command: ["npm", "test"]
+
+networks:
+  vcdeploy-test:
+    driver: bridge
+
+volumes:
+  test-data:
+  test-logs:
+  agent-test-data:
+  agent-test-logs:
+  gitea-data:
+  gitea-config:
+  ssh-target-data:
+  playwright-results:
+  playwright-reports:

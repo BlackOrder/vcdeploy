@@ -7,7 +7,8 @@ on:
     branches: [main, develop]
 
 env:
-  GO_VERSION: "1.25"
+  GO_VERSION: "1.21"
+  NODE_VERSION: "20"
 
 jobs:
   lint:
@@ -249,11 +250,238 @@ jobs:
           path: benchmark.txt
           retention-days: 30
 
+  # E2E API Tests
+  e2e-api:
+    name: E2E API Tests
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Build application
+        run: make build
+
+      - name: Start test server
+        run: |
+          mkdir -p data
+          ./bin/vcdeploy master start --config=configs/master-dev.yaml &
+          sleep 15  # Wait for server to start
+        env:
+          VCDEPLOY_TEST_MODE: "true"
+          VCDEPLOY_ADMIN_PASSWORD: "Changeme12345!"
+          VCDEPLOY_DATA_DIR: "./data"
+          VCDEPLOY_CONFIG_DIR: "./configs"
+          VCDEPLOY_RUN_DIR: "./data"
+          VCDEPLOY_LOG_DIR: "./data"
+
+      - name: Run E2E API tests
+        run: go test -v -tags=e2e -timeout 20m ./tests/e2e/...
+        env:
+          VCDEPLOY_MASTER_HTTP_URL: "http://localhost:8080"
+          VCDEPLOY_API_TOKEN: ""
+          TEST_ADMIN_USERNAME: "admin"
+          TEST_ADMIN_PASSWORD: "Changeme12345!"
+
+  # CLI Tests
+  cli-tests:
+    name: CLI Tests
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Build application
+        run: make build
+
+      - name: Run CLI tests
+        run: go test -v -tags=cli -timeout 15m ./tests/cli/...
+        env:
+          VCDEPLOY_BINARY: "./bin/vcdeploy"
+
+  # UI Tests (Playwright)
+  ui-tests:
+    name: UI Tests (Playwright)
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Playwright dependencies
+        run: |
+          cd tests/ui
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Build application
+        run: make build
+
+      - name: Start test server
+        run: |
+          mkdir -p data
+          ./bin/vcdeploy master start --config=configs/master-dev.yaml &
+          sleep 15
+        env:
+          VCDEPLOY_TEST_MODE: "true"
+          VCDEPLOY_ADMIN_PASSWORD: "Changeme12345!"
+          VCDEPLOY_DATA_DIR: "./data"
+          VCDEPLOY_CONFIG_DIR: "./configs"
+          VCDEPLOY_RUN_DIR: "./data"
+          VCDEPLOY_LOG_DIR: "./data"
+
+      - name: Run Playwright tests
+        run: |
+          cd tests/ui
+          npx playwright test --project=chromium
+        env:
+          VCDEPLOY_WEB_URL: "http://localhost:8080"
+          TEST_ADMIN_USERNAME: "admin"
+          TEST_ADMIN_PASSWORD: "Changeme12345!"
+          CI: "true"
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: tests/ui/playwright-report/
+          retention-days: 7
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-results
+          path: tests/ui/test-results/
+          retention-days: 7
+
+  # Full E2E with Docker (main branch only)
+  full-e2e:
+    name: Full E2E (Docker)
+    runs-on: ubuntu-latest
+    needs: [docker]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Start test infrastructure
+        run: |
+          docker compose -f docker/docker-compose.test.yml up -d --build
+          sleep 60  # Wait for all services to be ready
+
+      - name: Check infrastructure status
+        run: docker compose -f docker/docker-compose.test.yml ps
+
+      - name: Run E2E API tests
+        run: go test -v -tags=e2e -timeout 30m ./tests/e2e/...
+        env:
+          VCDEPLOY_MASTER_HTTP_URL: "http://localhost:8080"
+          TEST_ADMIN_PASSWORD: "Changeme12345!"
+
+      - name: Build CLI binary
+        run: make build
+
+      - name: Run CLI tests
+        run: go test -v -tags=cli -timeout 15m ./tests/cli/...
+        env:
+          VCDEPLOY_BINARY: "./bin/vcdeploy"
+          VCDEPLOY_MASTER_HTTP_URL: "http://localhost:8080"
+
+      - name: Install Playwright
+        run: |
+          cd tests/ui
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Run UI tests
+        run: |
+          cd tests/ui
+          npx playwright test --project=chromium
+        env:
+          VCDEPLOY_WEB_URL: "http://localhost:8080"
+          TEST_ADMIN_PASSWORD: "Changeme12345!"
+          CI: "true"
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose -f docker/docker-compose.test.yml logs
+
+      - name: Cleanup
+        if: always()
+        run: docker compose -f docker/docker-compose.test.yml down -v
+
+  # SBOM Generation (main branch only)
+  sbom:
+    name: Generate SBOM
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Generate SBOM
+        run: |
+          go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
+          mkdir -p sbom
+          cyclonedx-gomod mod -json -output sbom/sbom.json
+          cyclonedx-gomod mod -output sbom/sbom.xml
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom/
+          retention-days: 30
+
   # Final status check for branch protection
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
-    needs: [lint, test, systemd-tests, integration, build]
+    needs: [lint, test, systemd-tests, integration, build, e2e-api, cli-tests, ui-tests]
     if: always()
     steps:
       - name: Check all jobs
@@ -276,6 +504,18 @@ jobs:
           fi
           if [[ "${{ needs.build.result }}" != "success" ]]; then
             echo "::error::Build failed"
+            exit 1
+          fi
+          if [[ "${{ needs.e2e-api.result }}" != "success" ]]; then
+            echo "::error::E2E API tests failed"
+            exit 1
+          fi
+          if [[ "${{ needs.cli-tests.result }}" != "success" ]]; then
+            echo "::error::CLI tests failed"
+            exit 1
+          fi
+          if [[ "${{ needs.ui-tests.result }}" != "success" ]]; then
+            echo "::error::UI tests failed"
             exit 1
           fi
           echo "All CI checks passed!"

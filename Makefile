@@ -2,10 +2,11 @@
 # ==================
 
 .PHONY: all build build-master build-agent clean test test-unit test-integration \
-        test-systemd test-e2e test-all test-coverage test-coverage-ci test-bench \
-        lint fmt vet proto vuln gosec sbom security \
+        test-systemd test-e2e test-e2e-api test-cli test-ui test-all test-all-no-parallel \
+        test-coverage test-coverage-ci test-bench \
+        lint fmt vet proto vuln gosec sbom security quality-check \
         install install-systemd uninstall dev dev-agent \
-        docker-build docker-up docker-down \
+        docker-build docker-up docker-down docker-test-up docker-test-down \
         check verify help
 
 # ------------------------------------------------------------------------------
@@ -84,7 +85,7 @@ test-systemd:
 	@echo "Running systemd tests..."
 	go test -v -tags=systemd ./init/...
 
-## test-e2e: Run end-to-end tests (requires Docker)
+## test-e2e: Run full end-to-end tests (requires Docker)
 test-e2e:
 	@echo "Running e2e tests..."
 	@if [ ! -f docker-compose.test.yaml ]; then \
@@ -94,16 +95,67 @@ test-e2e:
 	@echo "Starting test infrastructure..."
 	$(DOCKER_COMPOSE) -f docker-compose.test.yaml up -d --build --wait || \
 		(echo "Failed to start containers"; exit 1)
-	@echo "Running e2e tests..."
+	@echo "Running e2e API tests..."
 	go test -v -tags=e2e -timeout $(TEST_TIMEOUT) ./tests/e2e/... || \
 		($(DOCKER_COMPOSE) -f docker-compose.test.yaml down -v; exit 1)
 	@echo "Cleaning up..."
 	$(DOCKER_COMPOSE) -f docker-compose.test.yaml down -v
 
+## test-e2e-api: Run E2E API tests only (requires running infrastructure)
+test-e2e-api:
+	@echo "Running E2E API tests..."
+	go test -v -tags=e2e -timeout $(TEST_TIMEOUT) ./tests/e2e/...
+
+## test-cli: Run CLI tests (requires running infrastructure)
+test-cli:
+	@echo "Running CLI tests..."
+	go test -v -tags=cli -timeout $(TEST_TIMEOUT) ./tests/cli/...
+
+## test-ui: Run Playwright UI tests (requires running infrastructure)
+test-ui:
+	@echo "Running Playwright UI tests..."
+	@cd tests/ui && npm install && npx playwright test
+
+## test-ui-headed: Run Playwright UI tests with visible browser
+test-ui-headed:
+	@echo "Running Playwright UI tests (headed)..."
+	@cd tests/ui && npm install && npx playwright test --headed
+
+## test-ui-debug: Run Playwright UI tests in debug mode
+test-ui-debug:
+	@echo "Running Playwright UI tests (debug)..."
+	@cd tests/ui && npm install && npx playwright test --debug
+
+## test-ui-report: Show Playwright test report
+test-ui-report:
+	@echo "Opening Playwright report..."
+	@cd tests/ui && npx playwright show-report
+
 ## test-all: Run all tests (unit + integration + systemd, excludes e2e)
 test-all:
 	@echo "Running all tests..."
 	go test $(TEST_FLAGS) -tags=integration,systemd -timeout $(TEST_TIMEOUT) ./...
+
+## test-all-no-parallel: Run all tests in single-worker mode
+test-all-no-parallel:
+	@echo "Running all tests (single-worker mode)..."
+	TEST_NO_PARALLEL=1 go test $(TEST_FLAGS) -p 1 -tags=integration,systemd -timeout $(TEST_TIMEOUT) ./...
+
+## test-full: Run all tests including E2E, CLI, and UI (requires Docker)
+test-full:
+	@echo "Running full test suite..."
+	@$(MAKE) test-all
+	@$(MAKE) test-e2e
+	@$(MAKE) test-cli
+	@$(MAKE) test-ui
+
+## test-full-no-parallel: Run full test suite in single-worker mode
+test-full-no-parallel:
+	@echo "Running full test suite (single-worker mode)..."
+	TEST_NO_PARALLEL=1 $(MAKE) test-all-no-parallel
+	TEST_NO_PARALLEL=1 go test -v -p 1 -tags=e2e -timeout $(TEST_TIMEOUT) ./tests/e2e/...
+	TEST_NO_PARALLEL=1 go test -v -p 1 -tags=cli -timeout $(TEST_TIMEOUT) ./tests/cli/...
+	@cd tests/ui && TEST_NO_PARALLEL=1 npx playwright test --workers=1
 
 ## test-coverage: Run tests with HTML coverage report
 test-coverage:
@@ -154,6 +206,11 @@ sbom:
 ## security: Run all security checks (vuln + gosec)
 security: vuln gosec
 
+## quality-check: Run all quality checks using script
+quality-check:
+	@echo "Running quality checks..."
+	@./scripts/quality-check.sh
+
 ## check: Run all quality checks (lint + vet + test) - good for CI
 check: lint vet test
 
@@ -175,6 +232,12 @@ lint:
 fmt:
 	@echo "Formatting code..."
 	go fmt ./...
+
+## fmt-check: Check if code is formatted (for CI)
+fmt-check:
+	@echo "Checking code formatting..."
+	@test -z "$$(gofmt -l . 2>/dev/null | grep -v vendor)" || \
+		(echo "Code is not properly formatted. Run 'make fmt' to fix."; gofmt -l . | grep -v vendor; exit 1)
 
 ## vet: Run go vet
 vet:
@@ -253,6 +316,35 @@ docker-up:
 docker-down:
 	$(DOCKER_COMPOSE) -f docker/docker-compose.yml down
 
+## docker-test-up: Start test infrastructure (master, agent, gitea, ssh-target)
+docker-test-up:
+	@echo "Starting test infrastructure..."
+	$(DOCKER_COMPOSE) -f docker/docker-compose.test.yml up -d --build --wait
+	@echo "Test infrastructure ready!"
+	@echo "  Master HTTP: http://localhost:8080"
+	@echo "  Master gRPC: localhost:9090"
+	@echo "  Git Server:  http://localhost:3000"
+	@echo "  SSH Target:  localhost:2223"
+
+## docker-test-down: Stop test infrastructure
+docker-test-down:
+	@echo "Stopping test infrastructure..."
+	$(DOCKER_COMPOSE) -f docker/docker-compose.test.yml down -v
+
+## docker-test-logs: Show test infrastructure logs
+docker-test-logs:
+	$(DOCKER_COMPOSE) -f docker/docker-compose.test.yml logs -f
+
+## docker-test-status: Show test infrastructure status
+docker-test-status:
+	$(DOCKER_COMPOSE) -f docker/docker-compose.test.yml ps
+
+## docker-test-playwright: Run Playwright UI tests in Docker
+docker-test-playwright:
+	@echo "Running Playwright tests in Docker..."
+	$(DOCKER_COMPOSE) -f docker/docker-compose.test.yml --profile ui-tests up playwright --abort-on-container-exit
+	$(DOCKER_COMPOSE) -f docker/docker-compose.test.yml --profile ui-tests rm -f playwright
+
 # ------------------------------------------------------------------------------
 # Help
 # ------------------------------------------------------------------------------
@@ -270,7 +362,7 @@ help:
 	@grep -E '^## test' Makefile | sed 's/## /  /'
 	@echo ""
 	@echo "Code Quality:"
-	@grep -E '^## (lint|fmt|vet|check|verify):' Makefile | sed 's/## /  /'
+	@grep -E '^## (lint|fmt|vet|check|verify|quality):' Makefile | sed 's/## /  /'
 	@echo ""
 	@echo "Security:"
 	@grep -E '^## (vuln|gosec|sbom|security):' Makefile | sed 's/## /  /'

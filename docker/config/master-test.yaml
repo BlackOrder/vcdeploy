@@ -1,0 +1,43 @@
+# VCDeploy Master Test Configuration
+# Used for E2E testing
+
+server:
+  http:
+    address: ":8080"
+    read_timeout: 30s
+    write_timeout: 30s
+  grpc:
+    address: ":9090"
+
+database:
+  driver: sqlite
+  dsn: "/var/lib/vcdeploy/vcdeploy-test.db"
+
+auth:
+  jwt:
+    secret: "test-jwt-secret-key-for-e2e-testing-only"
+    expiry: 24h
+  session:
+    timeout: 24h
+
+admin:
+  username: admin
+  password: "${VCDEPLOY_ADMIN_PASSWORD:-Changeme12345!}"
+
+logging:
+  level: debug
+  format: json
+  output: stdout
+
+features:
+  audit_logging: true
+  webhooks: true
+  api_keys: true
+
+webhook:
+  secret: "test-webhook-secret"
+
+rate_limit:
+  enabled: false
+
+test_mode: true
