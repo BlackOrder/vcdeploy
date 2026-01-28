@@ -85,6 +85,7 @@ message AgentMessage {
     CommandResult command_result = 3;
     AgentReady agent_ready = 4;
     UpdateResult update_result = 5;
+    HealthCheckResult health_check_result = 6;
   }
 }
 
@@ -95,6 +96,17 @@ message UpdateResult {
   bool success = 3;
   string error = 4;
   bool rolled_back = 5;  // True if update failed and agent rolled back
+}
+
+// HealthCheckResult reports the result of a health check.
+message HealthCheckResult {
+  string deployment_id = 1;
+  bool success = 2;
+  int32 status_code = 3;
+  int64 response_time_ms = 4;
+  string error = 5;
+  int32 retry_count = 6;        // How many retries were attempted
+  bool trigger_rollback = 7;    // Whether to trigger automatic rollback
 }
 
 // MasterMessage is sent from master to agent over the stream.
@@ -173,8 +185,16 @@ message CancelCommand {
 message HealthCheckCommand {
   string deployment_id = 1;
   string url = 2;
-  int32 timeout_seconds = 3;
-  int32 retries = 4;
+  string method = 3;              // HTTP method (GET, POST, etc.)
+  int32 timeout_seconds = 4;
+  int32 retries = 5;
+  int32 retry_delay_seconds = 6;
+  int32 expected_status = 7;      // Expected HTTP status code (default 200)
+  map<string, string> headers = 8;
+  string body = 9;                // Request body for POST
+  string body_contains = 10;      // Response should contain this string
+  bool trigger_rollback = 11;     // Whether to trigger rollback on failure
+  int32 release_number = 12;      // Current release number (for rollback context)
 }
 
 // DeploymentStatus reports deployment progress.

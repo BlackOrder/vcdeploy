@@ -156,16 +156,19 @@ type SecretInfo struct {
 
 // Project represents a deployment project.
 type Project struct {
-	ID               int64
-	Name             string
-	Repository       string
-	Branch           string
-	DeployPath       string
-	Type             string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-	LastDeployAt     *time.Time
-	LastDeployStatus string
+	ID                   int64
+	Name                 string
+	Repository           string
+	Branch               string
+	DeployPath           string
+	Type                 string
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+	LastDeployAt         *time.Time
+	LastDeployStatus     string
+	HealthCheckID        *int64 // Reference to health_check_configs, nil uses global
+	AutoRollbackEnabled  bool   // Whether to auto-rollback on deployment issues
+	RollbackOnHealthFail bool   // Whether to rollback if health check fails
 }
 
 // ProjectType represents a project type template.
@@ -328,3 +331,62 @@ type AgentBinary struct {
 	UploadedAt     time.Time
 	IsCurrent      bool
 }
+
+// --- Health Check Models ---
+
+// HealthCheckConfig represents a health check configuration.
+// Can be global (is_global=true, project_id=nil) or per-project.
+type HealthCheckConfig struct {
+	ID                int64
+	ProjectID         *int64 // nil for global config
+	Name              string
+	URL               string // Can include template vars like {{.URL}}
+	Method            string // GET, POST, etc.
+	ExpectedStatus    int
+	TimeoutSeconds    int
+	Retries           int
+	RetryDelaySeconds int
+	Headers           string // JSON object of headers
+	Body              string // Request body for POST
+	BodyContains      string // Response body should contain this
+	Enabled           bool
+	IsGlobal          bool
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+}
+
+// HealthCheckResult represents the result of a health check execution.
+type HealthCheckResult struct {
+	ConfigID       int64
+	DeploymentID   string
+	Success        bool
+	StatusCode     int
+	ResponseTimeMs int64
+	ErrorMessage   string
+	RetryCount     int
+	CheckedAt      time.Time
+}
+
+// DeploymentRollback represents a rollback event.
+type DeploymentRollback struct {
+	ID                int64
+	DeploymentID      string
+	ProjectName       string
+	FromRelease       int
+	ToRelease         int
+	Reason            string
+	TriggeredBy       string // "user", "auto_health_fail", "manual"
+	HealthCheckFailed bool
+	HealthCheckError  string
+	Status            string // "pending", "in_progress", "completed", "failed"
+	ErrorMessage      string
+	StartedAt         time.Time
+	CompletedAt       *time.Time
+}
+
+// RollbackTrigger constants
+const (
+	RollbackTriggerUser           = "user"
+	RollbackTriggerAutoHealthFail = "auto_health_fail"
+	RollbackTriggerManual         = "manual"
+)

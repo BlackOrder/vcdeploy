@@ -404,6 +404,7 @@ type AgentMessage struct {
 	//	*AgentMessage_CommandResult
 	//	*AgentMessage_AgentReady
 	//	*AgentMessage_UpdateResult
+	//	*AgentMessage_HealthCheckResult
 	Message isAgentMessage_Message
 }
 
@@ -442,6 +443,13 @@ func (x *AgentMessage) GetUpdateResult() *UpdateResult {
 	return nil
 }
 
+func (x *AgentMessage) GetHealthCheckResult() *HealthCheckResult {
+	if x, ok := x.GetMessage().(*AgentMessage_HealthCheckResult); ok {
+		return x.HealthCheckResult
+	}
+	return nil
+}
+
 func (x *AgentMessage) GetMessage() isAgentMessage_Message {
 	if x != nil {
 		return x.Message
@@ -476,11 +484,16 @@ type AgentMessage_UpdateResult struct {
 	UpdateResult *UpdateResult
 }
 
-func (*AgentMessage_DeploymentStatus) isAgentMessage_Message() {}
-func (*AgentMessage_DeploymentLog) isAgentMessage_Message()    {}
-func (*AgentMessage_CommandResult) isAgentMessage_Message()    {}
-func (*AgentMessage_AgentReady) isAgentMessage_Message()       {}
-func (*AgentMessage_UpdateResult) isAgentMessage_Message()     {}
+type AgentMessage_HealthCheckResult struct {
+	HealthCheckResult *HealthCheckResult
+}
+
+func (*AgentMessage_DeploymentStatus) isAgentMessage_Message()  {}
+func (*AgentMessage_DeploymentLog) isAgentMessage_Message()     {}
+func (*AgentMessage_CommandResult) isAgentMessage_Message()     {}
+func (*AgentMessage_AgentReady) isAgentMessage_Message()        {}
+func (*AgentMessage_UpdateResult) isAgentMessage_Message()      {}
+func (*AgentMessage_HealthCheckResult) isAgentMessage_Message() {}
 
 // UpdateResult reports the result of an agent update.
 type UpdateResult struct {
@@ -528,6 +541,69 @@ func (x *UpdateResult) GetRolledBack() bool {
 
 func (x *UpdateResult) Reset()        { *x = UpdateResult{} }
 func (x *UpdateResult) ProtoMessage() {}
+
+// HealthCheckResult reports the result of a health check.
+type HealthCheckResult struct {
+	DeploymentId    string `json:"deployment_id,omitempty"`
+	Success         bool   `json:"success,omitempty"`
+	StatusCode      int32  `json:"status_code,omitempty"`
+	ResponseTimeMs  int64  `json:"response_time_ms,omitempty"`
+	Error           string `json:"error,omitempty"`
+	RetryCount      int32  `json:"retry_count,omitempty"`
+	TriggerRollback bool   `json:"trigger_rollback,omitempty"`
+}
+
+func (x *HealthCheckResult) GetDeploymentId() string {
+	if x != nil {
+		return x.DeploymentId
+	}
+	return ""
+}
+
+func (x *HealthCheckResult) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *HealthCheckResult) GetStatusCode() int32 {
+	if x != nil {
+		return x.StatusCode
+	}
+	return 0
+}
+
+func (x *HealthCheckResult) GetResponseTimeMs() int64 {
+	if x != nil {
+		return x.ResponseTimeMs
+	}
+	return 0
+}
+
+func (x *HealthCheckResult) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+func (x *HealthCheckResult) GetRetryCount() int32 {
+	if x != nil {
+		return x.RetryCount
+	}
+	return 0
+}
+
+func (x *HealthCheckResult) GetTriggerRollback() bool {
+	if x != nil {
+		return x.TriggerRollback
+	}
+	return false
+}
+
+func (x *HealthCheckResult) Reset()        { *x = HealthCheckResult{} }
+func (x *HealthCheckResult) ProtoMessage() {}
 
 // MasterMessage is sent from master to agent over the stream.
 type MasterMessage struct {
@@ -956,10 +1032,18 @@ func (x *CancelCommand) ProtoMessage() {}
 
 // HealthCheckCommand instructs agent to check health.
 type HealthCheckCommand struct {
-	DeploymentId   string `json:"deployment_id,omitempty"`
-	Url            string `json:"url,omitempty"`
-	TimeoutSeconds int32  `json:"timeout_seconds,omitempty"`
-	Retries        int32  `json:"retries,omitempty"`
+	DeploymentId      string            `json:"deployment_id,omitempty"`
+	Url               string            `json:"url,omitempty"`
+	Method            string            `json:"method,omitempty"`
+	TimeoutSeconds    int32             `json:"timeout_seconds,omitempty"`
+	Retries           int32             `json:"retries,omitempty"`
+	RetryDelaySeconds int32             `json:"retry_delay_seconds,omitempty"`
+	ExpectedStatus    int32             `json:"expected_status,omitempty"`
+	Headers           map[string]string `json:"headers,omitempty"`
+	Body              string            `json:"body,omitempty"`
+	BodyContains      string            `json:"body_contains,omitempty"`
+	TriggerRollback   bool              `json:"trigger_rollback,omitempty"`
+	ReleaseNumber     int32             `json:"release_number,omitempty"`
 }
 
 func (x *HealthCheckCommand) GetDeploymentId() string {
@@ -976,6 +1060,13 @@ func (x *HealthCheckCommand) GetUrl() string {
 	return ""
 }
 
+func (x *HealthCheckCommand) GetMethod() string {
+	if x != nil {
+		return x.Method
+	}
+	return ""
+}
+
 func (x *HealthCheckCommand) GetTimeoutSeconds() int32 {
 	if x != nil {
 		return x.TimeoutSeconds
@@ -986,6 +1077,55 @@ func (x *HealthCheckCommand) GetTimeoutSeconds() int32 {
 func (x *HealthCheckCommand) GetRetries() int32 {
 	if x != nil {
 		return x.Retries
+	}
+	return 0
+}
+
+func (x *HealthCheckCommand) GetRetryDelaySeconds() int32 {
+	if x != nil {
+		return x.RetryDelaySeconds
+	}
+	return 0
+}
+
+func (x *HealthCheckCommand) GetExpectedStatus() int32 {
+	if x != nil {
+		return x.ExpectedStatus
+	}
+	return 0
+}
+
+func (x *HealthCheckCommand) GetHeaders() map[string]string {
+	if x != nil {
+		return x.Headers
+	}
+	return nil
+}
+
+func (x *HealthCheckCommand) GetBody() string {
+	if x != nil {
+		return x.Body
+	}
+	return ""
+}
+
+func (x *HealthCheckCommand) GetBodyContains() string {
+	if x != nil {
+		return x.BodyContains
+	}
+	return ""
+}
+
+func (x *HealthCheckCommand) GetTriggerRollback() bool {
+	if x != nil {
+		return x.TriggerRollback
+	}
+	return false
+}
+
+func (x *HealthCheckCommand) GetReleaseNumber() int32 {
+	if x != nil {
+		return x.ReleaseNumber
 	}
 	return 0
 }

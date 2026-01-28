@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -674,6 +675,9 @@ func (a *Agent) handleHealthCheckCommand(ctx context.Context, stream pb.AgentSer
 	a.logger.Info("Received health check command",
 		zap.String("deployment_id", cmd.DeploymentId),
 		zap.String("url", cmd.Url),
+		zap.String("method", cmd.Method),
+		zap.Int32("expected_status", cmd.ExpectedStatus),
+		zap.Bool("trigger_rollback", cmd.TriggerRollback),
 	)
 
 	// Perform actual HTTP health check with retries
@@ -682,33 +686,163 @@ func (a *Agent) handleHealthCheckCommand(ctx context.Context, stream pb.AgentSer
 		retries = 1
 	}
 
-	var result bool
-	var statusMsg string
+	retryDelay := cmd.RetryDelaySeconds
+	if retryDelay <= 0 {
+		retryDelay = 5
+	}
 
-	for attempt := int32(1); attempt <= retries; attempt++ {
-		result, statusMsg = a.performHealthCheck(ctx, cmd.Url, cmd.TimeoutSeconds)
-		if result {
+	expectedStatus := cmd.ExpectedStatus
+	if expectedStatus == 0 {
+		expectedStatus = 200
+	}
+
+	var result *pb.HealthCheckResult
+	var attempt int32
+
+	for attempt = 1; attempt <= retries; attempt++ {
+		result = a.performHealthCheckWithConfig(ctx, cmd)
+		result.RetryCount = attempt
+
+		if result.Success {
 			break
 		}
+
 		if attempt < retries {
 			a.logger.Info("Health check failed, retrying",
 				zap.Int32("attempt", attempt),
 				zap.Int32("max_retries", retries),
+				zap.String("error", result.Error),
 			)
-			// Brief sleep between health check retries - context checked at loop start
-			time.Sleep(time.Second)
+			// Sleep between retries
+			time.Sleep(time.Duration(retryDelay) * time.Second)
 		}
 	}
 
-	exitCode := int32(0)
-	if !result {
-		exitCode = 1
-	}
+	// Set rollback trigger based on command and result
+	result.TriggerRollback = cmd.TriggerRollback && !result.Success
 
+	// Send health check result
+	a.sendHealthCheckResult(stream, result)
+
+	// Also send command result for backward compatibility
+	exitCode := int32(0)
+	statusMsg := fmt.Sprintf("Health check passed: status %d (in %dms)", result.StatusCode, result.ResponseTimeMs)
+	if !result.Success {
+		exitCode = 1
+		statusMsg = result.Error
+	}
 	a.sendCommandResult(stream, cmd.DeploymentId, "health_check", exitCode, statusMsg, "")
 }
 
-// performHealthCheck makes an HTTP request and validates the response.
+// performHealthCheckWithConfig makes an HTTP request using the health check command configuration.
+func (a *Agent) performHealthCheckWithConfig(ctx context.Context, cmd *pb.HealthCheckCommand) *pb.HealthCheckResult {
+	result := &pb.HealthCheckResult{
+		DeploymentId: cmd.DeploymentId,
+	}
+
+	// Set default timeout
+	timeoutDuration := 10 * time.Second
+	if cmd.TimeoutSeconds > 0 {
+		timeoutDuration = time.Duration(cmd.TimeoutSeconds) * time.Second
+	}
+
+	// Create context with timeout for this specific request
+	reqCtx, cancel := context.WithTimeout(ctx, timeoutDuration)
+	defer cancel()
+
+	// Determine HTTP method
+	method := cmd.Method
+	if method == "" {
+		method = http.MethodGet
+	}
+
+	// Create request body if provided
+	var bodyReader io.Reader
+	if cmd.Body != "" {
+		bodyReader = strings.NewReader(cmd.Body)
+	}
+
+	// Create request with context
+	req, err := http.NewRequestWithContext(reqCtx, method, cmd.Url, bodyReader)
+	if err != nil {
+		result.Error = fmt.Sprintf("Failed to create request: %v", err)
+		return result
+	}
+
+	// Set user agent
+	req.Header.Set("User-Agent", "vcdeploy-health-check/1.0")
+
+	// Add custom headers
+	for key, value := range cmd.Headers {
+		req.Header.Set(key, value)
+	}
+
+	// Set content type if body is provided and not already set
+	if cmd.Body != "" && req.Header.Get("Content-Type") == "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	// Perform the request using the reusable HTTP client
+	start := time.Now()
+	resp, err := a.httpClient.Do(req)
+	duration := time.Since(start)
+	result.ResponseTimeMs = duration.Milliseconds()
+
+	if err != nil {
+		result.Error = fmt.Sprintf("Health check failed: %v (after %v)", err, duration)
+		return result
+	}
+	defer resp.Body.Close()
+
+	result.StatusCode = int32(resp.StatusCode)
+
+	// Read the response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		result.Error = fmt.Sprintf("Failed to read response body: %v", err)
+		return result
+	}
+
+	// Check expected status code
+	expectedStatus := cmd.ExpectedStatus
+	if expectedStatus == 0 {
+		expectedStatus = 200
+	}
+
+	if int32(resp.StatusCode) != expectedStatus {
+		result.Error = fmt.Sprintf("Health check failed: got status %d, expected %d (after %v)",
+			resp.StatusCode, expectedStatus, duration)
+		return result
+	}
+
+	// Check body contains if specified
+	if cmd.BodyContains != "" && !strings.Contains(string(body), cmd.BodyContains) {
+		result.Error = fmt.Sprintf("Health check failed: response body does not contain '%s'", cmd.BodyContains)
+		return result
+	}
+
+	result.Success = true
+	return result
+}
+
+// sendHealthCheckResult sends a health check result back to the master.
+func (a *Agent) sendHealthCheckResult(stream pb.AgentService_ConnectClient, result *pb.HealthCheckResult) {
+	msg := &pb.AgentMessage{
+		Message: &pb.AgentMessage_HealthCheckResult{
+			HealthCheckResult: result,
+		},
+	}
+
+	if err := stream.Send(msg); err != nil {
+		a.logger.Error("Failed to send health check result",
+			zap.String("deployment_id", result.DeploymentId),
+			zap.Error(err),
+		)
+	}
+}
+
+// performHealthCheck makes an HTTP request and validates the response (legacy method).
+// This method accepts any 2xx status code for backward compatibility.
 func (a *Agent) performHealthCheck(ctx context.Context, url string, timeout int32) (bool, string) {
 	// Set default timeout
 	timeoutDuration := 10 * time.Second
@@ -726,7 +860,7 @@ func (a *Agent) performHealthCheck(ctx context.Context, url string, timeout int3
 		return false, fmt.Sprintf("Failed to create request: %v", err)
 	}
 
-	// Set a user agent
+	// Set user agent
 	req.Header.Set("User-Agent", "vcdeploy-health-check/1.0")
 
 	// Perform the request using the reusable HTTP client
@@ -739,18 +873,12 @@ func (a *Agent) performHealthCheck(ctx context.Context, url string, timeout int3
 	}
 	defer resp.Body.Close()
 
-	// Read and discard the body (to allow connection reuse)
-	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
-		a.logger.Debug("Failed to drain health check response body", zap.Error(err))
+	// Accept any 2xx status code for backward compatibility
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return true, fmt.Sprintf("Health check passed: status %d (in %v)", resp.StatusCode, duration)
 	}
 
-	// Check status code (accept 2xx as success)
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return false, fmt.Sprintf("Health check failed: got status %d (after %v)",
-			resp.StatusCode, duration)
-	}
-
-	return true, fmt.Sprintf("Health check passed: status %d (in %v)", resp.StatusCode, duration)
+	return false, fmt.Sprintf("Health check failed: got status %d, expected 2xx (after %v)", resp.StatusCode, duration)
 }
 
 // protoToDeployCommand converts a protobuf deploy command to internal format.
