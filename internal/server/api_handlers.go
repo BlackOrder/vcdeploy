@@ -1029,15 +1029,10 @@ func (s *MasterServer) handleDeploymentsAPI(w http.ResponseWriter, r *http.Reque
 			return
 		}
 
-		// Parse query params
-		limit := 50
-		if l := r.URL.Query().Get("limit"); l != "" {
-			if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
-				limit = parsed
-			}
-		}
+		// Parse pagination
+		p := parsePagination(r)
 
-		deployments, err := s.deploymentService.ListRecent(ctx, limit)
+		deployments, err := s.deploymentService.ListRecent(ctx, p.Limit)
 		if err != nil {
 			s.logger.Error("Failed to list deployments", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)

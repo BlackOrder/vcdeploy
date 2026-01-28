@@ -18,17 +18,26 @@ const (
 // parsePagination extracts pagination parameters from query string.
 // Query parameters: limit (default 50), offset (default 0)
 // Also supports page parameter: page=2 with limit=50 means offset=50
-//
-//nolint:unused // Will be used when list handlers add pagination support
 func parsePagination(r *http.Request) services.Pagination {
+	return parsePaginationWithDefaults(r, DefaultPageSize)
+}
+
+// parsePaginationWithDefaults extracts pagination with a custom default limit.
+// Query parameters: limit, offset, page
+// Limit is capped at MaxPageSize.
+func parsePaginationWithDefaults(r *http.Request, defaultLimit int) services.Pagination {
 	q := r.URL.Query()
 
 	// Parse limit
-	limit := DefaultPageSize
+	limit := defaultLimit
 	if limitStr := q.Get("limit"); limitStr != "" {
 		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
 			limit = l
 		}
+	}
+	// Cap at max
+	if limit > MaxPageSize {
+		limit = MaxPageSize
 	}
 
 	// Parse offset, or calculate from page

@@ -349,23 +349,9 @@ func (s *MasterServer) handleRollbackRecords(w http.ResponseWriter, r *http.Requ
 
 	// Parse query parameters
 	projectName := r.URL.Query().Get("project")
-	limitStr := r.URL.Query().Get("limit")
-	offsetStr := r.URL.Query().Get("offset")
+	p := parsePaginationWithDefaults(r, 20)
 
-	limit := 20
-	offset := 0
-	if limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
-			limit = l
-		}
-	}
-	if offsetStr != "" {
-		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
-			offset = o
-		}
-	}
-
-	rollbacks, total, err := s.db.ListDeploymentRollbacks(ctx, projectName, limit, offset)
+	rollbacks, total, err := s.db.ListDeploymentRollbacks(ctx, projectName, p.Limit, p.Offset)
 	if err != nil {
 		s.logger.Error("Failed to list deployment rollbacks", zap.Error(err))
 		http.Error(w, "Failed to list deployment rollbacks", http.StatusInternalServerError)
@@ -376,8 +362,8 @@ func (s *MasterServer) handleRollbackRecords(w http.ResponseWriter, r *http.Requ
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"items":  rollbacks,
 		"total":  total,
-		"limit":  limit,
-		"offset": offset,
+		"limit":  p.Limit,
+		"offset": p.Offset,
 	})
 }
 
