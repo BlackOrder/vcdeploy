@@ -227,6 +227,8 @@ uninstall:
 ## dev: Run master in development mode
 dev:
 	@mkdir -p data
+	@[ -L data/templates ] || ln -sf ../web/templates data/templates
+	@[ -L data/static ] || ln -sf ../web/static data/static
 	VCDEPLOY_DATA_DIR=./data VCDEPLOY_CONFIG_DIR=./configs VCDEPLOY_RUN_DIR=./data VCDEPLOY_LOG_DIR=./data go run ./cmd/vcdeploy master start --config=configs/master-dev.yaml
 
 ## dev-agent: Run agent in development mode
