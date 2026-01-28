@@ -53,7 +53,7 @@ func DefaultCSPConfig() CSPConfig {
 // This is less secure but required when templates use inline handlers.
 func DefaultCSPConfigWithUnsafeInline() CSPConfig {
 	cfg := DefaultCSPConfig()
-	cfg.Directives["script-src"] = "'self' 'unsafe-inline'"
+	cfg.Directives["script-src"] = "'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.tailwindcss.com"
 	cfg.Directives["style-src"] = "'self' 'unsafe-inline'"
 	return cfg
 }
