@@ -226,7 +226,8 @@ uninstall:
 
 ## dev: Run master in development mode
 dev:
-	go run ./cmd/vcdeploy master start --config=configs/master.yaml.example
+	@mkdir -p data
+	VCDEPLOY_DATA_DIR=./data VCDEPLOY_CONFIG_DIR=./configs VCDEPLOY_RUN_DIR=./data VCDEPLOY_LOG_DIR=./data go run ./cmd/vcdeploy master start --config=configs/master-dev.yaml
 
 ## dev-agent: Run agent in development mode
 dev-agent:

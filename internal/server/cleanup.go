@@ -143,52 +143,66 @@ func (c *CleanupTask) runCleanup() {
 	c.logger.Debug("Running cleanup tasks")
 
 	// Clean up expired sessions
-	if count, err := c.cleanExpiredSessions(ctx); err != nil {
-		c.logger.Error("Failed to clean expired sessions", zap.Error(err))
-	} else if count > 0 {
-		c.logger.Info("Cleaned expired sessions", zap.Int64("count", count))
+	if c.sessionService != nil {
+		if count, err := c.cleanExpiredSessions(ctx); err != nil {
+			c.logger.Error("Failed to clean expired sessions", zap.Error(err))
+		} else if count > 0 {
+			c.logger.Info("Cleaned expired sessions", zap.Int64("count", count))
+		}
 	}
 
 	// Clean up old deployments
-	if count, err := c.cleanOldDeployments(ctx); err != nil {
-		c.logger.Error("Failed to clean old deployments", zap.Error(err))
-	} else if count > 0 {
-		c.logger.Info("Cleaned old deployments", zap.Int64("count", count))
+	if c.deploymentService != nil {
+		if count, err := c.cleanOldDeployments(ctx); err != nil {
+			c.logger.Error("Failed to clean old deployments", zap.Error(err))
+		} else if count > 0 {
+			c.logger.Info("Cleaned old deployments", zap.Int64("count", count))
+		}
 	}
 
 	// Clean up old deployment logs
-	if count, err := c.cleanOldDeploymentLogs(ctx); err != nil {
-		c.logger.Error("Failed to clean old deployment logs", zap.Error(err))
-	} else if count > 0 {
-		c.logger.Info("Cleaned old deployment logs", zap.Int64("count", count))
+	if c.deploymentService != nil {
+		if count, err := c.cleanOldDeploymentLogs(ctx); err != nil {
+			c.logger.Error("Failed to clean old deployment logs", zap.Error(err))
+		} else if count > 0 {
+			c.logger.Info("Cleaned old deployment logs", zap.Int64("count", count))
+		}
 	}
 
 	// Clean up old audit logs
-	if count, err := c.cleanOldAuditLogs(ctx); err != nil {
-		c.logger.Error("Failed to clean old audit logs", zap.Error(err))
-	} else if count > 0 {
-		c.logger.Info("Cleaned old audit logs", zap.Int64("count", count))
+	if c.auditService != nil {
+		if count, err := c.cleanOldAuditLogs(ctx); err != nil {
+			c.logger.Error("Failed to clean old audit logs", zap.Error(err))
+		} else if count > 0 {
+			c.logger.Info("Cleaned old audit logs", zap.Int64("count", count))
+		}
 	}
 
 	// Mark stale agents
-	if count, err := c.markStaleAgents(ctx); err != nil {
-		c.logger.Error("Failed to mark stale agents", zap.Error(err))
-	} else if count > 0 {
-		c.logger.Info("Marked agents as stale", zap.Int64("count", count))
+	if c.agentService != nil {
+		if count, err := c.markStaleAgents(ctx); err != nil {
+			c.logger.Error("Failed to mark stale agents", zap.Error(err))
+		} else if count > 0 {
+			c.logger.Info("Marked agents as stale", zap.Int64("count", count))
+		}
 	}
 
 	// Clean up expired API keys
-	if count, err := c.cleanExpiredAPIKeys(ctx); err != nil {
-		c.logger.Error("Failed to clean expired API keys", zap.Error(err))
-	} else if count > 0 {
-		c.logger.Info("Cleaned expired API keys", zap.Int64("count", count))
+	if c.apiKeyService != nil {
+		if count, err := c.cleanExpiredAPIKeys(ctx); err != nil {
+			c.logger.Error("Failed to clean expired API keys", zap.Error(err))
+		} else if count > 0 {
+			c.logger.Info("Cleaned expired API keys", zap.Int64("count", count))
+		}
 	}
 
 	// Clean up orphaned webhook secrets (webhooks for deleted projects)
-	if count, err := c.cleanOrphanedWebhooks(ctx); err != nil {
-		c.logger.Error("Failed to clean orphaned webhooks", zap.Error(err))
-	} else if count > 0 {
-		c.logger.Info("Cleaned orphaned webhooks", zap.Int64("count", count))
+	if c.webhookService != nil {
+		if count, err := c.cleanOrphanedWebhooks(ctx); err != nil {
+			c.logger.Error("Failed to clean orphaned webhooks", zap.Error(err))
+		} else if count > 0 {
+			c.logger.Info("Cleaned orphaned webhooks", zap.Int64("count", count))
+		}
 	}
 
 	c.logger.Debug("Cleanup tasks completed")

@@ -38,8 +38,19 @@ var (
 	systemConfigErr  error
 )
 
+// getSystemConfigPath returns the path to the system config file.
+// It checks VCDEPLOY_SYSTEM_CONFIG environment variable first, then falls back to default.
+func getSystemConfigPath() string {
+	if path := os.Getenv("VCDEPLOY_SYSTEM_CONFIG"); path != "" {
+		return path
+	}
+	return DefaultSystemConfigPath
+}
+
 // GetSystemConfig returns the singleton system configuration.
-// It loads from /etc/vcdeploy/vcdeploy.yaml if it exists, otherwise uses defaults.
+// It loads from VCDEPLOY_SYSTEM_CONFIG env var or /etc/vcdeploy/vcdeploy.yaml if it exists,
+// otherwise uses defaults. Environment variables VCDEPLOY_DATA_DIR, VCDEPLOY_CONFIG_DIR,
+// VCDEPLOY_RUN_DIR, and VCDEPLOY_LOG_DIR can override individual paths.
 func GetSystemConfig() (*SystemConfig, error) {
 	systemConfigOnce.Do(func() {
 		systemConfig = &SystemConfig{
@@ -52,8 +63,9 @@ func GetSystemConfig() (*SystemConfig, error) {
 		}
 
 		// Try to load from config file
-		if _, err := os.Stat(DefaultSystemConfigPath); err == nil {
-			data, err := os.ReadFile(DefaultSystemConfigPath)
+		configPath := getSystemConfigPath()
+		if _, err := os.Stat(configPath); err == nil {
+			data, err := os.ReadFile(configPath)
 			if err != nil {
 				systemConfigErr = err
 				return
@@ -78,6 +90,20 @@ func GetSystemConfig() (*SystemConfig, error) {
 			if loaded.Paths.LogDir != "" {
 				systemConfig.Paths.LogDir = loaded.Paths.LogDir
 			}
+		}
+
+		// Environment variables take highest precedence
+		if dir := os.Getenv("VCDEPLOY_DATA_DIR"); dir != "" {
+			systemConfig.Paths.DataDir = dir
+		}
+		if dir := os.Getenv("VCDEPLOY_CONFIG_DIR"); dir != "" {
+			systemConfig.Paths.ConfigDir = dir
+		}
+		if dir := os.Getenv("VCDEPLOY_RUN_DIR"); dir != "" {
+			systemConfig.Paths.RunDir = dir
+		}
+		if dir := os.Getenv("VCDEPLOY_LOG_DIR"); dir != "" {
+			systemConfig.Paths.LogDir = dir
 		}
 		// If file doesn't exist, silently use defaults (backward compatibility)
 	})
