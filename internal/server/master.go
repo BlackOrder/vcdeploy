@@ -445,6 +445,11 @@ func (s *MasterServer) startHTTP() error {
 	// Health check
 	mux.HandleFunc("/api/v1/health", s.handleHealth)
 
+	// Kubernetes-style health endpoints (no auth)
+	mux.HandleFunc("/healthz", s.handleHealthzLive)
+	mux.HandleFunc("/livez", s.handleHealthzLive)
+	mux.HandleFunc("/readyz", s.handleHealthzReady)
+
 	// Metrics endpoint (no auth - typically filtered at network level)
 	mux.Handle("/metrics", promhttp.Handler())
 
@@ -1099,11 +1104,121 @@ func (rw *responseWriter) WriteHeader(code int) {
 }
 
 func (s *MasterServer) handleHealth(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	health := s.buildDetailedHealth(ctx)
+
+	statusCode := http.StatusOK
+	if health.Status == "unhealthy" {
+		statusCode = http.StatusServiceUnavailable
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":    "healthy",
-		"timestamp": time.Now().UTC(),
-	})
+	w.WriteHeader(statusCode)
+	_ = json.NewEncoder(w).Encode(health)
+}
+
+// HealthStatus represents detailed health information.
+type HealthStatus struct {
+	Status    string                 `json:"status"` // "healthy", "degraded", "unhealthy"
+	Checks    map[string]CheckResult `json:"checks"`
+	Version   string                 `json:"version,omitempty"`
+	Uptime    string                 `json:"uptime,omitempty"`
+	Timestamp time.Time              `json:"timestamp"`
+}
+
+// CheckResult represents the result of a single health check.
+type CheckResult struct {
+	Status  string `json:"status"`
+	Message string `json:"message,omitempty"`
+	Latency string `json:"latency,omitempty"`
+}
+
+// handleHealthzLive handles /healthz and /livez (Kubernetes liveness probe).
+// Returns 200 if the process is alive.
+func (s *MasterServer) handleHealthzLive(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("ok"))
+}
+
+// handleHealthzReady handles /readyz (Kubernetes readiness probe).
+// Returns 200 if the server can serve traffic, 503 otherwise.
+func (s *MasterServer) handleHealthzReady(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	// Check database connectivity
+	if err := s.db.Conn().PingContext(ctx); err != nil {
+		s.logger.Warn("Readiness check failed: database not ready", zap.Error(err))
+		http.Error(w, "database not ready", http.StatusServiceUnavailable)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("ok"))
+}
+
+// buildDetailedHealth builds a detailed health status.
+func (s *MasterServer) buildDetailedHealth(ctx context.Context) HealthStatus {
+	health := HealthStatus{
+		Status:    "healthy",
+		Checks:    make(map[string]CheckResult),
+		Timestamp: time.Now().UTC(),
+	}
+
+	// Database check
+	dbStart := time.Now()
+	if err := s.db.Conn().PingContext(ctx); err != nil {
+		health.Status = "unhealthy"
+		health.Checks["database"] = CheckResult{
+			Status:  "unhealthy",
+			Message: err.Error(),
+		}
+	} else {
+		health.Checks["database"] = CheckResult{
+			Status:  "healthy",
+			Latency: time.Since(dbStart).Round(time.Microsecond).String(),
+		}
+	}
+
+	// gRPC server check
+	if s.grpcServer != nil {
+		health.Checks["grpc"] = CheckResult{Status: "healthy"}
+	} else {
+		health.Checks["grpc"] = CheckResult{
+			Status:  "degraded",
+			Message: "gRPC server not initialized",
+		}
+		if health.Status == "healthy" {
+			health.Status = "degraded"
+		}
+	}
+
+	// Agent connectivity summary
+	s.agentsMu.RLock()
+	connectedCount := 0
+	totalCount := len(s.agents)
+	for _, agent := range s.agents {
+		if agent.Status == "connected" {
+			connectedCount++
+		}
+	}
+	s.agentsMu.RUnlock()
+
+	agentStatus := "healthy"
+	if totalCount > 0 && connectedCount == 0 {
+		agentStatus = "degraded"
+		if health.Status == "healthy" {
+			health.Status = "degraded"
+		}
+	}
+	health.Checks["agents"] = CheckResult{
+		Status:  agentStatus,
+		Message: fmt.Sprintf("%d/%d connected", connectedCount, totalCount),
+	}
+
+	return health
 }
 
 func (s *MasterServer) handleAgents(w http.ResponseWriter, r *http.Request) {
