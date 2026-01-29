@@ -1102,3 +1102,187 @@ func TestRequireScopeHelpers(t *testing.T) {
 		}
 	})
 }
+
+// --- CheckScope tests ---
+
+func TestCheckScope(t *testing.T) {
+	logger := zap.NewNop()
+	cfg := &config.MasterConfig{}
+	userSvc := newMockUserService()
+	mw := NewEnforcementMiddleware(cfg, userSvc, logger)
+
+	t.Run("allows session auth without API key", func(t *testing.T) {
+		ctx := context.Background()
+		msg, status, ok := mw.CheckScope(ctx, ScopeRead)
+		if !ok {
+			t.Errorf("CheckScope() should allow when no API key present")
+		}
+		if msg != "" || status != 0 {
+			t.Errorf("CheckScope() returned msg=%q, status=%d; want empty, 0", msg, status)
+		}
+	})
+
+	t.Run("allows matching scope", func(t *testing.T) {
+		apiKey := &storage.APIKey{Scopes: `["read"]`}
+		ctx := WithAPIKeyContext(context.Background(), apiKey)
+		msg, status, ok := mw.CheckScope(ctx, ScopeRead)
+		if !ok {
+			t.Errorf("CheckScope() should allow matching scope")
+		}
+		if msg != "" || status != 0 {
+			t.Errorf("CheckScope() returned msg=%q, status=%d; want empty, 0", msg, status)
+		}
+	})
+
+	t.Run("rejects insufficient scope", func(t *testing.T) {
+		apiKey := &storage.APIKey{KeyPrefix: "test_key", Scopes: `["read"]`}
+		ctx := WithAPIKeyContext(context.Background(), apiKey)
+		msg, status, ok := mw.CheckScope(ctx, ScopeAdmin)
+		if ok {
+			t.Errorf("CheckScope() should reject insufficient scope")
+		}
+		if status != http.StatusForbidden {
+			t.Errorf("CheckScope() status = %d; want %d", status, http.StatusForbidden)
+		}
+		if msg == "" {
+			t.Errorf("CheckScope() should return error message")
+		}
+	})
+
+	t.Run("admin scope implies all", func(t *testing.T) {
+		apiKey := &storage.APIKey{Scopes: `["admin"]`}
+		ctx := WithAPIKeyContext(context.Background(), apiKey)
+		msg, status, ok := mw.CheckScope(ctx, ScopeWrite)
+		if !ok {
+			t.Errorf("CheckScope() admin should imply write")
+		}
+		if msg != "" || status != 0 {
+			t.Errorf("CheckScope() returned msg=%q, status=%d; want empty, 0", msg, status)
+		}
+	})
+}
+
+// --- CheckWriteAccess tests ---
+
+func TestCheckWriteAccess(t *testing.T) {
+	logger := zap.NewNop()
+	cfg := &config.MasterConfig{}
+
+	t.Run("allows with write scope and user role", func(t *testing.T) {
+		userSvc := newMockUserService()
+		userSvc.addUser(&storage.User{ID: 1, Username: "editor", Role: "user"})
+		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
+
+		apiKey := &storage.APIKey{Scopes: `["write"]`}
+		ctx := WithAPIKeyContext(context.Background(), apiKey)
+		ctx = context.WithValue(ctx, contextKeyUserID, int64(1))
+
+		msg, status, ok := mw.CheckWriteAccess(ctx)
+		if !ok {
+			t.Errorf("CheckWriteAccess() should allow with write scope and user role")
+		}
+		if msg != "" || status != 0 {
+			t.Errorf("CheckWriteAccess() returned msg=%q, status=%d; want empty, 0", msg, status)
+		}
+	})
+
+	t.Run("rejects read-only API key", func(t *testing.T) {
+		userSvc := newMockUserService()
+		userSvc.addUser(&storage.User{ID: 1, Username: "editor", Role: "user"})
+		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
+
+		apiKey := &storage.APIKey{KeyPrefix: "test", Scopes: `["read"]`}
+		ctx := WithAPIKeyContext(context.Background(), apiKey)
+		ctx = context.WithValue(ctx, contextKeyUserID, int64(1))
+
+		msg, status, ok := mw.CheckWriteAccess(ctx)
+		if ok {
+			t.Errorf("CheckWriteAccess() should reject read-only API key")
+		}
+		if status != http.StatusForbidden {
+			t.Errorf("CheckWriteAccess() status = %d; want %d", status, http.StatusForbidden)
+		}
+		if msg == "" {
+			t.Errorf("CheckWriteAccess() should return error message")
+		}
+	})
+
+	t.Run("rejects viewer role", func(t *testing.T) {
+		userSvc := newMockUserService()
+		userSvc.addUser(&storage.User{ID: 1, Username: "viewer", Role: "viewer"})
+		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
+
+		apiKey := &storage.APIKey{Scopes: `["write"]`}
+		ctx := WithAPIKeyContext(context.Background(), apiKey)
+		ctx = context.WithValue(ctx, contextKeyUserID, int64(1))
+
+		_, status, ok := mw.CheckWriteAccess(ctx)
+		if ok {
+			t.Errorf("CheckWriteAccess() should reject viewer role")
+		}
+		if status != http.StatusForbidden {
+			t.Errorf("CheckWriteAccess() status = %d; want %d", status, http.StatusForbidden)
+		}
+	})
+}
+
+// --- CheckAdminAccess tests ---
+
+func TestCheckAdminAccess(t *testing.T) {
+	logger := zap.NewNop()
+	cfg := &config.MasterConfig{}
+
+	t.Run("allows with admin scope and admin role", func(t *testing.T) {
+		userSvc := newMockUserService()
+		userSvc.addUser(&storage.User{ID: 1, Username: "admin", Role: "admin"})
+		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
+
+		apiKey := &storage.APIKey{Scopes: `["admin"]`}
+		ctx := WithAPIKeyContext(context.Background(), apiKey)
+		ctx = context.WithValue(ctx, contextKeyUserID, int64(1))
+
+		msg, status, ok := mw.CheckAdminAccess(ctx)
+		if !ok {
+			t.Errorf("CheckAdminAccess() should allow with admin scope and admin role")
+		}
+		if msg != "" || status != 0 {
+			t.Errorf("CheckAdminAccess() returned msg=%q, status=%d; want empty, 0", msg, status)
+		}
+	})
+
+	t.Run("rejects write-only API key", func(t *testing.T) {
+		userSvc := newMockUserService()
+		userSvc.addUser(&storage.User{ID: 1, Username: "admin", Role: "admin"})
+		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
+
+		apiKey := &storage.APIKey{KeyPrefix: "test", Scopes: `["write"]`}
+		ctx := WithAPIKeyContext(context.Background(), apiKey)
+		ctx = context.WithValue(ctx, contextKeyUserID, int64(1))
+
+		_, status, ok := mw.CheckAdminAccess(ctx)
+		if ok {
+			t.Errorf("CheckAdminAccess() should reject write-only API key")
+		}
+		if status != http.StatusForbidden {
+			t.Errorf("CheckAdminAccess() status = %d; want %d", status, http.StatusForbidden)
+		}
+	})
+
+	t.Run("rejects non-admin user role", func(t *testing.T) {
+		userSvc := newMockUserService()
+		userSvc.addUser(&storage.User{ID: 1, Username: "user", Role: "user"})
+		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
+
+		apiKey := &storage.APIKey{Scopes: `["admin"]`}
+		ctx := WithAPIKeyContext(context.Background(), apiKey)
+		ctx = context.WithValue(ctx, contextKeyUserID, int64(1))
+
+		_, status, ok := mw.CheckAdminAccess(ctx)
+		if ok {
+			t.Errorf("CheckAdminAccess() should reject non-admin user role")
+		}
+		if status != http.StatusForbidden {
+			t.Errorf("CheckAdminAccess() status = %d; want %d", status, http.StatusForbidden)
+		}
+	})
+}
