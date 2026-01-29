@@ -21,6 +21,7 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/alerting"
 	"github.com/BlackOrder/vcdeploy/internal/config"
 	"github.com/BlackOrder/vcdeploy/internal/metrics"
+	"github.com/BlackOrder/vcdeploy/internal/notify"
 	"github.com/BlackOrder/vcdeploy/internal/proto"
 	"github.com/BlackOrder/vcdeploy/internal/scheduler"
 	"github.com/BlackOrder/vcdeploy/internal/security"
@@ -48,6 +49,87 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
+
+// createNotifyManager creates a notification manager from config with registered notifiers.
+// It validates configuration for each enabled provider, logs warnings for misconfigurations,
+// and gracefully skips providers that fail to initialize.
+func createNotifyManager(cfg config.NotificationsConfig, logger *zap.Logger) *notify.Manager {
+	mgr := notify.NewManager(logger)
+
+	// Slack notifications
+	if cfg.Providers.Slack.Enabled {
+		if cfg.Providers.Slack.WebhookURL == "" {
+			logger.Warn("Slack notifications enabled but webhook_url not configured")
+		} else {
+			mgr.Register(notify.NewSlackNotifier(notify.SlackConfig{
+				WebhookURL: cfg.Providers.Slack.WebhookURL,
+				Channel:    cfg.Providers.Slack.Channel,
+				Username:   cfg.Providers.Slack.Username,
+				IconEmoji:  cfg.Providers.Slack.IconEmoji,
+			}))
+			logger.Info("Slack notification provider registered")
+		}
+	}
+
+	// Email notifications
+	if cfg.Providers.Email.Enabled {
+		smtp := cfg.Providers.Email.SMTP
+		if smtp.Host == "" {
+			logger.Warn("Email notifications enabled but SMTP host not configured")
+		} else if smtp.FromAddress == "" {
+			logger.Warn("Email notifications enabled but from_address not configured")
+		} else if len(smtp.ToAddresses) == 0 {
+			logger.Warn("Email notifications enabled but no to_addresses configured")
+		} else {
+			notifier, err := notify.NewEmailNotifier(notify.EmailConfig{
+				SMTPHost:    smtp.Host,
+				SMTPPort:    smtp.Port,
+				Username:    smtp.User,
+				Password:    smtp.Password,
+				FromAddress: smtp.FromAddress,
+				FromName:    smtp.FromName,
+				ToAddresses: smtp.ToAddresses,
+			})
+			if err != nil {
+				logger.Warn("Failed to create email notifier", zap.Error(err))
+			} else {
+				mgr.Register(notifier)
+				logger.Info("Email notification provider registered")
+			}
+		}
+	}
+
+	// Webhook notifications
+	if cfg.Providers.Webhook.Enabled {
+		if cfg.Providers.Webhook.URL == "" {
+			logger.Warn("Webhook notifications enabled but URL not configured")
+		} else {
+			mgr.Register(notify.NewWebhookNotifier(notify.WebhookConfig{
+				URL:     cfg.Providers.Webhook.URL,
+				Method:  cfg.Providers.Webhook.Method,
+				Headers: cfg.Providers.Webhook.Headers,
+				Secret:  cfg.Providers.Webhook.Secret,
+			}))
+			logger.Info("Webhook notification provider registered")
+		}
+	}
+
+	// Discord notifications
+	if cfg.Providers.Discord.Enabled {
+		if cfg.Providers.Discord.WebhookURL == "" {
+			logger.Warn("Discord notifications enabled but webhook_url not configured")
+		} else {
+			mgr.Register(notify.NewDiscordNotifier(notify.DiscordConfig{
+				WebhookURL: cfg.Providers.Discord.WebhookURL,
+				Username:   cfg.Providers.Discord.Username,
+				AvatarURL:  cfg.Providers.Discord.AvatarURL,
+			}))
+			logger.Info("Discord notification provider registered")
+		}
+	}
+
+	return mgr
+}
 
 // MasterServer is the main daemon server.
 type MasterServer struct {
@@ -326,8 +408,8 @@ func (s *MasterServer) SetWebhookHandler(kms *security.KMS, processor webhooksha
 				thresholds.AlertCooldown = s.config.Alerting.AlertCooldown
 			}
 
-			// TODO: Create notifier from config when notification system is integrated
-			s.alertManager = alerting.NewManager(nil, s.logger, thresholds)
+			notifyManager := createNotifyManager(s.config.Notifications, s.logger)
+			s.alertManager = alerting.NewManager(notifyManager, s.logger, thresholds)
 			s.agentServer.SetAlertManager(s.alertManager)
 			s.logger.Info("System alerting enabled", zap.Any("thresholds", thresholds))
 		}
