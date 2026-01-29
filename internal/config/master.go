@@ -19,6 +19,7 @@ type MasterConfig struct {
 	Backup        BackupConfig        `yaml:"backup"`
 	Logs          LogsConfig          `yaml:"logs"`
 	Tracing       TracingConfig       `yaml:"tracing"`
+	Alerting      AlertingConfig      `yaml:"alerting"`
 	Webhooks      WebhooksConfig      `yaml:"webhooks"`
 	Notifications NotificationsConfig `yaml:"notifications"`
 	API           APIConfig           `yaml:"api"`
@@ -141,6 +142,17 @@ type TracingConfig struct {
 	ServiceName string  `yaml:"service_name"`
 	SampleRate  float64 `yaml:"sample_rate"`
 	Insecure    bool    `yaml:"insecure"`
+}
+
+// AlertingConfig defines system alerting thresholds.
+type AlertingConfig struct {
+	Enabled              bool          `yaml:"enabled"`
+	DiskWarningPercent   float64       `yaml:"disk_warning_percent"`
+	DiskCriticalPercent  float64       `yaml:"disk_critical_percent"`
+	MemoryWarningPercent float64       `yaml:"memory_warning_percent"`
+	CPUWarningPercent    float64       `yaml:"cpu_warning_percent"`
+	DeploymentTimeout    time.Duration `yaml:"deployment_timeout"`
+	AlertCooldown        time.Duration `yaml:"alert_cooldown"`
 }
 
 // WebhooksConfig defines webhook settings.
