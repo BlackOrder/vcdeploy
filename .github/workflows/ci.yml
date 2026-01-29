@@ -306,6 +306,8 @@ jobs:
       - name: Start test server
         run: |
           mkdir -p data
+          ln -sf ../web/templates data/templates
+          ln -sf ../web/static data/static
           ./bin/vcdeploy master start --config=configs/master-dev.yaml &
           sleep 15  # Wait for server to start
         env:
@@ -416,6 +418,8 @@ jobs:
       - name: Start test server
         run: |
           mkdir -p data
+          ln -sf ../web/templates data/templates
+          ln -sf ../web/static data/static
           ./bin/vcdeploy master start --config=configs/master-dev.yaml &
           sleep 15
         env:
