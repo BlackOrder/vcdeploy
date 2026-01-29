@@ -93,7 +93,7 @@ func (db *DB) RunInTransaction(ctx context.Context, fn func(tx *sql.Tx) error) e
 		if rbErr := tx.Rollback(); rbErr != nil {
 			return fmt.Errorf("rollback failed: %v (original error: %w)", rbErr, err)
 		}
-		return err
+		return fmt.Errorf("transaction function: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -175,7 +175,10 @@ func (db *DB) UpsertAgent(ctx context.Context, agent *Agent) error {
 		agent.Status, agent.LastSeenAt, agent.Certificate,
 		agent.Version, agent.OS, agent.Arch, agent.UpdatePolicy,
 		agent.UpdateWindowStart, agent.UpdateWindowEnd, agent.LastUpdateAt, agent.LastUpdateError)
-	return err
+	if err != nil {
+		return fmt.Errorf("upserting agent: %w", err)
+	}
+	return nil
 }
 
 // GetAgent retrieves an agent by ID.
@@ -317,7 +320,10 @@ func (db *DB) CreateDeployment(ctx context.Context, d *DeploymentRecord) error {
 		INSERT INTO deployments (id, project, target, branch, commit_hash, status, triggered_by, trigger_source)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`, d.ID, d.Project, d.Target, d.Branch, d.CommitHash, d.Status, d.TriggeredBy, d.TriggerSource)
-	return err
+	if err != nil {
+		return fmt.Errorf("creating deployment: %w", err)
+	}
+	return nil
 }
 
 // UpdateDeployment updates a deployment record.
@@ -327,7 +333,10 @@ func (db *DB) UpdateDeployment(ctx context.Context, d *DeploymentRecord) error {
 			status = ?, release_number = ?, completed_at = ?, error_message = ?
 		WHERE id = ?
 	`, d.Status, d.ReleaseNumber, d.CompletedAt, d.ErrorMessage, d.ID)
-	return err
+	if err != nil {
+		return fmt.Errorf("updating deployment: %w", err)
+	}
+	return nil
 }
 
 // GetDeployment retrieves a deployment by ID.
@@ -373,7 +382,10 @@ func (db *DB) CreateDeploymentLog(ctx context.Context, log *DeploymentLog) error
 		INSERT INTO deployment_logs (deployment_id, level, message, source, created_at)
 		VALUES (?, ?, ?, ?, ?)
 	`, log.DeploymentID, log.Level, log.Message, log.Source, log.CreatedAt)
-	return err
+	if err != nil {
+		return fmt.Errorf("creating deployment log: %w", err)
+	}
+	return nil
 }
 
 // ListDeploymentLogs returns logs for a deployment.
@@ -432,7 +444,10 @@ func (db *DB) LogAudit(ctx context.Context, entry *AuditEntry) error {
 		INSERT INTO audit_logs (timestamp, source, user, action, resource, resource_id, resource_data, details, ip_address, result)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, entry.Timestamp, entry.Source, entry.User, entry.Action, entry.Resource, entry.ResourceID, entry.ResourceData, entry.Details, entry.IPAddress, entry.Result)
-	return err
+	if err != nil {
+		return fmt.Errorf("logging audit entry: %w", err)
+	}
+	return nil
 }
 
 // LogAuditWithSnapshot creates an audit log entry with a JSON snapshot of the resource.
@@ -507,7 +522,10 @@ func (db *DB) SetSecretEncrypted(ctx context.Context, project, scope, key string
 			value_encrypted = excluded.value_encrypted,
 			updated_at = CURRENT_TIMESTAMP
 	`, project, scope, key, valueEncrypted)
-	return err
+	if err != nil {
+		return fmt.Errorf("setting encrypted secret: %w", err)
+	}
+	return nil
 }
 
 // GetSecret retrieves a secret.
@@ -534,7 +552,7 @@ func (db *DB) ListSecrets(scope string) ([]*SecretInfo, error) {
 		SELECT key, scope, updated_at FROM secrets WHERE project = ? ORDER BY key
 	`, scope)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("querying secrets: %w", err)
 	}
 	defer rows.Close()
 
@@ -542,7 +560,7 @@ func (db *DB) ListSecrets(scope string) ([]*SecretInfo, error) {
 	for rows.Next() {
 		var s SecretInfo
 		if err := rows.Scan(&s.Key, &s.Scope, &s.UpdatedAt); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scanning secret: %w", err)
 		}
 		secrets = append(secrets, &s)
 	}
@@ -575,7 +593,10 @@ func (db *DB) ListSecretsCtx(ctx context.Context, project string) ([]*Secret, er
 // DeleteSecret deletes a secret (CLI version).
 func (db *DB) DeleteSecret(scope, key string) error {
 	_, err := db.conn.Exec(`DELETE FROM secrets WHERE project = ? AND key = ?`, scope, key)
-	return err
+	if err != nil {
+		return fmt.Errorf("deleting secret: %w", err)
+	}
+	return nil
 }
 
 // DeleteSecretCtx deletes a secret with context.
@@ -583,7 +604,10 @@ func (db *DB) DeleteSecretCtx(ctx context.Context, project, scope, key string) e
 	_, err := db.conn.ExecContext(ctx, `
 		DELETE FROM secrets WHERE project = ? AND scope = ? AND key = ?
 	`, project, scope, key)
-	return err
+	if err != nil {
+		return fmt.Errorf("deleting secret: %w", err)
+	}
+	return nil
 }
 
 // ListSecretsWithScope returns all secrets for a project and scope with encrypted values.
@@ -751,7 +775,10 @@ func (db *DB) ListProjects() ([]*Project, error) {
 // DeleteProject deletes a project.
 func (db *DB) DeleteProject(name string) error {
 	_, err := db.conn.Exec(`DELETE FROM projects WHERE name = ?`, name)
-	return err
+	if err != nil {
+		return fmt.Errorf("deleting project: %w", err)
+	}
+	return nil
 }
 
 // --- Project Type operations ---
@@ -822,13 +849,19 @@ func (db *DB) UpdateProjectTypeByName(pt *ProjectType) error {
 		UPDATE project_types SET description = ?, build_cmd = ?
 		WHERE name = ?
 	`, pt.Description, pt.BuildCmd, pt.Name)
-	return err
+	if err != nil {
+		return fmt.Errorf("updating project type: %w", err)
+	}
+	return nil
 }
 
 // DeleteProjectType deletes a project type.
 func (db *DB) DeleteProjectType(name string) error {
 	_, err := db.conn.Exec(`DELETE FROM project_types WHERE name = ?`, name)
-	return err
+	if err != nil {
+		return fmt.Errorf("deleting project type: %w", err)
+	}
+	return nil
 }
 
 // --- Extended Deployment operations for CLI ---
@@ -842,7 +875,10 @@ func (db *DB) InsertDeployment(d *DeploymentCLI) error {
 		INSERT INTO deployments (id, project, target, branch, status, triggered_by, started_at)
 		VALUES (?, ?, ?, '', ?, ?, ?)
 	`, d.ID, d.ProjectName, d.Target, d.Status, d.TriggeredBy, d.StartedAt)
-	return err
+	if err != nil {
+		return fmt.Errorf("inserting deployment: %w", err)
+	}
+	return nil
 }
 
 // SaveDeployment updates a deployment record (CLI version - alternate method)
@@ -850,14 +886,17 @@ func (db *DB) SaveDeployment(d *DeploymentCLI) error {
 	_, err := db.conn.Exec(`
 		UPDATE deployments SET status = ?, completed_at = ? WHERE id = ?
 	`, d.Status, d.FinishedAt, d.ID)
-	return err
+	if err != nil {
+		return fmt.Errorf("saving deployment: %w", err)
+	}
+	return nil
 }
 
 // ExportAllSecrets exports all secrets (for backup)
 func (db *DB) ExportAllSecrets() (map[string]map[string]string, error) {
 	rows, err := db.conn.Query(`SELECT project, key, value_encrypted FROM secrets`)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("querying secrets for export: %w", err)
 	}
 	defer rows.Close()
 
@@ -866,7 +905,7 @@ func (db *DB) ExportAllSecrets() (map[string]map[string]string, error) {
 		var project, key string
 		var value []byte
 		if err := rows.Scan(&project, &key, &value); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scanning secret for export: %w", err)
 		}
 		if result[project] == nil {
 			result[project] = make(map[string]string)
@@ -917,14 +956,17 @@ func (db *DB) GetSessionByToken(ctx context.Context, token string) (*Session, er
 // DeleteSession deletes a session by token (ID).
 func (db *DB) DeleteSession(ctx context.Context, token string) error {
 	_, err := db.conn.ExecContext(ctx, `DELETE FROM sessions WHERE id = ?`, token)
-	return err
+	if err != nil {
+		return fmt.Errorf("deleting session: %w", err)
+	}
+	return nil
 }
 
 // DeleteExpiredSessions removes all expired sessions.
 func (db *DB) DeleteExpiredSessions(ctx context.Context) (int64, error) {
 	result, err := db.conn.ExecContext(ctx, `DELETE FROM sessions WHERE expires_at < ?`, time.Now())
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("deleting expired sessions: %w", err)
 	}
 	return result.RowsAffected()
 }
@@ -932,7 +974,10 @@ func (db *DB) DeleteExpiredSessions(ctx context.Context) (int64, error) {
 // DeleteUserSessions deletes all sessions for a user.
 func (db *DB) DeleteUserSessions(ctx context.Context, userID int64) error {
 	_, err := db.conn.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ?`, userID)
-	return err
+	if err != nil {
+		return fmt.Errorf("deleting user sessions: %w", err)
+	}
+	return nil
 }
 
 // ListUserSessions returns all active sessions for a user.
@@ -943,7 +988,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64) ([]*Session, e
 		ORDER BY created_at DESC
 	`, userID, time.Now())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("querying user sessions: %w", err)
 	}
 	defer rows.Close()
 
@@ -954,7 +999,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64) ([]*Session, e
 		err := rows.Scan(&s.ID, &s.UserID, &ipAddress, &userAgent,
 			&s.CreatedAt, &s.ExpiresAt)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scanning session: %w", err)
 		}
 		s.Token = s.ID
 		s.IPAddress = ipAddress.String
@@ -1020,13 +1065,19 @@ func (db *DB) UpdateAPIKeyUsage(ctx context.Context, keyID int64) error {
 	_, err := db.conn.ExecContext(ctx, `
 		UPDATE api_keys SET last_used_at = ? WHERE id = ?
 	`, time.Now(), keyID)
-	return err
+	if err != nil {
+		return fmt.Errorf("updating API key usage: %w", err)
+	}
+	return nil
 }
 
 // DeleteAPIKey permanently deletes an API key.
 func (db *DB) DeleteAPIKey(ctx context.Context, keyID int64) error {
 	_, err := db.conn.ExecContext(ctx, `DELETE FROM api_keys WHERE id = ?`, keyID)
-	return err
+	if err != nil {
+		return fmt.Errorf("deleting API key: %w", err)
+	}
+	return nil
 }
 
 // ListAPIKeys returns all API keys for a user.
@@ -1037,7 +1088,7 @@ func (db *DB) ListAPIKeys(ctx context.Context, userID int64) ([]*APIKey, error) 
 		ORDER BY created_at DESC
 	`, userID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("querying API keys: %w", err)
 	}
 	defer rows.Close()
 
@@ -1050,7 +1101,7 @@ func (db *DB) ListAPIKeys(ctx context.Context, userID int64) ([]*APIKey, error) 
 		err := rows.Scan(&key.ID, &key.UserID, &key.Name, &key.KeyHash,
 			&scopes, &expiresAt, &lastUsedAt, &key.CreatedAt)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scanning API key: %w", err)
 		}
 
 		key.Scopes = scopes.String
@@ -1105,7 +1156,10 @@ func (db *DB) SetSetting(ctx context.Context, category, key, value, valueType st
 			encrypted = excluded.encrypted,
 			updated_at = CURRENT_TIMESTAMP
 	`, category, key, value, valueType, encVal)
-	return err
+	if err != nil {
+		return fmt.Errorf("setting setting: %w", err)
+	}
+	return nil
 }
 
 // ListSettingsByCategory retrieves all settings in a category.
@@ -1163,7 +1217,10 @@ func (db *DB) ListAllSettings(ctx context.Context) ([]*Setting, error) {
 // DeleteSetting deletes a setting.
 func (db *DB) DeleteSetting(ctx context.Context, category, key string) error {
 	_, err := db.conn.ExecContext(ctx, `DELETE FROM settings WHERE category = ? AND key = ?`, category, key)
-	return err
+	if err != nil {
+		return fmt.Errorf("deleting setting: %w", err)
+	}
+	return nil
 }
 
 // HasSettings checks if any settings exist (for init detection).
@@ -1171,7 +1228,7 @@ func (db *DB) HasSettings(ctx context.Context) (bool, error) {
 	var count int
 	err := db.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM settings`).Scan(&count)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("checking settings: %w", err)
 	}
 	return count > 0, nil
 }
@@ -1218,7 +1275,10 @@ func (db *DB) SetProjectWebhook(ctx context.Context, projectID int64, provider s
 			require_secret = excluded.require_secret,
 			updated_at = CURRENT_TIMESTAMP
 	`, projectID, provider, secretEncrypted, enabledVal, requireSecretVal)
-	return err
+	if err != nil {
+		return fmt.Errorf("setting project webhook: %w", err)
+	}
+	return nil
 }
 
 // ListProjectWebhooks retrieves all webhooks for a project.
@@ -1249,7 +1309,10 @@ func (db *DB) ListProjectWebhooks(ctx context.Context, projectID int64) ([]*Proj
 // DeleteProjectWebhook deletes a webhook config.
 func (db *DB) DeleteProjectWebhook(ctx context.Context, projectID int64, provider string) error {
 	_, err := db.conn.ExecContext(ctx, `DELETE FROM project_webhooks WHERE project_id = ? AND provider = ?`, projectID, provider)
-	return err
+	if err != nil {
+		return fmt.Errorf("deleting project webhook: %w", err)
+	}
+	return nil
 }
 
 // --- Scheduled Deployment operations ---
@@ -1260,7 +1323,10 @@ func (db *DB) CreateScheduledDeployment(ctx context.Context, id, project, target
 		INSERT INTO deployments (id, project, target, branch, status, scheduled_at, scheduled_by, triggered_by)
 		VALUES (?, ?, ?, ?, 'scheduled', ?, ?, ?)
 	`, id, project, target, branch, scheduledAt, scheduledBy, scheduledBy)
-	return err
+	if err != nil {
+		return fmt.Errorf("creating scheduled deployment: %w", err)
+	}
+	return nil
 }
 
 // ListPendingScheduledDeployments returns deployments that are due to run.
@@ -1296,7 +1362,7 @@ func (db *DB) CancelScheduledDeployment(ctx context.Context, id string) error {
 		WHERE id = ? AND status = 'scheduled'
 	`, id)
 	if err != nil {
-		return err
+		return fmt.Errorf("cancelling scheduled deployment: %w", err)
 	}
 	rows, err := result.RowsAffected()
 	if err != nil {
@@ -1382,7 +1448,10 @@ func (db *DB) UpdateUserByID(ctx context.Context, user *User) error {
 		       updated_at = datetime('now')
 		WHERE id = ?
 	`, user.Email, user.Role, user.PasswordHash, user.TOTPSecret, user.TOTPEnabled, user.MustChangePassword, user.ID)
-	return err
+	if err != nil {
+		return fmt.Errorf("updating user: %w", err)
+	}
+	return nil
 }
 
 // DeleteUser deletes a user by ID.
@@ -1395,7 +1464,10 @@ func (db *DB) DeleteUser(ctx context.Context, id int64) error {
 		db.logger.Warn("failed to delete user API keys", zap.Int64("userID", id), zap.Error(err))
 	}
 	_, err := db.conn.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, id)
-	return err
+	if err != nil {
+		return fmt.Errorf("deleting user: %w", err)
+	}
+	return nil
 }
 
 // --- Additional Deployment operations ---
@@ -1471,7 +1543,10 @@ func (db *DB) UpdateProjectByName(ctx context.Context, p *Project) error {
 		UPDATE projects SET repository = ?, branch = ?, deploy_path = ?, type = ?
 		WHERE name = ?
 	`, p.Repository, p.Branch, p.DeployPath, p.Type, p.Name)
-	return err
+	if err != nil {
+		return fmt.Errorf("updating project: %w", err)
+	}
+	return nil
 }
 
 // --- Cleanup operations ---
@@ -1482,7 +1557,7 @@ func (db *DB) CleanupExpiredSessions(ctx context.Context, cutoff time.Time) (int
 		DELETE FROM sessions WHERE expires_at < ?
 	`, cutoff)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("cleaning up expired sessions: %w", err)
 	}
 	return result.RowsAffected()
 }
@@ -2223,7 +2298,7 @@ func (db *DB) SetCurrentAgentBinary(ctx context.Context, id int64) error {
 	// Get the binary to find its OS and arch
 	binary, err := db.GetAgentBinary(ctx, id)
 	if err != nil {
-		return err
+		return fmt.Errorf("getting agent binary: %w", err)
 	}
 
 	tx, err := db.conn.BeginTx(ctx, nil)
