@@ -472,3 +472,101 @@ func TestSecretServiceReEncryptAll(t *testing.T) {
 		t.Errorf("Get() after ReEncryptAll = %v, want %v", entry.Value, "secret-value-1")
 	}
 }
+
+func TestSecretServiceListByProject(t *testing.T) {
+	svc, cleanup := setupTestSecretService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Set secrets in different projects and scopes
+	err := svc.Set(ctx, "project1", "production", "API_KEY", "key1")
+	if err != nil {
+		t.Fatalf("Set() error = %v", err)
+	}
+
+	err = svc.Set(ctx, "project1", "staging", "DB_PASSWORD", "pass1")
+	if err != nil {
+		t.Fatalf("Set() error = %v", err)
+	}
+
+	err = svc.Set(ctx, "project2", "production", "OTHER_KEY", "other")
+	if err != nil {
+		t.Fatalf("Set() error = %v", err)
+	}
+
+	// List secrets for project1
+	metadata, err := svc.ListByProject(ctx, "project1")
+	if err != nil {
+		t.Fatalf("ListByProject() error = %v", err)
+	}
+
+	if len(metadata) != 2 {
+		t.Errorf("ListByProject() returned %d secrets, want 2", len(metadata))
+	}
+
+	// Verify metadata fields
+	found := make(map[string]bool)
+	for _, m := range metadata {
+		if m.Project != "project1" {
+			t.Errorf("ListByProject() returned secret from wrong project: %s", m.Project)
+		}
+		found[m.Key] = true
+	}
+
+	if !found["API_KEY"] {
+		t.Error("ListByProject() missing API_KEY")
+	}
+	if !found["DB_PASSWORD"] {
+		t.Error("ListByProject() missing DB_PASSWORD")
+	}
+}
+
+func TestSecretServiceListAll(t *testing.T) {
+	svc, cleanup := setupTestSecretService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Set secrets in different projects
+	err := svc.Set(ctx, "project1", "production", "API_KEY", "key1")
+	if err != nil {
+		t.Fatalf("Set() error = %v", err)
+	}
+
+	err = svc.Set(ctx, "project2", "staging", "DB_PASSWORD", "pass1")
+	if err != nil {
+		t.Fatalf("Set() error = %v", err)
+	}
+
+	err = svc.Set(ctx, "project3", "production", "OTHER_KEY", "other")
+	if err != nil {
+		t.Fatalf("Set() error = %v", err)
+	}
+
+	// List all secrets
+	metadata, err := svc.ListAll(ctx)
+	if err != nil {
+		t.Fatalf("ListAll() error = %v", err)
+	}
+
+	if len(metadata) != 3 {
+		t.Errorf("ListAll() returned %d secrets, want 3", len(metadata))
+	}
+
+	// Verify all projects are represented
+	projects := make(map[string]bool)
+	for _, m := range metadata {
+		projects[m.Project] = true
+	}
+
+	if !projects["project1"] {
+		t.Error("ListAll() missing project1")
+	}
+	if !projects["project2"] {
+		t.Error("ListAll() missing project2")
+	}
+	if !projects["project3"] {
+		t.Error("ListAll() missing project3")
+	}
+}
