@@ -357,6 +357,19 @@ make dev-agent
 
 ## Security
 
+### Default Credentials
+
+On first run, vcdeploy creates a default admin user:
+
+| Field    | Value   |
+|----------|---------|
+| Username | `admin` |
+| Password | `admin` |
+
+**⚠️ IMPORTANT:** You will be required to change the password on first login. The default credentials cannot be used for normal operations until the password is changed.
+
+### Security Features
+
 - **Secrets**: AES-256-GCM encrypted in SQLite, master key from file or env
 - **Key rotation**: Automatic monthly rotation (configurable)
 - **Authentication**: Password + optional TOTP 2FA

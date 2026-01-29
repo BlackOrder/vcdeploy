@@ -50,19 +50,6 @@ func (s *MasterServer) requireReadAccessJSON(ctx context.Context, w http.Respons
 	return true
 }
 
-// requireWriteAccessJSON checks write permission and writes JSON error response if denied.
-// Use this for API endpoints that return JSON responses.
-// Returns true if access is granted, false if denied (error already written to w).
-//
-//nolint:unused // Available for future use in handlers
-func (s *MasterServer) requireWriteAccessJSON(ctx context.Context, w http.ResponseWriter) bool {
-	if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
-		s.jsonError(w, status, msg)
-		return false
-	}
-	return true
-}
-
 // requireAdminAccessJSON checks admin permission and writes JSON error response if denied.
 // Use this for API endpoints that return JSON responses.
 // Returns true if access is granted, false if denied (error already written to w).
