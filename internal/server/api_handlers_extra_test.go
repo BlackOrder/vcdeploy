@@ -490,6 +490,68 @@ func TestHandleBlockedIP_Unblock(t *testing.T) {
 	}
 }
 
+func TestHandleBlockedIP_Get(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+	ctx := context.Background()
+
+	// Block an IP
+	block := &storage.BlockedIP{
+		IPAddress: "10.0.0.1",
+		Reason:    "test for get",
+		BlockedAt: time.Now(),
+		ExpiresAt: time.Now().Add(24 * time.Hour),
+		BlockedBy: "test",
+	}
+	_ = server.db.BlockIP(ctx, block)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/blocked/10.0.0.1", http.NoBody)
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleBlockedIP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+}
+
+func TestHandleBlockedIP_GetNotFound(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/blocked/192.168.99.99", http.NoBody)
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleBlockedIP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+func TestHandleBlockedIP_MethodNotAllowed(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/blocked/10.0.0.1", http.NoBody)
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleBlockedIP(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusMethodNotAllowed)
+	}
+}
+
 // --- Provision API Tests ---
 
 func TestHandleProvisionJobs_List(t *testing.T) {
