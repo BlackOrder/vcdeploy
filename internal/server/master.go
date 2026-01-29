@@ -374,6 +374,12 @@ func (s *MasterServer) seedDefaultAdmin() error {
 		return fmt.Errorf("creating default admin: %w", err)
 	}
 
+	// Set MustChangePassword flag - admin must change password on first login
+	user.MustChangePassword = true
+	if err := s.userService.Update(ctx, user); err != nil {
+		return fmt.Errorf("setting MustChangePassword flag: %w", err)
+	}
+
 	s.logger.Info("Created default admin user",
 		zap.String("username", user.Username),
 		zap.String("note", "Password change required on first login"))
@@ -515,6 +521,7 @@ func (s *MasterServer) startHTTP() error {
 	mux.HandleFunc("/", s.handleIndex)
 	mux.HandleFunc("/login", s.handleLogin)
 	mux.HandleFunc("/logout", s.handleLogout)
+	mux.HandleFunc("/change-password", s.withUIAuth(s.handleChangePassword))
 	mux.HandleFunc("/dashboard", s.withUIAuth(s.handleDashboard))
 	mux.HandleFunc("/projects", s.withUIAuth(s.handleProjectsUI))
 	mux.HandleFunc("/deployments", s.withUIAuth(s.handleDeploymentsUI))
@@ -1489,6 +1496,14 @@ func (s *MasterServer) handleAPILogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check if user must change password
+	if user.MustChangePassword {
+		s.logger.Debug("API login blocked: password change required", zap.String("username", req.Username))
+		s.logAudit(r, "api_login", "session", "password change required for: "+req.Username, "blocked")
+		s.jsonError(w, http.StatusForbidden, "Password change required. Please login via web UI to change your password.")
+		return
+	}
+
 	// Verify TOTP if enabled
 	if user.TOTPEnabled {
 		if req.TOTP == "" {
@@ -1589,11 +1604,30 @@ func (s *MasterServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// Create session using service
+		// Create session using service (even if password change required, we need a session)
 		session, err := s.sessionService.Create(ctx, user.ID, extractClientIP(r), r.UserAgent(), 7*24*time.Hour)
 		if err != nil {
 			s.logger.Error("Failed to create session", zap.Error(err))
 			s.renderTemplate(w, "login", map[string]interface{}{"Error": "Internal error"})
+			return
+		}
+
+		// Set session cookie first (needed for change-password page)
+		http.SetCookie(w, &http.Cookie{
+			Name:     "session",
+			Value:    session.ID,
+			Path:     "/",
+			HttpOnly: true,
+			Secure:   s.config.Server.TLS.Enabled,
+			SameSite: http.SameSiteStrictMode,
+			MaxAge:   86400 * 7, // 7 days
+		})
+
+		// Check if user must change password
+		if user.MustChangePassword {
+			s.logger.Info("User must change password", zap.String("username", username))
+			s.logAudit(r, "login", "session", fmt.Sprintf("user: %s, password change required", username), "success")
+			http.Redirect(w, r, "/change-password", http.StatusSeeOther)
 			return
 		}
 
@@ -1604,16 +1638,6 @@ func (s *MasterServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 			zap.String("username", username),
 			zap.String("ip", session.IPAddress))
 
-		// Set session cookie
-		http.SetCookie(w, &http.Cookie{
-			Name:     "session",
-			Value:    session.ID,
-			Path:     "/",
-			HttpOnly: true,
-			Secure:   s.config.Server.TLS.Enabled,
-			SameSite: http.SameSiteStrictMode,
-			MaxAge:   86400 * 7, // 7 days
-		})
 		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
 		return
 	}
@@ -1651,6 +1675,75 @@ func (s *MasterServer) handleLogout(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   -1,
 	})
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
+}
+
+// handleChangePassword handles the password change page for users who must change their password.
+func (s *MasterServer) handleChangePassword(w http.ResponseWriter, r *http.Request) {
+	user, ok := GetUserFromContext(r.Context())
+	if !ok || user == nil {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		currentPassword := r.FormValue("current_password")
+		newPassword := r.FormValue("new_password")
+		confirmPassword := r.FormValue("confirm_password")
+
+		// Validate current password
+		if !verifyPassword(user.PasswordHash, currentPassword) {
+			s.renderTemplate(w, "change-password", map[string]interface{}{
+				"Error":              "Current password is incorrect",
+				"MustChangePassword": user.MustChangePassword,
+			})
+			return
+		}
+
+		// Validate new password matches confirmation
+		if newPassword != confirmPassword {
+			s.renderTemplate(w, "change-password", map[string]interface{}{
+				"Error":              "New passwords do not match",
+				"MustChangePassword": user.MustChangePassword,
+			})
+			return
+		}
+
+		// Validate new password is different from current
+		if currentPassword == newPassword {
+			s.renderTemplate(w, "change-password", map[string]interface{}{
+				"Error":              "New password must be different from current password",
+				"MustChangePassword": user.MustChangePassword,
+			})
+			return
+		}
+
+		// Update password using service (this clears MustChangePassword flag)
+		ctx := r.Context()
+		if err := s.userService.UpdatePassword(ctx, user.ID, newPassword); err != nil {
+			s.logger.Error("Failed to update password", zap.Error(err))
+			s.renderTemplate(w, "change-password", map[string]interface{}{
+				"Error":              "Failed to update password: " + err.Error(),
+				"MustChangePassword": user.MustChangePassword,
+			})
+			return
+		}
+
+		// Log password change
+		s.logAudit(r, "password_change", "user", fmt.Sprintf("user: %s", user.Username), "success")
+
+		s.logger.Info("User changed password",
+			zap.String("username", user.Username),
+			zap.Bool("was_forced", user.MustChangePassword))
+
+		// Redirect to dashboard
+		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+		return
+	}
+
+	// GET request - show the change password form
+	s.renderTemplate(w, "change-password", map[string]interface{}{
+		"MustChangePassword": user.MustChangePassword,
+	})
 }
 
 func (s *MasterServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
