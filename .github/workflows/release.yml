@@ -9,6 +9,18 @@ on:
       tag:
         description: 'Tag to release (e.g., v1.2.3)'
         required: true
+      release_notes:
+        description: 'Optional release notes (leave empty to auto-generate from commits)'
+        required: false
+        default: ''
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
 
 permissions:
   contents: write
