@@ -3,26 +3,18 @@ package deployments
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/BlackOrder/vcdeploy/internal/services/testutil"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
-	"go.uber.org/zap"
 )
 
 func newTestService(t *testing.T) (*Service, *storage.DB) {
 	t.Helper()
 
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	logger := zap.NewNop()
-	db, err := storage.New(dbPath, logger)
-	if err != nil {
-		t.Fatalf("Failed to create test database: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
+	db, cleanup := testutil.NewTestDB(t)
+	t.Cleanup(cleanup)
 
 	return New(db), db
 }

@@ -2,27 +2,19 @@ package secrets
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 
 	"github.com/BlackOrder/vcdeploy/internal/security"
 	"github.com/BlackOrder/vcdeploy/internal/services"
+	"github.com/BlackOrder/vcdeploy/internal/services/testutil"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
-	"go.uber.org/zap"
 )
 
 func newTestService(t *testing.T) (*Service, *storage.DB) {
 	t.Helper()
 
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	logger := zap.NewNop()
-	db, err := storage.New(dbPath, logger)
-	if err != nil {
-		t.Fatalf("Failed to create test database: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
+	db, cleanup := testutil.NewTestDB(t)
+	t.Cleanup(cleanup)
 
 	kms, err := security.NewKMS(db.Conn(), nil)
 	if err != nil {
@@ -794,15 +786,8 @@ func TestService_List_MetadataFields(t *testing.T) {
 }
 
 func TestNew(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	logger := zap.NewNop()
-	db, err := storage.New(dbPath, logger)
-	if err != nil {
-		t.Fatalf("Failed to create test database: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
+	db, cleanup := testutil.NewTestDB(t)
+	defer cleanup()
 
 	kms, err := security.NewKMS(db.Conn(), nil)
 	if err != nil {
