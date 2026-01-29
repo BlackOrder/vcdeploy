@@ -559,6 +559,51 @@ func TestRateLimiterListBlockedIPs(t *testing.T) {
 	}
 }
 
+func TestRateLimiterListBlockedIPs_InMemory(t *testing.T) {
+	// Test in-memory mode (UseDatabase=false)
+	rl, err := NewRateLimiter(nil, RateLimitConfig{
+		UseDatabase:   false,
+		BlockDuration: time.Hour,
+		BurstSize:     2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rl.Stop()
+
+	ctx := context.Background()
+
+	// Manually block some IPs using in-memory storage
+	rl.mu.Lock()
+	rl.blocked["10.0.0.1"] = time.Now().Add(time.Hour)
+	rl.blocked["10.0.0.2"] = time.Now().Add(time.Hour)
+	rl.blocked["10.0.0.3"] = time.Now().Add(-time.Hour) // expired, should not be returned
+	rl.mu.Unlock()
+
+	// List blocked
+	blocked, err := rl.ListBlockedIPs(ctx)
+	if err != nil {
+		t.Fatalf("ListBlockedIPs() error: %v", err)
+	}
+
+	if len(blocked) != 2 {
+		t.Errorf("Expected 2 blocked IPs (excluding expired), got %d", len(blocked))
+	}
+
+	// Verify returned IPs have correct fields
+	for _, b := range blocked {
+		if b.IPAddress != "10.0.0.1" && b.IPAddress != "10.0.0.2" {
+			t.Errorf("Unexpected IP address: %s", b.IPAddress)
+		}
+		if b.Reason != "rate_limit_exceeded" {
+			t.Errorf("Expected reason 'rate_limit_exceeded', got '%s'", b.Reason)
+		}
+		if b.ExpiresAt.Before(time.Now()) {
+			t.Error("Expected ExpiresAt to be in the future")
+		}
+	}
+}
+
 func TestUserRateLimiter(t *testing.T) {
 	rl, err := NewRateLimiter(nil, RateLimitConfig{
 		RequestsPerSecond: 10,
