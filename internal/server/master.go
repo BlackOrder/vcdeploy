@@ -3,6 +3,7 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -544,9 +545,10 @@ func (s *MasterServer) startHTTP() error {
 	}
 	s.logger.Info("Starting HTTP server", zap.String("addr", addr))
 
-	// Build middleware chain: logging -> CSP -> security headers -> rate limiting -> handler
+	// Build middleware chain: request ID -> logging -> CSP -> security headers -> rate limiting -> handler
 	var handler http.Handler = mux
 	handler = s.loggingMiddleware(handler)
+	handler = s.requestIDMiddleware(handler) // Add request ID first (outermost)
 
 	// Add CSP middleware (must be before security headers to set CSP header)
 	if s.cspMiddleware != nil {
@@ -866,6 +868,50 @@ func (s *MasterServer) Stop(ctx context.Context) error {
 	return s.Shutdown(ctx)
 }
 
+// Request ID context key and header
+type contextKeyType string
+
+const (
+	contextKeyRequestID contextKeyType = "request_id"
+	RequestIDHeader     string         = "X-Request-ID"
+)
+
+// GetRequestID retrieves the request ID from the context.
+func GetRequestID(ctx context.Context) string {
+	if id, ok := ctx.Value(contextKeyRequestID).(string); ok {
+		return id
+	}
+	return ""
+}
+
+// requestIDMiddleware adds a unique request ID to each request.
+// It will use an existing X-Request-ID header if present, otherwise generate a new one.
+func (s *MasterServer) requestIDMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestID := r.Header.Get(RequestIDHeader)
+		if requestID == "" {
+			requestID = generateRequestID()
+		}
+
+		// Add to response header
+		w.Header().Set(RequestIDHeader, requestID)
+
+		// Add to context
+		ctx := context.WithValue(r.Context(), contextKeyRequestID, requestID)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// generateRequestID creates a unique request ID using timestamp and random suffix.
+func generateRequestID() string {
+	// Use timestamp in microseconds + random suffix for uniqueness
+	// Format: timestamp_random (e.g., "1706529600123456_a1b2c3d4")
+	timestamp := time.Now().UnixMicro()
+	random := make([]byte, 4)
+	_, _ = rand.Read(random)
+	return fmt.Sprintf("%d_%x", timestamp, random)
+}
+
 func (s *MasterServer) loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Skip metrics for /metrics endpoint to avoid recursive counting
@@ -891,7 +937,10 @@ func (s *MasterServer) loggingMiddleware(next http.Handler) http.Handler {
 		metrics.HTTPRequestDuration.WithLabelValues(r.Method, path, statusStr).Observe(duration.Seconds())
 		metrics.HTTPRequestsTotal.WithLabelValues(r.Method, path, statusStr).Inc()
 
+		// Include request ID in logs for correlation
+		requestID := GetRequestID(r.Context())
 		s.logger.Debug("HTTP request",
+			zap.String("request_id", requestID),
 			zap.String("method", r.Method),
 			zap.String("path", r.URL.Path),
 			zap.Int("status", wrapped.status),
