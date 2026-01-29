@@ -34,6 +34,18 @@ func (s *Service) Log(ctx context.Context, entry *storage.AuditEntry) error {
 	return nil
 }
 
+// LogWithSnapshot creates an audit log entry with a JSON snapshot of the resource.
+// This is useful for capturing resource state before deletion.
+func (s *Service) LogWithSnapshot(ctx context.Context, entry *storage.AuditEntry, resourceSnapshot any) error {
+	if entry.Timestamp.IsZero() {
+		entry.Timestamp = time.Now()
+	}
+	if err := s.db.LogAuditWithSnapshot(ctx, entry, resourceSnapshot); err != nil {
+		return fmt.Errorf("logging audit entry with snapshot: %w", err)
+	}
+	return nil
+}
+
 // List returns audit log entries with pagination.
 func (s *Service) List(ctx context.Context, limit, offset int) ([]*storage.AuditEntry, error) {
 	if limit <= 0 {
