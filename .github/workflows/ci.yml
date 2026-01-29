@@ -313,10 +313,10 @@ jobs:
       - name: Run E2E API tests
         run: go test -v -tags=e2e -timeout 20m ./tests/e2e/...
         env:
-          VCDEPLOY_MASTER_HTTP_URL: "http://localhost:8080"
-          VCDEPLOY_API_TOKEN: ""
-          TEST_ADMIN_USERNAME: "admin"
-          TEST_ADMIN_PASSWORD: "admin"
+          E2E_MASTER_HTTP_URL: "http://localhost:8080"
+          E2E_API_TOKEN: ""
+          E2E_ADMIN_USER: "admin"
+          E2E_ADMIN_PASS: "admin"
 
   # CLI Tests
   cli-tests:
@@ -468,8 +468,8 @@ jobs:
       - name: Run E2E API tests
         run: go test -v -tags=e2e -timeout 30m ./tests/e2e/...
         env:
-          VCDEPLOY_MASTER_HTTP_URL: "http://localhost:8080"
-          TEST_ADMIN_PASSWORD: "admin"
+          E2E_MASTER_HTTP_URL: "http://localhost:8080"
+          E2E_ADMIN_PASS: "admin"
 
       - name: Build CLI binary
         run: make build
@@ -478,7 +478,7 @@ jobs:
         run: go test -v -tags=cli -timeout 15m ./tests/cli/...
         env:
           VCDEPLOY_BINARY: "./bin/vcdeploy"
-          VCDEPLOY_MASTER_HTTP_URL: "http://localhost:8080"
+          E2E_MASTER_HTTP_URL: "http://localhost:8080"
 
       - name: Install Playwright
         run: |
