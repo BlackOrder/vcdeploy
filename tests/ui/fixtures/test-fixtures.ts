@@ -2,7 +2,7 @@ import { test as base, expect, Page } from '@playwright/test';
 
 // Test credentials
 export const TEST_ADMIN_USERNAME = process.env.TEST_ADMIN_USERNAME || 'admin';
-export const TEST_ADMIN_PASSWORD = process.env.TEST_ADMIN_PASSWORD || 'admin';
+export const TEST_ADMIN_PASSWORD = process.env.TEST_ADMIN_PASSWORD || 'adminpassword123';
 
 // Test user for non-admin tests
 export const TEST_USER_USERNAME = 'testuser';
