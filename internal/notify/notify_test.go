@@ -1887,6 +1887,7 @@ func TestDiscordNotifierSend(t *testing.T) {
 
 		w.WriteHeader(http.StatusOK)
 	}))
+	server.Config.SetKeepAlivesEnabled(false)
 	defer server.Close()
 
 	cfg := DiscordConfig{
@@ -1953,6 +1954,7 @@ func TestDiscordNotifierSendWithMessage(t *testing.T) {
 		decoder.Decode(&receivedPayload)
 		w.WriteHeader(http.StatusOK)
 	}))
+	server.Config.SetKeepAlivesEnabled(false)
 	defer server.Close()
 
 	cfg := DiscordConfig{WebhookURL: server.URL}
