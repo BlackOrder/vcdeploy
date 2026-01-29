@@ -13,7 +13,7 @@ import (
 
 // TracedOperation wraps a database operation with tracing and metrics.
 func TracedOperation(ctx context.Context, operation, description string, fn func() error) error {
-	ctx, span := tracing.Tracer("storage").Start(ctx, "db."+operation,
+	_, span := tracing.Tracer("storage").Start(ctx, "db."+operation,
 		trace.WithAttributes(
 			attribute.String("db.operation", operation),
 			attribute.String("db.statement", description),
@@ -38,7 +38,7 @@ func TracedOperation(ctx context.Context, operation, description string, fn func
 
 // TracedQuery wraps a query operation with tracing and metrics.
 func TracedQuery[T any](ctx context.Context, operation, description string, fn func() (T, error)) (T, error) {
-	ctx, span := tracing.Tracer("storage").Start(ctx, "db."+operation,
+	_, span := tracing.Tracer("storage").Start(ctx, "db."+operation,
 		trace.WithAttributes(
 			attribute.String("db.operation", operation),
 			attribute.String("db.statement", description),
