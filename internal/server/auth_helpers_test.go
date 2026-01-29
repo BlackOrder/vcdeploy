@@ -99,11 +99,12 @@ func TestAuthHelpers(t *testing.T) {
 	t.Run("requireReadAccess allows with valid admin context", func(t *testing.T) {
 		t.Parallel()
 
+		testServer := newTestServer(t)
 		rec := httptest.NewRecorder()
-		userID := createTestAdminUser(t, server)
+		userID := createTestAdminUser(t, testServer)
 		ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
 
-		result := server.requireReadAccess(ctx, rec)
+		result := testServer.requireReadAccess(ctx, rec)
 
 		if !result {
 			t.Error("expected requireReadAccess to return true with admin context")
@@ -113,11 +114,12 @@ func TestAuthHelpers(t *testing.T) {
 	t.Run("requireAdminAccess allows with valid admin context", func(t *testing.T) {
 		t.Parallel()
 
+		testServer := newTestServer(t)
 		rec := httptest.NewRecorder()
-		userID := createTestAdminUser(t, server)
+		userID := createTestAdminUser(t, testServer)
 		ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
 
-		result := server.requireAdminAccess(ctx, rec)
+		result := testServer.requireAdminAccess(ctx, rec)
 
 		if !result {
 			t.Error("expected requireAdminAccess to return true with admin context")

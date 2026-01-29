@@ -934,6 +934,139 @@ func TestHandleProjectTypeDelete(t *testing.T) {
 	}
 }
 
+func TestHandleProjectTypePut(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+
+	// Create a project type
+	pt := &storage.ProjectType{
+		Name:        "update-me",
+		Description: "Original description",
+		BuildCmd:    "npm build",
+		CreatedAt:   time.Now(),
+	}
+	if err := server.db.CreateProjectType(pt); err != nil {
+		t.Fatalf("failed to create project type: %v", err)
+	}
+
+	// Update it
+	body := bytes.NewBufferString(`{"description":"Updated description","build_cmd":"npm run build"}`)
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/project-types/update-me", body)
+	req.Header.Set("Content-Type", "application/json")
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleProjectType(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	// Verify the update
+	updated, err := server.db.GetProjectTypeByName("update-me")
+	if err != nil {
+		t.Fatalf("failed to get updated project type: %v", err)
+	}
+	if updated.Description != "Updated description" {
+		t.Errorf("description = %q, want %q", updated.Description, "Updated description")
+	}
+	if updated.BuildCmd != "npm run build" {
+		t.Errorf("build_cmd = %q, want %q", updated.BuildCmd, "npm run build")
+	}
+}
+
+func TestHandleProjectType_NotFound(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/project-types/nonexistent", nil)
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleProjectType(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusNotFound, rec.Body.String())
+	}
+}
+
+func TestHandleProjectType_EmptyName(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/project-types/", nil)
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleProjectType(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+}
+
+func TestHandleProjectType_MethodNotAllowed(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+
+	// Create a project type
+	pt := &storage.ProjectType{
+		Name:        "test-type",
+		Description: "Test",
+		CreatedAt:   time.Now(),
+	}
+	if err := server.db.CreateProjectType(pt); err != nil {
+		t.Fatalf("failed to create project type: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/project-types/test-type", nil)
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleProjectType(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusMethodNotAllowed, rec.Body.String())
+	}
+}
+
+func TestHandleProjectType_InvalidJSON(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+
+	// Create a project type
+	pt := &storage.ProjectType{
+		Name:        "invalid-json-type",
+		Description: "Test",
+		CreatedAt:   time.Now(),
+	}
+	if err := server.db.CreateProjectType(pt); err != nil {
+		t.Fatalf("failed to create project type: %v", err)
+	}
+
+	body := bytes.NewBufferString(`{invalid json`)
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/project-types/invalid-json-type", body)
+	req.Header.Set("Content-Type", "application/json")
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleProjectType(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+}
+
 func TestHandleDeploymentLogs(t *testing.T) {
 	t.Parallel()
 

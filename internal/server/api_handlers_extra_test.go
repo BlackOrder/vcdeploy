@@ -282,6 +282,115 @@ func TestHandleJumpServers_Create(t *testing.T) {
 	}
 }
 
+func TestHandleJumpServers_CreateMissingName(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+
+	body := bytes.NewBufferString(`{
+		"host": "newbastion.example.com",
+		"port": 22,
+		"username": "admin"
+	}`)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/jumpservers", body)
+	req.Header.Set("Content-Type", "application/json")
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleJumpServers(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+}
+
+func TestHandleJumpServers_CreateMissingHost(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+
+	body := bytes.NewBufferString(`{
+		"name": "new-bastion",
+		"port": 22,
+		"username": "admin"
+	}`)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/jumpservers", body)
+	req.Header.Set("Content-Type", "application/json")
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleJumpServers(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+}
+
+func TestHandleJumpServers_CreateMissingUsername(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+
+	body := bytes.NewBufferString(`{
+		"name": "new-bastion",
+		"host": "newbastion.example.com",
+		"port": 22
+	}`)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/jumpservers", body)
+	req.Header.Set("Content-Type", "application/json")
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleJumpServers(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+}
+
+func TestHandleJumpServers_CreateInvalidJSON(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+
+	body := bytes.NewBufferString(`{invalid json`)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/jumpservers", body)
+	req.Header.Set("Content-Type", "application/json")
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleJumpServers(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+}
+
+func TestHandleJumpServers_MethodNotAllowed(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/jumpservers", http.NoBody)
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleJumpServers(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusMethodNotAllowed, rec.Body.String())
+	}
+}
+
 func TestHandleJumpServer_Get(t *testing.T) {
 	t.Parallel()
 
