@@ -297,20 +297,6 @@ release:
   footer: |
     **Full Changelog**: https://github.com/BlackOrder/vcdeploy/compare/{{.PreviousTag}}...{{.Tag}}
 
-# Signs releases with GPG if available
-signs:
-  - cmd: gpg
-    args:
-      - "--batch"
-      - "-u"
-      - "{{ .Env.GPG_FINGERPRINT }}"
-      - "--output"
-      - "${signature}"
-      - "--detach-sign"
-      - "${artifact}"
-    artifacts: checksum
-    output: true
-
 # Announce new releases
 announce:
   skip: '{{ gt (len .Prerelease) 0 }}'
