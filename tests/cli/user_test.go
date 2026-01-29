@@ -1,5 +1,6 @@
 //go:build cli
 
+//nolint:nopkgdoc
 package cli
 
 import (
