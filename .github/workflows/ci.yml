@@ -336,10 +336,37 @@ jobs:
       - name: Build application
         run: make build
 
+      - name: Verify binary exists
+        run: |
+          ls -la bin/
+          ./bin/vcdeploy version
+
+      - name: Start master server
+        run: |
+          docker compose -f docker/docker-compose.test.yml up -d master
+          # Wait for master to be healthy
+          timeout 60 bash -c 'until docker compose -f docker/docker-compose.test.yml ps master | grep -q "healthy"; do sleep 2; done'
+
+      - name: Check master status
+        run: |
+          docker compose -f docker/docker-compose.test.yml ps
+          curl -s http://localhost:8080/api/v1/health || true
+
       - name: Run CLI tests
         run: go test -v -tags=cli -timeout 15m ./tests/cli/...
         env:
           VCDEPLOY_BINARY: "./bin/vcdeploy"
+          E2E_MASTER_HTTP_URL: "http://localhost:8080"
+          E2E_API_TOKEN: "test-api-token"
+          SKIP_AGENT_TESTS: "1"
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose -f docker/docker-compose.test.yml logs master
+
+      - name: Cleanup
+        if: always()
+        run: docker compose -f docker/docker-compose.test.yml down -v
 
   # UI Tests (Playwright)
   ui-tests:

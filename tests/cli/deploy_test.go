@@ -35,6 +35,7 @@ func TestDeployCommands(t *testing.T) {
 	})
 
 	t.Run("deploy trigger", func(t *testing.T) {
+		testutil.SkipIfNoAgent(t)
 		result := ctx.CLI.Run("deploy", "trigger", "cli-deploy-project")
 		// May fail due to no agents, but command should work
 		// Check it doesn't crash
