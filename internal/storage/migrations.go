@@ -107,6 +107,7 @@ var migrations = []Migration{
 				CREATE TABLE IF NOT EXISTS secrets (
 					id INTEGER PRIMARY KEY AUTOINCREMENT,
 					project TEXT NOT NULL,
+					project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
 					scope TEXT NOT NULL,
 					key TEXT NOT NULL,
 					value_encrypted BLOB NOT NULL,
@@ -117,6 +118,7 @@ var migrations = []Migration{
 
 				-- Indexes
 				CREATE INDEX IF NOT EXISTS idx_secrets_project_scope ON secrets(project, scope);
+				CREATE INDEX IF NOT EXISTS idx_secrets_project_id ON secrets(project_id);
 			`)
 			return err
 		},
@@ -137,6 +139,7 @@ var migrations = []Migration{
 				CREATE TABLE IF NOT EXISTS deployments (
 					id TEXT PRIMARY KEY,
 					project TEXT NOT NULL,
+					project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
 					target TEXT NOT NULL,
 					branch TEXT NOT NULL,
 					commit_hash TEXT,
@@ -164,8 +167,10 @@ var migrations = []Migration{
 
 				-- Indexes
 				CREATE INDEX IF NOT EXISTS idx_deployments_project ON deployments(project);
+				CREATE INDEX IF NOT EXISTS idx_deployments_project_id ON deployments(project_id);
 				CREATE INDEX IF NOT EXISTS idx_deployments_status ON deployments(status);
 				CREATE INDEX IF NOT EXISTS idx_deployments_started_at ON deployments(started_at);
+				CREATE INDEX IF NOT EXISTS idx_deployments_triggered_by ON deployments(triggered_by);
 				CREATE INDEX IF NOT EXISTS idx_deployments_scheduled ON deployments(scheduled_at) WHERE scheduled_at IS NOT NULL;
 				CREATE INDEX IF NOT EXISTS idx_deployment_logs_deployment_id ON deployment_logs(deployment_id);
 			`)
@@ -192,6 +197,8 @@ var migrations = []Migration{
 					user TEXT NOT NULL,
 					action TEXT NOT NULL,
 					resource TEXT,
+					resource_id TEXT,
+					resource_data TEXT,
 					details TEXT,
 					ip_address TEXT,
 					result TEXT NOT NULL
@@ -218,6 +225,7 @@ var migrations = []Migration{
 				CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp);
 				CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
 				CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON audit_logs(user);
+				CREATE INDEX IF NOT EXISTS idx_audit_logs_resource ON audit_logs(resource, resource_id);
 			`)
 			return err
 		},
