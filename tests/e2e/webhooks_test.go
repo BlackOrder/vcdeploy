@@ -122,7 +122,10 @@ func TestGitHubWebhook(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-GitHub-Event", "ping")
 
-		resp, _ := http.DefaultClient.Do(req)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
 		defer resp.Body.Close()
 
 		ctx.Assertions.NoServerError(resp)
@@ -139,7 +142,10 @@ func TestGitHubWebhook(t *testing.T) {
 		req.Header.Set("X-GitHub-Event", "push")
 		req.Header.Set("X-Hub-Signature-256", "sha256=invalidsignature")
 
-		resp, _ := http.DefaultClient.Do(req)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
 		defer resp.Body.Close()
 
 		// Should reject invalid signature
