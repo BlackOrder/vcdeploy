@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures/test-fixtures';
+import { test, expect, TEST_ADMIN_PASSWORD } from '../fixtures/test-fixtures';
 import { UsersPage, UserFormPage } from '../pages';
 
 test.describe('Users List', () => {
@@ -115,13 +115,13 @@ test.describe('Create User', () => {
     await page.waitForLoadState('networkidle');
     
     // Cleanup via API
-    await api.authenticate('admin', 'Changeme12345!');
+    await api.authenticate('admin', TEST_ADMIN_PASSWORD);
     // Note: Would need to find user ID to delete
   });
 
   test('should not allow duplicate username', async ({ page, api }) => {
     // First create a user via API
-    await api.authenticate('admin', 'Changeme12345!');
+    await api.authenticate('admin', TEST_ADMIN_PASSWORD);
     const username = `testuser-${Date.now()}`;
     const email = `test-${Date.now()}@example.com`;
     
@@ -164,7 +164,7 @@ test.describe('Edit User', () => {
 
   test('should edit user details', async ({ page, api }) => {
     // Create a test user via API
-    await api.authenticate('admin', 'Changeme12345!');
+    await api.authenticate('admin', TEST_ADMIN_PASSWORD);
     const username = `testuser-${Date.now()}`;
     const email = `test-${Date.now()}@example.com`;
     
@@ -198,7 +198,7 @@ test.describe('Delete User', () => {
 
   test('should delete user with confirmation', async ({ page, api }) => {
     // Create a test user via API
-    await api.authenticate('admin', 'Changeme12345!');
+    await api.authenticate('admin', TEST_ADMIN_PASSWORD);
     const username = `testuser-delete-${Date.now()}`;
     const email = `test-delete-${Date.now()}@example.com`;
     

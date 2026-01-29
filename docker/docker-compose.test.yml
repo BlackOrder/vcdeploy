@@ -25,7 +25,7 @@ services:
       - TZ=UTC
       - VCDEPLOY_LOG_LEVEL=debug
       - VCDEPLOY_TEST_MODE=true
-      - VCDEPLOY_ADMIN_PASSWORD=${TEST_ADMIN_PASSWORD:-Changeme12345!}
+      - VCDEPLOY_ADMIN_PASSWORD=${TEST_ADMIN_PASSWORD:-admin}
     networks:
       - vcdeploy-test
     healthcheck:
@@ -130,7 +130,7 @@ services:
       - VCDEPLOY_WEB_URL=http://master:8080
       - VCDEPLOY_API_URL=http://master:8080/api
       - TEST_ADMIN_USERNAME=admin
-      - TEST_ADMIN_PASSWORD=${TEST_ADMIN_PASSWORD:-Changeme12345!}
+      - TEST_ADMIN_PASSWORD=${TEST_ADMIN_PASSWORD:-admin}
       - CI=true
     networks:
       - vcdeploy-test

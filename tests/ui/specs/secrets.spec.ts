@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures/test-fixtures';
+import { test, expect, TEST_ADMIN_PASSWORD } from '../fixtures/test-fixtures';
 
 test.describe('Secrets List', () => {
   test.beforeEach(async ({ page, auth }) => {
@@ -123,7 +123,7 @@ test.describe('Edit Secret', () => {
 
   test('should edit secret value', async ({ page, testData, api }) => {
     // Create a test secret via API first
-    await api.authenticate('admin', 'Changeme12345!');
+    await api.authenticate('admin', TEST_ADMIN_PASSWORD);
     
     // Navigate to secrets page
     await page.goto('/secrets');

@@ -22,7 +22,7 @@ auth:
 
 admin:
   username: admin
-  password: "${VCDEPLOY_ADMIN_PASSWORD:-Changeme12345!}"
+  password: "${VCDEPLOY_ADMIN_PASSWORD:-admin}"
 
 logging:
   level: debug
