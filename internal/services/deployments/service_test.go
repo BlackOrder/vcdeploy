@@ -290,7 +290,7 @@ func TestService_Cancel_FailedStatus(t *testing.T) {
 // The schema has been fixed to use created_at column.
 
 func TestService_CreateLog(t *testing.T) {
-	svc, db := newTestService(t)
+	svc, _ := newTestService(t)
 	ctx := context.Background()
 
 	deployment := createTestDeployment(t, svc, "log-deploy-1", "running")
@@ -303,17 +303,17 @@ func TestService_CreateLog(t *testing.T) {
 		CreatedAt:    time.Now(),
 	}
 
-	err := db.CreateDeploymentLog(ctx, log)
+	err := svc.CreateLog(ctx, log)
 	if err != nil {
-		t.Fatalf("CreateDeploymentLog() error = %v", err)
+		t.Fatalf("CreateLog() error = %v", err)
 	}
 
-	logs, err := db.ListDeploymentLogs(ctx, deployment.ID)
+	logs, err := svc.ListLogs(ctx, deployment.ID)
 	if err != nil {
-		t.Fatalf("ListDeploymentLogs() error = %v", err)
+		t.Fatalf("ListLogs() error = %v", err)
 	}
 	if len(logs) != 1 {
-		t.Errorf("ListDeploymentLogs() returned %d logs, want 1", len(logs))
+		t.Errorf("ListLogs() returned %d logs, want 1", len(logs))
 	}
 	if logs[0].Message != "Test log message" {
 		t.Errorf("Log message = %q, want %q", logs[0].Message, "Test log message")
@@ -321,7 +321,7 @@ func TestService_CreateLog(t *testing.T) {
 }
 
 func TestService_ListLogs(t *testing.T) {
-	svc, db := newTestService(t)
+	svc, _ := newTestService(t)
 	ctx := context.Background()
 
 	deployment := createTestDeployment(t, svc, "log-deploy-2", "running")
@@ -335,37 +335,37 @@ func TestService_ListLogs(t *testing.T) {
 			Source:       "test",
 			CreatedAt:    time.Now().Add(time.Duration(i) * time.Second),
 		}
-		if err := db.CreateDeploymentLog(ctx, log); err != nil {
-			t.Fatalf("CreateDeploymentLog() error = %v", err)
+		if err := svc.CreateLog(ctx, log); err != nil {
+			t.Fatalf("CreateLog() error = %v", err)
 		}
 	}
 
-	logs, err := db.ListDeploymentLogs(ctx, deployment.ID)
+	logs, err := svc.ListLogs(ctx, deployment.ID)
 	if err != nil {
-		t.Fatalf("ListDeploymentLogs() error = %v", err)
+		t.Fatalf("ListLogs() error = %v", err)
 	}
 	if len(logs) != 3 {
-		t.Errorf("ListDeploymentLogs() returned %d logs, want 3", len(logs))
+		t.Errorf("ListLogs() returned %d logs, want 3", len(logs))
 	}
 }
 
 func TestService_ListLogs_Empty(t *testing.T) {
-	svc, db := newTestService(t)
+	svc, _ := newTestService(t)
 	ctx := context.Background()
 
 	deployment := createTestDeployment(t, svc, "log-deploy-empty", "running")
 
-	logs, err := db.ListDeploymentLogs(ctx, deployment.ID)
+	logs, err := svc.ListLogs(ctx, deployment.ID)
 	if err != nil {
-		t.Fatalf("ListDeploymentLogs() error = %v", err)
+		t.Fatalf("ListLogs() error = %v", err)
 	}
 	if len(logs) != 0 {
-		t.Errorf("ListDeploymentLogs() returned %d logs, want 0", len(logs))
+		t.Errorf("ListLogs() returned %d logs, want 0", len(logs))
 	}
 }
 
 func TestService_ListLogsAfter(t *testing.T) {
-	svc, db := newTestService(t)
+	svc, _ := newTestService(t)
 	ctx := context.Background()
 
 	deployment := createTestDeployment(t, svc, "log-deploy-after", "running")
@@ -380,23 +380,23 @@ func TestService_ListLogsAfter(t *testing.T) {
 			Source:       "test",
 			CreatedAt:    time.Now().Add(time.Duration(i) * time.Second),
 		}
-		if err := db.CreateDeploymentLog(ctx, log); err != nil {
-			t.Fatalf("CreateDeploymentLog() error = %v", err)
+		if err := svc.CreateLog(ctx, log); err != nil {
+			t.Fatalf("CreateLog() error = %v", err)
 		}
 		if i == 2 {
 			// Get the ID of the 3rd log to use as cursor
-			logs, _ := db.ListDeploymentLogs(ctx, deployment.ID)
+			logs, _ := svc.ListLogs(ctx, deployment.ID)
 			lastID = logs[2].ID
 		}
 	}
 
 	// Get logs after the 3rd one
-	logs, err := db.ListDeploymentLogsAfter(ctx, deployment.ID, lastID)
+	logs, err := svc.ListLogsAfter(ctx, deployment.ID, lastID)
 	if err != nil {
-		t.Fatalf("ListDeploymentLogsAfter() error = %v", err)
+		t.Fatalf("ListLogsAfter() error = %v", err)
 	}
 	if len(logs) != 2 {
-		t.Errorf("ListDeploymentLogsAfter() returned %d logs, want 2", len(logs))
+		t.Errorf("ListLogsAfter() returned %d logs, want 2", len(logs))
 	}
 }
 
@@ -582,7 +582,7 @@ func TestService_CleanupOld_NoneToCleanup(t *testing.T) {
 }
 
 func TestService_CleanupOldLogs(t *testing.T) {
-	svc, db := newTestService(t)
+	svc, _ := newTestService(t)
 	ctx := context.Background()
 
 	deployment := createTestDeployment(t, svc, "cleanup-logs-deploy", "completed")
@@ -596,19 +596,27 @@ func TestService_CleanupOldLogs(t *testing.T) {
 			Source:       "test",
 			CreatedAt:    time.Now().Add(-time.Duration(i) * time.Hour),
 		}
-		if err := db.CreateDeploymentLog(ctx, log); err != nil {
-			t.Fatalf("CreateDeploymentLog() error = %v", err)
+		if err := svc.CreateLog(ctx, log); err != nil {
+			t.Fatalf("CreateLog() error = %v", err)
 		}
 	}
 
 	// Verify logs exist
-	logs, err := db.ListDeploymentLogs(ctx, deployment.ID)
+	logs, err := svc.ListLogs(ctx, deployment.ID)
 	if err != nil {
-		t.Fatalf("ListDeploymentLogs() error = %v", err)
+		t.Fatalf("ListLogs() error = %v", err)
 	}
 	if len(logs) != 3 {
 		t.Errorf("Expected 3 logs before cleanup, got %d", len(logs))
 	}
+
+	// Try cleanup with future cutoff (should remove nothing)
+	cutoff := time.Now().Add(1 * time.Hour)
+	count, err := svc.CleanupOldLogs(ctx, cutoff)
+	if err != nil {
+		t.Fatalf("CleanupOldLogs() error = %v", err)
+	}
+	t.Logf("CleanupOldLogs() removed %d logs", count)
 }
 
 // --- Batch operations tests ---
