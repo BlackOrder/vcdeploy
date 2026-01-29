@@ -24,7 +24,8 @@
   * [Troubleshooting](operations/troubleshooting.md)
 
 * **API Reference**
-  * [REST API](api/rest.md)
+  * [REST API](api.md)
+  * [OpenAPI Spec](api/openapi.yaml ':ignore')
   * [gRPC API](api/grpc.md)
   * [Webhooks](api/webhooks.md)
 
