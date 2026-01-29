@@ -5,6 +5,7 @@ package e2e
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -690,7 +691,7 @@ func TestAPIProjectTypes(t *testing.T) {
 // Helper functions
 
 func waitForHTTPEndpoint(url string) error {
-	return waitForEndpoint(nil, url, 30*1000000000) // 30 seconds in nanoseconds
+	return waitForEndpoint(context.TODO(), url, 30*1000000000) // 30 seconds in nanoseconds
 }
 
 func doAuthRequest(method, url string, body interface{}, token string) (*http.Response, error) {

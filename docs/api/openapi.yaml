@@ -1,0 +1,949 @@
+openapi: 3.1.0
+info:
+  title: vcdeploy API
+  description: |
+    REST API for vcdeploy - a modern deployment orchestration platform.
+    
+    ## Authentication
+    
+    Most endpoints require authentication via one of:
+    - Session cookie (for web UI)
+    - Bearer token in `Authorization` header (for API access)
+    - API key in `X-API-Key` header
+    
+    ## Rate Limiting
+    
+    API requests are rate limited. When exceeded, endpoints return `429 Too Many Requests`.
+    
+    ## Request IDs
+    
+    All requests receive an `X-Request-ID` header for correlation and debugging.
+  version: 1.0.0
+  license:
+    name: MIT
+    url: https://github.com/BlackOrder/vcdeploy/blob/main/LICENSE
+  contact:
+    name: BlackOrder
+    url: https://github.com/BlackOrder/vcdeploy
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+  - url: https://vcdeploy.example.com
+    description: Production server (example)
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Auth
+    description: Authentication endpoints
+  - name: Users
+    description: User management
+  - name: Projects
+    description: Project management
+  - name: Deployments
+    description: Deployment operations
+  - name: Agents
+    description: Agent management
+  - name: Secrets
+    description: Secret management
+  - name: Settings
+    description: System settings
+  - name: Webhooks
+    description: Webhook endpoints
+
+paths:
+  /healthz:
+    get:
+      tags: [Health]
+      summary: Liveness probe
+      description: Returns 200 if the process is alive. Used for Kubernetes liveness probes.
+      operationId: getLiveness
+      security: []
+      responses:
+        '200':
+          description: Process is alive
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: ok
+
+  /readyz:
+    get:
+      tags: [Health]
+      summary: Readiness probe
+      description: Returns 200 if the server can serve traffic, 503 otherwise. Used for Kubernetes readiness probes.
+      operationId: getReadiness
+      security: []
+      responses:
+        '200':
+          description: Server is ready
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: ok
+        '503':
+          description: Server is not ready
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: database not ready
+
+  /api/v1/health:
+    get:
+      tags: [Health]
+      summary: Detailed health status
+      description: Returns detailed health information including database, gRPC, and agent status.
+      operationId: getHealth
+      security: []
+      responses:
+        '200':
+          description: Health status (may be healthy, degraded, or unhealthy)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        '503':
+          description: Unhealthy status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /metrics:
+    get:
+      tags: [Health]
+      summary: Prometheus metrics
+      description: Returns Prometheus-formatted metrics for monitoring.
+      operationId: getMetrics
+      security: []
+      responses:
+        '200':
+          description: Prometheus metrics
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login
+      description: Authenticate with username and password to obtain a session token.
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                  example: admin
+                password:
+                  type: string
+                  format: password
+                  example: secret123
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    description: JWT token for API access
+                  user:
+                    $ref: '#/components/schemas/User'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/users:
+    get:
+      tags: [Users]
+      summary: List users
+      description: Returns a list of all users (admin only).
+      operationId: listUsers
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        '403':
+          description: Forbidden - admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags: [Users]
+      summary: Create user
+      description: Create a new user (admin only).
+      operationId: createUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/projects:
+    get:
+      tags: [Projects]
+      summary: List projects
+      description: Returns a list of all projects.
+      operationId: listProjects
+      responses:
+        '200':
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Project'
+    post:
+      tags: [Projects]
+      summary: Create project
+      description: Create a new project.
+      operationId: createProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectCreate'
+      responses:
+        '201':
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/projects/{projectId}:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Projects]
+      summary: Get project
+      description: Get a project by ID.
+      operationId: getProject
+      responses:
+        '200':
+          description: Project details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags: [Projects]
+      summary: Update project
+      description: Update a project.
+      operationId: updateProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectUpdate'
+      responses:
+        '200':
+          description: Project updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Projects]
+      summary: Delete project
+      description: Delete a project.
+      operationId: deleteProject
+      responses:
+        '204':
+          description: Project deleted
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/deployments:
+    get:
+      tags: [Deployments]
+      summary: List deployments
+      description: Returns a list of deployments with optional filtering.
+      operationId: listDeployments
+      parameters:
+        - name: project_id
+          in: query
+          schema:
+            type: string
+          description: Filter by project ID
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, running, success, failed, cancelled]
+          description: Filter by status
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+          description: Maximum number of results
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+          description: Offset for pagination
+      responses:
+        '200':
+          description: List of deployments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Deployment'
+    post:
+      tags: [Deployments]
+      summary: Create deployment
+      description: Start a new deployment for a project.
+      operationId: createDeployment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeploymentCreate'
+      responses:
+        '201':
+          description: Deployment created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deployment'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/deployments/{deploymentId}:
+    parameters:
+      - name: deploymentId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Deployments]
+      summary: Get deployment
+      description: Get deployment details by ID.
+      operationId: getDeployment
+      responses:
+        '200':
+          description: Deployment details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deployment'
+        '404':
+          description: Deployment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/deployments/{deploymentId}/cancel:
+    parameters:
+      - name: deploymentId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      tags: [Deployments]
+      summary: Cancel deployment
+      description: Cancel a running deployment.
+      operationId: cancelDeployment
+      responses:
+        '200':
+          description: Deployment cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deployment'
+        '400':
+          description: Deployment cannot be cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Deployment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/deployments/{deploymentId}/logs:
+    parameters:
+      - name: deploymentId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Deployments]
+      summary: Get deployment logs
+      description: Get logs for a deployment.
+      operationId: getDeploymentLogs
+      parameters:
+        - name: after_id
+          in: query
+          schema:
+            type: integer
+          description: Return logs after this ID (for polling)
+      responses:
+        '200':
+          description: Deployment logs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DeploymentLog'
+        '404':
+          description: Deployment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/agents:
+    get:
+      tags: [Agents]
+      summary: List agents
+      description: Returns a list of all registered agents.
+      operationId: listAgents
+      responses:
+        '200':
+          description: List of agents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Agent'
+
+  /api/v1/agents/{agentId}:
+    parameters:
+      - name: agentId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Agents]
+      summary: Get agent
+      description: Get agent details by ID.
+      operationId: getAgent
+      responses:
+        '200':
+          description: Agent details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agent'
+        '404':
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Agents]
+      summary: Delete agent
+      description: Delete an agent registration.
+      operationId: deleteAgent
+      responses:
+        '204':
+          description: Agent deleted
+        '404':
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/secrets:
+    get:
+      tags: [Secrets]
+      summary: List secrets
+      description: Returns a list of secret keys (values are not exposed).
+      operationId: listSecrets
+      parameters:
+        - name: project
+          in: query
+          schema:
+            type: string
+          description: Filter by project
+        - name: scope
+          in: query
+          schema:
+            type: string
+            enum: [global, project, environment]
+          description: Filter by scope
+      responses:
+        '200':
+          description: List of secrets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Secret'
+    post:
+      tags: [Secrets]
+      summary: Create secret
+      description: Create or update a secret.
+      operationId: createSecret
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SecretCreate'
+      responses:
+        '201':
+          description: Secret created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Secret'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/secrets/{key}:
+    parameters:
+      - name: key
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      tags: [Secrets]
+      summary: Delete secret
+      description: Delete a secret.
+      operationId: deleteSecret
+      parameters:
+        - name: project
+          in: query
+          schema:
+            type: string
+          description: Project scope
+        - name: scope
+          in: query
+          schema:
+            type: string
+            enum: [global, project, environment]
+          description: Secret scope
+      responses:
+        '204':
+          description: Secret deleted
+        '404':
+          description: Secret not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/webhooks/github:
+    post:
+      tags: [Webhooks]
+      summary: GitHub webhook
+      description: Receive webhook events from GitHub.
+      operationId: handleGitHubWebhook
+      security: []
+      parameters:
+        - name: X-Hub-Signature-256
+          in: header
+          required: true
+          schema:
+            type: string
+          description: HMAC signature for verification
+        - name: X-GitHub-Event
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Event type (push, pull_request, etc.)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Webhook processed
+        '400':
+          description: Invalid webhook
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        request_id:
+          type: string
+
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        checks:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/CheckResult'
+        timestamp:
+          type: string
+          format: date-time
+
+    CheckResult:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        message:
+          type: string
+        latency:
+          type: string
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [admin, user, readonly]
+        created_at:
+          type: string
+          format: date-time
+
+    UserCreate:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [admin, user, readonly]
+          default: user
+
+    Project:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        repo_url:
+          type: string
+        branch:
+          type: string
+        deploy_path:
+          type: string
+        project_type_id:
+          type: string
+        agents:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ProjectCreate:
+      type: object
+      required: [name, repo_url]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        repo_url:
+          type: string
+        branch:
+          type: string
+          default: main
+        deploy_path:
+          type: string
+        project_type_id:
+          type: string
+        agents:
+          type: array
+          items:
+            type: string
+
+    ProjectUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        repo_url:
+          type: string
+        branch:
+          type: string
+        deploy_path:
+          type: string
+        project_type_id:
+          type: string
+        agents:
+          type: array
+          items:
+            type: string
+
+    Deployment:
+      type: object
+      properties:
+        id:
+          type: string
+        project_id:
+          type: string
+        project_name:
+          type: string
+        status:
+          type: string
+          enum: [pending, running, success, failed, cancelled]
+        version:
+          type: string
+        commit:
+          type: string
+        triggered_by:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: string
+          format: date-time
+        error_message:
+          type: string
+
+    DeploymentCreate:
+      type: object
+      required: [project_id]
+      properties:
+        project_id:
+          type: string
+        version:
+          type: string
+        commit:
+          type: string
+        force:
+          type: boolean
+          default: false
+
+    DeploymentLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        deployment_id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        level:
+          type: string
+          enum: [info, warn, error]
+        message:
+          type: string
+        source:
+          type: string
+
+    Agent:
+      type: object
+      properties:
+        id:
+          type: string
+        hostname:
+          type: string
+        status:
+          type: string
+          enum: [online, offline, unknown]
+        version:
+          type: string
+        os:
+          type: string
+        arch:
+          type: string
+        last_seen_at:
+          type: string
+          format: date-time
+        registered_at:
+          type: string
+          format: date-time
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        stats:
+          type: object
+          properties:
+            cpu_percent:
+              type: number
+            memory_percent:
+              type: number
+            disk_percent:
+              type: number
+
+    Secret:
+      type: object
+      properties:
+        key:
+          type: string
+        project:
+          type: string
+        scope:
+          type: string
+          enum: [global, project, environment]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    SecretCreate:
+      type: object
+      required: [key, value]
+      properties:
+        key:
+          type: string
+        value:
+          type: string
+          format: password
+        project:
+          type: string
+        scope:
+          type: string
+          enum: [global, project, environment]
+          default: global
+
+security:
+  - bearerAuth: []
+  - apiKey: []
