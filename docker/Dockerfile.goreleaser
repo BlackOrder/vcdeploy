@@ -1,0 +1,38 @@
+# VCDeploy Master Dockerfile for GoReleaser
+# Uses pre-built binary from goreleaser
+
+FROM alpine:3.19
+
+# Install runtime dependencies
+RUN apk add --no-cache \
+    ca-certificates \
+    tzdata \
+    openssh-client \
+    git
+
+# Create non-root user
+RUN addgroup -S vcdeploy && adduser -S vcdeploy -G vcdeploy
+
+# Create directories
+RUN mkdir -p /etc/vcdeploy /var/lib/vcdeploy /var/log/vcdeploy && \
+    chown -R vcdeploy:vcdeploy /etc/vcdeploy /var/lib/vcdeploy /var/log/vcdeploy
+
+# Copy pre-built binary from goreleaser
+COPY vcdeploy /usr/local/bin/vcdeploy
+
+# Set permissions
+RUN chmod +x /usr/local/bin/vcdeploy
+
+# Switch to non-root user
+USER vcdeploy
+
+# Expose ports
+EXPOSE 8080 9090
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget -q --spider http://localhost:8080/api/v1/health || exit 1
+
+# Default command
+ENTRYPOINT ["vcdeploy"]
+CMD ["master", "start", "--config", "/etc/vcdeploy/master.yaml"]
