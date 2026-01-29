@@ -201,6 +201,32 @@ func TestHandleHealthCheckConfig(t *testing.T) {
 			t.Errorf("Expected status %d, got %d: %s", http.StatusNotFound, rr.Code, rr.Body.String())
 		}
 	})
+
+	t.Run("DELETE - not found", func(t *testing.T) {
+		req := requestWithAdminContext(httptest.NewRequest("DELETE", "/api/v1/health-checks/99999", http.NoBody), userID)
+		rr := httptest.NewRecorder()
+		s.handleHealthCheckConfig(rr, req)
+
+		if rr.Code != http.StatusNotFound {
+			t.Errorf("Expected status %d, got %d: %s", http.StatusNotFound, rr.Code, rr.Body.String())
+		}
+	})
+
+	t.Run("DELETE - cannot delete global config", func(t *testing.T) {
+		// Get the global config ID
+		globalConfig, err := s.db.GetGlobalHealthCheckConfig(ctx)
+		if err != nil {
+			t.Skipf("No global config to test: %v", err)
+		}
+
+		req := requestWithAdminContext(httptest.NewRequest("DELETE", fmt.Sprintf("/api/v1/health-checks/%d", globalConfig.ID), http.NoBody), userID)
+		rr := httptest.NewRecorder()
+		s.handleHealthCheckConfig(rr, req)
+
+		if rr.Code != http.StatusBadRequest {
+			t.Errorf("Expected status %d, got %d: %s", http.StatusBadRequest, rr.Code, rr.Body.String())
+		}
+	})
 }
 
 func TestHandleGlobalHealthCheck(t *testing.T) {
