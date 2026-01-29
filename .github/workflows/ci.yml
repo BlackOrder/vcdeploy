@@ -5,6 +5,9 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
+  schedule:
+    # Run daily at midnight UTC
+    - cron: "0 0 * * *"
 
 env:
   GO_VERSION: "1.25"
@@ -128,7 +131,7 @@ jobs:
     needs: [lint, test]
     strategy:
       matrix:
-        os: [linux, darwin]
+        os: [linux, darwin, freebsd]
         arch: [amd64, arm64]
     steps:
       - name: Checkout code
@@ -161,6 +164,32 @@ jobs:
           path: |
             vcdeploy-${{ matrix.os }}-${{ matrix.arch }}*
             vcdeploy-agent-${{ matrix.os }}-${{ matrix.arch }}*
+
+  goreleaser-check:
+    name: Validate GoReleaser Config
+    runs-on: ubuntu-latest
+    needs: [lint]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Validate GoReleaser config
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: latest
+          args: check
+
+      - name: Build snapshot (dry-run)
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: latest
+          args: release --snapshot --clean --skip=publish
 
   docker:
     name: Docker Build
@@ -481,7 +510,7 @@ jobs:
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
-    needs: [lint, test, systemd-tests, integration, build, e2e-api, cli-tests, ui-tests]
+    needs: [lint, test, systemd-tests, integration, build, goreleaser-check, e2e-api, cli-tests, ui-tests]
     if: always()
     steps:
       - name: Check all jobs
@@ -504,6 +533,10 @@ jobs:
           fi
           if [[ "${{ needs.build.result }}" != "success" ]]; then
             echo "::error::Build failed"
+            exit 1
+          fi
+          if [[ "${{ needs.goreleaser-check.result }}" != "success" ]]; then
+            echo "::error::GoReleaser check failed"
             exit 1
           fi
           if [[ "${{ needs.e2e-api.result }}" != "success" ]]; then
