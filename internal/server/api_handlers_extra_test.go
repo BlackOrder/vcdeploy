@@ -338,6 +338,76 @@ func TestHandleJumpServer_Delete(t *testing.T) {
 	}
 }
 
+func TestHandleJumpServer_GetNotFound(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/jumpservers/999", http.NoBody)
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleJumpServer(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+func TestHandleJumpServer_InvalidID(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/jumpservers/invalid", http.NoBody)
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleJumpServer(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleJumpServer_Update(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+	ctx := context.Background()
+
+	// Create a jump server
+	js := &storage.SSHJumpServer{
+		Name:      "update-test-bastion",
+		Host:      "updatetest.example.com",
+		Port:      22,
+		Username:  "updateuser",
+		CreatedAt: time.Now(),
+	}
+	_ = server.db.CreateJumpServer(ctx, js)
+
+	body := bytes.NewBufferString(`{
+		"name": "updated-bastion",
+		"host": "updated.example.com",
+		"port": 2222,
+		"username": "newuser"
+	}`)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/jumpservers/1", body)
+	req.Header.Set("Content-Type", "application/json")
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleJumpServer(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+}
+
 // --- Blocked IPs API Tests ---
 
 func TestHandleBlockedIPs_List(t *testing.T) {
