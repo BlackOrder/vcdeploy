@@ -1,0 +1,33 @@
+# VCDeploy Agent Dockerfile for GoReleaser
+# Uses pre-built binary from goreleaser
+
+FROM alpine:3.19
+
+# Install runtime dependencies
+RUN apk add --no-cache \
+    ca-certificates \
+    tzdata \
+    git \
+    bash \
+    curl \
+    rsync
+
+# Create directories
+RUN mkdir -p /etc/vcdeploy /var/lib/vcdeploy-agent /var/log/vcdeploy-agent
+
+# Copy pre-built binary from goreleaser
+COPY vcdeploy-agent /usr/local/bin/vcdeploy-agent
+
+# Set permissions
+RUN chmod +x /usr/local/bin/vcdeploy-agent
+
+# Expose gRPC port (for debugging)
+EXPOSE 9091
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD pgrep vcdeploy-agent || exit 1
+
+# Default command
+ENTRYPOINT ["vcdeploy-agent"]
+CMD ["start", "--config", "/etc/vcdeploy/agent.yaml"]

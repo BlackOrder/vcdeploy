@@ -68,7 +68,7 @@ dockers:
     goarch: amd64
     image_templates:
       - "ghcr.io/blackorder/vcdeploy:{{ .Tag }}-amd64"
-    dockerfile: docker/Dockerfile
+    dockerfile: docker/Dockerfile.goreleaser
     use: buildx
     build_flag_templates:
       - "--platform=linux/amd64"
@@ -85,7 +85,7 @@ dockers:
     goarch: arm64
     image_templates:
       - "ghcr.io/blackorder/vcdeploy:{{ .Tag }}-arm64"
-    dockerfile: docker/Dockerfile
+    dockerfile: docker/Dockerfile.goreleaser
     use: buildx
     build_flag_templates:
       - "--platform=linux/arm64"
@@ -102,7 +102,7 @@ dockers:
     goarch: amd64
     image_templates:
       - "ghcr.io/blackorder/vcdeploy-agent:{{ .Tag }}-amd64"
-    dockerfile: docker/Dockerfile.agent
+    dockerfile: docker/Dockerfile.agent.goreleaser
     use: buildx
     build_flag_templates:
       - "--platform=linux/amd64"
@@ -119,7 +119,7 @@ dockers:
     goarch: arm64
     image_templates:
       - "ghcr.io/blackorder/vcdeploy-agent:{{ .Tag }}-arm64"
-    dockerfile: docker/Dockerfile.agent
+    dockerfile: docker/Dockerfile.agent.goreleaser
     use: buildx
     build_flag_templates:
       - "--platform=linux/arm64"
