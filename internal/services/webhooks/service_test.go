@@ -3,13 +3,11 @@ package webhooks
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 
 	"github.com/BlackOrder/vcdeploy/internal/security"
 	"github.com/BlackOrder/vcdeploy/internal/services/testutil"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
-	"go.uber.org/zap"
 )
 
 func setupTest(t *testing.T) (*Service, func()) {
@@ -22,14 +20,7 @@ func setupTest(t *testing.T) (*Service, func()) {
 func setupTestWithKMS(t *testing.T) (*Service, *storage.DB, func()) {
 	t.Helper()
 
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	logger := zap.NewNop()
-	db, err := storage.New(dbPath, logger)
-	if err != nil {
-		t.Fatalf("Failed to create test database: %v", err)
-	}
+	db, cleanup := testutil.NewTestDB(t)
 
 	kms, err := security.NewKMS(db.Conn(), nil)
 	if err != nil {
@@ -39,10 +30,6 @@ func setupTestWithKMS(t *testing.T) (*Service, *storage.DB, func()) {
 	ctx := context.Background()
 	if err := kms.Initialize(ctx); err != nil {
 		t.Fatalf("Failed to initialize KMS: %v", err)
-	}
-
-	cleanup := func() {
-		db.Close()
 	}
 
 	return New(db, kms), db, cleanup
@@ -964,18 +951,7 @@ func TestService_Get_EdgeCases(t *testing.T) {
 func setupTestWithDB(t *testing.T) (*Service, *storage.DB, func()) {
 	t.Helper()
 
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	logger := zap.NewNop()
-	db, err := storage.New(dbPath, logger)
-	if err != nil {
-		t.Fatalf("Failed to create test database: %v", err)
-	}
-
-	cleanup := func() {
-		db.Close()
-	}
+	db, cleanup := testutil.NewTestDB(t)
 
 	return New(db, nil), db, cleanup
 }
