@@ -587,3 +587,518 @@ func TestRequire2FAForAdminFunc(t *testing.T) {
 		}
 	})
 }
+
+// --- parseScopes and hasScope tests ---
+
+func TestParseScopes(t *testing.T) {
+	tests := []struct {
+		name       string
+		key        *storage.APIKey
+		wantScopes []string
+		wantErr    bool
+	}{
+		{
+			name:       "nil key",
+			key:        nil,
+			wantScopes: nil,
+			wantErr:    false,
+		},
+		{
+			name:       "empty scopes",
+			key:        &storage.APIKey{Scopes: ""},
+			wantScopes: nil,
+			wantErr:    false,
+		},
+		{
+			name:       "valid single scope",
+			key:        &storage.APIKey{Scopes: `["read"]`},
+			wantScopes: []string{"read"},
+			wantErr:    false,
+		},
+		{
+			name:       "valid multiple scopes",
+			key:        &storage.APIKey{Scopes: `["read","write","admin"]`},
+			wantScopes: []string{"read", "write", "admin"},
+			wantErr:    false,
+		},
+		{
+			name:       "invalid JSON",
+			key:        &storage.APIKey{Scopes: `not valid json`},
+			wantScopes: nil,
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scopes, err := parseScopes(tt.key)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("parseScopes() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if len(scopes) != len(tt.wantScopes) {
+				t.Errorf("parseScopes() = %v, want %v", scopes, tt.wantScopes)
+			}
+			for i, s := range scopes {
+				if s != tt.wantScopes[i] {
+					t.Errorf("parseScopes()[%d] = %s, want %s", i, s, tt.wantScopes[i])
+				}
+			}
+		})
+	}
+}
+
+func TestHasScope(t *testing.T) {
+	tests := []struct {
+		name     string
+		key      *storage.APIKey
+		required APIScope
+		want     bool
+	}{
+		{
+			name:     "nil key means full access",
+			key:      nil,
+			required: ScopeRead,
+			want:     true,
+		},
+		{
+			name:     "empty scopes means full access",
+			key:      &storage.APIKey{Scopes: "[]"},
+			required: ScopeAdmin,
+			want:     true,
+		},
+		{
+			name:     "no scopes string means full access",
+			key:      &storage.APIKey{Scopes: ""},
+			required: ScopeWrite,
+			want:     true,
+		},
+		{
+			name:     "admin scope implies all others",
+			key:      &storage.APIKey{Scopes: `["admin"]`},
+			required: ScopeRead,
+			want:     true,
+		},
+		{
+			name:     "admin scope implies write",
+			key:      &storage.APIKey{Scopes: `["admin"]`},
+			required: ScopeWrite,
+			want:     true,
+		},
+		{
+			name:     "write scope implies read",
+			key:      &storage.APIKey{Scopes: `["write"]`},
+			required: ScopeRead,
+			want:     true,
+		},
+		{
+			name:     "write scope does not imply admin",
+			key:      &storage.APIKey{Scopes: `["write"]`},
+			required: ScopeAdmin,
+			want:     false,
+		},
+		{
+			name:     "read scope does not imply write",
+			key:      &storage.APIKey{Scopes: `["read"]`},
+			required: ScopeWrite,
+			want:     false,
+		},
+		{
+			name:     "exact scope match",
+			key:      &storage.APIKey{Scopes: `["read"]`},
+			required: ScopeRead,
+			want:     true,
+		},
+		{
+			name:     "invalid JSON returns false",
+			key:      &storage.APIKey{Scopes: `invalid`},
+			required: ScopeRead,
+			want:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := hasScope(tt.key, tt.required)
+			if got != tt.want {
+				t.Errorf("hasScope() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// --- RequireRole tests ---
+
+func TestRequireRole(t *testing.T) {
+	logger := zap.NewNop()
+	cfg := &config.MasterConfig{}
+
+	t.Run("allows exact role match", func(t *testing.T) {
+		userSvc := newMockUserService()
+		userSvc.addUser(&storage.User{ID: 1, Username: "admin", Role: "admin"})
+		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
+
+		handler := mw.RequireRole("admin")(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		req := httptest.NewRequest("GET", "/admin", nil)
+		ctx := context.WithValue(req.Context(), contextKeyUserID, int64(1))
+		req = req.WithContext(ctx)
+		rr := httptest.NewRecorder()
+
+		handler(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status %d, got %d", http.StatusOK, rr.Code)
+		}
+	})
+
+	t.Run("rejects role mismatch", func(t *testing.T) {
+		userSvc := newMockUserService()
+		userSvc.addUser(&storage.User{ID: 1, Username: "user", Role: "user"})
+		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
+
+		handler := mw.RequireRole("admin")(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		req := httptest.NewRequest("GET", "/admin", nil)
+		ctx := context.WithValue(req.Context(), contextKeyUserID, int64(1))
+		req = req.WithContext(ctx)
+		rr := httptest.NewRecorder()
+
+		handler(rr, req)
+
+		if rr.Code != http.StatusForbidden {
+			t.Errorf("Expected status %d, got %d", http.StatusForbidden, rr.Code)
+		}
+	})
+
+	t.Run("rejects no user in context", func(t *testing.T) {
+		userSvc := newMockUserService()
+		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
+
+		handler := mw.RequireRole("admin")(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		req := httptest.NewRequest("GET", "/admin", nil)
+		rr := httptest.NewRecorder()
+
+		handler(rr, req)
+
+		if rr.Code != http.StatusUnauthorized {
+			t.Errorf("Expected status %d, got %d", http.StatusUnauthorized, rr.Code)
+		}
+	})
+
+	t.Run("handles user lookup error", func(t *testing.T) {
+		userSvc := newMockUserService() // No user added
+		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
+
+		handler := mw.RequireRole("admin")(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		req := httptest.NewRequest("GET", "/admin", nil)
+		ctx := context.WithValue(req.Context(), contextKeyUserID, int64(999))
+		req = req.WithContext(ctx)
+		rr := httptest.NewRecorder()
+
+		handler(rr, req)
+
+		if rr.Code != http.StatusInternalServerError {
+			t.Errorf("Expected status %d, got %d", http.StatusInternalServerError, rr.Code)
+		}
+	})
+}
+
+// --- RequireMinRole tests ---
+
+func TestRequireMinRole(t *testing.T) {
+	logger := zap.NewNop()
+	cfg := &config.MasterConfig{}
+
+	t.Run("admin can access admin-required", func(t *testing.T) {
+		userSvc := newMockUserService()
+		userSvc.addUser(&storage.User{ID: 1, Username: "admin", Role: "admin"})
+		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
+
+		handler := mw.RequireMinRole("admin")(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		req := httptest.NewRequest("GET", "/admin", nil)
+		ctx := context.WithValue(req.Context(), contextKeyUserID, int64(1))
+		req = req.WithContext(ctx)
+		rr := httptest.NewRecorder()
+
+		handler(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status %d, got %d", http.StatusOK, rr.Code)
+		}
+	})
+
+	t.Run("admin can access user-required", func(t *testing.T) {
+		userSvc := newMockUserService()
+		userSvc.addUser(&storage.User{ID: 1, Username: "admin", Role: "admin"})
+		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
+
+		handler := mw.RequireMinRole("user")(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		req := httptest.NewRequest("GET", "/resource", nil)
+		ctx := context.WithValue(req.Context(), contextKeyUserID, int64(1))
+		req = req.WithContext(ctx)
+		rr := httptest.NewRecorder()
+
+		handler(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status %d, got %d", http.StatusOK, rr.Code)
+		}
+	})
+
+	t.Run("user cannot access admin-required", func(t *testing.T) {
+		userSvc := newMockUserService()
+		userSvc.addUser(&storage.User{ID: 1, Username: "user", Role: "user"})
+		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
+
+		handler := mw.RequireMinRole("admin")(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		req := httptest.NewRequest("GET", "/admin", nil)
+		ctx := context.WithValue(req.Context(), contextKeyUserID, int64(1))
+		req = req.WithContext(ctx)
+		rr := httptest.NewRecorder()
+
+		handler(rr, req)
+
+		if rr.Code != http.StatusForbidden {
+			t.Errorf("Expected status %d, got %d", http.StatusForbidden, rr.Code)
+		}
+	})
+
+	t.Run("viewer can access viewer-required", func(t *testing.T) {
+		userSvc := newMockUserService()
+		userSvc.addUser(&storage.User{ID: 1, Username: "viewer", Role: "viewer"})
+		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
+
+		handler := mw.RequireMinRole("viewer")(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		req := httptest.NewRequest("GET", "/view", nil)
+		ctx := context.WithValue(req.Context(), contextKeyUserID, int64(1))
+		req = req.WithContext(ctx)
+		rr := httptest.NewRecorder()
+
+		handler(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status %d, got %d", http.StatusOK, rr.Code)
+		}
+	})
+
+	t.Run("viewer cannot access user-required", func(t *testing.T) {
+		userSvc := newMockUserService()
+		userSvc.addUser(&storage.User{ID: 1, Username: "viewer", Role: "viewer"})
+		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
+
+		handler := mw.RequireMinRole("user")(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		req := httptest.NewRequest("GET", "/resource", nil)
+		ctx := context.WithValue(req.Context(), contextKeyUserID, int64(1))
+		req = req.WithContext(ctx)
+		rr := httptest.NewRecorder()
+
+		handler(rr, req)
+
+		if rr.Code != http.StatusForbidden {
+			t.Errorf("Expected status %d, got %d", http.StatusForbidden, rr.Code)
+		}
+	})
+
+	t.Run("rejects no user in context", func(t *testing.T) {
+		userSvc := newMockUserService()
+		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
+
+		handler := mw.RequireMinRole("user")(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		req := httptest.NewRequest("GET", "/resource", nil)
+		rr := httptest.NewRecorder()
+
+		handler(rr, req)
+
+		if rr.Code != http.StatusUnauthorized {
+			t.Errorf("Expected status %d, got %d", http.StatusUnauthorized, rr.Code)
+		}
+	})
+}
+
+// --- RequireScope tests ---
+
+func TestRequireScope(t *testing.T) {
+	logger := zap.NewNop()
+	cfg := &config.MasterConfig{}
+	userSvc := newMockUserService()
+	mw := NewEnforcementMiddleware(cfg, userSvc, logger)
+
+	t.Run("allows matching scope", func(t *testing.T) {
+		handler := mw.RequireScope(ScopeRead)(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		req := httptest.NewRequest("GET", "/api/v1/projects", nil)
+		apiKey := &storage.APIKey{Scopes: `["read"]`}
+		ctx := WithAPIKeyContext(req.Context(), apiKey)
+		req = req.WithContext(ctx)
+		rr := httptest.NewRecorder()
+
+		handler(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status %d, got %d", http.StatusOK, rr.Code)
+		}
+	})
+
+	t.Run("allows admin scope for any requirement", func(t *testing.T) {
+		handler := mw.RequireScope(ScopeWrite)(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		req := httptest.NewRequest("POST", "/api/v1/projects", nil)
+		apiKey := &storage.APIKey{Scopes: `["admin"]`}
+		ctx := WithAPIKeyContext(req.Context(), apiKey)
+		req = req.WithContext(ctx)
+		rr := httptest.NewRecorder()
+
+		handler(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status %d, got %d", http.StatusOK, rr.Code)
+		}
+	})
+
+	t.Run("rejects insufficient scope", func(t *testing.T) {
+		handler := mw.RequireScope(ScopeAdmin)(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		req := httptest.NewRequest("DELETE", "/api/v1/users/1", nil)
+		apiKey := &storage.APIKey{KeyPrefix: "test_key", Scopes: `["read"]`}
+		ctx := WithAPIKeyContext(req.Context(), apiKey)
+		req = req.WithContext(ctx)
+		rr := httptest.NewRecorder()
+
+		handler(rr, req)
+
+		if rr.Code != http.StatusForbidden {
+			t.Errorf("Expected status %d, got %d", http.StatusForbidden, rr.Code)
+		}
+	})
+
+	t.Run("allows request without API key (session auth)", func(t *testing.T) {
+		handler := mw.RequireScope(ScopeRead)(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		req := httptest.NewRequest("GET", "/api/v1/projects", nil)
+		rr := httptest.NewRecorder()
+
+		handler(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status %d, got %d", http.StatusOK, rr.Code)
+		}
+	})
+}
+
+// --- RequireReadScope, RequireWriteScope, RequireAdminScope tests ---
+
+func TestRequireScopeHelpers(t *testing.T) {
+	logger := zap.NewNop()
+	cfg := &config.MasterConfig{}
+	userSvc := newMockUserService()
+	mw := NewEnforcementMiddleware(cfg, userSvc, logger)
+
+	t.Run("RequireReadScope allows read", func(t *testing.T) {
+		handler := mw.RequireReadScope(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		req := httptest.NewRequest("GET", "/api/v1/projects", nil)
+		apiKey := &storage.APIKey{Scopes: `["read"]`}
+		ctx := WithAPIKeyContext(req.Context(), apiKey)
+		req = req.WithContext(ctx)
+		rr := httptest.NewRecorder()
+
+		handler(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status %d, got %d", http.StatusOK, rr.Code)
+		}
+	})
+
+	t.Run("RequireWriteScope allows write", func(t *testing.T) {
+		handler := mw.RequireWriteScope(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		req := httptest.NewRequest("POST", "/api/v1/projects", nil)
+		apiKey := &storage.APIKey{Scopes: `["write"]`}
+		ctx := WithAPIKeyContext(req.Context(), apiKey)
+		req = req.WithContext(ctx)
+		rr := httptest.NewRecorder()
+
+		handler(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status %d, got %d", http.StatusOK, rr.Code)
+		}
+	})
+
+	t.Run("RequireAdminScope allows admin", func(t *testing.T) {
+		handler := mw.RequireAdminScope(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		req := httptest.NewRequest("DELETE", "/api/v1/users/1", nil)
+		apiKey := &storage.APIKey{Scopes: `["admin"]`}
+		ctx := WithAPIKeyContext(req.Context(), apiKey)
+		req = req.WithContext(ctx)
+		rr := httptest.NewRecorder()
+
+		handler(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status %d, got %d", http.StatusOK, rr.Code)
+		}
+	})
+
+	t.Run("RequireAdminScope rejects write-only", func(t *testing.T) {
+		handler := mw.RequireAdminScope(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		req := httptest.NewRequest("DELETE", "/api/v1/users/1", nil)
+		apiKey := &storage.APIKey{KeyPrefix: "test", Scopes: `["write"]`}
+		ctx := WithAPIKeyContext(req.Context(), apiKey)
+		req = req.WithContext(ctx)
+		rr := httptest.NewRecorder()
+
+		handler(rr, req)
+
+		if rr.Code != http.StatusForbidden {
+			t.Errorf("Expected status %d, got %d", http.StatusForbidden, rr.Code)
+		}
+	})
+}
