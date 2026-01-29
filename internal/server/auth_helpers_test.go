@@ -148,8 +148,6 @@ func TestAuthHelpersEnforcement(t *testing.T) {
 	_ = cfg
 
 	t.Run("viewer can read but not write", func(t *testing.T) {
-		t.Parallel()
-
 		viewerCtx := context.WithValue(context.Background(), contextKeyUserID, viewerUser.ID)
 
 		// Read should work
@@ -172,8 +170,6 @@ func TestAuthHelpersEnforcement(t *testing.T) {
 	})
 
 	t.Run("regular user can read and write but not admin", func(t *testing.T) {
-		t.Parallel()
-
 		userCtx := context.WithValue(context.Background(), contextKeyUserID, regularUser.ID)
 
 		// Read should work
@@ -196,8 +192,6 @@ func TestAuthHelpersEnforcement(t *testing.T) {
 	})
 
 	t.Run("admin has all access", func(t *testing.T) {
-		t.Parallel()
-
 		adminCtx := context.WithValue(context.Background(), contextKeyUserID, adminUser.ID)
 
 		// Read should work
