@@ -5349,3 +5349,1161 @@ func TestJumpServerDuplicateName(t *testing.T) {
 		t.Error("CreateJumpServer() with duplicate name should fail")
 	}
 }
+
+// --- Agent Binary Tests ---
+
+func TestAgentBinary_CRUD(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create agent binary
+	binary := &AgentBinary{
+		Version:        "1.0.0",
+		OS:             "linux",
+		Arch:           "amd64",
+		Path:           "/opt/binaries/vcdeploy-agent-1.0.0-linux-amd64",
+		ChecksumSHA256: "abc123def456",
+		SizeBytes:      1024000,
+		UploadedAt:     time.Now(),
+		IsCurrent:      false,
+	}
+
+	err := db.CreateAgentBinary(ctx, binary)
+	if err != nil {
+		t.Fatalf("CreateAgentBinary() error = %v", err)
+	}
+	if binary.ID == 0 {
+		t.Error("CreateAgentBinary() did not set ID")
+	}
+
+	// Get by ID
+	got, err := db.GetAgentBinary(ctx, binary.ID)
+	if err != nil {
+		t.Fatalf("GetAgentBinary() error = %v", err)
+	}
+	if got.Version != binary.Version {
+		t.Errorf("GetAgentBinary() Version = %s, want %s", got.Version, binary.Version)
+	}
+	if got.OS != binary.OS {
+		t.Errorf("GetAgentBinary() OS = %s, want %s", got.OS, binary.OS)
+	}
+	if got.Arch != binary.Arch {
+		t.Errorf("GetAgentBinary() Arch = %s, want %s", got.Arch, binary.Arch)
+	}
+	if got.ChecksumSHA256 != binary.ChecksumSHA256 {
+		t.Errorf("GetAgentBinary() ChecksumSHA256 = %s, want %s", got.ChecksumSHA256, binary.ChecksumSHA256)
+	}
+
+	// Delete
+	err = db.DeleteAgentBinary(ctx, binary.ID)
+	if err != nil {
+		t.Fatalf("DeleteAgentBinary() error = %v", err)
+	}
+
+	// Verify deleted
+	_, err = db.GetAgentBinary(ctx, binary.ID)
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("GetAgentBinary() after delete should return ErrNotFound, got %v", err)
+	}
+}
+
+func TestAgentBinary_GetByVersion(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	binary := &AgentBinary{
+		Version:        "2.0.0",
+		OS:             "darwin",
+		Arch:           "arm64",
+		Path:           "/opt/binaries/vcdeploy-agent-2.0.0-darwin-arm64",
+		ChecksumSHA256: "xyz789",
+		SizeBytes:      2048000,
+		UploadedAt:     time.Now(),
+		IsCurrent:      false,
+	}
+
+	if err := db.CreateAgentBinary(ctx, binary); err != nil {
+		t.Fatalf("CreateAgentBinary() error = %v", err)
+	}
+
+	// Get by version
+	got, err := db.GetAgentBinaryByVersion(ctx, "2.0.0", "darwin", "arm64")
+	if err != nil {
+		t.Fatalf("GetAgentBinaryByVersion() error = %v", err)
+	}
+	if got.ID != binary.ID {
+		t.Errorf("GetAgentBinaryByVersion() ID = %d, want %d", got.ID, binary.ID)
+	}
+
+	// Non-existent version
+	_, err = db.GetAgentBinaryByVersion(ctx, "999.0.0", "darwin", "arm64")
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("GetAgentBinaryByVersion() for non-existent should return ErrNotFound, got %v", err)
+	}
+}
+
+func TestAgentBinary_SetCurrent(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create two binaries for the same OS/arch
+	binary1 := &AgentBinary{
+		Version: "1.0.0", OS: "linux", Arch: "amd64",
+		Path: "/path/1", ChecksumSHA256: "hash1", SizeBytes: 1000, UploadedAt: time.Now(),
+		IsCurrent: true,
+	}
+	binary2 := &AgentBinary{
+		Version: "1.1.0", OS: "linux", Arch: "amd64",
+		Path: "/path/2", ChecksumSHA256: "hash2", SizeBytes: 1100, UploadedAt: time.Now(),
+		IsCurrent: false,
+	}
+
+	if err := db.CreateAgentBinary(ctx, binary1); err != nil {
+		t.Fatalf("CreateAgentBinary() binary1 error = %v", err)
+	}
+	if err := db.CreateAgentBinary(ctx, binary2); err != nil {
+		t.Fatalf("CreateAgentBinary() binary2 error = %v", err)
+	}
+
+	// Get current (should be binary1)
+	current, err := db.GetCurrentAgentBinary(ctx, "linux", "amd64")
+	if err != nil {
+		t.Fatalf("GetCurrentAgentBinary() error = %v", err)
+	}
+	if current.ID != binary1.ID {
+		t.Errorf("GetCurrentAgentBinary() ID = %d, want %d", current.ID, binary1.ID)
+	}
+
+	// Set binary2 as current
+	if err := db.SetCurrentAgentBinary(ctx, binary2.ID); err != nil {
+		t.Fatalf("SetCurrentAgentBinary() error = %v", err)
+	}
+
+	// Verify binary2 is now current
+	current, err = db.GetCurrentAgentBinary(ctx, "linux", "amd64")
+	if err != nil {
+		t.Fatalf("GetCurrentAgentBinary() after set error = %v", err)
+	}
+	if current.ID != binary2.ID {
+		t.Errorf("GetCurrentAgentBinary() after set ID = %d, want %d", current.ID, binary2.ID)
+	}
+
+	// Verify binary1 is no longer current
+	got, err := db.GetAgentBinary(ctx, binary1.ID)
+	if err != nil {
+		t.Fatalf("GetAgentBinary() binary1 error = %v", err)
+	}
+	if got.IsCurrent {
+		t.Error("binary1 should no longer be current")
+	}
+}
+
+func TestAgentBinary_List(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create multiple binaries
+	binaries := []*AgentBinary{
+		{Version: "1.0.0", OS: "linux", Arch: "amd64", Path: "/p1", ChecksumSHA256: "h1", SizeBytes: 100, UploadedAt: time.Now()},
+		{Version: "1.0.0", OS: "darwin", Arch: "arm64", Path: "/p2", ChecksumSHA256: "h2", SizeBytes: 200, UploadedAt: time.Now()},
+		{Version: "1.1.0", OS: "linux", Arch: "amd64", Path: "/p3", ChecksumSHA256: "h3", SizeBytes: 300, UploadedAt: time.Now()},
+	}
+
+	for _, b := range binaries {
+		if err := db.CreateAgentBinary(ctx, b); err != nil {
+			t.Fatalf("CreateAgentBinary() error = %v", err)
+		}
+	}
+
+	// List all
+	list, err := db.ListAgentBinaries(ctx)
+	if err != nil {
+		t.Fatalf("ListAgentBinaries() error = %v", err)
+	}
+	if len(list) != 3 {
+		t.Errorf("ListAgentBinaries() count = %d, want 3", len(list))
+	}
+}
+
+func TestAgentBinary_DeleteNotFound(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	err := db.DeleteAgentBinary(ctx, 999999)
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("DeleteAgentBinary() non-existent should return ErrNotFound, got %v", err)
+	}
+}
+
+// --- Agent Update History Tests ---
+
+func TestAgentUpdateHistory_CRUD(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create an agent first
+	agent := &Agent{
+		ID:           "agent-update-test",
+		Hostname:     "test-host",
+		Status:       "online",
+		RegisteredAt: time.Now(),
+	}
+	if err := db.UpsertAgent(ctx, agent); err != nil {
+		t.Fatalf("UpsertAgent() error = %v", err)
+	}
+
+	// Create update history
+	history := &AgentUpdateHistory{
+		AgentID:     agent.ID,
+		FromVersion: "1.0.0",
+		ToVersion:   "1.1.0",
+		Status:      "pending",
+		StartedAt:   time.Now(),
+	}
+
+	err := db.CreateAgentUpdateHistory(ctx, history)
+	if err != nil {
+		t.Fatalf("CreateAgentUpdateHistory() error = %v", err)
+	}
+	if history.ID == 0 {
+		t.Error("CreateAgentUpdateHistory() did not set ID")
+	}
+
+	// Get by ID
+	got, err := db.GetAgentUpdateHistory(ctx, history.ID)
+	if err != nil {
+		t.Fatalf("GetAgentUpdateHistory() error = %v", err)
+	}
+	if got.AgentID != history.AgentID {
+		t.Errorf("GetAgentUpdateHistory() AgentID = %s, want %s", got.AgentID, history.AgentID)
+	}
+	if got.FromVersion != history.FromVersion {
+		t.Errorf("GetAgentUpdateHistory() FromVersion = %s, want %s", got.FromVersion, history.FromVersion)
+	}
+	if got.ToVersion != history.ToVersion {
+		t.Errorf("GetAgentUpdateHistory() ToVersion = %s, want %s", got.ToVersion, history.ToVersion)
+	}
+	if got.Status != "pending" {
+		t.Errorf("GetAgentUpdateHistory() Status = %s, want pending", got.Status)
+	}
+
+	// Update history
+	now := time.Now()
+	history.Status = "completed"
+	history.CompletedAt = &now
+	err = db.UpdateAgentUpdateHistory(ctx, history)
+	if err != nil {
+		t.Fatalf("UpdateAgentUpdateHistory() error = %v", err)
+	}
+
+	// Verify update
+	got, err = db.GetAgentUpdateHistory(ctx, history.ID)
+	if err != nil {
+		t.Fatalf("GetAgentUpdateHistory() after update error = %v", err)
+	}
+	if got.Status != "completed" {
+		t.Errorf("GetAgentUpdateHistory() Status = %s, want completed", got.Status)
+	}
+	if got.CompletedAt == nil {
+		t.Error("GetAgentUpdateHistory() CompletedAt should not be nil")
+	}
+}
+
+func TestAgentUpdateHistory_List(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create agent
+	agent := &Agent{
+		ID:           "agent-list-history",
+		Hostname:     "history-host",
+		Status:       "online",
+		RegisteredAt: time.Now(),
+	}
+	if err := db.UpsertAgent(ctx, agent); err != nil {
+		t.Fatalf("UpsertAgent() error = %v", err)
+	}
+
+	// Create multiple history records
+	for i := 0; i < 5; i++ {
+		history := &AgentUpdateHistory{
+			AgentID:     agent.ID,
+			FromVersion: "1.0.0",
+			ToVersion:   "1.1.0",
+			Status:      "completed",
+			StartedAt:   time.Now().Add(time.Duration(i) * time.Minute),
+		}
+		if err := db.CreateAgentUpdateHistory(ctx, history); err != nil {
+			t.Fatalf("CreateAgentUpdateHistory() error = %v", err)
+		}
+	}
+
+	// List with pagination
+	list, total, err := db.ListAgentUpdateHistory(ctx, agent.ID, 3, 0)
+	if err != nil {
+		t.Fatalf("ListAgentUpdateHistory() error = %v", err)
+	}
+	if total != 5 {
+		t.Errorf("ListAgentUpdateHistory() total = %d, want 5", total)
+	}
+	if len(list) != 3 {
+		t.Errorf("ListAgentUpdateHistory() count = %d, want 3", len(list))
+	}
+
+	// List page 2
+	list, _, err = db.ListAgentUpdateHistory(ctx, agent.ID, 3, 3)
+	if err != nil {
+		t.Fatalf("ListAgentUpdateHistory() page 2 error = %v", err)
+	}
+	if len(list) != 2 {
+		t.Errorf("ListAgentUpdateHistory() page 2 count = %d, want 2", len(list))
+	}
+}
+
+func TestAgentUpdateHistory_GetLatest(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create agent
+	agent := &Agent{
+		ID:           "agent-latest-history",
+		Hostname:     "latest-host",
+		Status:       "online",
+		RegisteredAt: time.Now(),
+	}
+	if err := db.UpsertAgent(ctx, agent); err != nil {
+		t.Fatalf("UpsertAgent() error = %v", err)
+	}
+
+	// Create history records at different times
+	for i := 0; i < 3; i++ {
+		history := &AgentUpdateHistory{
+			AgentID:     agent.ID,
+			FromVersion: "1.0.0",
+			ToVersion:   "1." + string(rune('1'+i)) + ".0",
+			Status:      "completed",
+			StartedAt:   time.Now().Add(time.Duration(i) * time.Hour),
+		}
+		if err := db.CreateAgentUpdateHistory(ctx, history); err != nil {
+			t.Fatalf("CreateAgentUpdateHistory() error = %v", err)
+		}
+	}
+
+	// Get latest
+	latest, err := db.GetLatestAgentUpdateHistory(ctx, agent.ID)
+	if err != nil {
+		t.Fatalf("GetLatestAgentUpdateHistory() error = %v", err)
+	}
+	// Should be the most recent (highest i value)
+	if latest.ToVersion != "1.3.0" {
+		t.Errorf("GetLatestAgentUpdateHistory() ToVersion = %s, want 1.3.0", latest.ToVersion)
+	}
+
+	// Non-existent agent
+	_, err = db.GetLatestAgentUpdateHistory(ctx, "non-existent-agent")
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("GetLatestAgentUpdateHistory() non-existent should return ErrNotFound, got %v", err)
+	}
+}
+
+func TestAgentUpdateHistory_NotFound(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	_, err := db.GetAgentUpdateHistory(ctx, 999999)
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("GetAgentUpdateHistory() non-existent should return ErrNotFound, got %v", err)
+	}
+}
+
+// --- Agent Version/Update Policy Tests ---
+
+func TestUpdateAgentVersion(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create agent
+	agent := &Agent{
+		ID:           "agent-version-test",
+		Hostname:     "version-host",
+		Status:       "online",
+		RegisteredAt: time.Now(),
+		Version:      "1.0.0",
+	}
+	if err := db.UpsertAgent(ctx, agent); err != nil {
+		t.Fatalf("UpsertAgent() error = %v", err)
+	}
+
+	// Update version
+	err := db.UpdateAgentVersion(ctx, agent.ID, "2.0.0")
+	if err != nil {
+		t.Fatalf("UpdateAgentVersion() error = %v", err)
+	}
+
+	// Verify
+	got, err := db.GetAgent(ctx, agent.ID)
+	if err != nil {
+		t.Fatalf("GetAgent() error = %v", err)
+	}
+	if got.Version != "2.0.0" {
+		t.Errorf("GetAgent() Version = %s, want 2.0.0", got.Version)
+	}
+	if got.LastUpdateAt == nil {
+		t.Error("GetAgent() LastUpdateAt should be set")
+	}
+}
+
+func TestUpdateAgentUpdateError(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create agent
+	agent := &Agent{
+		ID:           "agent-error-test",
+		Hostname:     "error-host",
+		Status:       "online",
+		RegisteredAt: time.Now(),
+	}
+	if err := db.UpsertAgent(ctx, agent); err != nil {
+		t.Fatalf("UpsertAgent() error = %v", err)
+	}
+
+	// Set update error
+	err := db.UpdateAgentUpdateError(ctx, agent.ID, "download failed: connection timeout")
+	if err != nil {
+		t.Fatalf("UpdateAgentUpdateError() error = %v", err)
+	}
+
+	// Verify
+	got, err := db.GetAgent(ctx, agent.ID)
+	if err != nil {
+		t.Fatalf("GetAgent() error = %v", err)
+	}
+	if got.LastUpdateError != "download failed: connection timeout" {
+		t.Errorf("GetAgent() LastUpdateError = %s, want 'download failed: connection timeout'", got.LastUpdateError)
+	}
+}
+
+func TestUpdateAgentUpdatePolicy(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create agent
+	agent := &Agent{
+		ID:           "agent-policy-test",
+		Hostname:     "policy-host",
+		Status:       "online",
+		RegisteredAt: time.Now(),
+	}
+	if err := db.UpsertAgent(ctx, agent); err != nil {
+		t.Fatalf("UpsertAgent() error = %v", err)
+	}
+
+	// Update policy
+	err := db.UpdateAgentUpdatePolicy(ctx, agent.ID, "scheduled", "02:00", "04:00")
+	if err != nil {
+		t.Fatalf("UpdateAgentUpdatePolicy() error = %v", err)
+	}
+
+	// Verify
+	got, err := db.GetAgent(ctx, agent.ID)
+	if err != nil {
+		t.Fatalf("GetAgent() error = %v", err)
+	}
+	if got.UpdatePolicy != "scheduled" {
+		t.Errorf("GetAgent() UpdatePolicy = %s, want scheduled", got.UpdatePolicy)
+	}
+	if got.UpdateWindowStart != "02:00" {
+		t.Errorf("GetAgent() UpdateWindowStart = %s, want 02:00", got.UpdateWindowStart)
+	}
+	if got.UpdateWindowEnd != "04:00" {
+		t.Errorf("GetAgent() UpdateWindowEnd = %s, want 04:00", got.UpdateWindowEnd)
+	}
+}
+
+func TestListAgentsNeedingUpdate(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a current binary
+	binary := &AgentBinary{
+		Version:   "2.0.0",
+		OS:        "linux",
+		Arch:      "amd64",
+		Path:      "/path/binary",
+		SizeBytes: 1000,
+		IsCurrent: true,
+	}
+	if err := db.CreateAgentBinary(ctx, binary); err != nil {
+		t.Fatalf("CreateAgentBinary() error = %v", err)
+	}
+
+	// Create agent with old version
+	agent1 := &Agent{
+		ID:           "agent-needs-update",
+		Hostname:     "outdated-host",
+		Status:       "online",
+		RegisteredAt: time.Now(),
+		Version:      "1.0.0",
+		OS:           "linux",
+		Arch:         "amd64",
+	}
+	if err := db.UpsertAgent(ctx, agent1); err != nil {
+		t.Fatalf("UpsertAgent() error = %v", err)
+	}
+
+	// Create agent with current version
+	agent2 := &Agent{
+		ID:           "agent-current",
+		Hostname:     "current-host",
+		Status:       "online",
+		RegisteredAt: time.Now(),
+		Version:      "2.0.0",
+		OS:           "linux",
+		Arch:         "amd64",
+	}
+	if err := db.UpsertAgent(ctx, agent2); err != nil {
+		t.Fatalf("UpsertAgent() error = %v", err)
+	}
+
+	// List agents needing update
+	agents, err := db.ListAgentsNeedingUpdate(ctx)
+	if err != nil {
+		t.Fatalf("ListAgentsNeedingUpdate() error = %v", err)
+	}
+
+	// Should only include agent1
+	if len(agents) != 1 {
+		t.Errorf("ListAgentsNeedingUpdate() count = %d, want 1", len(agents))
+	}
+	if len(agents) > 0 && agents[0].ID != agent1.ID {
+		t.Errorf("ListAgentsNeedingUpdate()[0].ID = %s, want %s", agents[0].ID, agent1.ID)
+	}
+}
+
+// --- Health Check Config Tests ---
+
+func TestHealthCheckConfig_CRUD(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create global health check config
+	config := &HealthCheckConfig{
+		Name:              "Default Health Check",
+		URL:               "{{.URL}}/health",
+		Method:            "GET",
+		ExpectedStatus:    200,
+		TimeoutSeconds:    30,
+		Retries:           3,
+		RetryDelaySeconds: 5,
+		Enabled:           true,
+		IsGlobal:          true,
+	}
+
+	err := db.CreateHealthCheckConfig(ctx, config)
+	if err != nil {
+		t.Fatalf("CreateHealthCheckConfig() error = %v", err)
+	}
+	if config.ID == 0 {
+		t.Error("CreateHealthCheckConfig() did not set ID")
+	}
+
+	// Get by ID
+	got, err := db.GetHealthCheckConfig(ctx, config.ID)
+	if err != nil {
+		t.Fatalf("GetHealthCheckConfig() error = %v", err)
+	}
+	if got.Name != config.Name {
+		t.Errorf("GetHealthCheckConfig() Name = %s, want %s", got.Name, config.Name)
+	}
+	if got.URL != config.URL {
+		t.Errorf("GetHealthCheckConfig() URL = %s, want %s", got.URL, config.URL)
+	}
+	if got.Method != config.Method {
+		t.Errorf("GetHealthCheckConfig() Method = %s, want %s", got.Method, config.Method)
+	}
+	if got.ExpectedStatus != config.ExpectedStatus {
+		t.Errorf("GetHealthCheckConfig() ExpectedStatus = %d, want %d", got.ExpectedStatus, config.ExpectedStatus)
+	}
+	if !got.IsGlobal {
+		t.Error("GetHealthCheckConfig() IsGlobal should be true")
+	}
+
+	// Update
+	config.TimeoutSeconds = 60
+	config.Retries = 5
+	err = db.UpdateHealthCheckConfig(ctx, config)
+	if err != nil {
+		t.Fatalf("UpdateHealthCheckConfig() error = %v", err)
+	}
+
+	// Verify update
+	got, err = db.GetHealthCheckConfig(ctx, config.ID)
+	if err != nil {
+		t.Fatalf("GetHealthCheckConfig() after update error = %v", err)
+	}
+	if got.TimeoutSeconds != 60 {
+		t.Errorf("GetHealthCheckConfig() TimeoutSeconds = %d, want 60", got.TimeoutSeconds)
+	}
+	if got.Retries != 5 {
+		t.Errorf("GetHealthCheckConfig() Retries = %d, want 5", got.Retries)
+	}
+}
+
+func TestHealthCheckConfig_Global(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Get the default global config that's created by migrations
+	got, err := db.GetGlobalHealthCheckConfig(ctx)
+	if err != nil {
+		t.Fatalf("GetGlobalHealthCheckConfig() error = %v", err)
+	}
+
+	// The migration creates "Global Default" as the default global config
+	if got.Name != "Global Default" {
+		t.Errorf("GetGlobalHealthCheckConfig() Name = %s, want 'Global Default'", got.Name)
+	}
+	if !got.IsGlobal {
+		t.Error("GetGlobalHealthCheckConfig() IsGlobal should be true")
+	}
+}
+
+func TestHealthCheckConfig_ForProject(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a project
+	project := &Project{
+		Name:       "health-check-project",
+		Repository: "https://github.com/test/hc",
+		Branch:     "main",
+		DeployPath: "/app",
+		Type:       "web",
+		CreatedAt:  time.Now(),
+	}
+	if err := db.CreateProject(project); err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+
+	// Create global config
+	global := &HealthCheckConfig{
+		Name:           "Global",
+		URL:            "{{.URL}}/health",
+		Method:         "GET",
+		ExpectedStatus: 200,
+		TimeoutSeconds: 10,
+		Enabled:        true,
+		IsGlobal:       true,
+	}
+	if err := db.CreateHealthCheckConfig(ctx, global); err != nil {
+		t.Fatalf("CreateHealthCheckConfig() global error = %v", err)
+	}
+
+	// Without project-specific config, should return global
+	got, err := db.GetHealthCheckConfigForProject(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("GetHealthCheckConfigForProject() error = %v", err)
+	}
+	if !got.IsGlobal {
+		t.Error("GetHealthCheckConfigForProject() should return global when no project config exists")
+	}
+
+	// Create project-specific config
+	projectConfig := &HealthCheckConfig{
+		ProjectID:      &project.ID,
+		Name:           "Project Specific",
+		URL:            "{{.URL}}/api/status",
+		Method:         "POST",
+		ExpectedStatus: 201,
+		TimeoutSeconds: 20,
+		Enabled:        true,
+		IsGlobal:       false,
+	}
+	if err := db.CreateHealthCheckConfig(ctx, projectConfig); err != nil {
+		t.Fatalf("CreateHealthCheckConfig() project error = %v", err)
+	}
+
+	// Now should return project-specific config
+	got, err = db.GetHealthCheckConfigForProject(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("GetHealthCheckConfigForProject() with project config error = %v", err)
+	}
+	if got.IsGlobal {
+		t.Error("GetHealthCheckConfigForProject() should return project-specific config when it exists")
+	}
+	if got.ID != projectConfig.ID {
+		t.Errorf("GetHealthCheckConfigForProject() ID = %d, want %d", got.ID, projectConfig.ID)
+	}
+}
+
+func TestHealthCheckConfig_List(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create multiple configs
+	configs := []*HealthCheckConfig{
+		{Name: "Global", URL: "/health", Method: "GET", ExpectedStatus: 200, TimeoutSeconds: 10, Enabled: true, IsGlobal: true},
+		{Name: "Config A", URL: "/a", Method: "GET", ExpectedStatus: 200, TimeoutSeconds: 10, Enabled: true, IsGlobal: false},
+		{Name: "Config B", URL: "/b", Method: "GET", ExpectedStatus: 200, TimeoutSeconds: 10, Enabled: true, IsGlobal: false},
+	}
+
+	for _, c := range configs {
+		if err := db.CreateHealthCheckConfig(ctx, c); err != nil {
+			t.Fatalf("CreateHealthCheckConfig() error = %v", err)
+		}
+	}
+
+	// List all
+	list, err := db.ListHealthCheckConfigs(ctx)
+	if err != nil {
+		t.Fatalf("ListHealthCheckConfigs() error = %v", err)
+	}
+	if len(list) < 3 {
+		t.Errorf("ListHealthCheckConfigs() count = %d, want at least 3", len(list))
+	}
+
+	// Check global is in the list
+	foundGlobal := false
+	for _, c := range list {
+		if c.IsGlobal {
+			foundGlobal = true
+			break
+		}
+	}
+	if !foundGlobal {
+		t.Error("ListHealthCheckConfigs() should include global config")
+	}
+}
+
+func TestHealthCheckConfig_Delete(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create global config
+	global := &HealthCheckConfig{
+		Name: "Global", URL: "/health", Method: "GET", ExpectedStatus: 200,
+		TimeoutSeconds: 10, Enabled: true, IsGlobal: true,
+	}
+	if err := db.CreateHealthCheckConfig(ctx, global); err != nil {
+		t.Fatalf("CreateHealthCheckConfig() error = %v", err)
+	}
+
+	// Create non-global config
+	nonGlobal := &HealthCheckConfig{
+		Name: "Non-Global", URL: "/status", Method: "GET", ExpectedStatus: 200,
+		TimeoutSeconds: 10, Enabled: true, IsGlobal: false,
+	}
+	if err := db.CreateHealthCheckConfig(ctx, nonGlobal); err != nil {
+		t.Fatalf("CreateHealthCheckConfig() error = %v", err)
+	}
+
+	// Should be able to delete non-global
+	err := db.DeleteHealthCheckConfig(ctx, nonGlobal.ID)
+	if err != nil {
+		t.Fatalf("DeleteHealthCheckConfig() non-global error = %v", err)
+	}
+
+	// Verify deleted
+	_, err = db.GetHealthCheckConfig(ctx, nonGlobal.ID)
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("GetHealthCheckConfig() after delete should return ErrNotFound, got %v", err)
+	}
+
+	// Should NOT be able to delete global
+	err = db.DeleteHealthCheckConfig(ctx, global.ID)
+	if err == nil {
+		t.Error("DeleteHealthCheckConfig() global should fail")
+	}
+}
+
+func TestHealthCheckConfig_NotFound(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	_, err := db.GetHealthCheckConfig(ctx, 999999)
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("GetHealthCheckConfig() non-existent should return ErrNotFound, got %v", err)
+	}
+
+	// Delete non-existent
+	err = db.DeleteHealthCheckConfig(ctx, 999999)
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("DeleteHealthCheckConfig() non-existent should return ErrNotFound, got %v", err)
+	}
+}
+
+// --- Deployment Rollback Tests ---
+
+func TestDeploymentRollback_CRUD(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create rollback
+	rollback := &DeploymentRollback{
+		DeploymentID:      "deploy-123",
+		ProjectName:       "test-project",
+		FromRelease:       5,
+		ToRelease:         4,
+		Reason:            "Health check failed",
+		TriggeredBy:       RollbackTriggerAutoHealthFail,
+		HealthCheckFailed: true,
+		HealthCheckError:  "Connection refused",
+		Status:            "pending",
+		StartedAt:         time.Now(),
+	}
+
+	err := db.CreateDeploymentRollback(ctx, rollback)
+	if err != nil {
+		t.Fatalf("CreateDeploymentRollback() error = %v", err)
+	}
+	if rollback.ID == 0 {
+		t.Error("CreateDeploymentRollback() did not set ID")
+	}
+
+	// Get by ID
+	got, err := db.GetDeploymentRollback(ctx, rollback.ID)
+	if err != nil {
+		t.Fatalf("GetDeploymentRollback() error = %v", err)
+	}
+	if got.DeploymentID != rollback.DeploymentID {
+		t.Errorf("GetDeploymentRollback() DeploymentID = %s, want %s", got.DeploymentID, rollback.DeploymentID)
+	}
+	if got.ProjectName != rollback.ProjectName {
+		t.Errorf("GetDeploymentRollback() ProjectName = %s, want %s", got.ProjectName, rollback.ProjectName)
+	}
+	if got.FromRelease != 5 {
+		t.Errorf("GetDeploymentRollback() FromRelease = %d, want 5", got.FromRelease)
+	}
+	if got.ToRelease != 4 {
+		t.Errorf("GetDeploymentRollback() ToRelease = %d, want 4", got.ToRelease)
+	}
+	if got.TriggeredBy != RollbackTriggerAutoHealthFail {
+		t.Errorf("GetDeploymentRollback() TriggeredBy = %s, want %s", got.TriggeredBy, RollbackTriggerAutoHealthFail)
+	}
+	if !got.HealthCheckFailed {
+		t.Error("GetDeploymentRollback() HealthCheckFailed should be true")
+	}
+
+	// Update rollback
+	now := time.Now()
+	rollback.Status = "completed"
+	rollback.CompletedAt = &now
+	err = db.UpdateDeploymentRollback(ctx, rollback)
+	if err != nil {
+		t.Fatalf("UpdateDeploymentRollback() error = %v", err)
+	}
+
+	// Verify update
+	got, err = db.GetDeploymentRollback(ctx, rollback.ID)
+	if err != nil {
+		t.Fatalf("GetDeploymentRollback() after update error = %v", err)
+	}
+	if got.Status != "completed" {
+		t.Errorf("GetDeploymentRollback() Status = %s, want completed", got.Status)
+	}
+	if got.CompletedAt == nil {
+		t.Error("GetDeploymentRollback() CompletedAt should not be nil")
+	}
+}
+
+func TestDeploymentRollback_List(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create multiple rollbacks for different projects
+	rollbacks := []*DeploymentRollback{
+		{DeploymentID: "d1", ProjectName: "project-a", FromRelease: 2, ToRelease: 1, Reason: "test", TriggeredBy: "user", Status: "completed", StartedAt: time.Now()},
+		{DeploymentID: "d2", ProjectName: "project-a", FromRelease: 3, ToRelease: 2, Reason: "test", TriggeredBy: "user", Status: "completed", StartedAt: time.Now().Add(time.Hour)},
+		{DeploymentID: "d3", ProjectName: "project-b", FromRelease: 2, ToRelease: 1, Reason: "test", TriggeredBy: "user", Status: "completed", StartedAt: time.Now()},
+	}
+
+	for _, r := range rollbacks {
+		if err := db.CreateDeploymentRollback(ctx, r); err != nil {
+			t.Fatalf("CreateDeploymentRollback() error = %v", err)
+		}
+	}
+
+	// List all
+	list, total, err := db.ListDeploymentRollbacks(ctx, "", 10, 0)
+	if err != nil {
+		t.Fatalf("ListDeploymentRollbacks() all error = %v", err)
+	}
+	if total != 3 {
+		t.Errorf("ListDeploymentRollbacks() all total = %d, want 3", total)
+	}
+	if len(list) != 3 {
+		t.Errorf("ListDeploymentRollbacks() all count = %d, want 3", len(list))
+	}
+
+	// List for specific project
+	list, total, err = db.ListDeploymentRollbacks(ctx, "project-a", 10, 0)
+	if err != nil {
+		t.Fatalf("ListDeploymentRollbacks() project-a error = %v", err)
+	}
+	if total != 2 {
+		t.Errorf("ListDeploymentRollbacks() project-a total = %d, want 2", total)
+	}
+	if len(list) != 2 {
+		t.Errorf("ListDeploymentRollbacks() project-a count = %d, want 2", len(list))
+	}
+
+	// List with pagination
+	list, total, err = db.ListDeploymentRollbacks(ctx, "", 2, 0)
+	if err != nil {
+		t.Fatalf("ListDeploymentRollbacks() paginated error = %v", err)
+	}
+	if total != 3 {
+		t.Errorf("ListDeploymentRollbacks() paginated total = %d, want 3", total)
+	}
+	if len(list) != 2 {
+		t.Errorf("ListDeploymentRollbacks() paginated count = %d, want 2", len(list))
+	}
+}
+
+func TestDeploymentRollback_GetLatest(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Use unique deployment ID for this test
+	deployID := "deploy-getlatest-test-unique"
+
+	// Create rollbacks - the most recently inserted one should be returned
+	// Note: CreateDeploymentRollback doesn't save started_at from the struct,
+	// it uses CURRENT_TIMESTAMP as default. So we rely on insertion order.
+	var lastID int64
+	var lastFromRelease int
+	for i := 0; i < 3; i++ {
+		fromRelease := i + 2
+		rollback := &DeploymentRollback{
+			DeploymentID: deployID,
+			ProjectName:  "test-project",
+			FromRelease:  fromRelease,
+			ToRelease:    i + 1,
+			Reason:       "test",
+			TriggeredBy:  "user",
+			Status:       "completed",
+			StartedAt:    time.Now(), // Will be overwritten by DB default
+		}
+		if err := db.CreateDeploymentRollback(ctx, rollback); err != nil {
+			t.Fatalf("CreateDeploymentRollback() error = %v", err)
+		}
+		lastID = rollback.ID
+		lastFromRelease = fromRelease
+		time.Sleep(1100 * time.Millisecond) // Ensure distinct timestamps (SQLite uses seconds)
+	}
+
+	// Get latest
+	latest, err := db.GetLatestRollbackForDeployment(ctx, deployID)
+	if err != nil {
+		t.Fatalf("GetLatestRollbackForDeployment() error = %v", err)
+	}
+
+	// Verify it's the last inserted one
+	if latest.ID != lastID {
+		t.Errorf("GetLatestRollbackForDeployment() ID = %d, want %d", latest.ID, lastID)
+	}
+	if latest.FromRelease != lastFromRelease {
+		t.Errorf("GetLatestRollbackForDeployment() FromRelease = %d, want %d", latest.FromRelease, lastFromRelease)
+	}
+
+	// Non-existent deployment
+	_, err = db.GetLatestRollbackForDeployment(ctx, "non-existent-deployment-xyz")
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("GetLatestRollbackForDeployment() non-existent should return ErrNotFound, got %v", err)
+	}
+}
+
+func TestDeploymentRollback_NotFound(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	_, err := db.GetDeploymentRollback(ctx, 999999)
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("GetDeploymentRollback() non-existent should return ErrNotFound, got %v", err)
+	}
+}
+
+// --- Project Health Check Update Tests ---
+
+func TestUpdateProjectHealthCheck(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create project
+	project := &Project{
+		Name:       "hc-update-project",
+		Repository: "https://github.com/test/hc-update",
+		Branch:     "main",
+		DeployPath: "/app",
+		Type:       "web",
+		CreatedAt:  time.Now(),
+	}
+	if err := db.CreateProject(project); err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+
+	// Create health check config
+	config := &HealthCheckConfig{
+		Name: "Project HC", URL: "/health", Method: "GET", ExpectedStatus: 200,
+		TimeoutSeconds: 10, Enabled: true, IsGlobal: false,
+	}
+	if err := db.CreateHealthCheckConfig(ctx, config); err != nil {
+		t.Fatalf("CreateHealthCheckConfig() error = %v", err)
+	}
+
+	// Update project health check - this should not error
+	err := db.UpdateProjectHealthCheck(ctx, project.ID, &config.ID, true, true)
+	if err != nil {
+		t.Fatalf("UpdateProjectHealthCheck() error = %v", err)
+	}
+
+	// The actual verification would require GetProjectByName to return these fields
+	// which it currently doesn't. We're testing that the function runs without error.
+
+	// Update to remove health check
+	err = db.UpdateProjectHealthCheck(ctx, project.ID, nil, false, false)
+	if err != nil {
+		t.Fatalf("UpdateProjectHealthCheck() clear error = %v", err)
+	}
+}
+
+// --- Audit Log Tests ---
+
+func TestLogAuditWithSnapshot(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	snapshot := map[string]interface{}{
+		"old_value": "foo",
+		"new_value": "bar",
+	}
+
+	entry := &AuditEntry{
+		User:     "test-user",
+		Action:   "update",
+		Resource: "settings",
+		Details:  "Updated system settings",
+	}
+
+	err := db.LogAuditWithSnapshot(ctx, entry, snapshot)
+	if err != nil {
+		t.Fatalf("LogAuditWithSnapshot() error = %v", err)
+	}
+
+	// Verify by listing audit logs
+	logs, err := db.ListAuditLogs(ctx, 10, 0)
+	if err != nil {
+		t.Fatalf("ListAuditLogs() error = %v", err)
+	}
+	if len(logs) == 0 {
+		t.Fatal("ListAuditLogs() returned no logs")
+	}
+
+	// Check the log entry
+	found := false
+	for _, log := range logs {
+		if log.User == "test-user" && log.Action == "update" {
+			found = true
+			if log.ResourceData == "" {
+				t.Error("LogAuditWithSnapshot() should have ResourceData")
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("LogAuditWithSnapshot() log entry not found")
+	}
+}
+
+func TestListAuditLogsSince(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Record the time before creating logs
+	since := time.Now().Add(-time.Second)
+
+	// Create some audit logs
+	for i := 0; i < 5; i++ {
+		entry := &AuditEntry{
+			User:     "user",
+			Action:   "action",
+			Resource: "target",
+			Details:  "description",
+		}
+		if err := db.LogAudit(ctx, entry); err != nil {
+			t.Fatalf("LogAudit() error = %v", err)
+		}
+	}
+
+	// List logs since the recorded time
+	logs, err := db.ListAuditLogsSince(ctx, since)
+	if err != nil {
+		t.Fatalf("ListAuditLogsSince() error = %v", err)
+	}
+	if len(logs) != 5 {
+		t.Errorf("ListAuditLogsSince() count = %d, want 5", len(logs))
+	}
+
+	// List with future time should return nothing
+	future := time.Now().Add(time.Hour)
+	logs, err = db.ListAuditLogsSince(ctx, future)
+	if err != nil {
+		t.Fatalf("ListAuditLogsSince() future error = %v", err)
+	}
+	if len(logs) != 0 {
+		t.Errorf("ListAuditLogsSince() future count = %d, want 0", len(logs))
+	}
+}
