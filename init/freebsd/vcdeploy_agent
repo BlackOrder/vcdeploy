@@ -1,0 +1,40 @@
+#!/bin/sh
+
+# PROVIDE: vcdeploy_agent
+# REQUIRE: LOGIN DAEMON NETWORKING
+# KEYWORD: shutdown
+
+. /etc/rc.subr
+
+name="vcdeploy_agent"
+rcvar="${name}_enable"
+
+load_rc_config $name
+: ${vcdeploy_agent_enable:="NO"}
+: ${vcdeploy_agent_user:="vcdeploy"}
+: ${vcdeploy_agent_config:="/usr/local/etc/vcdeploy/agent.yaml"}
+
+command="/usr/local/bin/vcdeploy-agent"
+command_args="start"
+pidfile="/var/run/${name}.pid"
+
+start_cmd="${name}_start"
+stop_cmd="${name}_stop"
+
+vcdeploy_agent_start()
+{
+    echo "Starting ${name}."
+    /usr/sbin/daemon -f -p ${pidfile} -u ${vcdeploy_agent_user} \
+        ${command} ${command_args}
+}
+
+vcdeploy_agent_stop()
+{
+    echo "Stopping ${name}."
+    if [ -f ${pidfile} ]; then
+        kill -TERM $(cat ${pidfile})
+        rm -f ${pidfile}
+    fi
+}
+
+run_rc_command "$1"

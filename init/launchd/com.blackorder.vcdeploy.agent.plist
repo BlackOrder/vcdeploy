@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.blackorder.vcdeploy.agent</string>
+    
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/vcdeploy-agent</string>
+        <string>start</string>
+    </array>
+    
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>VCDEPLOY_CONFIG</key>
+        <string>/usr/local/etc/vcdeploy/agent.yaml</string>
+    </dict>
+    
+    <key>RunAtLoad</key>
+    <true/>
+    
+    <key>KeepAlive</key>
+    <true/>
+    
+    <key>StandardOutPath</key>
+    <string>/usr/local/var/log/vcdeploy/agent.log</string>
+    
+    <key>StandardErrorPath</key>
+    <string>/usr/local/var/log/vcdeploy/agent.error.log</string>
+    
+    <key>WorkingDirectory</key>
+    <string>/usr/local/var/lib/vcdeploy</string>
+    
+    <key>SoftResourceLimits</key>
+    <dict>
+        <key>NumberOfFiles</key>
+        <integer>65535</integer>
+    </dict>
+</dict>
+</plist>
