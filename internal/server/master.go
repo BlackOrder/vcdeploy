@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BlackOrder/vcdeploy/internal/alerting"
 	"github.com/BlackOrder/vcdeploy/internal/config"
 	"github.com/BlackOrder/vcdeploy/internal/metrics"
 	"github.com/BlackOrder/vcdeploy/internal/proto"
@@ -80,6 +81,9 @@ type MasterServer struct {
 
 	// Webhook handling
 	webhookHandler *webhookHandlerAdapter
+
+	// Alerting
+	alertManager *alerting.Manager
 
 	// Security middleware
 	securityMiddleware    *SecurityMiddleware
@@ -299,6 +303,34 @@ func (s *MasterServer) SetWebhookHandler(kms *security.KMS, processor webhooksha
 	// Inject services into AgentServer if it exists
 	if s.agentServer != nil {
 		s.agentServer.SetServices(s.agentService, s.deploymentService)
+
+		// Initialize alerting if enabled
+		if s.config.Alerting.Enabled {
+			thresholds := alerting.DefaultThresholds()
+			if s.config.Alerting.DiskWarningPercent > 0 {
+				thresholds.DiskWarningPercent = s.config.Alerting.DiskWarningPercent
+			}
+			if s.config.Alerting.DiskCriticalPercent > 0 {
+				thresholds.DiskCriticalPercent = s.config.Alerting.DiskCriticalPercent
+			}
+			if s.config.Alerting.MemoryWarningPercent > 0 {
+				thresholds.MemoryWarningPercent = s.config.Alerting.MemoryWarningPercent
+			}
+			if s.config.Alerting.CPUWarningPercent > 0 {
+				thresholds.CPUWarningPercent = s.config.Alerting.CPUWarningPercent
+			}
+			if s.config.Alerting.DeploymentTimeout > 0 {
+				thresholds.DeploymentTimeout = s.config.Alerting.DeploymentTimeout
+			}
+			if s.config.Alerting.AlertCooldown > 0 {
+				thresholds.AlertCooldown = s.config.Alerting.AlertCooldown
+			}
+
+			// TODO: Create notifier from config when notification system is integrated
+			s.alertManager = alerting.NewManager(nil, s.logger, thresholds)
+			s.agentServer.SetAlertManager(s.alertManager)
+			s.logger.Info("System alerting enabled", zap.Any("thresholds", thresholds))
+		}
 	}
 
 	secretStore := &webhookSecretStoreAdapter{

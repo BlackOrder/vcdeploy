@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BlackOrder/vcdeploy/internal/alerting"
+	"github.com/BlackOrder/vcdeploy/internal/metrics"
 	"github.com/BlackOrder/vcdeploy/internal/proto"
 	"github.com/BlackOrder/vcdeploy/internal/security"
 	"github.com/BlackOrder/vcdeploy/internal/services"
@@ -31,6 +33,9 @@ type AgentServer struct {
 	// Service layer
 	agentService      services.AgentServicer
 	deploymentService services.DeploymentServicer
+
+	// Alert manager for system alerts
+	alertManager *alerting.Manager
 
 	// tokens maps agent IDs to their registration tokens
 	tokens     map[string]string
@@ -72,6 +77,11 @@ func NewAgentServer(db *storage.DB, ca *security.CAManager, logger *zap.Logger) 
 func (s *AgentServer) SetServices(agentSvc services.AgentServicer, deploymentSvc services.DeploymentServicer) {
 	s.agentService = agentSvc
 	s.deploymentService = deploymentSvc
+}
+
+// SetAlertManager sets the alert manager for system alerts.
+func (s *AgentServer) SetAlertManager(alertMgr *alerting.Manager) {
+	s.alertManager = alertMgr
 }
 
 // RegisterToken adds a registration token for an agent.
@@ -266,6 +276,14 @@ func (s *AgentServer) Connect(stream proto.AgentService_ConnectServer) error {
 		s.logger.Warn("Failed to update agent status", zap.Error(err))
 	}
 
+	// Update metrics
+	metrics.AgentConnected.WithLabelValues(agentID, agent.Hostname).Set(1)
+
+	// Send reconnection alert if alerting is enabled
+	if s.alertManager != nil {
+		s.alertManager.CheckAgentReconnect(ctx, agent)
+	}
+
 	s.logger.Info("Agent connected",
 		zap.String("agent_id", agentID),
 		zap.String("hostname", agent.Hostname),
@@ -324,6 +342,17 @@ func (s *AgentServer) Heartbeat(ctx context.Context, req *proto.HeartbeatRequest
 	// Update agent status and stats
 	agent.LastSeenAt = time.Now()
 	if req.Stats != nil {
+		// Update Prometheus metrics
+		metrics.AgentCPUPercent.WithLabelValues(req.AgentId).Set(req.Stats.CpuPercent)
+		metrics.AgentMemoryPercent.WithLabelValues(req.AgentId).Set(req.Stats.MemoryPercent)
+		metrics.AgentDiskPercent.WithLabelValues(req.AgentId).Set(req.Stats.DiskPercent)
+
+		// Check alert thresholds
+		if s.alertManager != nil {
+			s.alertManager.CheckAgentMetrics(ctx, req.AgentId, agent.Hostname,
+				req.Stats.CpuPercent, req.Stats.MemoryPercent, req.Stats.DiskPercent)
+		}
+
 		// Store stats as capabilities JSON for now
 		stats := map[string]interface{}{
 			"cpu_percent":        req.Stats.CpuPercent,
@@ -505,6 +534,14 @@ func (s *AgentServer) cleanupConnection(agentID string) {
 			s.logger.Warn("Failed to update agent status to offline",
 				zap.String("agent_id", agentID),
 				zap.Error(err))
+		}
+
+		// Update metrics
+		metrics.AgentConnected.WithLabelValues(agentID, agent.Hostname).Set(0)
+
+		// Send disconnect alert if alerting is enabled
+		if s.alertManager != nil {
+			s.alertManager.CheckAgentDisconnect(ctx, agent)
 		}
 	}
 
