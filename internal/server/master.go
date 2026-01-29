@@ -12,11 +12,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/BlackOrder/vcdeploy/internal/config"
+	"github.com/BlackOrder/vcdeploy/internal/metrics"
 	"github.com/BlackOrder/vcdeploy/internal/proto"
 	"github.com/BlackOrder/vcdeploy/internal/scheduler"
 	"github.com/BlackOrder/vcdeploy/internal/security"
@@ -36,6 +38,7 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/services/webhooks"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 	webhookshandler "github.com/BlackOrder/vcdeploy/internal/webhooks"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/grpc"
@@ -440,6 +443,9 @@ func (s *MasterServer) startHTTP() error {
 
 	// Health check
 	mux.HandleFunc("/api/v1/health", s.handleHealth)
+
+	// Metrics endpoint (no auth - typically filtered at network level)
+	mux.Handle("/metrics", promhttp.Handler())
 
 	// Auth API (for programmatic login)
 	mux.HandleFunc("/api/v1/auth/login", s.handleAPILogin)
@@ -862,16 +868,55 @@ func (s *MasterServer) Stop(ctx context.Context) error {
 
 func (s *MasterServer) loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Skip metrics for /metrics endpoint to avoid recursive counting
+		if r.URL.Path == "/metrics" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		metrics.HTTPRequestsInFlight.Inc()
+		defer metrics.HTTPRequestsInFlight.Dec()
+
 		start := time.Now()
 		wrapped := &responseWriter{ResponseWriter: w, status: 200}
 		next.ServeHTTP(wrapped, r)
+
+		duration := time.Since(start)
+		statusStr := strconv.Itoa(wrapped.status)
+
+		// Normalize path for metrics (remove IDs to reduce cardinality)
+		path := normalizePath(r.URL.Path)
+
+		// Record metrics
+		metrics.HTTPRequestDuration.WithLabelValues(r.Method, path, statusStr).Observe(duration.Seconds())
+		metrics.HTTPRequestsTotal.WithLabelValues(r.Method, path, statusStr).Inc()
+
 		s.logger.Debug("HTTP request",
 			zap.String("method", r.Method),
 			zap.String("path", r.URL.Path),
 			zap.Int("status", wrapped.status),
-			zap.Duration("duration", time.Since(start)),
+			zap.Duration("duration", duration),
 		)
 	})
+}
+
+// normalizePath normalizes URL paths for metrics by replacing IDs with placeholders.
+// This reduces metric cardinality while preserving useful grouping.
+func normalizePath(path string) string {
+	// Simple normalization: replace numeric segments and UUIDs with :id
+	parts := strings.Split(path, "/")
+	for i, part := range parts {
+		// Replace numeric IDs
+		if _, err := strconv.ParseInt(part, 10, 64); err == nil {
+			parts[i] = ":id"
+			continue
+		}
+		// Replace UUIDs (simple check for 36-char strings with dashes)
+		if len(part) == 36 && strings.Count(part, "-") == 4 {
+			parts[i] = ":id"
+		}
+	}
+	return strings.Join(parts, "/")
 }
 
 func (s *MasterServer) withAuth(handler http.HandlerFunc) http.HandlerFunc {
