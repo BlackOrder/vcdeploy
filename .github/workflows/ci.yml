@@ -310,7 +310,7 @@ jobs:
           sleep 15  # Wait for server to start
         env:
           VCDEPLOY_TEST_MODE: "true"
-          VCDEPLOY_ADMIN_PASSWORD: "admin"
+          VCDEPLOY_ADMIN_PASSWORD: "adminpassword123"
           VCDEPLOY_DATA_DIR: "./data"
           VCDEPLOY_CONFIG_DIR: "./configs"
           VCDEPLOY_RUN_DIR: "./data"
@@ -322,7 +322,7 @@ jobs:
           E2E_MASTER_HTTP_URL: "http://localhost:8080"
           E2E_API_TOKEN: ""
           E2E_ADMIN_USER: "admin"
-          E2E_ADMIN_PASS: "admin"
+          E2E_ADMIN_PASS: "adminpassword123"
 
   # CLI Tests
   cli-tests:
@@ -420,7 +420,7 @@ jobs:
           sleep 15
         env:
           VCDEPLOY_TEST_MODE: "true"
-          VCDEPLOY_ADMIN_PASSWORD: "admin"
+          VCDEPLOY_ADMIN_PASSWORD: "adminpassword123"
           VCDEPLOY_DATA_DIR: "./data"
           VCDEPLOY_CONFIG_DIR: "./configs"
           VCDEPLOY_RUN_DIR: "./data"
@@ -433,7 +433,7 @@ jobs:
         env:
           VCDEPLOY_WEB_URL: "http://localhost:8080"
           TEST_ADMIN_USERNAME: "admin"
-          TEST_ADMIN_PASSWORD: "admin"
+          TEST_ADMIN_PASSWORD: "adminpassword123"
           CI: "true"
 
       - name: Upload Playwright report
@@ -485,7 +485,7 @@ jobs:
         run: go test -v -tags=e2e -timeout 30m ./tests/e2e/...
         env:
           E2E_MASTER_HTTP_URL: "http://localhost:8080"
-          E2E_ADMIN_PASS: "admin"
+          E2E_ADMIN_PASS: "adminpassword123"
 
       - name: Build CLI binary
         run: make build
@@ -508,7 +508,7 @@ jobs:
           npx playwright test --project=chromium
         env:
           VCDEPLOY_WEB_URL: "http://localhost:8080"
-          TEST_ADMIN_PASSWORD: "admin"
+          TEST_ADMIN_PASSWORD: "adminpassword123"
           CI: "true"
 
       - name: Show logs on failure
