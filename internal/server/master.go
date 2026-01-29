@@ -40,6 +40,8 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 	webhookshandler "github.com/BlackOrder/vcdeploy/internal/webhooks"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/grpc"
@@ -550,10 +552,15 @@ func (s *MasterServer) startHTTP() error {
 	}
 	s.logger.Info("Starting HTTP server", zap.String("addr", addr))
 
-	// Build middleware chain: request ID -> logging -> CSP -> security headers -> rate limiting -> handler
+	// Build middleware chain: otel -> request ID -> logging -> CSP -> security headers -> rate limiting -> handler
 	var handler http.Handler = mux
 	handler = s.loggingMiddleware(handler)
 	handler = s.requestIDMiddleware(handler) // Add request ID first (outermost)
+
+	// Add OpenTelemetry HTTP instrumentation (outermost for full request tracing)
+	handler = otelhttp.NewHandler(handler, "vcdeploy-http",
+		otelhttp.WithMessageEvents(otelhttp.ReadEvents, otelhttp.WriteEvents),
+	)
 
 	// Add CSP middleware (must be before security headers to set CSP header)
 	if s.cspMiddleware != nil {
@@ -597,6 +604,9 @@ func (s *MasterServer) startGRPC() error {
 	}
 
 	var opts []grpc.ServerOption
+
+	// Add OpenTelemetry gRPC instrumentation
+	opts = append(opts, grpc.StatsHandler(otelgrpc.NewServerHandler()))
 
 	if s.config.Server.TLS.Enabled {
 		cert, err := tls.LoadX509KeyPair(s.config.Server.TLS.Cert, s.config.Server.TLS.Key)

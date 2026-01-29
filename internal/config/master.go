@@ -18,6 +18,7 @@ type MasterConfig struct {
 	Security      SecurityConfig      `yaml:"security"`
 	Backup        BackupConfig        `yaml:"backup"`
 	Logs          LogsConfig          `yaml:"logs"`
+	Tracing       TracingConfig       `yaml:"tracing"`
 	Webhooks      WebhooksConfig      `yaml:"webhooks"`
 	Notifications NotificationsConfig `yaml:"notifications"`
 	API           APIConfig           `yaml:"api"`
@@ -131,6 +132,15 @@ type ApplicationLogsConfig struct {
 // LogRotationConfig defines log rotation settings.
 type LogRotationConfig struct {
 	Schedule string `yaml:"schedule"`
+}
+
+// TracingConfig defines OpenTelemetry tracing settings.
+type TracingConfig struct {
+	Enabled     bool    `yaml:"enabled"`
+	Endpoint    string  `yaml:"endpoint"`
+	ServiceName string  `yaml:"service_name"`
+	SampleRate  float64 `yaml:"sample_rate"`
+	Insecure    bool    `yaml:"insecure"`
 }
 
 // WebhooksConfig defines webhook settings.

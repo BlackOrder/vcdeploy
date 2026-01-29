@@ -22,6 +22,7 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/security"
 	"github.com/BlackOrder/vcdeploy/internal/server"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
+	"github.com/BlackOrder/vcdeploy/internal/tracing"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -408,6 +409,39 @@ func runMasterStart(cmd *cobra.Command, args []string) error {
 		zap.String("commit", commit),
 	)
 
+	// Initialize OpenTelemetry tracing if enabled
+	var tracingShutdown func(context.Context) error
+	if globalConfig.Tracing.Enabled {
+		tracing.SetVersion(version)
+		tracingCfg := tracing.Config{
+			Enabled:     globalConfig.Tracing.Enabled,
+			Endpoint:    globalConfig.Tracing.Endpoint,
+			ServiceName: globalConfig.Tracing.ServiceName,
+			SampleRate:  globalConfig.Tracing.SampleRate,
+			Insecure:    globalConfig.Tracing.Insecure,
+		}
+		if tracingCfg.ServiceName == "" {
+			tracingCfg.ServiceName = "vcdeploy"
+		}
+		if tracingCfg.Endpoint == "" {
+			tracingCfg.Endpoint = "localhost:4317"
+		}
+		if tracingCfg.SampleRate == 0 {
+			tracingCfg.SampleRate = 0.1
+		}
+
+		shutdown, err := tracing.InitTracer(context.Background(), tracingCfg)
+		if err != nil {
+			globalLogger.Warn("failed to initialize tracing", zap.Error(err))
+		} else {
+			tracingShutdown = shutdown
+			globalLogger.Info("OpenTelemetry tracing initialized",
+				zap.String("endpoint", tracingCfg.Endpoint),
+				zap.Float64("sample_rate", tracingCfg.SampleRate),
+			)
+		}
+	}
+
 	// Initialize database
 	sysCfg := config.MustGetSystemConfig()
 	dbPath := sysCfg.DatabasePath()
@@ -453,7 +487,19 @@ func runMasterStart(cmd *cobra.Command, args []string) error {
 		if err := srv.Stop(shutdownCtx); err != nil {
 			globalLogger.Error("shutdown error", zap.Error(err))
 		}
+		// Shutdown tracing
+		if tracingShutdown != nil {
+			if err := tracingShutdown(shutdownCtx); err != nil {
+				globalLogger.Error("tracing shutdown error", zap.Error(err))
+			}
+		}
 	case err := <-errCh:
+		// Shutdown tracing on error path too
+		if tracingShutdown != nil {
+			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			_ = tracingShutdown(shutdownCtx)
+			shutdownCancel()
+		}
 		return err
 	}
 
