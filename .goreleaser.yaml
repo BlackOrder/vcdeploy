@@ -19,14 +19,14 @@ builds:
     goos:
       - linux
       - darwin
-      - windows
+      - freebsd
     goarch:
       - amd64
       - arm64
     ldflags:
       - -s -w
       - -X main.version={{.Version}}
-      - -X main.commit={{.ShortCommit}}
+      - -X main.commit={{.Commit}}
       - -X main.date={{.Date}}
     mod_timestamp: "{{ .CommitTimestamp }}"
 
@@ -38,37 +38,114 @@ builds:
     goos:
       - linux
       - darwin
-      - windows
+      - freebsd
     goarch:
       - amd64
       - arm64
     ldflags:
       - -s -w
       - -X main.version={{.Version}}
-      - -X main.commit={{.ShortCommit}}
+      - -X main.commit={{.Commit}}
       - -X main.date={{.Date}}
     mod_timestamp: "{{ .CommitTimestamp }}"
 
 archives:
   - id: default
-    builds:
-      - vcdeploy
-      - vcdeploy-agent
-    name_template: >-
-      {{ .ProjectName }}_
-      {{- .Os }}_
-      {{- if eq .Arch "amd64" }}x86_64
-      {{- else if eq .Arch "386" }}i386
-      {{- else }}{{ .Arch }}{{ end }}
-      {{- if .Arm }}v{{ .Arm }}{{ end }}
-    format_overrides:
-      - goos: windows
-        format: zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - README.md
       - LICENSE
-      - scripts/install.sh
-      - scripts/uninstall.sh
+      - init/systemd/*
+      - init/launchd/*
+      - init/openrc/*
+      - init/freebsd/*
+
+dockers:
+  - id: master-amd64
+    ids:
+      - vcdeploy
+    goos: linux
+    goarch: amd64
+    image_templates:
+      - "ghcr.io/blackorder/vcdeploy:{{ .Tag }}-amd64"
+    dockerfile: docker/Dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+
+  - id: master-arm64
+    ids:
+      - vcdeploy
+    goos: linux
+    goarch: arm64
+    image_templates:
+      - "ghcr.io/blackorder/vcdeploy:{{ .Tag }}-arm64"
+    dockerfile: docker/Dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+
+  - id: agent-amd64
+    ids:
+      - vcdeploy-agent
+    goos: linux
+    goarch: amd64
+    image_templates:
+      - "ghcr.io/blackorder/vcdeploy-agent:{{ .Tag }}-amd64"
+    dockerfile: docker/Dockerfile.agent
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}-agent"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+
+  - id: agent-arm64
+    ids:
+      - vcdeploy-agent
+    goos: linux
+    goarch: arm64
+    image_templates:
+      - "ghcr.io/blackorder/vcdeploy-agent:{{ .Tag }}-arm64"
+    dockerfile: docker/Dockerfile.agent
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}-agent"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+
+docker_manifests:
+  - name_template: "ghcr.io/blackorder/vcdeploy:{{ .Tag }}"
+    image_templates:
+      - "ghcr.io/blackorder/vcdeploy:{{ .Tag }}-amd64"
+      - "ghcr.io/blackorder/vcdeploy:{{ .Tag }}-arm64"
+  - name_template: "ghcr.io/blackorder/vcdeploy:latest"
+    image_templates:
+      - "ghcr.io/blackorder/vcdeploy:{{ .Tag }}-amd64"
+      - "ghcr.io/blackorder/vcdeploy:{{ .Tag }}-arm64"
+  - name_template: "ghcr.io/blackorder/vcdeploy-agent:{{ .Tag }}"
+    image_templates:
+      - "ghcr.io/blackorder/vcdeploy-agent:{{ .Tag }}-amd64"
+      - "ghcr.io/blackorder/vcdeploy-agent:{{ .Tag }}-arm64"
+  - name_template: "ghcr.io/blackorder/vcdeploy-agent:latest"
+    image_templates:
+      - "ghcr.io/blackorder/vcdeploy-agent:{{ .Tag }}-amd64"
+      - "ghcr.io/blackorder/vcdeploy-agent:{{ .Tag }}-arm64"
 
 nfpms:
   - id: packages
@@ -76,7 +153,7 @@ nfpms:
     vendor: BlackOrder
     homepage: https://github.com/BlackOrder/vcdeploy
     maintainer: VCDeploy Team <vcdeploy@blackorder.dev>
-    description: Deployment automation and orchestration tool
+    description: Deployment platform with master-agent architecture
     license: Apache-2.0
     formats:
       - deb
@@ -105,7 +182,7 @@ nfpms:
         type: dir
         file_info:
           mode: 0750
-      # Data directory  
+      # Data directory
       - dst: /var/lib/vcdeploy
         type: dir
         file_info:
@@ -133,7 +210,7 @@ brews:
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     directory: Formula
     homepage: https://github.com/BlackOrder/vcdeploy
-    description: Deployment automation and orchestration tool
+    description: Deployment platform with master-agent architecture
     license: Apache-2.0
     install: |
       bin.install "vcdeploy"
@@ -151,6 +228,9 @@ brews:
 checksum:
   name_template: "checksums.txt"
   algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot"
 
 changelog:
   sort: asc
@@ -188,6 +268,7 @@ release:
     name: vcdeploy
   draft: false
   prerelease: auto
+  mode: replace
   name_template: "{{.ProjectName}} v{{.Version}}"
   header: |
     ## VCDeploy v{{.Version}}
@@ -203,6 +284,11 @@ release:
     ```bash
     brew tap BlackOrder/vcdeploy
     brew install vcdeploy
+    ```
+
+    **Docker:**
+    ```bash
+    docker pull ghcr.io/blackorder/vcdeploy:{{ .Tag }}
     ```
 
     **Direct Download:**
@@ -224,23 +310,6 @@ signs:
       - "${artifact}"
     artifacts: checksum
     output: true
-
-# Docker images (optional)
-dockers:
-  - image_templates:
-      - "ghcr.io/blackorder/vcdeploy:{{ .Tag }}"
-      - "ghcr.io/blackorder/vcdeploy:latest"
-    dockerfile: Dockerfile
-    build_flag_templates:
-      - "--pull"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-    ids:
-      - vcdeploy
-      - vcdeploy-agent
-    skip_push: auto
 
 # Announce new releases
 announce:

@@ -1,0 +1,26 @@
+#!/sbin/openrc-run
+# OpenRC init script for VCDeploy Agent
+
+name="vcdeploy-agent"
+description="VCDeploy Agent"
+supervisor="supervise-daemon"
+
+command="/usr/local/bin/vcdeploy-agent"
+command_args="start"
+command_user="vcdeploy:vcdeploy"
+command_background="yes"
+
+pidfile="/run/${name}.pid"
+output_log="/var/log/vcdeploy/agent.log"
+error_log="/var/log/vcdeploy/agent.error.log"
+
+depend() {
+    need net
+    after firewall
+}
+
+start_pre() {
+    checkpath --directory --owner vcdeploy:vcdeploy --mode 0755 /var/lib/vcdeploy
+    checkpath --directory --owner vcdeploy:vcdeploy --mode 0755 /var/log/vcdeploy
+    checkpath --directory --owner root:vcdeploy --mode 0750 /etc/vcdeploy
+}
