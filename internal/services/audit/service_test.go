@@ -268,3 +268,70 @@ func TestService_Cleanup_NoOldEntries(t *testing.T) {
 		t.Errorf("Cleanup() count = %v, want 0", count)
 	}
 }
+
+func TestService_LogWithSnapshot(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+
+	entry := &storage.AuditEntry{
+		Source:   "test",
+		User:     "admin",
+		Action:   "delete",
+		Resource: "project:myproject",
+		Result:   "success",
+	}
+
+	// Create a snapshot of the resource before deletion
+	snapshot := map[string]any{
+		"name":        "myproject",
+		"description": "A test project",
+		"created_at":  time.Now().Format(time.RFC3339),
+	}
+
+	if err := svc.LogWithSnapshot(ctx, entry, snapshot); err != nil {
+		t.Fatalf("LogWithSnapshot() error = %v", err)
+	}
+
+	// Verify the entry was logged
+	entries, err := svc.List(ctx, 10, 0)
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("List() count = %v, want 1", len(entries))
+	}
+
+	logged := entries[0]
+	if logged.Action != "delete" {
+		t.Errorf("LogWithSnapshot() action = %v, want %v", logged.Action, "delete")
+	}
+	if logged.Resource != "project:myproject" {
+		t.Errorf("LogWithSnapshot() resource = %v, want %v", logged.Resource, "project:myproject")
+	}
+}
+
+func TestService_LogWithSnapshot_SetsTimestamp(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+
+	entry := &storage.AuditEntry{
+		Source: "test",
+		User:   "testuser",
+		Action: "delete",
+	}
+
+	snapshot := map[string]string{"key": "value"}
+
+	if err := svc.LogWithSnapshot(ctx, entry, snapshot); err != nil {
+		t.Fatalf("LogWithSnapshot() error = %v", err)
+	}
+
+	entries, err := svc.List(ctx, 10, 0)
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+
+	if entries[0].Timestamp.IsZero() {
+		t.Error("LogWithSnapshot() should set timestamp if not provided")
+	}
+}
