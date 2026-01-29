@@ -80,6 +80,111 @@ func TestHandleHostKeys_Create(t *testing.T) {
 	}
 }
 
+func TestHandleHostKey_Get(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+	ctx := context.Background()
+
+	// Create a host key
+	key := &storage.SSHHostKey{
+		Hostname:    "gettest.example.com",
+		Port:        22,
+		KeyType:     "ssh-rsa",
+		PublicKey:   "AAAAB3...",
+		Fingerprint: "SHA256:...",
+		Trusted:     true,
+		AddedBy:     "test",
+		CreatedAt:   time.Now(),
+	}
+	_ = server.hostKeyService.Create(ctx, key)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/hostkeys/1", http.NoBody)
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleHostKey(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var keyResponse storage.SSHHostKey
+	if err := json.NewDecoder(rec.Body).Decode(&keyResponse); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if keyResponse.Hostname != "gettest.example.com" {
+		t.Errorf("hostname = %v, want %v", keyResponse.Hostname, "gettest.example.com")
+	}
+}
+
+func TestHandleHostKey_GetNotFound(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/hostkeys/999", http.NoBody)
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleHostKey(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+func TestHandleHostKey_Delete(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+	ctx := context.Background()
+
+	// Create a host key
+	key := &storage.SSHHostKey{
+		Hostname:    "deletetest.example.com",
+		Port:        22,
+		KeyType:     "ssh-rsa",
+		PublicKey:   "AAAAB3...",
+		Fingerprint: "SHA256:...",
+		Trusted:     false,
+		AddedBy:     "test",
+		CreatedAt:   time.Now(),
+	}
+	_ = server.hostKeyService.Create(ctx, key)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/hostkeys/1", http.NoBody)
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleHostKey(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+}
+
+func TestHandleHostKey_InvalidID(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/hostkeys/invalid", http.NoBody)
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleHostKey(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
 func TestHandleHostKey_UpdateTrust(t *testing.T) {
 	t.Parallel()
 
