@@ -14,47 +14,28 @@ import (
 func TestConfigCommands(t *testing.T) {
 	ctx := setupTest(t)
 
-	t.Run("config init", func(t *testing.T) {
-		// Create temp directory for config
-		tmpDir := t.TempDir()
-		configPath := filepath.Join(tmpDir, "config.yaml")
-
-		result := ctx.CLI.Run("config", "init", "--output", configPath)
+	t.Run("config help", func(t *testing.T) {
+		result := ctx.CLI.Run("config", "--help")
 		ctx.Assertions.Success(result)
-
-		// Verify file was created
-		if _, err := os.Stat(configPath); os.IsNotExist(err) {
-			t.Error("config file was not created")
-		}
+		ctx.Assertions.StdoutContains(result, "export")
+		ctx.Assertions.StdoutContains(result, "import")
+		ctx.Assertions.StdoutContains(result, "set")
+		ctx.Assertions.StdoutContains(result, "show")
 	})
 
-	t.Run("config validate", func(t *testing.T) {
-		// Create a valid config
-		tmpDir := t.TempDir()
-		configPath := filepath.Join(tmpDir, "master.yaml")
-
-		// Write a minimal valid config
-		validConfig := `
-server:
-  listen: ":8080"
-grpc:
-  listen: ":9090"
-`
-		os.WriteFile(configPath, []byte(validConfig), 0644)
-
-		result := ctx.CLI.Run("config", "validate", configPath)
+	t.Run("config export help", func(t *testing.T) {
+		result := ctx.CLI.Run("config", "export", "--help")
 		ctx.Assertions.Success(result)
 	})
 
-	t.Run("config validate invalid", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		configPath := filepath.Join(tmpDir, "invalid.yaml")
+	t.Run("config import help", func(t *testing.T) {
+		result := ctx.CLI.Run("config", "import", "--help")
+		ctx.Assertions.Success(result)
+	})
 
-		// Write invalid YAML
-		os.WriteFile(configPath, []byte("invalid: yaml: syntax"), 0644)
-
-		result := ctx.CLI.Run("config", "validate", configPath)
-		ctx.Assertions.Failed(result)
+	t.Run("config set help", func(t *testing.T) {
+		result := ctx.CLI.Run("config", "set", "--help")
+		ctx.Assertions.Success(result)
 	})
 
 	t.Run("config show", func(t *testing.T) {
@@ -67,28 +48,24 @@ grpc:
 	})
 }
 
-// TestConfigGenerate tests config generation for different project types.
-func TestConfigGenerate(t *testing.T) {
+// TestConfigExportImport tests config export and import.
+func TestConfigExportImport(t *testing.T) {
 	ctx := setupTest(t)
+	cfg := testutil.GetConfig()
 
-	projectTypes := []string{"nodejs", "php", "python", "static", "docker"}
+	ctx.CLI.WithEnv("VCDEPLOY_API_URL", cfg.MasterHTTPURL)
+	ctx.CLI.WithEnv("VCDEPLOY_API_TOKEN", cfg.APIToken)
 
-	for _, projectType := range projectTypes {
-		t.Run("generate "+projectType+" config", func(t *testing.T) {
-			tmpDir := t.TempDir()
-			configPath := filepath.Join(tmpDir, "project.yaml")
+	t.Run("config export to file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "config.json")
 
-			result := ctx.CLI.Run("config", "generate",
-				"--type", projectType,
-				"--output", configPath,
-			)
-			ctx.Assertions.Success(result)
+		result := ctx.CLI.Run("config", "export", "--output", configPath)
+		ctx.Assertions.Success(result)
 
-			// Verify file was created
-			content, err := os.ReadFile(configPath)
-			if err == nil && len(content) > 0 {
-				// Config file generated successfully
-			}
-		})
-	}
+		// Verify file was created
+		if _, err := os.Stat(configPath); os.IsNotExist(err) {
+			t.Error("config file was not created")
+		}
+	})
 }

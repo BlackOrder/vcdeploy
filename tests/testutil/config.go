@@ -4,6 +4,7 @@ package testutil
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
@@ -86,8 +87,36 @@ func loadConfig() *Config {
 		Parallel:      os.Getenv("TEST_NO_PARALLEL") == "",
 
 		// Binary paths
-		VCDeployBinary:      getEnvOrDefault("VCDEPLOY_BINARY", "./bin/vcdeploy"),
-		VCDeployAgentBinary: getEnvOrDefault("VCDEPLOY_AGENT_BINARY", "./bin/vcdeploy-agent"),
+		VCDeployBinary:      resolveBinaryPath(getEnvOrDefault("VCDEPLOY_BINARY", "./bin/vcdeploy")),
+		VCDeployAgentBinary: resolveBinaryPath(getEnvOrDefault("VCDEPLOY_AGENT_BINARY", "./bin/vcdeploy-agent")),
+	}
+}
+
+// resolveBinaryPath resolves a binary path relative to the repository root.
+// If the path is absolute, it's returned as-is.
+// If the path is relative, it tries to find the repository root by looking for go.mod.
+func resolveBinaryPath(path string) string {
+	if filepath.IsAbs(path) {
+		return path
+	}
+
+	// Try to find repository root by looking for go.mod
+	dir, err := os.Getwd()
+	if err != nil {
+		return path
+	}
+
+	// Walk up directory tree looking for go.mod
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return filepath.Join(dir, path)
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			// Reached filesystem root, return original path
+			return path
+		}
+		dir = parent
 	}
 }
 
@@ -96,6 +125,16 @@ func getEnvOrDefault(key, defaultVal string) string {
 		return val
 	}
 	return defaultVal
+}
+
+// SkipIfNoAgent skips the test if no agent is available.
+// This is for tests that require an actual agent to be connected to the master.
+// Use this for tests that trigger deployments or interact with agent-specific features.
+func SkipIfNoAgent(t TestingT) {
+	t.Helper()
+	if os.Getenv("SKIP_AGENT_TESTS") != "" {
+		t.Skip("Skipping test that requires an agent: SKIP_AGENT_TESTS is set")
+	}
 }
 
 // SkipIfNoParallel skips the test if parallel execution is disabled.

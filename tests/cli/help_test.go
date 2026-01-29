@@ -16,9 +16,10 @@ func TestVersionCommand(t *testing.T) {
 		ctx.Assertions.StdoutContains(result, "vcdeploy")
 	})
 
-	t.Run("version with verbose flag", func(t *testing.T) {
-		result := ctx.CLI.Run("version", "-v")
+	t.Run("version with help flag", func(t *testing.T) {
+		result := ctx.CLI.Run("version", "--help")
 		ctx.Assertions.Success(result)
+		ctx.Assertions.StdoutContains(result, "Print version information")
 	})
 }
 
