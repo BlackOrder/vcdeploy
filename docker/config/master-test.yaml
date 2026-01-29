@@ -2,12 +2,14 @@
 # Used for E2E testing
 
 server:
-  http:
-    address: ":8080"
-    read_timeout: 30s
-    write_timeout: 30s
-  grpc:
-    address: ":9090"
+  listen: ":8080"
+  tls:
+    enabled: false
+
+grpc:
+  listen: ":9090"
+  tls:
+    enabled: false
 
 database:
   driver: sqlite
@@ -22,7 +24,7 @@ auth:
 
 admin:
   username: admin
-  password: "${VCDEPLOY_ADMIN_PASSWORD:-admin}"
+  password: "${VCDEPLOY_ADMIN_PASSWORD:-adminpassword123}"
 
 logging:
   level: debug
