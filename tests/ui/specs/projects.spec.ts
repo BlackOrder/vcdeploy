@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures/test-fixtures';
+import { test, expect, TEST_ADMIN_PASSWORD } from '../fixtures/test-fixtures';
 import { ProjectsPage, ProjectFormPage, ProjectDetailPage } from '../pages';
 
 test.describe('Projects List', () => {
@@ -114,7 +114,7 @@ test.describe('Project Details', () => {
 
   test('should navigate to project details when clicking a project', async ({ page, api }) => {
     // Create a test project via API first
-    await api.authenticate('admin', 'Changeme12345!');
+    await api.authenticate('admin', TEST_ADMIN_PASSWORD);
     const projectName = `test-project-${Date.now()}`;
     const createResponse = await api.createTestProject(projectName);
     
@@ -145,7 +145,7 @@ test.describe('Project Details', () => {
 
   test('should display project information', async ({ page, api }) => {
     // Create a test project via API
-    await api.authenticate('admin', 'Changeme12345!');
+    await api.authenticate('admin', TEST_ADMIN_PASSWORD);
     const projectName = `test-project-${Date.now()}`;
     const createResponse = await api.createTestProject(projectName);
     
@@ -172,7 +172,7 @@ test.describe('Edit Project', () => {
 
   test('should edit project details', async ({ page, api }) => {
     // Create a test project via API
-    await api.authenticate('admin', 'Changeme12345!');
+    await api.authenticate('admin', TEST_ADMIN_PASSWORD);
     const projectName = `test-project-${Date.now()}`;
     const createResponse = await api.createTestProject(projectName);
     
@@ -206,7 +206,7 @@ test.describe('Delete Project', () => {
 
   test('should delete project with confirmation', async ({ page, api }) => {
     // Create a test project via API
-    await api.authenticate('admin', 'Changeme12345!');
+    await api.authenticate('admin', TEST_ADMIN_PASSWORD);
     const projectName = `test-project-delete-${Date.now()}`;
     const createResponse = await api.createTestProject(projectName);
     
@@ -235,7 +235,7 @@ test.describe('Delete Project', () => {
 
   test('should show confirmation dialog before delete', async ({ page, api }) => {
     // Create a test project via API
-    await api.authenticate('admin', 'Changeme12345!');
+    await api.authenticate('admin', TEST_ADMIN_PASSWORD);
     const projectName = `test-project-confirm-${Date.now()}`;
     const createResponse = await api.createTestProject(projectName);
     

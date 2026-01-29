@@ -366,8 +366,9 @@ func (s *MasterServer) seedDefaultAdmin() error {
 		return nil // Users already exist, no need to seed
 	}
 
-	// Create default admin user
-	defaultPassword := "Changeme12345!" // User should change this immediately
+	// Create default admin user with simple default credentials
+	// User MUST change password on first login
+	defaultPassword := "admin"
 	user, err := s.userService.Create(ctx, "admin", defaultPassword, "admin@localhost", "admin")
 	if err != nil {
 		return fmt.Errorf("creating default admin: %w", err)
@@ -375,7 +376,7 @@ func (s *MasterServer) seedDefaultAdmin() error {
 
 	s.logger.Info("Created default admin user",
 		zap.String("username", user.Username),
-		zap.String("password", defaultPassword+" (CHANGE THIS IMMEDIATELY)"))
+		zap.String("note", "Password change required on first login"))
 
 	return nil
 }

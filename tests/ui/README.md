@@ -66,7 +66,7 @@ npm run report
 | `VCDEPLOY_WEB_URL` | Base URL of the web application | `http://localhost:8080` |
 | `VCDEPLOY_API_URL` | Base URL of the API | `http://localhost:8080/api` |
 | `TEST_ADMIN_USERNAME` | Admin username for tests | `admin` |
-| `TEST_ADMIN_PASSWORD` | Admin password for tests | `Changeme12345!` |
+| `TEST_ADMIN_PASSWORD` | Admin password for tests | `admin` |
 | `TEST_NO_PARALLEL` | Disable parallel tests | `false` |
 | `CI` | CI environment flag | (auto-detected) |
 
@@ -114,7 +114,7 @@ import { LoginPage } from '../pages';
 test('should login successfully', async ({ page }) => {
   const loginPage = new LoginPage(page);
   await loginPage.goto();
-  await loginPage.login('admin', 'Changeme12345!');
+  await loginPage.login('admin', 'admin');
   await expect(page).not.toHaveURL(/.*login/);
 });
 ```
@@ -139,7 +139,7 @@ test('should create and delete project', async ({ page, auth, api }) => {
   await auth.loginAsAdmin();
   
   // Create project via API
-  await api.authenticate('admin', 'Changeme12345!');
+  await api.authenticate('admin', 'admin');
   const project = await api.createTestProject('test-project');
   
   // Test UI
