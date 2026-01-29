@@ -486,9 +486,12 @@ func (s *MasterServer) seedDefaultAdmin() error {
 		return nil // Users already exist, no need to seed
 	}
 
-	// Create default admin user with simple default credentials
-	// User MUST change password on first login
-	defaultPassword := "admin"
+	// Get admin password from environment variable or use default
+	// Default password meets minimum 12 character requirement
+	defaultPassword := os.Getenv("VCDEPLOY_ADMIN_PASSWORD")
+	if defaultPassword == "" {
+		defaultPassword = "adminpassword123" // Default that meets 12 char requirement
+	}
 	user, err := s.userService.Create(ctx, "admin", defaultPassword, "admin@localhost", "admin")
 	if err != nil {
 		return fmt.Errorf("creating default admin: %w", err)

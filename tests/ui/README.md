@@ -66,7 +66,7 @@ npm run report
 | `VCDEPLOY_WEB_URL` | Base URL of the web application | `http://localhost:8080` |
 | `VCDEPLOY_API_URL` | Base URL of the API | `http://localhost:8080/api` |
 | `TEST_ADMIN_USERNAME` | Admin username for tests | `admin` |
-| `TEST_ADMIN_PASSWORD` | Admin password for tests | `admin` |
+| `TEST_ADMIN_PASSWORD` | Admin password for tests | `adminpassword123` |
 | `TEST_NO_PARALLEL` | Disable parallel tests | `false` |
 | `CI` | CI environment flag | (auto-detected) |
 
