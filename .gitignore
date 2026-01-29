@@ -94,3 +94,4 @@ ehthumbs.db
 cpu.out
 mem.out
 *.sarif
+*.prompt.md
