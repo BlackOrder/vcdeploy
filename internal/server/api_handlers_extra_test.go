@@ -80,6 +80,115 @@ func TestHandleHostKeys_Create(t *testing.T) {
 	}
 }
 
+func TestHandleHostKeys_CreateInvalidJSON(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+
+	body := bytes.NewBufferString(`{invalid json`)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/hostkeys", body)
+	req.Header.Set("Content-Type", "application/json")
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleHostKeys(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+}
+
+func TestHandleHostKeys_CreateMissingHostname(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+
+	body := bytes.NewBufferString(`{
+		"port": 22,
+		"key_type": "ssh-ed25519",
+		"public_key": "AAAAC3..."
+	}`)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/hostkeys", body)
+	req.Header.Set("Content-Type", "application/json")
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleHostKeys(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+}
+
+func TestHandleHostKeys_CreateMissingKeyType(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+
+	body := bytes.NewBufferString(`{
+		"hostname": "test.example.com",
+		"port": 22,
+		"public_key": "AAAAC3..."
+	}`)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/hostkeys", body)
+	req.Header.Set("Content-Type", "application/json")
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleHostKeys(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+}
+
+func TestHandleHostKeys_CreateMissingPublicKey(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+
+	body := bytes.NewBufferString(`{
+		"hostname": "test.example.com",
+		"port": 22,
+		"key_type": "ssh-ed25519"
+	}`)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/hostkeys", body)
+	req.Header.Set("Content-Type", "application/json")
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleHostKeys(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+}
+
+func TestHandleHostKeys_MethodNotAllowed(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/hostkeys", http.NoBody)
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleHostKeys(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusMethodNotAllowed, rec.Body.String())
+	}
+}
+
 func TestHandleHostKey_Get(t *testing.T) {
 	t.Parallel()
 
@@ -765,6 +874,57 @@ func TestHandleProvisionJob_Cancel(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+}
+
+func TestHandleProvisionJob_GetNotFound(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/provision/nonexistent-job-id", http.NoBody)
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleProvisionJob(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusNotFound, rec.Body.String())
+	}
+}
+
+func TestHandleProvisionJob_EmptyID(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/provision/", http.NoBody)
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleProvisionJob(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+}
+
+func TestHandleProvisionJob_MethodNotAllowed(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/provision/some-id", http.NoBody)
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleProvisionJob(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusMethodNotAllowed, rec.Body.String())
 	}
 }
 

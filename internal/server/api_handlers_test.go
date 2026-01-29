@@ -283,6 +283,23 @@ func TestHandleAgentsAPI_List(t *testing.T) {
 	}
 }
 
+func TestHandleAgentsAPI_MethodNotAllowed(t *testing.T) {
+	t.Parallel()
+
+	server, _, _, userID := newTestServerWithAuth(t)
+	defer server.db.Close()
+
+	req := httptest.NewRequest("POST", "/api/v1/agents", nil)
+	req = requestWithUserContext(req, userID)
+	w := httptest.NewRecorder()
+
+	server.handleAgentsAPI(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected status %d, got %d: %s", http.StatusMethodNotAllowed, w.Code, w.Body.String())
+	}
+}
+
 // TestHandleDeploymentsAPI tests the deployments list endpoint.
 func TestHandleDeploymentsAPI_List(t *testing.T) {
 	t.Parallel()
