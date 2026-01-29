@@ -385,52 +385,6 @@ func TestValidateKey_TooLong(t *testing.T) {
 	}
 }
 
-func TestValidateProjectName_Valid(t *testing.T) {
-	validNames := []string{
-		"project",
-		"my-project",
-		"myProject123",
-		"Project_Name",
-		"a",
-		"A1",
-	}
-
-	for _, name := range validNames {
-		if err := ValidateProjectName(name); err != nil {
-			t.Errorf("ValidateProjectName(%q) unexpected error = %v", name, err)
-		}
-	}
-}
-
-func TestValidateProjectName_Invalid(t *testing.T) {
-	invalidNames := []string{
-		"",
-		"123project",
-		"my project",
-		"project.name",
-		"project/name",
-	}
-
-	for _, name := range invalidNames {
-		if err := ValidateProjectName(name); err == nil {
-			t.Errorf("ValidateProjectName(%q) expected error", name)
-		}
-	}
-}
-
-func TestValidateProjectName_TooLong(t *testing.T) {
-	// Create a name that exceeds 64 characters
-	longName := ""
-	for i := 0; i < 65; i++ {
-		longName += "a"
-	}
-
-	err := ValidateProjectName(longName)
-	if err == nil {
-		t.Error("ValidateProjectName() expected error for name exceeding 64 characters")
-	}
-}
-
 func TestService_ExportEnvFile(t *testing.T) {
 	svc, _ := newTestService(t)
 	ctx := context.Background()

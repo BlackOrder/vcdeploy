@@ -254,8 +254,7 @@ func (s *Service) ReEncryptAll(ctx context.Context) error {
 
 // Validation patterns
 var (
-	keyPattern     = regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,63}$`)
-	projectPattern = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_-]{0,63}$`)
+	keyPattern = regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,63}$`)
 )
 
 // ValidateKey validates a secret key name.
@@ -268,20 +267,6 @@ func ValidateKey(key string) error {
 	}
 	if !keyPattern.MatchString(key) {
 		return fmt.Errorf("key must start with uppercase letter, contain only A-Z, 0-9, underscore")
-	}
-	return nil
-}
-
-// ValidateProjectName validates a project name.
-func ValidateProjectName(name string) error {
-	if name == "" {
-		return fmt.Errorf("project name cannot be empty")
-	}
-	if len(name) > 64 {
-		return fmt.Errorf("project name cannot exceed 64 characters")
-	}
-	if !projectPattern.MatchString(name) {
-		return fmt.Errorf("project name must start with letter, contain only letters, numbers, hyphens, underscores")
 	}
 	return nil
 }
