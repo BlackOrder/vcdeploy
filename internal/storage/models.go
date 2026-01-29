@@ -72,6 +72,7 @@ type AgentUpdateHistory struct {
 type DeploymentRecord struct {
 	ID            string
 	Project       string
+	ProjectID     *int64 // FK to projects table (optional for backward compatibility)
 	Target        string
 	Branch        string
 	CommitHash    string
@@ -121,15 +122,17 @@ type ScheduledDeployment struct {
 
 // AuditEntry represents an audit log entry.
 type AuditEntry struct {
-	ID        int64
-	Timestamp time.Time
-	Source    string
-	User      string
-	Action    string
-	Resource  string
-	Details   string
-	IPAddress string
-	Result    string
+	ID           int64
+	Timestamp    time.Time
+	Source       string
+	User         string
+	Action       string
+	Resource     string
+	ResourceID   string // ID of the affected resource
+	ResourceData string // JSON snapshot of resource before deletion
+	Details      string
+	IPAddress    string
+	Result       string
 }
 
 // --- Secret Models ---
@@ -138,6 +141,7 @@ type AuditEntry struct {
 type Secret struct {
 	ID             int64
 	Project        string
+	ProjectID      *int64 // FK to projects table (optional for backward compatibility)
 	Scope          string
 	Key            string
 	ValueEncrypted []byte

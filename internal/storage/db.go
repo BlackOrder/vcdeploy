@@ -429,16 +429,16 @@ func (db *DB) LogAudit(ctx context.Context, entry *AuditEntry) error {
 		entry.Timestamp = time.Now()
 	}
 	_, err := db.conn.ExecContext(ctx, `
-		INSERT INTO audit_logs (timestamp, source, user, action, resource, details, ip_address, result)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, entry.Timestamp, entry.Source, entry.User, entry.Action, entry.Resource, entry.Details, entry.IPAddress, entry.Result)
+		INSERT INTO audit_logs (timestamp, source, user, action, resource, resource_id, resource_data, details, ip_address, result)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, entry.Timestamp, entry.Source, entry.User, entry.Action, entry.Resource, entry.ResourceID, entry.ResourceData, entry.Details, entry.IPAddress, entry.Result)
 	return err
 }
 
 // ListAuditLogs returns audit log entries with optional filtering.
 func (db *DB) ListAuditLogs(ctx context.Context, limit int, offset int) ([]*AuditEntry, error) {
 	rows, err := db.conn.QueryContext(ctx, `
-		SELECT id, timestamp, source, user, action, resource, details, ip_address, result
+		SELECT id, timestamp, source, user, action, resource, COALESCE(resource_id, ''), COALESCE(resource_data, ''), details, ip_address, result
 		FROM audit_logs ORDER BY timestamp DESC LIMIT ? OFFSET ?
 	`, limit, offset)
 	if err != nil {
@@ -450,7 +450,7 @@ func (db *DB) ListAuditLogs(ctx context.Context, limit int, offset int) ([]*Audi
 	for rows.Next() {
 		var entry AuditEntry
 		if err := rows.Scan(&entry.ID, &entry.Timestamp, &entry.Source, &entry.User,
-			&entry.Action, &entry.Resource, &entry.Details, &entry.IPAddress, &entry.Result); err != nil {
+			&entry.Action, &entry.Resource, &entry.ResourceID, &entry.ResourceData, &entry.Details, &entry.IPAddress, &entry.Result); err != nil {
 			return nil, fmt.Errorf("scanning audit entry: %w", err)
 		}
 		entries = append(entries, &entry)
@@ -462,7 +462,7 @@ func (db *DB) ListAuditLogs(ctx context.Context, limit int, offset int) ([]*Audi
 // ListAuditLogsSince returns audit log entries since the given time.
 func (db *DB) ListAuditLogsSince(ctx context.Context, since time.Time) ([]*AuditEntry, error) {
 	rows, err := db.conn.QueryContext(ctx, `
-		SELECT id, timestamp, source, user, action, resource, details, ip_address, result
+		SELECT id, timestamp, source, user, action, resource, COALESCE(resource_id, ''), COALESCE(resource_data, ''), details, ip_address, result
 		FROM audit_logs WHERE timestamp >= ? ORDER BY timestamp DESC
 	`, since)
 	if err != nil {
@@ -474,7 +474,7 @@ func (db *DB) ListAuditLogsSince(ctx context.Context, since time.Time) ([]*Audit
 	for rows.Next() {
 		var entry AuditEntry
 		if err := rows.Scan(&entry.ID, &entry.Timestamp, &entry.Source, &entry.User,
-			&entry.Action, &entry.Resource, &entry.Details, &entry.IPAddress, &entry.Result); err != nil {
+			&entry.Action, &entry.Resource, &entry.ResourceID, &entry.ResourceData, &entry.Details, &entry.IPAddress, &entry.Result); err != nil {
 			return nil, fmt.Errorf("scanning audit entry: %w", err)
 		}
 		entries = append(entries, &entry)
