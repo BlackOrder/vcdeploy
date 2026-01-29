@@ -156,6 +156,7 @@ type AgentServicer interface {
 // AuditServicer defines the interface for audit logging.
 type AuditServicer interface {
 	Log(ctx context.Context, entry *storage.AuditEntry) error
+	LogWithSnapshot(ctx context.Context, entry *storage.AuditEntry, resourceSnapshot any) error
 	List(ctx context.Context, limit, offset int) ([]*storage.AuditEntry, error)
 	Cleanup(ctx context.Context, cutoff time.Time) (int64, error)
 }

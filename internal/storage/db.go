@@ -435,6 +435,19 @@ func (db *DB) LogAudit(ctx context.Context, entry *AuditEntry) error {
 	return err
 }
 
+// LogAuditWithSnapshot creates an audit log entry with a JSON snapshot of the resource.
+// This is useful for capturing resource state before deletion.
+func (db *DB) LogAuditWithSnapshot(ctx context.Context, entry *AuditEntry, resourceSnapshot any) error {
+	if resourceSnapshot != nil {
+		data, err := json.Marshal(resourceSnapshot)
+		if err != nil {
+			return fmt.Errorf("marshal resource snapshot: %w", err)
+		}
+		entry.ResourceData = string(data)
+	}
+	return db.LogAudit(ctx, entry)
+}
+
 // ListAuditLogs returns audit log entries with optional filtering.
 func (db *DB) ListAuditLogs(ctx context.Context, limit int, offset int) ([]*AuditEntry, error) {
 	rows, err := db.conn.QueryContext(ctx, `

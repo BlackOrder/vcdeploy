@@ -299,7 +299,14 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		s.logAudit(r, "delete", "user", fmt.Sprintf("Deleted user: %s", user.Username), "success")
+		// Log with snapshot - omit password hash for security
+		userSnapshot := map[string]any{
+			"id":       user.ID,
+			"username": user.Username,
+			"email":    user.Email,
+			"role":     user.Role,
+		}
+		s.logAuditWithSnapshot(r, "delete", "user", fmt.Sprintf("%d", user.ID), userSnapshot, fmt.Sprintf("Deleted user: %s", user.Username), "success")
 		s.jsonResponse(w, map[string]string{"status": "deleted"})
 
 	default:
@@ -653,13 +660,26 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 
+		// Fetch project before deletion to capture snapshot for audit
+		project, err := s.projectService.GetByName(ctx, projectName)
+		if err != nil {
+			if services.IsNotFound(err) {
+				s.jsonError(w, http.StatusNotFound, "Project not found")
+				return
+			}
+			s.logger.Error("Failed to get project", zap.Error(err))
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+			return
+		}
+
 		if err := s.projectService.Delete(ctx, projectName); err != nil {
 			s.logger.Error("Failed to delete project", zap.Error(err))
 			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
-		s.logAudit(r, "delete", "project", fmt.Sprintf("Deleted project: %s", projectName), "success")
+		// Log with snapshot of deleted resource
+		s.logAuditWithSnapshot(r, "delete", "project", fmt.Sprintf("%d", project.ID), project, fmt.Sprintf("Deleted project: %s", projectName), "success")
 		s.jsonResponse(w, map[string]string{"status": "deleted"})
 
 	default:
@@ -970,13 +990,36 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// Fetch agent before deletion for snapshot
+		agent, err := s.agentService.GetByID(ctx, agentID)
+		if err != nil {
+			if services.IsNotFound(err) {
+				s.jsonError(w, http.StatusNotFound, "Agent not found")
+				return
+			}
+			s.logger.Error("Failed to get agent", zap.Error(err))
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+			return
+		}
+
 		if err := s.agentService.Delete(ctx, agentID); err != nil {
 			s.logger.Error("Failed to delete agent", zap.Error(err))
 			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
-		s.logAudit(r, "delete", "agent", fmt.Sprintf("Deleted agent: %s", agentID), "success")
+		// Log with snapshot - omit certificate for security
+		agentSnapshot := map[string]any{
+			"id":         agent.ID,
+			"hostname":   agent.Hostname,
+			"labels":     agent.Labels,
+			"status":     agent.Status,
+			"version":    agent.Version,
+			"os":         agent.OS,
+			"arch":       agent.Arch,
+			"lastSeenAt": agent.LastSeenAt,
+		}
+		s.logAuditWithSnapshot(r, "delete", "agent", agentID, agentSnapshot, fmt.Sprintf("Deleted agent: %s", agentID), "success")
 		s.jsonResponse(w, map[string]string{"status": "deleted"})
 
 	default:

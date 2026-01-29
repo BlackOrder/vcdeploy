@@ -1382,6 +1382,37 @@ func (s *MasterServer) logAudit(r *http.Request, action, resource, details, resu
 	}
 }
 
+// logAuditWithSnapshot creates an audit log entry with request context and a resource snapshot.
+// This is used for delete operations to capture the resource state before deletion.
+func (s *MasterServer) logAuditWithSnapshot(r *http.Request, action, resource, resourceID string, snapshot any, details, result string) {
+	// Get username from context (set by auth middleware)
+	user := "anonymous"
+	if username, ok := r.Context().Value("username").(string); ok {
+		user = username
+	}
+
+	// Get IP address
+	ip := extractClientIP(r)
+
+	entry := &storage.AuditEntry{
+		Source:     "http",
+		User:       user,
+		Action:     action,
+		Resource:   resource,
+		ResourceID: resourceID,
+		Details:    details,
+		IPAddress:  ip,
+		Result:     result,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := s.auditService.LogWithSnapshot(ctx, entry, snapshot); err != nil {
+		s.logger.Error("Failed to write audit log with snapshot", zap.Error(err))
+	}
+}
+
 func (s *MasterServer) jsonResponse(w http.ResponseWriter, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(data)
