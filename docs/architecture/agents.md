@@ -101,3 +101,58 @@ Agents are designed to be lightweight:
 | Memory (idle) | ~20MB |
 | Memory (deploying) | ~50MB |
 | CPU (idle) | <1% |
+
+## Agent Self-Update
+
+Agents can be updated remotely from the master server without manual intervention.
+
+### Update Policies
+
+Configure how agents receive updates:
+
+| Policy | Behavior |
+|--------|----------|
+| `immediate` | Update as soon as new version is available |
+| `window` | Update only during maintenance window |
+| `manual` | Require manual approval for each update |
+
+### Configuration
+
+```yaml
+# Agent configuration
+update:
+  policy: window
+  window:
+    start: "02:00"
+    end: "04:00"
+  auto_rollback: true
+```
+
+### Update Process
+
+1. **Check**: Master detects agent version mismatch
+2. **Download**: Agent downloads new binary from master
+3. **Verify**: Binary signature is validated
+4. **Replace**: New binary replaces old (with backup)
+5. **Restart**: Agent service restarts automatically
+6. **Verify**: Master confirms successful update
+
+### Rollback
+
+If an update fails or the agent becomes unhealthy after update:
+
+```bash
+# View update history
+vcdeploy agent updates --agent-id agent-001
+
+# Rollback to previous version
+vcdeploy agent rollback --agent-id agent-001
+```
+
+### API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/agents/{id}/updates` | Get update history |
+| POST | `/api/v1/agents/{id}/update` | Trigger update |
+| POST | `/api/v1/agents/{id}/rollback` | Rollback update |
