@@ -364,6 +364,8 @@ jobs:
           done
           # Final check
           curl -sf http://localhost:8080/api/v1/health || (docker compose -f docker/docker-compose.test.yml logs master && exit 1)
+        env:
+          TEST_ADMIN_PASSWORD: "Admin@Password123!"
 
       - name: Check master status
         run: |
@@ -376,6 +378,7 @@ jobs:
           VCDEPLOY_BINARY: "./bin/vcdeploy"
           E2E_MASTER_HTTP_URL: "http://localhost:8080"
           E2E_API_TOKEN: "test-api-token"
+          E2E_ADMIN_PASS: "Admin@Password123!"
           SKIP_AGENT_TESTS: "1"
 
       - name: Show logs on failure
@@ -481,6 +484,8 @@ jobs:
         run: |
           docker compose -f docker/docker-compose.test.yml up -d --build
           sleep 60  # Wait for all services to be ready
+        env:
+          TEST_ADMIN_PASSWORD: "Admin@Password123!"
 
       - name: Check infrastructure status
         run: docker compose -f docker/docker-compose.test.yml ps
@@ -499,6 +504,7 @@ jobs:
         env:
           VCDEPLOY_BINARY: "./bin/vcdeploy"
           E2E_MASTER_HTTP_URL: "http://localhost:8080"
+          E2E_ADMIN_PASS: "Admin@Password123!"
 
       - name: Install Playwright
         run: |

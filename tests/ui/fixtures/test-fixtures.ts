@@ -1,6 +1,7 @@
 import { test as base, expect, Page } from '@playwright/test';
 
-// Test credentials
+// Test credentials - these MUST match the VCDEPLOY_ADMIN_PASSWORD set on the server
+// The fallback is only for local development; CI must set these explicitly
 export const TEST_ADMIN_USERNAME = process.env.TEST_ADMIN_USERNAME || 'admin';
 export const TEST_ADMIN_PASSWORD = process.env.TEST_ADMIN_PASSWORD || 'Admin@Password123!';
 
@@ -20,6 +21,15 @@ export class AuthHelper {
    */
   async login(username: string, password: string) {
     await this.page.goto('/login');
+    
+    // Check if we were redirected to setup (server has no users configured)
+    if (this.page.url().includes('/setup')) {
+      throw new Error(
+        'Server redirected to /setup - no admin user configured. ' +
+        'Ensure VCDEPLOY_ADMIN_PASSWORD is set when starting the server.'
+      );
+    }
+    
     await this.page.fill('input[name="username"], input[id="username"], #username', username);
     await this.page.fill('input[name="password"], input[id="password"], #password', password);
     await this.page.click('button[type="submit"]');

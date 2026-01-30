@@ -76,7 +76,8 @@ func loadConfig() *Config {
 		GitServerUser: getEnvOrDefault("E2E_GIT_USER", "testuser"),
 		GitServerPass: getEnvOrDefault("E2E_GIT_PASS", "testpass"),
 
-		// Authentication
+		// Authentication - these must match VCDEPLOY_ADMIN_* env vars set on the server
+		// The fallback is for local dev; CI must set E2E_ADMIN_PASS explicitly
 		APIToken:      getEnvOrDefault("E2E_API_TOKEN", "test-api-token"),
 		AdminUsername: getEnvOrDefault("E2E_ADMIN_USER", "admin"),
 		AdminPassword: getEnvOrDefault("E2E_ADMIN_PASS", "Admin@Password123!"),
