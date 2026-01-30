@@ -62,7 +62,7 @@ Agents authenticate using one of:
 
 ```yaml
 # Agent config
-master_address: "master.example.com:50051"
+master_address: "master.example.com:9001"
 token: "agent-secret-token"
 ```
 
@@ -70,7 +70,7 @@ token: "agent-secret-token"
 
 ```yaml
 # Agent config
-master_address: "master.example.com:50051"
+master_address: "master.example.com:9001"
 tls:
   cert_file: "/etc/vcdeploy/agent.crt"
   key_file: "/etc/vcdeploy/agent.key"

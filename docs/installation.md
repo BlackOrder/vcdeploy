@@ -12,7 +12,7 @@ Detailed installation instructions for all supported platforms.
 | Architecture | amd64 or arm64 |
 | Memory | 256MB (master), 64MB (agent) |
 | Disk | 100MB for binaries + database |
-| Network | TCP ports 8080 (HTTP), 9090 (gRPC) |
+| Network | TCP ports 9000 (HTTP), 9001 (gRPC) |
 
 ### Recommended for Production
 
@@ -102,8 +102,8 @@ docker pull ghcr.io/blackorder/vcdeploy:latest
 # Run master server
 docker run -d \
   --name vcdeploy-master \
-  -p 8080:8080 \
-  -p 9090:9090 \
+  -p 9000:9000 \
+  -p 9001:9001 \
   -v /var/lib/vcdeploy:/data \
   -v /etc/vcdeploy:/etc/vcdeploy:ro \
   ghcr.io/blackorder/vcdeploy:latest \
