@@ -52,7 +52,7 @@ jobs:
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: results.sarif
-        if: always()
+        if: ${{ always() && !env.ACT }}
 
       - name: Fail on critical findings in PRs
         if: github.event_name == 'pull_request'
@@ -71,6 +71,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
@@ -84,6 +90,7 @@ jobs:
         uses: github/codeql-action/analyze@v4
         with:
           category: "/language:go"
+        if: ${{ !env.ACT }}
 
   trivy:
     name: Container Security Scan
@@ -105,7 +112,7 @@ jobs:
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: "trivy-results.sarif"
-        if: always()
+        if: ${{ always() && !env.ACT }}
 
   license-check:
     name: License Check
@@ -133,6 +140,7 @@ jobs:
         with:
           name: license-report
           path: licenses.csv
+        if: ${{ !env.ACT }}
 
   dependency-review:
     name: Dependency Review
