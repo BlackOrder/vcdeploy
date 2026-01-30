@@ -113,9 +113,45 @@ docs(api): document webhook endpoints
 
 - [ ] Tests pass
 - [ ] Linting passes
+- [ ] Security scans pass
 - [ ] Coverage doesn't decrease
 - [ ] Documentation updated (if applicable)
 - [ ] Commit messages follow convention
+
+## Security Scanning
+
+CI runs several security scanners:
+
+### gosec (Go Security)
+
+Static analysis tool for Go that identifies security issues:
+
+```bash
+# Run locally
+make security-scan
+```
+
+#### Excluded Rules
+
+Some gosec rules are excluded due to the nature of deployment tools:
+
+| Rule | Reason |
+|------|--------|
+| G104 | Errors are intentionally ignored in cleanup/defer contexts |
+| G115 | Integer overflow checks not needed for version comparisons |
+| G204 | Command execution is core functionality (sandboxed) |
+| G301 | Directory permissions are intentionally set for deployment |
+| G302 | File permissions are intentionally set for deployment |
+| G304 | File path inclusion is required for deployment templates |
+| G306 | Write permissions needed for deployment artifacts |
+
+When adding new `//nolint:gosec` directives, include a comment explaining why.
+
+### Other Scanners
+
+- **govulncheck**: Go vulnerability scanner
+- **CodeQL**: GitHub's semantic code analysis
+- **Trivy**: Container and filesystem vulnerability scanner
 
 ## Testing
 
