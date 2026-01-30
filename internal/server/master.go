@@ -189,6 +189,9 @@ type MasterServer struct {
 
 	// Scheduled jobs
 	scheduler *scheduler.Scheduler
+
+	// Setup state - true when no users exist and env credentials not provided
+	requiresSetup bool
 }
 
 // AgentConnection tracks a connected agent.
@@ -326,9 +329,9 @@ func NewMasterServer(cfg *config.MasterConfig, db *storage.DB, logger *zap.Logge
 		s.webhookService = webhooks.New(s.db, s.kms)
 	}
 
-	// Seed default admin user if no users exist
-	if err := s.seedDefaultAdmin(); err != nil {
-		logger.Warn("Failed to seed default admin", zap.Error(err))
+	// Sync admin credentials from env or mark system as requiring setup
+	if err := s.syncAdminCredentials(); err != nil {
+		logger.Warn("Failed to sync admin credentials", zap.Error(err))
 	}
 
 	// Load templates from disk
@@ -472,42 +475,196 @@ func (s *MasterServer) loadTemplates() error {
 	return nil
 }
 
-// seedDefaultAdmin creates a default admin user if no users exist.
-func (s *MasterServer) seedDefaultAdmin() error {
+// syncAdminCredentials syncs admin credentials from environment variables or marks system as requiring setup.
+// Environment variables:
+//   - VCDEPLOY_ADMIN_PASSWORD: Admin password (required for env-based setup)
+//   - VCDEPLOY_ADMIN_USERNAME: Admin username (default: "admin")
+//   - VCDEPLOY_ADMIN_EMAIL: Admin email (default: "admin@localhost")
+//
+// Behavior:
+//   - If VCDEPLOY_ADMIN_PASSWORD is set: create or update admin user on every startup
+//   - If not set and no users exist: mark system as requiring setup (s.requiresSetup = true)
+//   - If not set and users exist: normal operation
+func (s *MasterServer) syncAdminCredentials() error {
 	ctx := context.Background()
 
-	// Check if any users exist
-	users, err := s.userService.List(ctx)
+	// Read environment variables
+	envPassword := os.Getenv("VCDEPLOY_ADMIN_PASSWORD")
+	envUsername := os.Getenv("VCDEPLOY_ADMIN_USERNAME")
+	envEmail := os.Getenv("VCDEPLOY_ADMIN_EMAIL")
+
+	// Set defaults for username and email
+	if envUsername == "" {
+		envUsername = "admin"
+	}
+	if envEmail == "" {
+		envEmail = "admin@localhost"
+	}
+
+	// If password is set via env, sync credentials
+	if envPassword != "" {
+		return s.syncAdminFromEnv(ctx, envUsername, envPassword, envEmail)
+	}
+
+	// No env password - check if any users exist
+	count, err := s.userService.Count(ctx)
 	if err != nil {
-		return fmt.Errorf("listing users: %w", err)
+		return fmt.Errorf("counting users: %w", err)
 	}
 
-	if len(users) > 0 {
-		return nil // Users already exist, no need to seed
+	if count == 0 {
+		// No users and no env credentials - require setup
+		s.requiresSetup = true
+		s.logger.Info("No users found and VCDEPLOY_ADMIN_PASSWORD not set - setup required",
+			zap.String("hint", "Visit /setup in browser or use 'vcdeploy admin' CLI command"))
 	}
-
-	// Get admin password from environment variable or use default
-	// Default password meets all complexity requirements (upper, lower, digit, special)
-	defaultPassword := os.Getenv("VCDEPLOY_ADMIN_PASSWORD")
-	if defaultPassword == "" {
-		defaultPassword = "Admin@Password123!" // Default that meets all requirements
-	}
-	user, err := s.userService.Create(ctx, "admin", defaultPassword, "admin@localhost", "admin")
-	if err != nil {
-		return fmt.Errorf("creating default admin: %w", err)
-	}
-
-	// Set MustChangePassword flag - admin must change password on first login
-	user.MustChangePassword = true
-	if err := s.userService.Update(ctx, user); err != nil {
-		return fmt.Errorf("setting MustChangePassword flag: %w", err)
-	}
-
-	s.logger.Info("Created default admin user",
-		zap.String("username", user.Username),
-		zap.String("note", "Password change required on first login"))
 
 	return nil
+}
+
+// syncAdminFromEnv creates or updates admin user from environment variables.
+func (s *MasterServer) syncAdminFromEnv(ctx context.Context, username, password, email string) error {
+	// Try to find existing admin user by username
+	existingUser, err := s.userService.GetByUsername(ctx, username)
+	if err == nil && existingUser != nil {
+		// User exists - update password and email
+		existingUser.Email = email
+		if err := s.userService.Update(ctx, existingUser); err != nil {
+			return fmt.Errorf("updating admin email: %w", err)
+		}
+
+		// Update password (this handles hashing internally)
+		if err := s.userService.UpdatePassword(ctx, existingUser.ID, password); err != nil {
+			return fmt.Errorf("updating admin password: %w", err)
+		}
+
+		s.logger.Info("Admin credentials synced from environment variables",
+			zap.String("username", username),
+			zap.String("email", email))
+		return nil
+	}
+
+	// User doesn't exist - create new admin
+	user, err := s.userService.Create(ctx, username, password, email, "admin")
+	if err != nil {
+		return fmt.Errorf("creating admin user: %w", err)
+	}
+
+	// Don't set MustChangePassword for env-managed credentials (they're intentional)
+	s.logger.Info("Admin user created from environment variables",
+		zap.String("username", user.Username),
+		zap.String("email", user.Email))
+
+	return nil
+}
+
+// setupRequiredMiddleware redirects to /setup when system requires initial configuration.
+// Allows: /setup, /static/*, /favicon.ico, health endpoints
+func (s *MasterServer) setupRequiredMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !s.requiresSetup {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Allow these paths even during setup
+		path := r.URL.Path
+		if path == "/setup" ||
+			strings.HasPrefix(path, "/static/") ||
+			path == "/favicon.ico" ||
+			path == "/healthz" ||
+			path == "/livez" ||
+			path == "/readyz" ||
+			path == "/api/v1/health" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Redirect everything else to setup
+		http.Redirect(w, r, "/setup", http.StatusSeeOther)
+	})
+}
+
+// handleSetup handles the first-run setup wizard.
+func (s *MasterServer) handleSetup(w http.ResponseWriter, r *http.Request) {
+	// If setup not required, redirect to dashboard or login
+	if !s.requiresSetup {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+
+	if r.Method == http.MethodGet {
+		s.renderTemplate(w, "setup", nil)
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		username := strings.TrimSpace(r.FormValue("username"))
+		email := strings.TrimSpace(r.FormValue("email"))
+		password := r.FormValue("password")
+		confirmPassword := r.FormValue("confirm_password")
+
+		// Validation
+		if username == "" {
+			s.renderTemplate(w, "setup", map[string]interface{}{"Error": "Username is required"})
+			return
+		}
+		if email == "" {
+			s.renderTemplate(w, "setup", map[string]interface{}{"Error": "Email is required"})
+			return
+		}
+		if password == "" {
+			s.renderTemplate(w, "setup", map[string]interface{}{"Error": "Password is required"})
+			return
+		}
+		if password != confirmPassword {
+			s.renderTemplate(w, "setup", map[string]interface{}{"Error": "Passwords do not match"})
+			return
+		}
+
+		// Create admin user
+		ctx := r.Context()
+		user, err := s.userService.Create(ctx, username, password, email, "admin")
+		if err != nil {
+			s.logger.Error("Failed to create admin user during setup", zap.Error(err))
+			s.renderTemplate(w, "setup", map[string]interface{}{"Error": fmt.Sprintf("Failed to create user: %v", err)})
+			return
+		}
+
+		// Log audit event
+		s.logAudit(r, "setup", "user", fmt.Sprintf("Initial admin user '%s' created via setup wizard", username), "success")
+
+		s.logger.Info("Initial admin user created via setup wizard",
+			zap.String("username", user.Username),
+			zap.String("email", user.Email))
+
+		// Mark setup as complete
+		s.requiresSetup = false
+
+		// Create session and redirect to dashboard
+		session, err := s.sessionService.Create(ctx, user.ID, extractClientIP(r), r.UserAgent(), 7*24*time.Hour)
+		if err != nil {
+			s.logger.Error("Failed to create session after setup", zap.Error(err))
+			// Still redirect to login - user can log in manually
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+
+		http.SetCookie(w, &http.Cookie{
+			Name:     "session",
+			Value:    session.ID,
+			Path:     "/",
+			HttpOnly: true,
+			Secure:   s.config.Server.TLS.Enabled,
+			SameSite: http.SameSiteStrictMode,
+			MaxAge:   86400 * 7, // 7 days
+		})
+
+		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+		return
+	}
+
+	http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 }
 
 func (s *MasterServer) templateFuncs() template.FuncMap {
@@ -652,6 +809,7 @@ func (s *MasterServer) startHTTP() error {
 	mux.HandleFunc("/", s.handleIndex)
 	mux.HandleFunc("/login", s.handleLogin)
 	mux.HandleFunc("/logout", s.handleLogout)
+	mux.HandleFunc("/setup", s.handleSetup)
 	mux.HandleFunc("/change-password", s.withUIAuth(s.handleChangePassword))
 	mux.HandleFunc("/dashboard", s.withUIAuth(s.handleDashboard))
 	mux.HandleFunc("/projects", s.withUIAuth(s.handleProjectsUI))
@@ -693,6 +851,9 @@ func (s *MasterServer) startHTTP() error {
 	if s.rateLimiter != nil {
 		handler = s.rateLimiter.Middleware(handler)
 	}
+
+	// Add setup required middleware (redirects to /setup when system needs initial configuration)
+	handler = s.setupRequiredMiddleware(handler)
 
 	s.httpServer = &http.Server{
 		Addr:         addr,
