@@ -123,7 +123,7 @@ Common issues and their solutions.
 2. Check token hasn't expired
 3. Verify token is being sent correctly:
    ```bash
-   curl -H "Authorization: Bearer <token>" http://localhost:8080/api/v1/health
+   curl -H "Authorization: Bearer <token>" http://localhost:9000/api/v1/health
    ```
 
 ### "TOTP required"

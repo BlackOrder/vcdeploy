@@ -87,7 +87,7 @@ sudo systemctl enable --now vcdeploy-master
 
 ### 3. Access the Web UI
 
-Open http://localhost:8080 in your browser.
+Open http://localhost:9000 in your browser.
 
 **If `VCDEPLOY_ADMIN_PASSWORD` was set**, log in with:
 - Username: `admin` (or your configured `VCDEPLOY_ADMIN_USERNAME`)
@@ -160,7 +160,7 @@ health_check:
 vcdeploy deploy myapp
 
 # Or via API
-curl -X POST http://localhost:8080/api/v1/deployments \
+curl -X POST http://localhost:9000/api/v1/deployments \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"project": "myapp"}'
 ```

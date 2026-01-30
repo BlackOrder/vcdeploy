@@ -27,7 +27,7 @@ info:
     url: https://github.com/BlackOrder/vcdeploy
 
 servers:
-  - url: http://localhost:8080
+  - url: http://localhost:9000
     description: Local development server
   - url: https://vcdeploy.example.com
     description: Production server (example)

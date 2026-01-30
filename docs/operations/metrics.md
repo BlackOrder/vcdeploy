@@ -7,7 +7,7 @@ vcdeploy exposes Prometheus metrics for comprehensive observability.
 Metrics are available at `/metrics` on the master server:
 
 ```bash
-curl http://localhost:8080/metrics
+curl http://localhost:9000/metrics
 ```
 
 ## Available Metrics
