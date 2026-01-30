@@ -127,8 +127,8 @@ services:
       - playwright-results:/app/tests/ui/test-results
       - playwright-reports:/app/tests/ui/playwright-report
     environment:
-      - VCDEPLOY_WEB_URL=http://master:8080
-      - VCDEPLOY_API_URL=http://master:8080/api
+      - VCDEPLOY_WEB_URL=http://master:9000
+      - VCDEPLOY_API_URL=http://master:9000/api
       - TEST_ADMIN_USERNAME=admin
       - TEST_ADMIN_PASSWORD=${TEST_ADMIN_PASSWORD:-admin}
       - CI=true
