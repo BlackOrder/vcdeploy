@@ -157,6 +157,27 @@ export class APIHelper {
   }
 
   /**
+   * Alias for createTestUser - used by some tests
+   */
+  async createUser(username: string, email: string, password: string, role: string = 'user') {
+    return this.createTestUser(username, email, password, role);
+  }
+
+  /**
+   * Generic POST request - alias for request('POST', ...)
+   */
+  async post(path: string, body?: unknown) {
+    return this.request('POST', path, body);
+  }
+
+  /**
+   * Generic GET request
+   */
+  async get(path: string) {
+    return this.request('GET', path);
+  }
+
+  /**
    * Delete a user via API
    */
   async deleteUser(userId: string) {
@@ -236,6 +257,7 @@ export class TestDataGenerator {
 export interface TestFixtures {
   auth: AuthHelper;
   api: APIHelper;
+  apiClient: APIHelper;  // Alias for api
   testData: typeof TestDataGenerator;
 }
 
@@ -250,6 +272,11 @@ export const test = base.extend<TestFixtures>({
 
   api: async ({ baseURL }, use) => {
     const api = new APIHelper(baseURL || 'http://localhost:8080');
+    await use(api);
+  },
+
+  // Alias for api - some tests use apiClient
+  apiClient: async ({ api }, use) => {
     await use(api);
   },
 

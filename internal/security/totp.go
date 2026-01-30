@@ -57,6 +57,12 @@ func GenerateTOTPURI(secret, username string, config TOTPConfig) string {
 	)
 }
 
+// GenerateTOTPCode generates a TOTP code for a given secret and timestamp.
+// This is useful for testing TOTP validation.
+func GenerateTOTPCode(secret string, timestamp int64, config TOTPConfig) string {
+	return generateTOTP(secret, timestamp, config)
+}
+
 func generateTOTP(secret string, timestamp int64, config TOTPConfig) string {
 	// Decode secret
 	key, err := base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(secret)

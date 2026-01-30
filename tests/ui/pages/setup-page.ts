@@ -2,76 +2,57 @@ import { Page, Locator, expect } from '@playwright/test';
 import { BasePage } from './base-page';
 
 /**
- * Login page object
+ * Setup wizard page object for first-run configuration
  */
-export class LoginPage extends BasePage {
+export class SetupPage extends BasePage {
   readonly usernameInput: Locator;
+  readonly emailInput: Locator;
   readonly passwordInput: Locator;
-  readonly totpInput: Locator;
+  readonly confirmPasswordInput: Locator;
   readonly submitButton: Locator;
   readonly errorMessage: Locator;
-  readonly forgotPasswordLink: Locator;
+  readonly pageTitle: Locator;
 
   constructor(page: Page) {
     super(page);
     this.usernameInput = page.locator('input[name="username"], input[id="username"], #username');
+    this.emailInput = page.locator('input[name="email"], input[id="email"], #email');
     this.passwordInput = page.locator('input[name="password"], input[id="password"], #password');
-    this.totpInput = page.locator('input[name="totp"], input[id="totp"], #totp');
+    this.confirmPasswordInput = page.locator('input[name="confirm_password"], input[id="confirm_password"], #confirm_password');
     this.submitButton = page.locator('button[type="submit"]');
     this.errorMessage = page.locator('.error, .alert-error, .alert-danger, [role="alert"]');
-    this.forgotPasswordLink = page.locator('a:has-text("Forgot"), a:has-text("forgot")');
+    this.pageTitle = page.locator('h1, h2, .page-title');
   }
 
   /**
-   * Navigate to login page
+   * Navigate to setup page
    */
   async goto() {
-    await super.goto('/login');
+    await super.goto('/setup');
   }
 
   /**
-   * Fill login form
+   * Fill setup form with admin credentials
    */
-  async fillLoginForm(username: string, password: string) {
+  async fillSetupForm(username: string, email: string, password: string, confirmPassword?: string) {
     await this.usernameInput.fill(username);
+    await this.emailInput.fill(email);
     await this.passwordInput.fill(password);
+    await this.confirmPasswordInput.fill(confirmPassword ?? password);
   }
 
   /**
-   * Fill TOTP code
-   */
-  async fillTOTP(code: string) {
-    await this.totpInput.fill(code);
-  }
-
-  /**
-   * Check if TOTP input is visible
-   */
-  async isTOTPVisible(): Promise<boolean> {
-    return this.totpInput.isVisible({ timeout: 2000 }).catch(() => false);
-  }
-
-  /**
-   * Submit login form
+   * Submit setup form
    */
   async submit() {
     await this.submitButton.click();
   }
 
   /**
-   * Login with credentials
+   * Complete setup with credentials
    */
-  async login(username: string, password: string) {
-    await this.fillLoginForm(username, password);
-    await this.submit();
-  }
-
-  /**
-   * Login with credentials and TOTP
-   */
-  async loginWithTOTP(username: string, password: string, totpCode: string) {
-    await this.fillLoginForm(username, password);
-    await this.fillTOTP(totpCode);
+  async completeSetup(username: string, email: string, password: string) {
+    await this.fillSetupForm(username, email, password);
     await this.submit();
   }
 
@@ -93,11 +74,20 @@ export class LoginPage extends BasePage {
   }
 
   /**
-   * Verify login page is displayed
+   * Verify setup page is displayed
    */
   async verifyPage() {
     await expect(this.usernameInput).toBeVisible();
+    await expect(this.emailInput).toBeVisible();
     await expect(this.passwordInput).toBeVisible();
+    await expect(this.confirmPasswordInput).toBeVisible();
     await expect(this.submitButton).toBeVisible();
+  }
+
+  /**
+   * Check if currently on setup page
+   */
+  async isOnSetupPage(): Promise<boolean> {
+    return this.page.url().includes('/setup');
   }
 }

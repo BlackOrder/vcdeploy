@@ -104,7 +104,7 @@ test-cli: ## Run CLI tests (requires running infrastructure)
 
 .PHONY: test-ui
 test-ui: ## Run Playwright UI tests
-	cd tests/ui && npm ci && npx playwright test
+	cd tests/ui && npm ci && npx playwright test --workers=1
 
 .PHONY: test-all
 test-all: test test-integration test-systemd ## Run all tests except E2E

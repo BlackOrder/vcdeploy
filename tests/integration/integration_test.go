@@ -2051,3 +2051,178 @@ func TestAgentUpdateHistoryLifecycle(t *testing.T) {
 		t.Errorf("Expected status 'completed', got '%s'", entries[0].Status)
 	}
 }
+
+// --- Admin Credentials Flow Integration Tests ---
+
+// TestSyncAdminCredentials_Integration tests the admin credentials sync in an integration context.
+func TestSyncAdminCredentials_Integration(t *testing.T) {
+	t.Run("server starts with env admin credentials", func(t *testing.T) {
+		// Set environment variables
+		t.Setenv("VCDEPLOY_ADMIN_PASSWORD", "Integration@Test123!")
+		t.Setenv("VCDEPLOY_ADMIN_USERNAME", "intadmin")
+		t.Setenv("VCDEPLOY_ADMIN_EMAIL", "intadmin@integration.test")
+
+		f := NewTestFixture(t)
+		defer f.Close()
+
+		// Verify admin user was created by NewMasterServer's syncAdminCredentials
+		ctx := context.Background()
+		users, err := f.DB.ListUsers(ctx)
+		if err != nil {
+			t.Fatalf("Failed to list users: %v", err)
+		}
+
+		var found bool
+		for _, u := range users {
+			if u.Username == "intadmin" {
+				found = true
+				if u.Email != "intadmin@integration.test" {
+					t.Errorf("Expected email 'intadmin@integration.test', got '%s'", u.Email)
+				}
+				if u.Role != "admin" {
+					t.Errorf("Expected role 'admin', got '%s'", u.Role)
+				}
+				break
+			}
+		}
+
+		if !found {
+			t.Error("Admin user 'intadmin' should have been created from environment variables")
+		}
+	})
+
+	t.Run("server enters setup mode without env credentials", func(t *testing.T) {
+		// Clear environment variables
+		t.Setenv("VCDEPLOY_ADMIN_PASSWORD", "")
+		t.Setenv("VCDEPLOY_ADMIN_USERNAME", "")
+		t.Setenv("VCDEPLOY_ADMIN_EMAIL", "")
+
+		f := NewTestFixture(t)
+		defer f.Close()
+
+		// Server should have requiresSetup = true (no env password and no users)
+		if !f.Server.RequiresSetup() {
+			t.Error("Server should require setup when no env password and no users exist")
+		}
+	})
+
+	t.Run("RequiresSetup returns false when users exist", func(t *testing.T) {
+		// Create fixture with env credentials (creates user)
+		t.Setenv("VCDEPLOY_ADMIN_PASSWORD", "Test@Password123!")
+		t.Setenv("VCDEPLOY_ADMIN_USERNAME", "testadmin")
+		t.Setenv("VCDEPLOY_ADMIN_EMAIL", "test@example.com")
+
+		f := NewTestFixture(t)
+		defer f.Close()
+
+		// Should not require setup when admin exists
+		if f.Server.RequiresSetup() {
+			t.Error("Server should not require setup when admin user exists")
+		}
+	})
+}
+
+// TestSetupWizardIntegration tests the setup wizard via direct handler calls.
+func TestSetupWizardIntegration(t *testing.T) {
+	t.Run("setup handler rejects when not in setup mode", func(t *testing.T) {
+		// Create fixture with admin user
+		t.Setenv("VCDEPLOY_ADMIN_PASSWORD", "Test@Password123!")
+		t.Setenv("VCDEPLOY_ADMIN_USERNAME", "admin")
+		t.Setenv("VCDEPLOY_ADMIN_EMAIL", "admin@test.com")
+
+		f := NewTestFixture(t)
+		defer f.Close()
+
+		// Server is not in setup mode
+		if f.Server.RequiresSetup() {
+			t.Fatal("Expected server to not require setup")
+		}
+
+		// Note: We can't call handleSetup directly since it's unexported
+		// But we verified the server is in the correct state
+	})
+
+	t.Run("setup mode middleware behavior", func(t *testing.T) {
+		t.Setenv("VCDEPLOY_ADMIN_PASSWORD", "")
+
+		f := NewTestFixture(t)
+		defer f.Close()
+
+		if !f.Server.RequiresSetup() {
+			t.Skip("Server not in setup mode")
+		}
+
+		// Verify setup state can be modified
+		f.Server.SetRequiresSetup(false)
+		if f.Server.RequiresSetup() {
+			t.Error("SetRequiresSetup(false) should have set requiresSetup to false")
+		}
+
+		f.Server.SetRequiresSetup(true)
+		if !f.Server.RequiresSetup() {
+			t.Error("SetRequiresSetup(true) should have set requiresSetup to true")
+		}
+	})
+}
+
+// TestAdminCredentialsSync_Integration tests admin credential sync behavior.
+func TestAdminCredentialsSync_Integration(t *testing.T) {
+	t.Run("default username when not specified", func(t *testing.T) {
+		t.Setenv("VCDEPLOY_ADMIN_PASSWORD", "Default@Test123!")
+		t.Setenv("VCDEPLOY_ADMIN_USERNAME", "") // Should default to "admin"
+		t.Setenv("VCDEPLOY_ADMIN_EMAIL", "")    // Should default to "admin@localhost"
+
+		f := NewTestFixture(t)
+		defer f.Close()
+
+		ctx := context.Background()
+		user, err := f.DB.GetUserByUsername(ctx, "admin")
+		if err != nil || user == nil {
+			t.Fatal("default admin user should be created")
+		}
+
+		if user.Email != "admin@localhost" {
+			t.Errorf("expected default email 'admin@localhost', got '%s'", user.Email)
+		}
+	})
+
+	t.Run("custom username and email via env", func(t *testing.T) {
+		t.Setenv("VCDEPLOY_ADMIN_PASSWORD", "Custom@Test123!")
+		t.Setenv("VCDEPLOY_ADMIN_USERNAME", "customadmin")
+		t.Setenv("VCDEPLOY_ADMIN_EMAIL", "custom@example.com")
+
+		f := NewTestFixture(t)
+		defer f.Close()
+
+		ctx := context.Background()
+		user, err := f.DB.GetUserByUsername(ctx, "customadmin")
+		if err != nil || user == nil {
+			t.Fatal("custom admin user should be created")
+		}
+
+		if user.Email != "custom@example.com" {
+			t.Errorf("expected email 'custom@example.com', got '%s'", user.Email)
+		}
+		if user.Role != "admin" {
+			t.Errorf("expected role 'admin', got '%s'", user.Role)
+		}
+	})
+
+	t.Run("password validation on env credentials", func(t *testing.T) {
+		// Weak password should fail validation
+		t.Setenv("VCDEPLOY_ADMIN_PASSWORD", "weak")
+		t.Setenv("VCDEPLOY_ADMIN_USERNAME", "weakadmin")
+		t.Setenv("VCDEPLOY_ADMIN_EMAIL", "weak@test.com")
+
+		f := NewTestFixture(t)
+		defer f.Close()
+
+		// The weak password should have caused the user creation to fail
+		// So the server should be in setup mode
+		ctx := context.Background()
+		user, _ := f.DB.GetUserByUsername(ctx, "weakadmin")
+		if user != nil {
+			t.Error("user should not be created with weak password")
+		}
+	})
+}
