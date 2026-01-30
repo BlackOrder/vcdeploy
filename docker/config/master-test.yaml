@@ -2,12 +2,12 @@
 # Used for E2E testing
 
 server:
-  listen: ":8080"
+  listen: ":9000"
   tls:
     enabled: false
 
 grpc:
-  listen: ":9090"
+  listen: ":9001"
   tls:
     enabled: false
 

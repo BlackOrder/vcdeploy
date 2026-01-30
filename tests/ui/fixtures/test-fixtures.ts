@@ -271,7 +271,7 @@ export const test = base.extend<TestFixtures>({
   },
 
   api: async ({ baseURL }, use) => {
-    const api = new APIHelper(baseURL || 'http://localhost:8080');
+    const api = new APIHelper(baseURL || 'http://localhost:9000');
     await use(api);
   },
 

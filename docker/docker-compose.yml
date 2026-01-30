@@ -15,8 +15,8 @@ services:
     container_name: vcdeploy-master
     restart: unless-stopped
     ports:
-      - "8080:8080"   # HTTP/Web UI
-      - "9090:9090"   # gRPC (agents)
+      - \"9000:9000\"   # HTTP/Web UI
+      - \"9001:9001\"   # gRPC (agents)
     volumes:
       - ./config/master.yaml:/etc/vcdeploy/master.yaml:ro
       - vcdeploy-data:/var/lib/vcdeploy
@@ -29,7 +29,7 @@ services:
     networks:
       - vcdeploy
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/api/v1/health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9000/api/v1/health"]
       interval: 30s
       timeout: 5s
       retries: 3

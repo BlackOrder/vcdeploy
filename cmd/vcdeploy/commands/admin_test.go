@@ -25,9 +25,9 @@ func TestAPIClientCreation(t *testing.T) {
 		token     string
 		wantErr   bool
 	}{
-		{"valid http", "http://localhost:8080", "test-token", false},
+		{"valid http", "http://localhost:9000", "test-token", false},
 		{"valid https", "https://example.com", "test-token", false},
-		{"adds http prefix", "localhost:8080", "test-token", false},
+		{"adds http prefix", "localhost:9000", "test-token", false},
 		{"empty master", "", "test-token", true},
 		{"empty token", "http://localhost", "", true},
 	}
@@ -1599,12 +1599,12 @@ func TestRunAdmin_SelectsCorrectMode(t *testing.T) {
 		envToken   string
 		wantRemote bool
 	}{
-		{"flags remote", "http://localhost:8080", "token123", "", "", true},
-		{"env remote", "", "", "http://localhost:8080", "token123", true},
-		{"mixed remote (flag master, env token)", "http://localhost:8080", "", "", "token123", true},
-		{"mixed remote (env master, flag token)", "", "token123", "http://localhost:8080", "", true},
+		{"flags remote", "http://localhost:9000", "token123", "", "", true},
+		{"env remote", "", "", "http://localhost:9000", "token123", true},
+		{"mixed remote (flag master, env token)", "http://localhost:9000", "", "", "token123", true},
+		{"mixed remote (env master, flag token)", "", "token123", "http://localhost:9000", "", true},
 		{"local mode - no credentials", "", "", "", "", false},
-		{"local mode - only master", "http://localhost:8080", "", "", "", false},
+		{"local mode - only master", "http://localhost:9000", "", "", "", false},
 		{"local mode - only token", "", "token123", "", "", false},
 	}
 
