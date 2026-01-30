@@ -29,7 +29,7 @@ services:
     networks:
       - vcdeploy-test
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/api/v1/health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9000/api/v1/health"]
       interval: 5s
       timeout: 3s
       retries: 10

@@ -63,8 +63,8 @@ npm run report
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `VCDEPLOY_WEB_URL` | Base URL of the web application | `http://localhost:8080` |
-| `VCDEPLOY_API_URL` | Base URL of the API | `http://localhost:8080/api` |
+| `VCDEPLOY_WEB_URL` | Base URL of the web application | `http://localhost:9000` |
+| `VCDEPLOY_API_URL` | Base URL of the API | `http://localhost:9000/api` |
 | `TEST_ADMIN_USERNAME` | Admin username for tests | `admin` |
 | `TEST_ADMIN_PASSWORD` | Admin password for tests (must match server's `VCDEPLOY_ADMIN_PASSWORD`) | `Admin@Password123!` |
 | `TEST_NO_PARALLEL` | Disable parallel tests | `false` |

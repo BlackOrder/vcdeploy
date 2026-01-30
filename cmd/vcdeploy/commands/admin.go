@@ -33,7 +33,7 @@ Local mode (lockout recovery):
   vcdeploy admin --username admin --email admin@example.com
 
 Remote mode (requires authentication):
-  vcdeploy admin --master localhost:8080 --token <api-token> --username admin
+  vcdeploy admin --master localhost:9000 --token <api-token> --username admin
 
 When --password is not provided, you will be prompted to enter it interactively.`,
 	RunE: runAdmin,

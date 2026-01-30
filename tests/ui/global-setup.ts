@@ -9,7 +9,7 @@ dotenv.config({ path: '.env.test' });
  * This runs once before all tests.
  */
 async function globalSetup(config: FullConfig) {
-  const baseURL = config.projects[0].use.baseURL || process.env.VCDEPLOY_WEB_URL || 'http://localhost:8080';
+  const baseURL = config.projects[0].use.baseURL || process.env.VCDEPLOY_WEB_URL || 'http://localhost:9000';
   
   console.log('🚀 Global Setup: Starting VCDeploy UI tests');
   console.log(`   Base URL: ${baseURL}`);

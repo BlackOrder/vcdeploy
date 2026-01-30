@@ -54,11 +54,11 @@ RUN chmod +x /usr/local/bin/vcdeploy
 USER vcdeploy
 
 # Expose ports
-EXPOSE 8080 9090
+EXPOSE 9000 9001
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget -q --spider http://localhost:8080/api/v1/health || exit 1
+    CMD wget -q --spider http://localhost:9000/api/v1/health || exit 1
 
 # Default command
 ENTRYPOINT ["vcdeploy"]

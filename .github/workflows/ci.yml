@@ -379,7 +379,7 @@ jobs:
       - name: Run E2E API tests
         run: go test -v -tags=e2e -timeout 20m ./tests/e2e/...
         env:
-          E2E_MASTER_HTTP_URL: "http://localhost:8080"
+          E2E_MASTER_HTTP_URL: "http://localhost:9000"
           E2E_API_TOKEN: ""
           E2E_ADMIN_USER: "admin"
           E2E_ADMIN_PASS: "Admin@Password123!"
@@ -414,7 +414,7 @@ jobs:
           # Wait for master to be healthy (check health endpoint)
           echo "Waiting for master to be ready..."
           for i in {1..30}; do
-            if curl -sf http://localhost:8080/api/v1/health > /dev/null 2>&1; then
+            if curl -sf http://localhost:9000/api/v1/health > /dev/null 2>&1; then
               echo "Master is ready!"
               break
             fi
@@ -422,20 +422,20 @@ jobs:
             sleep 2
           done
           # Final check
-          curl -sf http://localhost:8080/api/v1/health || (docker compose -f docker/docker-compose.test.yml logs master && exit 1)
+          curl -sf http://localhost:9000/api/v1/health || (docker compose -f docker/docker-compose.test.yml logs master && exit 1)
         env:
           TEST_ADMIN_PASSWORD: "Admin@Password123!"
 
       - name: Check master status
         run: |
           docker compose -f docker/docker-compose.test.yml ps
-          curl -s http://localhost:8080/api/v1/health || true
+          curl -s http://localhost:9000/api/v1/health || true
 
       - name: Run CLI tests
         run: go test -v -tags=cli -timeout 15m ./tests/cli/...
         env:
           VCDEPLOY_BINARY: "./bin/vcdeploy"
-          E2E_MASTER_HTTP_URL: "http://localhost:8080"
+          E2E_MASTER_HTTP_URL: "http://localhost:9000"
           E2E_API_TOKEN: "test-api-token"
           E2E_ADMIN_PASS: "Admin@Password123!"
           SKIP_AGENT_TESTS: "1"
@@ -498,7 +498,7 @@ jobs:
           cd tests/ui
           npx playwright test --project=chromium
         env:
-          VCDEPLOY_WEB_URL: "http://localhost:8080"
+          VCDEPLOY_WEB_URL: "http://localhost:9000"
           TEST_ADMIN_USERNAME: "admin"
           TEST_ADMIN_PASSWORD: "Admin@Password123!"
           CI: "true"
@@ -554,7 +554,7 @@ jobs:
       - name: Run E2E API tests
         run: go test -v -tags=e2e -timeout 30m ./tests/e2e/...
         env:
-          E2E_MASTER_HTTP_URL: "http://localhost:8080"
+          E2E_MASTER_HTTP_URL: "http://localhost:9000"
           E2E_ADMIN_PASS: "Admin@Password123!"
 
       - name: Build CLI binary
@@ -564,7 +564,7 @@ jobs:
         run: go test -v -tags=cli -timeout 15m ./tests/cli/...
         env:
           VCDEPLOY_BINARY: "./bin/vcdeploy"
-          E2E_MASTER_HTTP_URL: "http://localhost:8080"
+          E2E_MASTER_HTTP_URL: "http://localhost:9000"
           E2E_ADMIN_PASS: "Admin@Password123!"
 
       - name: Install Playwright
@@ -578,7 +578,7 @@ jobs:
           cd tests/ui
           npx playwright test --project=chromium
         env:
-          VCDEPLOY_WEB_URL: "http://localhost:8080"
+          VCDEPLOY_WEB_URL: "http://localhost:9000"
           TEST_ADMIN_PASSWORD: "Admin@Password123!"
           CI: "true"
 

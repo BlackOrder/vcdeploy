@@ -4,12 +4,12 @@
 #   VCDEPLOY_DATA_DIR, VCDEPLOY_CONFIG_DIR, VCDEPLOY_RUN_DIR, VCDEPLOY_LOG_DIR
 
 server:
-  listen: ":8080"
+  listen: ":9000"
   tls:
     enabled: false
 
 grpc:
-  listen: ":9090"
+  listen: ":9001"
 
 ssh:
   default_user: ${USER}
