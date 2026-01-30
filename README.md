@@ -3,7 +3,7 @@
 [![CI](https://github.com/BlackOrder/vcdeploy/actions/workflows/ci.yml/badge.svg)](https://github.com/BlackOrder/vcdeploy/actions/workflows/ci.yml)
 [![Security](https://github.com/BlackOrder/vcdeploy/actions/workflows/security.yml/badge.svg)](https://github.com/BlackOrder/vcdeploy/actions/workflows/security.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/BlackOrder/vcdeploy)](https://goreportcard.com/report/github.com/BlackOrder/vcdeploy)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 A deployment platform with master-agent architecture for automated, webhook-driven deployments.
 
