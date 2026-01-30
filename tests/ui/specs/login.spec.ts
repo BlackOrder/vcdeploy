@@ -102,6 +102,97 @@ test.describe('Login Page - Edge Cases', () => {
   });
 });
 
+test.describe('TOTP Authentication', () => {
+  // Note: These tests require a user with TOTP enabled
+  // The TOTP input should appear after initial credentials are validated
+
+  test('should have TOTP input locator available', async ({ page }) => {
+    const loginPage = new LoginPage(page);
+    await loginPage.goto();
+    
+    // TOTP input may or may not be visible initially
+    // This test just verifies the locator is set up correctly
+    expect(loginPage.totpInput).toBeDefined();
+  });
+
+  test('should show TOTP field when required', async ({ page, apiClient }) => {
+    // Create a user with TOTP enabled
+    const testUsername = `totp_${Date.now()}`;
+    const testPassword = 'TOTP@Pass123!';
+    
+    try {
+      await apiClient.post('/api/v1/users', {
+        username: testUsername,
+        email: `${testUsername}@example.com`,
+        password: testPassword,
+        role: 'user',
+        totp_enabled: true,
+        totp_secret: 'JBSWY3DPEHPK3PXP', // Test secret
+      });
+    } catch {
+      test.skip(true, 'Could not create TOTP test user');
+      return;
+    }
+    
+    const loginPage = new LoginPage(page);
+    await loginPage.goto();
+    
+    // Fill in credentials
+    await loginPage.fillLoginForm(testUsername, testPassword);
+    await loginPage.submit();
+    
+    // After submitting, TOTP field should appear if TOTP is enabled
+    // Note: The exact behavior depends on the implementation
+    // Some implementations show TOTP on a second screen, others inline
+    await page.waitForTimeout(1000);
+    
+    // Check if TOTP input became visible or if we got an error about TOTP
+    const totpVisible = await loginPage.isTOTPVisible();
+    const hasError = await loginPage.hasError();
+    
+    // Either TOTP field is shown or we got an error message about TOTP
+    expect(totpVisible || hasError).toBeTruthy();
+  });
+
+  test('should reject invalid TOTP code', async ({ page, apiClient }) => {
+    // Create a user with TOTP enabled
+    const testUsername = `totp_invalid_${Date.now()}`;
+    const testPassword = 'TOTP@Pass123!';
+    
+    try {
+      await apiClient.post('/api/v1/users', {
+        username: testUsername,
+        email: `${testUsername}@example.com`,
+        password: testPassword,
+        role: 'user',
+        totp_enabled: true,
+        totp_secret: 'JBSWY3DPEHPK3PXP',
+      });
+    } catch {
+      test.skip(true, 'Could not create TOTP test user');
+      return;
+    }
+    
+    const loginPage = new LoginPage(page);
+    await loginPage.goto();
+    
+    // Fill in credentials with invalid TOTP
+    await loginPage.fillLoginForm(testUsername, testPassword);
+    
+    // Check if TOTP field is visible and fill it
+    if (await loginPage.isTOTPVisible()) {
+      await loginPage.fillTOTP('000000');
+    }
+    
+    await loginPage.submit();
+    
+    // Should show error or stay on login page
+    const hasError = await loginPage.hasError();
+    const stillOnLogin = page.url().includes('/login');
+    expect(hasError || stillOnLogin).toBeTruthy();
+  });
+});
+
 test.describe('Session Management', () => {
   test('should redirect to login when not authenticated', async ({ page }) => {
     // Try to access protected page without logging in

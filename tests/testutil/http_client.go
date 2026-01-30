@@ -85,6 +85,66 @@ func (c *HTTPClient) Delete(path string) (*http.Response, error) {
 	return c.Request("DELETE", path, nil)
 }
 
+// GetWithRedirects makes a GET request and follows redirects, returning the final response.
+func (c *HTTPClient) GetWithRedirects(path string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(context.Background(), "GET", c.baseURL+path, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+
+	// Use a client that follows redirects
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			// Allow up to 10 redirects
+			if len(via) >= 10 {
+				return fmt.Errorf("too many redirects")
+			}
+			return nil
+		},
+	}
+
+	return client.Do(req)
+}
+
+// PostForm makes a POST request with form-urlencoded body.
+func (c *HTTPClient) PostForm(path string, data map[string]string) (*http.Response, error) {
+	formData := ""
+	for key, value := range data {
+		if formData != "" {
+			formData += "&"
+		}
+		formData += key + "=" + value
+	}
+
+	req, err := http.NewRequestWithContext(context.Background(), "POST", c.baseURL+path, bytes.NewBufferString(formData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	// Use a client that follows redirects
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return fmt.Errorf("too many redirects")
+			}
+			return nil
+		},
+	}
+
+	return client.Do(req)
+}
+
 // DecodeJSON decodes a JSON response body into the given interface.
 func DecodeJSON(resp *http.Response, v interface{}) error {
 	defer resp.Body.Close()

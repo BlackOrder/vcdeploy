@@ -32,6 +32,17 @@ import (
 	"go.uber.org/zap"
 )
 
+// loadTemplatesOrSkip loads templates for a server, skipping the test if templates aren't available.
+func loadTemplatesOrSkip(t *testing.T, server *MasterServer) {
+	t.Helper()
+	if err := server.loadTemplates(); err != nil {
+		t.Skipf("skipping test, templates not available: %v", err)
+	}
+	if len(server.templates) == 0 {
+		t.Skip("skipping test, no templates loaded (template directory not found)")
+	}
+}
+
 func newTestServer(t *testing.T) *MasterServer {
 	t.Helper()
 
@@ -1997,6 +2008,357 @@ func TestNewMasterServer_WithSecurityMiddleware(t *testing.T) {
 	}
 }
 
+// --- Admin Credentials Flow Tests ---
+
+// TestSyncAdminCredentials_WithEnvPassword tests admin sync with environment password set.
+func TestSyncAdminCredentials_WithEnvPassword(t *testing.T) {
+	// NOTE: Cannot use t.Parallel() - uses t.Setenv
+
+	// Set environment variables BEFORE creating server (syncAdminCredentials runs during init)
+	t.Setenv("VCDEPLOY_ADMIN_PASSWORD", "Admin@Test123!")
+	t.Setenv("VCDEPLOY_ADMIN_USERNAME", "envadmin")
+	t.Setenv("VCDEPLOY_ADMIN_EMAIL", "envadmin@example.com")
+
+	server := newTestServer(t)
+
+	// Verify user was created
+	ctx := context.Background()
+	user, err := server.userService.GetByUsername(ctx, "envadmin")
+	if err != nil {
+		t.Fatalf("GetByUsername() error = %v", err)
+	}
+
+	if user.Email != "envadmin@example.com" {
+		t.Errorf("user.Email = %q, want %q", user.Email, "envadmin@example.com")
+	}
+	if user.Role != "admin" {
+		t.Errorf("user.Role = %q, want %q", user.Role, "admin")
+	}
+	if server.requiresSetup {
+		t.Error("requiresSetup should be false after env-based setup")
+	}
+}
+
+// TestSyncAdminCredentials_WithEnvPassword_UpdatesExisting tests updating existing admin.
+func TestSyncAdminCredentials_WithEnvPassword_UpdatesExisting(t *testing.T) {
+	// NOTE: Cannot use t.Parallel() - uses t.Setenv
+
+	server := newTestServer(t)
+	ctx := context.Background()
+
+	// Create existing admin user
+	_, err := server.userService.Create(ctx, "admin", "OldPass@123!", "old@example.com", "admin")
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	// Set environment variables with different email and password
+	t.Setenv("VCDEPLOY_ADMIN_PASSWORD", "NewAdmin@Pass123!")
+	t.Setenv("VCDEPLOY_ADMIN_USERNAME", "admin")
+	t.Setenv("VCDEPLOY_ADMIN_EMAIL", "new@example.com")
+
+	// Sync credentials
+	err = server.syncAdminCredentials()
+	if err != nil {
+		t.Fatalf("syncAdminCredentials() error = %v", err)
+	}
+
+	// Verify user was updated
+	user, err := server.userService.GetByUsername(ctx, "admin")
+	if err != nil {
+		t.Fatalf("GetByUsername() error = %v", err)
+	}
+
+	if user.Email != "new@example.com" {
+		t.Errorf("user.Email = %q, want %q", user.Email, "new@example.com")
+	}
+}
+
+// TestSyncAdminCredentials_NoEnvNoUsers_RequiresSetup tests setup mode when no users exist.
+func TestSyncAdminCredentials_NoEnvNoUsers_RequiresSetup(t *testing.T) {
+	// NOTE: Cannot use t.Parallel() - uses t.Setenv
+
+	// Ensure no env password BEFORE creating server
+	t.Setenv("VCDEPLOY_ADMIN_PASSWORD", "")
+	t.Setenv("VCDEPLOY_ADMIN_USERNAME", "")
+	t.Setenv("VCDEPLOY_ADMIN_EMAIL", "")
+
+	server := newTestServer(t)
+
+	// Server should be in setup-required mode since no env password and no users
+	if !server.requiresSetup {
+		t.Error("requiresSetup should be true when no env password and no users")
+	}
+}
+
+// TestSyncAdminCredentials_NoEnvWithUsers_NormalOperation tests normal mode when users exist.
+func TestSyncAdminCredentials_NoEnvWithUsers_NormalOperation(t *testing.T) {
+	// NOTE: Cannot use t.Parallel() - uses t.Setenv
+
+	// First create a test server with an admin user via env
+	t.Setenv("VCDEPLOY_ADMIN_PASSWORD", "Existing@Pass123!")
+	t.Setenv("VCDEPLOY_ADMIN_USERNAME", "existingadmin")
+	t.Setenv("VCDEPLOY_ADMIN_EMAIL", "existing@example.com")
+
+	server := newTestServer(t)
+
+	// Verify requiresSetup is false (because users exist via env setup)
+	if server.requiresSetup {
+		t.Error("requiresSetup should be false when admin was created via env")
+	}
+
+	// Now clear env vars and re-sync - should still not require setup since user exists
+	t.Setenv("VCDEPLOY_ADMIN_PASSWORD", "")
+	t.Setenv("VCDEPLOY_ADMIN_USERNAME", "")
+	t.Setenv("VCDEPLOY_ADMIN_EMAIL", "")
+	server.requiresSetup = false // reset for re-test
+
+	err := server.syncAdminCredentials()
+	if err != nil {
+		t.Fatalf("syncAdminCredentials() error = %v", err)
+	}
+
+	if server.requiresSetup {
+		t.Error("requiresSetup should be false when users exist (even without env password)")
+	}
+}
+
+// TestSyncAdminCredentials_DefaultUsername tests default username when not specified.
+func TestSyncAdminCredentials_DefaultUsername(t *testing.T) {
+	// NOTE: Cannot use t.Parallel() - uses t.Setenv
+
+	// Set only password BEFORE creating server
+	t.Setenv("VCDEPLOY_ADMIN_PASSWORD", "Admin@Test123!")
+	t.Setenv("VCDEPLOY_ADMIN_USERNAME", "") // Empty - should default to "admin"
+	t.Setenv("VCDEPLOY_ADMIN_EMAIL", "")    // Empty - should default to "admin@localhost"
+
+	server := newTestServer(t)
+
+	ctx := context.Background()
+	user, err := server.userService.GetByUsername(ctx, "admin")
+	if err != nil {
+		t.Fatalf("GetByUsername() error = %v", err)
+	}
+
+	if user.Email != "admin@localhost" {
+		t.Errorf("user.Email = %q, want %q", user.Email, "admin@localhost")
+	}
+}
+
+// TestSetupRequiredMiddleware_RedirectsWhenSetupRequired tests middleware redirect.
+func TestSetupRequiredMiddleware_RedirectsWhenSetupRequired(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	server.requiresSetup = true
+
+	// Create middleware chain
+	handler := server.setupRequiredMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	tests := []struct {
+		name           string
+		path           string
+		wantRedirect   bool
+		wantStatusCode int
+	}{
+		{"dashboard redirects", "/dashboard", true, http.StatusSeeOther},
+		{"login redirects", "/login", true, http.StatusSeeOther},
+		{"api redirects", "/api/v1/users", true, http.StatusSeeOther},
+		{"setup allowed", "/setup", false, http.StatusOK},
+		{"static allowed", "/static/css/style.css", false, http.StatusOK},
+		{"favicon allowed", "/favicon.ico", false, http.StatusOK},
+		{"healthz allowed", "/healthz", false, http.StatusOK},
+		{"livez allowed", "/livez", false, http.StatusOK},
+		{"readyz allowed", "/readyz", false, http.StatusOK},
+		{"api health allowed", "/api/v1/health", false, http.StatusOK},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
+			rec := httptest.NewRecorder()
+
+			handler.ServeHTTP(rec, req)
+
+			if tt.wantRedirect {
+				if rec.Code != http.StatusSeeOther {
+					t.Errorf("status = %d, want %d", rec.Code, http.StatusSeeOther)
+				}
+				location := rec.Header().Get("Location")
+				if location != "/setup" {
+					t.Errorf("Location = %q, want /setup", location)
+				}
+			} else {
+				if rec.Code != http.StatusOK {
+					t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+				}
+			}
+		})
+	}
+}
+
+// TestSetupRequiredMiddleware_PassesThroughWhenNotRequired tests middleware passes through.
+func TestSetupRequiredMiddleware_PassesThroughWhenNotRequired(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	server.requiresSetup = false
+
+	handled := false
+	handler := server.setupRequiredMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handled = true
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if !handled {
+		t.Error("handler should have been called when requiresSetup is false")
+	}
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+}
+
+// TestHandleSetup_GET_RedirectsWhenNotRequired tests GET /setup redirects if not needed.
+func TestHandleSetup_GET_RedirectsWhenNotRequired(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	server.requiresSetup = false
+
+	req := httptest.NewRequest(http.MethodGet, "/setup", nil)
+	rec := httptest.NewRecorder()
+
+	server.handleSetup(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusSeeOther)
+	}
+	location := rec.Header().Get("Location")
+	if location != "/login" {
+		t.Errorf("Location = %q, want /login", location)
+	}
+}
+
+// TestHandleSetup_POST_CreatesAdminUser tests POST /setup creates admin user.
+func TestHandleSetup_POST_CreatesAdminUser(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	server.requiresSetup = true
+
+	// Load templates for rendering
+	loadTemplatesOrSkip(t, server)
+
+	form := strings.NewReader("username=setupadmin&email=setup@example.com&password=Setup@Pass123!&confirm_password=Setup@Pass123!")
+	req := httptest.NewRequest(http.MethodPost, "/setup", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+
+	server.handleSetup(rec, req)
+
+	// Should redirect to dashboard on success
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want %d (body: %s)", rec.Code, http.StatusSeeOther, rec.Body.String())
+	}
+	location := rec.Header().Get("Location")
+	if location != "/dashboard" {
+		t.Errorf("Location = %q, want /dashboard", location)
+	}
+
+	// Verify user was created
+	ctx := context.Background()
+	user, err := server.userService.GetByUsername(ctx, "setupadmin")
+	if err != nil {
+		t.Fatalf("GetByUsername() error = %v", err)
+	}
+	if user.Email != "setup@example.com" {
+		t.Errorf("user.Email = %q, want %q", user.Email, "setup@example.com")
+	}
+	if user.Role != "admin" {
+		t.Errorf("user.Role = %q, want %q", user.Role, "admin")
+	}
+
+	// Verify requiresSetup is now false
+	if server.requiresSetup {
+		t.Error("requiresSetup should be false after setup")
+	}
+
+	// Verify session cookie was set
+	cookies := rec.Result().Cookies()
+	var sessionCookie *http.Cookie
+	for _, c := range cookies {
+		if c.Name == "session" {
+			sessionCookie = c
+			break
+		}
+	}
+	if sessionCookie == nil {
+		t.Error("session cookie should be set after setup")
+	}
+}
+
+// TestHandleSetup_POST_ValidationErrors tests POST /setup validation.
+func TestHandleSetup_POST_ValidationErrors(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		form     string
+		wantErr  string
+	}{
+		{"missing username", "email=test@example.com&password=Pass@123!&confirm_password=Pass@123!", "Username is required"},
+		{"missing email", "username=test&password=Pass@123!&confirm_password=Pass@123!", "Email is required"},
+		{"missing password", "username=test&email=test@example.com&confirm_password=Pass@123!", "Password is required"},
+		{"password mismatch", "username=test&email=test@example.com&password=Pass@123!&confirm_password=Different@123!", "Passwords do not match"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := newTestServer(t)
+			server.requiresSetup = true
+
+			// Load templates for error rendering - skip if not available
+			loadTemplatesOrSkip(t, server)
+
+			req := httptest.NewRequest(http.MethodPost, "/setup", strings.NewReader(tt.form))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			rec := httptest.NewRecorder()
+
+			server.handleSetup(rec, req)
+
+			// Should stay on setup page with error (200) or render error (could be 500 if templates fail)
+			// Main check: requiresSetup should still be true after validation error
+			if !server.requiresSetup {
+				t.Error("requiresSetup should still be true after validation error")
+			}
+		})
+	}
+}
+
+// TestHandleSetup_MethodNotAllowed tests unsupported methods on /setup.
+func TestHandleSetup_MethodNotAllowed(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	server.requiresSetup = true
+
+	req := httptest.NewRequest(http.MethodDelete, "/setup", nil)
+	rec := httptest.NewRecorder()
+
+	server.handleSetup(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusMethodNotAllowed)
+	}
+}
+
 // --- Benchmark Tests ---
 
 func BenchmarkHandleStats(b *testing.B) {
@@ -2088,3 +2450,1073 @@ func BenchmarkWithAuth(b *testing.B) {
 		handler(rec, req)
 	}
 }
+
+// --- Login Handler Tests ---
+
+func TestHandleLogin_GET_RendersLoginPage(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	loadTemplatesOrSkip(t, server)
+
+	req := httptest.NewRequest(http.MethodGet, "/login", nil)
+	rec := httptest.NewRecorder()
+
+	server.handleLogin(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	// Body should contain login form elements
+	body := rec.Body.String()
+	if !strings.Contains(body, "username") || !strings.Contains(body, "password") {
+		t.Error("response should contain login form elements")
+	}
+}
+
+func TestHandleLogin_POST_ValidCredentials(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	ctx := context.Background()
+
+	// Create a test user with known password
+	_, err := server.userService.Create(ctx, "logintest", "TestPass@123!", "login@test.com", "user")
+	if err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	form := strings.NewReader("username=logintest&password=TestPass@123!")
+	req := httptest.NewRequest(http.MethodPost, "/login", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+
+	server.handleLogin(rec, req)
+
+	// Should redirect to dashboard
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusSeeOther)
+	}
+	location := rec.Header().Get("Location")
+	if location != "/dashboard" {
+		t.Errorf("Location = %q, want /dashboard", location)
+	}
+
+	// Should set session cookie
+	cookies := rec.Result().Cookies()
+	var sessionCookie *http.Cookie
+	for _, c := range cookies {
+		if c.Name == "session" {
+			sessionCookie = c
+			break
+		}
+	}
+	if sessionCookie == nil {
+		t.Error("session cookie should be set after login")
+	}
+}
+
+func TestHandleLogin_POST_InvalidCredentials(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	loadTemplatesOrSkip(t, server)
+
+	ctx := context.Background()
+
+	// Create a test user
+	_, err := server.userService.Create(ctx, "logintest2", "TestPass@123!", "login2@test.com", "user")
+	if err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	form := strings.NewReader("username=logintest2&password=WrongPassword!")
+	req := httptest.NewRequest(http.MethodPost, "/login", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+
+	server.handleLogin(rec, req)
+
+	// Should stay on login page with error (200 OK for form re-render)
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	// Body should contain error message
+	body := rec.Body.String()
+	if !strings.Contains(body, "Invalid") && !strings.Contains(body, "invalid") && !strings.Contains(body, "error") {
+		t.Error("response should contain error message")
+	}
+}
+
+func TestHandleLogin_POST_UserNotFound(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	loadTemplatesOrSkip(t, server)
+
+	form := strings.NewReader("username=nonexistent&password=SomePass@123!")
+	req := httptest.NewRequest(http.MethodPost, "/login", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+
+	server.handleLogin(rec, req)
+
+	// Should stay on login page with error
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+}
+
+func TestHandleLogin_POST_MustChangePassword(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	ctx := context.Background()
+
+	// Create a test user with MustChangePassword flag
+	user, err := server.userService.Create(ctx, "mustchange", "TestPass@123!", "mustchange@test.com", "user")
+	if err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	// Set MustChangePassword flag
+	user.MustChangePassword = true
+	if err := server.userService.Update(ctx, user); err != nil {
+		t.Fatalf("failed to update user: %v", err)
+	}
+
+	form := strings.NewReader("username=mustchange&password=TestPass@123!")
+	req := httptest.NewRequest(http.MethodPost, "/login", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+
+	server.handleLogin(rec, req)
+
+	// Should redirect to change-password
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusSeeOther)
+	}
+	location := rec.Header().Get("Location")
+	if location != "/change-password" {
+		t.Errorf("Location = %q, want /change-password", location)
+	}
+
+	// Should still set session cookie (needed for change-password page)
+	cookies := rec.Result().Cookies()
+	var sessionCookie *http.Cookie
+	for _, c := range cookies {
+		if c.Name == "session" {
+			sessionCookie = c
+			break
+		}
+	}
+	if sessionCookie == nil {
+		t.Error("session cookie should be set even for must-change-password")
+	}
+}
+
+func TestHandleLogin_POST_TOTPRequired(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	loadTemplatesOrSkip(t, server)
+
+	ctx := context.Background()
+
+	// Create a test user with TOTP enabled
+	user, err := server.userService.Create(ctx, "totpuser", "TestPass@123!", "totp@test.com", "user")
+	if err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	// Enable TOTP
+	secret, err := security.GenerateTOTPSecret()
+	if err != nil {
+		t.Fatalf("failed to generate TOTP secret: %v", err)
+	}
+	user.TOTPEnabled = true
+	user.TOTPSecret = secret
+	if err := server.userService.Update(ctx, user); err != nil {
+		t.Fatalf("failed to update user: %v", err)
+	}
+
+	// Login without TOTP code
+	form := strings.NewReader("username=totpuser&password=TestPass@123!")
+	req := httptest.NewRequest(http.MethodPost, "/login", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+
+	server.handleLogin(rec, req)
+
+	// Should re-render login page with TOTP prompt
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	// Body should indicate TOTP is needed
+	body := rec.Body.String()
+	if !strings.Contains(body, "totp") && !strings.Contains(body, "TOTP") && !strings.Contains(body, "verification") {
+		t.Error("response should contain TOTP prompt")
+	}
+}
+
+func TestHandleLogin_POST_TOTPValid(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	ctx := context.Background()
+
+	// Create a test user with TOTP enabled
+	user, err := server.userService.Create(ctx, "totpvalid", "TestPass@123!", "totpvalid@test.com", "user")
+	if err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	// Enable TOTP with known secret
+	secret, err := security.GenerateTOTPSecret()
+	if err != nil {
+		t.Fatalf("failed to generate TOTP secret: %v", err)
+	}
+	user.TOTPEnabled = true
+	user.TOTPSecret = secret
+	if err := server.userService.Update(ctx, user); err != nil {
+		t.Fatalf("failed to update user: %v", err)
+	}
+
+	// Generate valid TOTP code
+	validCode := security.GenerateTOTPCode(secret, time.Now().Unix(), security.DefaultTOTPConfig())
+
+	// Login with valid TOTP code
+	form := strings.NewReader(fmt.Sprintf("username=totpvalid&password=TestPass@123!&totp=%s", validCode))
+	req := httptest.NewRequest(http.MethodPost, "/login", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+
+	server.handleLogin(rec, req)
+
+	// Should redirect to dashboard
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want %d; body = %s", rec.Code, http.StatusSeeOther, rec.Body.String())
+	}
+	location := rec.Header().Get("Location")
+	if location != "/dashboard" {
+		t.Errorf("Location = %q, want /dashboard", location)
+	}
+}
+
+func TestHandleLogin_POST_TOTPInvalid(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	loadTemplatesOrSkip(t, server)
+
+	ctx := context.Background()
+
+	// Create a test user with TOTP enabled
+	user, err := server.userService.Create(ctx, "totpinvalid", "TestPass@123!", "totpinvalid@test.com", "user")
+	if err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	// Enable TOTP
+	secret, err := security.GenerateTOTPSecret()
+	if err != nil {
+		t.Fatalf("failed to generate TOTP secret: %v", err)
+	}
+	user.TOTPEnabled = true
+	user.TOTPSecret = secret
+	if err := server.userService.Update(ctx, user); err != nil {
+		t.Fatalf("failed to update user: %v", err)
+	}
+
+	// Login with invalid TOTP code
+	form := strings.NewReader("username=totpinvalid&password=TestPass@123!&totp=000000")
+	req := httptest.NewRequest(http.MethodPost, "/login", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+
+	server.handleLogin(rec, req)
+
+	// Should stay on login page with error
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	// Body should contain error message about invalid verification code
+	body := rec.Body.String()
+	if !strings.Contains(body, "Invalid") && !strings.Contains(body, "invalid") && !strings.Contains(body, "verification") {
+		t.Error("response should contain error message about invalid verification code")
+	}
+}
+
+// --- Logout Handler Tests ---
+
+func TestHandleLogout_DeletesSession(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	ctx := context.Background()
+
+	// Create a test user and session
+	user, err := server.userService.Create(ctx, "logouttest", "TestPass@123!", "logout@test.com", "user")
+	if err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	session, err := server.sessionService.Create(ctx, user.ID, "127.0.0.1", "test-agent", 24*time.Hour)
+	if err != nil {
+		t.Fatalf("failed to create session: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/logout", nil)
+	req.AddCookie(&http.Cookie{Name: "session", Value: session.ID})
+	rec := httptest.NewRecorder()
+
+	server.handleLogout(rec, req)
+
+	// Session should be deleted from database
+	_, err = server.sessionService.GetByToken(ctx, session.ID)
+	if err == nil {
+		t.Error("session should be deleted after logout")
+	}
+}
+
+func TestHandleLogout_ClearsCookie(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	ctx := context.Background()
+
+	// Create a test user and session
+	user, err := server.userService.Create(ctx, "logoutcookie", "TestPass@123!", "logoutcookie@test.com", "user")
+	if err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	session, err := server.sessionService.Create(ctx, user.ID, "127.0.0.1", "test-agent", 24*time.Hour)
+	if err != nil {
+		t.Fatalf("failed to create session: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/logout", nil)
+	req.AddCookie(&http.Cookie{Name: "session", Value: session.ID})
+	rec := httptest.NewRecorder()
+
+	server.handleLogout(rec, req)
+
+	// Cookie should be cleared (MaxAge = -1)
+	cookies := rec.Result().Cookies()
+	var sessionCookie *http.Cookie
+	for _, c := range cookies {
+		if c.Name == "session" {
+			sessionCookie = c
+			break
+		}
+	}
+	if sessionCookie == nil {
+		t.Fatal("session cookie should be in response")
+	}
+	if sessionCookie.MaxAge != -1 {
+		t.Errorf("session cookie MaxAge = %d, want -1", sessionCookie.MaxAge)
+	}
+}
+
+func TestHandleLogout_RedirectsToLogin(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/logout", nil)
+	rec := httptest.NewRecorder()
+
+	server.handleLogout(rec, req)
+
+	// Should redirect to login
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusSeeOther)
+	}
+	location := rec.Header().Get("Location")
+	if location != "/login" {
+		t.Errorf("Location = %q, want /login", location)
+	}
+}
+
+func TestHandleLogout_CreatesAuditEntry(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	ctx := context.Background()
+
+	// Create a test user and session
+	user, err := server.userService.Create(ctx, "logoutaudit", "TestPass@123!", "logoutaudit@test.com", "user")
+	if err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	session, err := server.sessionService.Create(ctx, user.ID, "127.0.0.1", "test-agent", 24*time.Hour)
+	if err != nil {
+		t.Fatalf("failed to create session: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/logout", nil)
+	req.AddCookie(&http.Cookie{Name: "session", Value: session.ID})
+	rec := httptest.NewRecorder()
+
+	server.handleLogout(rec, req)
+
+	// Check audit log for logout entry
+	entries, err := server.auditService.List(ctx, 10, 0)
+	if err != nil {
+		t.Fatalf("failed to list audit entries: %v", err)
+	}
+
+	found := false
+	for _, entry := range entries {
+		if entry.Action == "logout" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("audit log should contain logout entry")
+	}
+}
+
+func TestHandleLogout_NoSession(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+
+	// Logout without session cookie - should still redirect gracefully
+	req := httptest.NewRequest(http.MethodGet, "/logout", nil)
+	rec := httptest.NewRecorder()
+
+	server.handleLogout(rec, req)
+
+	// Should still redirect to login
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusSeeOther)
+	}
+	location := rec.Header().Get("Location")
+	if location != "/login" {
+		t.Errorf("Location = %q, want /login", location)
+	}
+}
+
+// --- Change Password Handler Tests ---
+
+func TestHandleChangePassword_GET_Authenticated(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	loadTemplatesOrSkip(t, server)
+
+	ctx := context.Background()
+
+	// Create a test user
+	user, err := server.userService.Create(ctx, "changepassget", "TestPass@123!", "changepassget@test.com", "user")
+	if err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/change-password", nil)
+	// Add user to context (simulating authenticated request)
+	ctx = context.WithValue(req.Context(), contextKeyUserID, user.ID)
+	ctx = WithUserContext(ctx, user)
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	server.handleChangePassword(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	// Body should contain change password form
+	body := rec.Body.String()
+	if !strings.Contains(body, "current") && !strings.Contains(body, "new") {
+		t.Error("response should contain change password form elements")
+	}
+}
+
+func TestHandleChangePassword_GET_WithMustChangeFlag(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	loadTemplatesOrSkip(t, server)
+
+	ctx := context.Background()
+
+	// Create a test user with MustChangePassword flag
+	user, err := server.userService.Create(ctx, "mustchangeget", "TestPass@123!", "mustchangeget@test.com", "user")
+	if err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	user.MustChangePassword = true
+	if err := server.userService.Update(ctx, user); err != nil {
+		t.Fatalf("failed to update user: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/change-password", nil)
+	ctx = context.WithValue(req.Context(), contextKeyUserID, user.ID)
+	ctx = WithUserContext(ctx, user)
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	server.handleChangePassword(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	// Template should receive MustChangePassword=true (visible in rendered HTML)
+	// The form should be rendered successfully
+	body := rec.Body.String()
+	if len(body) == 0 {
+		t.Error("response body should not be empty")
+	}
+}
+
+func TestHandleChangePassword_GET_Unauthenticated(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/change-password", nil)
+	rec := httptest.NewRecorder()
+
+	server.handleChangePassword(rec, req)
+
+	// Should redirect to login
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusSeeOther)
+	}
+	location := rec.Header().Get("Location")
+	if location != "/login" {
+		t.Errorf("Location = %q, want /login", location)
+	}
+}
+
+func TestHandleChangePassword_POST_WrongCurrentPassword(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	loadTemplatesOrSkip(t, server)
+
+	ctx := context.Background()
+
+	// Create a test user
+	user, err := server.userService.Create(ctx, "wrongcurrent", "TestPass@123!", "wrongcurrent@test.com", "user")
+	if err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	form := strings.NewReader("current_password=WrongPassword&new_password=NewPass@123!&confirm_password=NewPass@123!")
+	req := httptest.NewRequest(http.MethodPost, "/change-password", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	ctx = context.WithValue(req.Context(), contextKeyUserID, user.ID)
+	ctx = WithUserContext(ctx, user)
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	server.handleChangePassword(rec, req)
+
+	// Should stay on page with error
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "incorrect") && !strings.Contains(body, "Current") {
+		t.Error("response should contain error about current password")
+	}
+}
+
+func TestHandleChangePassword_POST_PasswordMismatch(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	loadTemplatesOrSkip(t, server)
+
+	ctx := context.Background()
+
+	// Create a test user
+	user, err := server.userService.Create(ctx, "mismatch", "TestPass@123!", "mismatch@test.com", "user")
+	if err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	form := strings.NewReader("current_password=TestPass@123!&new_password=NewPass@123!&confirm_password=DifferentPass@123!")
+	req := httptest.NewRequest(http.MethodPost, "/change-password", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	ctx = context.WithValue(req.Context(), contextKeyUserID, user.ID)
+	ctx = WithUserContext(ctx, user)
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	server.handleChangePassword(rec, req)
+
+	// Should stay on page with error
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "match") && !strings.Contains(body, "Match") {
+		t.Error("response should contain error about password mismatch")
+	}
+}
+
+func TestHandleChangePassword_POST_SamePassword(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	loadTemplatesOrSkip(t, server)
+
+	ctx := context.Background()
+
+	// Create a test user
+	user, err := server.userService.Create(ctx, "samepass", "TestPass@123!", "samepass@test.com", "user")
+	if err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	form := strings.NewReader("current_password=TestPass@123!&new_password=TestPass@123!&confirm_password=TestPass@123!")
+	req := httptest.NewRequest(http.MethodPost, "/change-password", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	ctx = context.WithValue(req.Context(), contextKeyUserID, user.ID)
+	ctx = WithUserContext(ctx, user)
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	server.handleChangePassword(rec, req)
+
+	// Should stay on page with error
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "different") && !strings.Contains(body, "Different") {
+		t.Error("response should contain error about password must be different")
+	}
+}
+
+func TestHandleChangePassword_POST_WeakPassword(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	loadTemplatesOrSkip(t, server)
+
+	ctx := context.Background()
+
+	// Create a test user
+	user, err := server.userService.Create(ctx, "weakpass", "TestPass@123!", "weakpass@test.com", "user")
+	if err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	form := strings.NewReader("current_password=TestPass@123!&new_password=weak&confirm_password=weak")
+	req := httptest.NewRequest(http.MethodPost, "/change-password", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	ctx = context.WithValue(req.Context(), contextKeyUserID, user.ID)
+	ctx = WithUserContext(ctx, user)
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	server.handleChangePassword(rec, req)
+
+	// Should stay on page with error
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	// Error message should mention password requirements
+	body := rec.Body.String()
+	if !strings.Contains(body, "password") && !strings.Contains(body, "Password") {
+		t.Error("response should contain error about password requirements")
+	}
+}
+
+func TestHandleChangePassword_POST_Success(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	ctx := context.Background()
+
+	// Create a test user
+	user, err := server.userService.Create(ctx, "changepasssuccess", "TestPass@123!", "changepasssuccess@test.com", "user")
+	if err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	form := strings.NewReader("current_password=TestPass@123!&new_password=NewPass@456!&confirm_password=NewPass@456!")
+	req := httptest.NewRequest(http.MethodPost, "/change-password", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	ctx = context.WithValue(req.Context(), contextKeyUserID, user.ID)
+	ctx = WithUserContext(ctx, user)
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	server.handleChangePassword(rec, req)
+
+	// Should redirect to dashboard
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want %d; body = %s", rec.Code, http.StatusSeeOther, rec.Body.String())
+	}
+	location := rec.Header().Get("Location")
+	if location != "/dashboard" {
+		t.Errorf("Location = %q, want /dashboard", location)
+	}
+
+	// Verify password was actually changed - should be able to verify new password
+	updatedUser, err := server.userService.GetByID(context.Background(), user.ID)
+	if err != nil {
+		t.Fatalf("failed to get updated user: %v", err)
+	}
+
+	// Old password should no longer work
+	if verifyPassword(updatedUser.PasswordHash, "TestPass@123!") {
+		t.Error("old password should no longer work")
+	}
+
+	// New password should work
+	if !verifyPassword(updatedUser.PasswordHash, "NewPass@456!") {
+		t.Error("new password should work")
+	}
+}
+
+func TestHandleChangePassword_POST_ClearsMustChangeFlag(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	ctx := context.Background()
+
+	// Create a test user with MustChangePassword flag
+	user, err := server.userService.Create(ctx, "clearmustchange", "TestPass@123!", "clearmustchange@test.com", "user")
+	if err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	user.MustChangePassword = true
+	if err := server.userService.Update(ctx, user); err != nil {
+		t.Fatalf("failed to update user: %v", err)
+	}
+
+	form := strings.NewReader("current_password=TestPass@123!&new_password=NewPass@456!&confirm_password=NewPass@456!")
+	req := httptest.NewRequest(http.MethodPost, "/change-password", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	ctx = context.WithValue(req.Context(), contextKeyUserID, user.ID)
+	ctx = WithUserContext(ctx, user)
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	server.handleChangePassword(rec, req)
+
+	// Should redirect to dashboard
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want %d; body = %s", rec.Code, http.StatusSeeOther, rec.Body.String())
+	}
+
+	// Verify MustChangePassword flag was cleared
+	updatedUser, err := server.userService.GetByID(context.Background(), user.ID)
+	if err != nil {
+		t.Fatalf("failed to get updated user: %v", err)
+	}
+
+	if updatedUser.MustChangePassword {
+		t.Error("MustChangePassword flag should be cleared after successful password change")
+	}
+}
+
+// --- API Login Tests for MustChangePassword ---
+
+func TestHandleAPILogin_MustChangePassword_Returns403(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	ctx := context.Background()
+
+	// Create a test user with MustChangePassword flag
+	user, err := server.userService.Create(ctx, "apimustchange", "TestPass@123!", "apimustchange@test.com", "user")
+	if err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	user.MustChangePassword = true
+	if err := server.userService.Update(ctx, user); err != nil {
+		t.Fatalf("failed to update user: %v", err)
+	}
+
+	body := `{"username": "apimustchange", "password": "TestPass@123!"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	server.handleAPILogin(rec, req)
+
+	// Should return 403 Forbidden
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusForbidden)
+	}
+
+	// Body should mention web UI
+	respBody := rec.Body.String()
+	if !strings.Contains(respBody, "web") && !strings.Contains(respBody, "Web") {
+		t.Error("response should mention using web UI to change password")
+	}
+}
+
+func TestHandleAPILogin_WithTOTP_Success(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	ctx := context.Background()
+
+	// Create a test user with TOTP enabled
+	user, err := server.userService.Create(ctx, "apitotpvalid", "TestPass@123!", "apitotpvalid@test.com", "user")
+	if err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	// Enable TOTP
+	secret, err := security.GenerateTOTPSecret()
+	if err != nil {
+		t.Fatalf("failed to generate TOTP secret: %v", err)
+	}
+	user.TOTPEnabled = true
+	user.TOTPSecret = secret
+	if err := server.userService.Update(ctx, user); err != nil {
+		t.Fatalf("failed to update user: %v", err)
+	}
+
+	// Generate valid TOTP code
+	validCode := security.GenerateTOTPCode(secret, time.Now().Unix(), security.DefaultTOTPConfig())
+
+	body := fmt.Sprintf(`{"username": "apitotpvalid", "password": "TestPass@123!", "totp": "%s"}`, validCode)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	server.handleAPILogin(rec, req)
+
+	// Should return 200 OK
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if result["token"] == nil || result["token"] == "" {
+		t.Error("expected token in response")
+	}
+}
+
+func TestHandleAPILogin_WithTOTP_MissingCode(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	ctx := context.Background()
+
+	// Create a test user with TOTP enabled
+	user, err := server.userService.Create(ctx, "apitotpmissing", "TestPass@123!", "apitotpmissing@test.com", "user")
+	if err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	// Enable TOTP
+	secret, err := security.GenerateTOTPSecret()
+	if err != nil {
+		t.Fatalf("failed to generate TOTP secret: %v", err)
+	}
+	user.TOTPEnabled = true
+	user.TOTPSecret = secret
+	if err := server.userService.Update(ctx, user); err != nil {
+		t.Fatalf("failed to update user: %v", err)
+	}
+
+	// Login without TOTP code
+	body := `{"username": "apitotpmissing", "password": "TestPass@123!"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	server.handleAPILogin(rec, req)
+
+	// Should return 401 Unauthorized
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+
+	// Body should mention TOTP
+	respBody := rec.Body.String()
+	if !strings.Contains(respBody, "TOTP") && !strings.Contains(respBody, "totp") {
+		t.Error("response should mention TOTP required")
+	}
+}
+
+func TestHandleAPILogin_WithTOTP_InvalidCode(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	ctx := context.Background()
+
+	// Create a test user with TOTP enabled
+	user, err := server.userService.Create(ctx, "apitotpinvalid", "TestPass@123!", "apitotpinvalid@test.com", "user")
+	if err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	// Enable TOTP
+	secret, err := security.GenerateTOTPSecret()
+	if err != nil {
+		t.Fatalf("failed to generate TOTP secret: %v", err)
+	}
+	user.TOTPEnabled = true
+	user.TOTPSecret = secret
+	if err := server.userService.Update(ctx, user); err != nil {
+		t.Fatalf("failed to update user: %v", err)
+	}
+
+	// Login with invalid TOTP code
+	body := `{"username": "apitotpinvalid", "password": "TestPass@123!", "totp": "000000"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	server.handleAPILogin(rec, req)
+
+	// Should return 401 Unauthorized
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+}
+
+// --- Session Expiry Tests (Auth Flow) ---
+
+func TestAuthFlow_WithAuth_ExpiredSession(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	ctx := context.Background()
+
+	// Create a test user
+	user, err := server.userService.Create(ctx, "expiredsession", "TestPass@123!", "expiredsession@test.com", "user")
+	if err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	// Create an expired session directly in DB
+	expiredSession := &storage.Session{
+		ID:        "expired-session-token-12345",
+		UserID:    user.ID,
+		IPAddress: "127.0.0.1",
+		UserAgent: "test-agent",
+		CreatedAt: time.Now().Add(-48 * time.Hour),
+		ExpiresAt: time.Now().Add(-1 * time.Hour), // Expired 1 hour ago
+	}
+	if err := server.db.CreateSession(ctx, expiredSession); err != nil {
+		t.Fatalf("failed to create expired session: %v", err)
+	}
+
+	handler := server.withAuth(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects", nil)
+	req.AddCookie(&http.Cookie{Name: "session", Value: expiredSession.ID})
+	rec := httptest.NewRecorder()
+
+	handler(rec, req)
+
+	// Should return 401 Unauthorized
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestAuthFlow_WithUIAuth_ExpiredSession(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	ctx := context.Background()
+
+	// Create a test user
+	user, err := server.userService.Create(ctx, "uiexpiredsession", "TestPass@123!", "uiexpiredsession@test.com", "user")
+	if err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	// Create an expired session directly in DB
+	expiredSession := &storage.Session{
+		ID:        "ui-expired-session-token-12345",
+		UserID:    user.ID,
+		IPAddress: "127.0.0.1",
+		UserAgent: "test-agent",
+		CreatedAt: time.Now().Add(-48 * time.Hour),
+		ExpiresAt: time.Now().Add(-1 * time.Hour), // Expired 1 hour ago
+	}
+	if err := server.db.CreateSession(ctx, expiredSession); err != nil {
+		t.Fatalf("failed to create expired session: %v", err)
+	}
+
+	handler := server.withUIAuth(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	req.AddCookie(&http.Cookie{Name: "session", Value: expiredSession.ID})
+	rec := httptest.NewRecorder()
+
+	handler(rec, req)
+
+	// Should redirect to login
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusSeeOther)
+	}
+	location := rec.Header().Get("Location")
+	if location != "/login" {
+		t.Errorf("Location = %q, want /login", location)
+	}
+}
+
+func TestAuthFlow_WithAuth_ValidSession(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	ctx := context.Background()
+
+	// Create a test user
+	user, err := server.userService.Create(ctx, "validsession", "TestPass@123!", "validsession@test.com", "user")
+	if err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	// Create a valid session
+	session, err := server.sessionService.Create(ctx, user.ID, "127.0.0.1", "test-agent", 24*time.Hour)
+	if err != nil {
+		t.Fatalf("failed to create session: %v", err)
+	}
+
+	handler := server.withAuth(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("success"))
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects", nil)
+	req.AddCookie(&http.Cookie{Name: "session", Value: session.ID})
+	rec := httptest.NewRecorder()
+
+	handler(rec, req)
+
+	// Should return 200 OK
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+}
+

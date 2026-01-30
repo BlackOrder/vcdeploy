@@ -9,14 +9,14 @@ dotenv.config({ path: '.env.test' });
  */
 export default defineConfig({
   testDir: './specs',
-  /* Run tests in files in parallel */
-  fullyParallel: process.env.TEST_NO_PARALLEL !== 'true',
+  /* Run tests in files in parallel - disabled locally to avoid overwhelming dev machine */
+  fullyParallel: !!process.env.CI,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
-  /* Opt out of parallel tests on CI. */
-  workers: process.env.CI ? 1 : undefined,
+  /* Use 1 worker locally to avoid overwhelming the dev machine, more on CI */
+  workers: process.env.CI ? 4 : 1,
   /* Reporter to use */
   reporter: [
     ['list'],

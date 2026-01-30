@@ -21,7 +21,7 @@ async function globalSetup(config: FullConfig) {
   
   for (let i = 0; i < maxRetries; i++) {
     try {
-      const response = await fetch(`${baseURL}/api/health`);
+      const response = await fetch(`${baseURL}/api/v1/health`);
       if (response.ok) {
         console.log('   ✅ Application is ready');
         return;

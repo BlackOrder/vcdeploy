@@ -1161,6 +1161,17 @@ func (s *MasterServer) Stop(ctx context.Context) error {
 	return s.Shutdown(ctx)
 }
 
+// RequiresSetup returns whether the server requires initial setup.
+// This is true when no users exist and VCDEPLOY_ADMIN_PASSWORD was not set.
+func (s *MasterServer) RequiresSetup() bool {
+	return s.requiresSetup
+}
+
+// SetRequiresSetup sets the requiresSetup state. Used for testing.
+func (s *MasterServer) SetRequiresSetup(v bool) {
+	s.requiresSetup = v
+}
+
 // Request ID context key and header
 type contextKeyType string
 
@@ -1313,6 +1324,16 @@ func (s *MasterServer) withUIAuth(handler http.HandlerFunc) http.HandlerFunc {
 
 		// Add user ID to context for downstream handlers
 		ctx := context.WithValue(r.Context(), contextKeyUserID, userID)
+
+		// Also load and set the full user object for handlers that need it
+		user, err := s.userService.GetByID(ctx, userID)
+		if err != nil {
+			s.logger.Debug("Failed to load user", zap.Error(err))
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+		ctx = WithUserContext(ctx, user)
+
 		handler(w, r.WithContext(ctx))
 	}
 }
