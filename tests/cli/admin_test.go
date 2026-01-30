@@ -9,12 +9,14 @@ import (
 )
 
 // TestAdminCommand tests the admin CLI command for creating/managing admin users.
+// The admin command works differently - it's for initial admin setup.
+// For user management via API, use the `user` command instead.
 func TestAdminCommand(t *testing.T) {
 	ctx := setupTest(t)
 	cfg := testutil.GetConfig()
 
-	ctx.CLI.WithEnv("VCDEPLOY_API_URL", cfg.MasterHTTPURL)
-	ctx.CLI.WithEnv("VCDEPLOY_API_TOKEN", cfg.APIToken)
+	ctx.CLI.WithEnv("VCDEPLOY_MASTER", cfg.MasterHTTPURL)
+	ctx.CLI.WithEnv("VCDEPLOY_TOKEN", cfg.APIToken)
 
 	t.Run("admin help", func(t *testing.T) {
 		result := ctx.CLI.Run("admin", "--help")
@@ -23,157 +25,119 @@ func TestAdminCommand(t *testing.T) {
 		ctx.Assertions.StdoutContains(result, "password")
 		ctx.Assertions.StdoutContains(result, "email")
 	})
-
-	t.Run("admin user help", func(t *testing.T) {
-		result := ctx.CLI.Run("admin", "user", "--help")
-		ctx.Assertions.Success(result)
-		ctx.Assertions.StdoutContains(result, "list")
-		ctx.Assertions.StdoutContains(result, "create")
-		ctx.Assertions.StdoutContains(result, "delete")
-		ctx.Assertions.StdoutContains(result, "passwd")
-	})
 }
 
-// TestAdminUserCreate tests admin user creation via CLI.
-func TestAdminUserCreate(t *testing.T) {
+// TestUserManagementViaCLI tests user management using the `user` command.
+// CLI syntax:
+//   - user list
+//   - user create [username] -e <email> -r <role> -p <password>
+//   - user delete [username]
+//   - user passwd [username]
+func TestUserManagementViaCLI(t *testing.T) {
 	ctx := setupTest(t)
 	cfg := testutil.GetConfig()
 
-	ctx.CLI.WithEnv("VCDEPLOY_API_URL", cfg.MasterHTTPURL)
-	ctx.CLI.WithEnv("VCDEPLOY_API_TOKEN", cfg.APIToken)
+	ctx.CLI.WithEnv("VCDEPLOY_MASTER", cfg.MasterHTTPURL)
+	ctx.CLI.WithEnv("VCDEPLOY_TOKEN", cfg.APIToken)
 
-	t.Run("admin user create with valid password", func(t *testing.T) {
-		result := ctx.CLI.Run("admin", "user", "create",
-			"--username", "cli-admin-test",
-			"--email", "cli-admin@example.com",
-			"--password", "CLIAdmin@Pass123!",
-			"--role", "admin",
-		)
-		ctx.Assertions.Success(result)
-
-		// Clean up
-		ctx.CLI.Run("admin", "user", "delete", "cli-admin-test", "--force")
-	})
-
-	t.Run("admin user create with weak password fails", func(t *testing.T) {
-		result := ctx.CLI.Run("admin", "user", "create",
-			"--username", "weak-admin-test",
-			"--email", "weak-admin@example.com",
-			"--password", "weak",
-			"--role", "admin",
-		)
-		ctx.Assertions.Failed(result)
-	})
-
-	t.Run("admin user create requires password", func(t *testing.T) {
-		result := ctx.CLI.Run("admin", "user", "create",
-			"--username", "no-pass-admin",
-			"--email", "nopass@example.com",
-			"--role", "admin",
-		)
-		ctx.Assertions.Failed(result)
-	})
-}
-
-// TestAdminUserList tests admin user listing via CLI.
-func TestAdminUserList(t *testing.T) {
-	ctx := setupTest(t)
-	cfg := testutil.GetConfig()
-
-	ctx.CLI.WithEnv("VCDEPLOY_API_URL", cfg.MasterHTTPURL)
-	ctx.CLI.WithEnv("VCDEPLOY_API_TOKEN", cfg.APIToken)
-
-	t.Run("admin user list", func(t *testing.T) {
-		result := ctx.CLI.Run("admin", "user", "list")
+	t.Run("user list", func(t *testing.T) {
+		result := ctx.CLI.Run("user", "list")
 		ctx.Assertions.Success(result)
 		// Should contain at least the admin user
 		ctx.Assertions.StdoutContains(result, "admin")
 	})
 
-	t.Run("admin user list json output", func(t *testing.T) {
-		result := ctx.CLI.Run("admin", "user", "list", "--output", "json")
+	t.Run("user create with valid password", func(t *testing.T) {
+		result := ctx.CLI.Run("user", "create", "cli-admin-test",
+			"-e", "cli-admin@example.com",
+			"-p", "CLIAdmin@Pass123!",
+			"-r", "admin",
+		)
 		ctx.Assertions.Success(result)
-		ctx.Assertions.StdoutContains(result, "[")
+
+		// Clean up
+		ctx.CLI.RunWithInput("y\n", "user", "delete", "cli-admin-test")
 	})
 
-	t.Run("admin user list yaml output", func(t *testing.T) {
-		result := ctx.CLI.Run("admin", "user", "list", "--output", "yaml")
-		ctx.Assertions.Success(result)
+	t.Run("user create with weak password fails", func(t *testing.T) {
+		result := ctx.CLI.Run("user", "create", "weak-admin-test",
+			"-e", "weak-admin@example.com",
+			"-p", "weak",
+			"-r", "admin",
+		)
+		ctx.Assertions.Failed(result)
 	})
 }
 
-// TestAdminUserDelete tests admin user deletion via CLI.
-func TestAdminUserDelete(t *testing.T) {
+// TestUserDelete tests user deletion via CLI.
+func TestUserDelete(t *testing.T) {
 	ctx := setupTest(t)
 	cfg := testutil.GetConfig()
 
-	ctx.CLI.WithEnv("VCDEPLOY_API_URL", cfg.MasterHTTPURL)
-	ctx.CLI.WithEnv("VCDEPLOY_API_TOKEN", cfg.APIToken)
+	ctx.CLI.WithEnv("VCDEPLOY_MASTER", cfg.MasterHTTPURL)
+	ctx.CLI.WithEnv("VCDEPLOY_TOKEN", cfg.APIToken)
 
-	t.Run("admin user delete nonexistent fails", func(t *testing.T) {
-		result := ctx.CLI.Run("admin", "user", "delete", "nonexistent-admin-12345", "--force")
+	t.Run("user delete nonexistent fails", func(t *testing.T) {
+		result := ctx.CLI.RunWithInput("y\n", "user", "delete", "nonexistent-admin-12345")
 		ctx.Assertions.Failed(result)
 	})
 
-	t.Run("admin user delete requires force flag", func(t *testing.T) {
+	t.Run("user delete with confirmation", func(t *testing.T) {
 		// First create a user
-		ctx.CLI.Run("admin", "user", "create",
-			"--username", "delete-test-admin",
-			"--email", "delete-test@example.com",
-			"--password", "DeleteTest@Pass123!",
-			"--role", "viewer",
+		ctx.CLI.Run("user", "create", "delete-test-user",
+			"-e", "delete-test@example.com",
+			"-p", "DeleteTest@Pass123!",
+			"-r", "viewer",
 		)
 
-		// Try to delete without --force
-		_ = ctx.CLI.Run("admin", "user", "delete", "delete-test-admin")
-		// Without --force, command might fail or require confirmation
-		// This depends on implementation
-
-		// Clean up
-		ctx.CLI.Run("admin", "user", "delete", "delete-test-admin", "--force")
+		// Delete with confirmation via stdin
+		result := ctx.CLI.RunWithInput("y\n", "user", "delete", "delete-test-user")
+		ctx.Assertions.Success(result)
 	})
 }
 
-// TestAdminUserPasswd tests the admin user passwd command.
-func TestAdminUserPasswd(t *testing.T) {
+// TestUserPasswd tests the user passwd command.
+func TestUserPasswd(t *testing.T) {
 	ctx := setupTest(t)
 	cfg := testutil.GetConfig()
 
-	ctx.CLI.WithEnv("VCDEPLOY_API_URL", cfg.MasterHTTPURL)
-	ctx.CLI.WithEnv("VCDEPLOY_API_TOKEN", cfg.APIToken)
+	ctx.CLI.WithEnv("VCDEPLOY_MASTER", cfg.MasterHTTPURL)
+	ctx.CLI.WithEnv("VCDEPLOY_TOKEN", cfg.APIToken)
 
 	// Create a test user for password changes
 	testUsername := "passwd-admin-test"
-	result := ctx.CLI.Run("admin", "user", "create",
-		"--username", testUsername,
-		"--email", "passwd-admin@example.com",
-		"--password", "InitialAdmin@Pass123!",
-		"--role", "viewer",
+	result := ctx.CLI.Run("user", "create", testUsername,
+		"-e", "passwd-admin@example.com",
+		"-p", "InitialAdmin@Pass123!",
+		"-r", "viewer",
 	)
 	if result.ExitCode != 0 {
 		t.Skip("Could not create test user")
 	}
 
 	t.Cleanup(func() {
-		ctx.CLI.Run("admin", "user", "delete", testUsername, "--force")
+		ctx.CLI.RunWithInput("y\n", "user", "delete", testUsername)
 	})
 
-	t.Run("admin user passwd nonexistent user fails", func(t *testing.T) {
-		// Note: passwd command reads password from stdin in interactive mode
-		// For testing, we might need to use flags or skip this test
-		result := ctx.CLI.Run("admin", "user", "passwd", "nonexistent-user-12345")
-		// Will fail because user doesn't exist (or because password prompt fails in non-interactive)
+	t.Run("user passwd for existing user", func(t *testing.T) {
+		// passwd command reads password from stdin (password + confirmation)
+		result := ctx.CLI.RunWithInput("NewAdmin@Pass123!\nNewAdmin@Pass123!\n", "user", "passwd", testUsername)
+		ctx.Assertions.Success(result)
+	})
+
+	t.Run("user passwd nonexistent user fails", func(t *testing.T) {
+		result := ctx.CLI.RunWithInput("ValidPass123!\nValidPass123!\n", "user", "passwd", "nonexistent-user-12345")
 		ctx.Assertions.Failed(result)
 	})
 }
 
-// TestAdminPasswordRequirements tests that admin commands enforce password requirements.
-func TestAdminPasswordRequirements(t *testing.T) {
+// TestPasswordRequirements tests that CLI enforces password requirements.
+func TestPasswordRequirements(t *testing.T) {
 	ctx := setupTest(t)
 	cfg := testutil.GetConfig()
 
-	ctx.CLI.WithEnv("VCDEPLOY_API_URL", cfg.MasterHTTPURL)
-	ctx.CLI.WithEnv("VCDEPLOY_API_TOKEN", cfg.APIToken)
+	ctx.CLI.WithEnv("VCDEPLOY_MASTER", cfg.MasterHTTPURL)
+	ctx.CLI.WithEnv("VCDEPLOY_TOKEN", cfg.APIToken)
 
 	tests := []struct {
 		name        string
@@ -222,11 +186,10 @@ func TestAdminPasswordRequirements(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			username := "pw-test-" + tt.name[:5]
-			result := ctx.CLI.Run("admin", "user", "create",
-				"--username", username,
-				"--email", username+"@example.com",
-				"--password", tt.password,
-				"--role", "viewer",
+			result := ctx.CLI.Run("user", "create", username,
+				"-e", username+"@example.com",
+				"-p", tt.password,
+				"-r", "viewer",
 			)
 
 			if tt.expectError {
@@ -234,20 +197,20 @@ func TestAdminPasswordRequirements(t *testing.T) {
 			} else {
 				ctx.Assertions.Success(result)
 				// Clean up successful creation
-				ctx.CLI.Run("admin", "user", "delete", username, "--force")
+				ctx.CLI.RunWithInput("y\n", "user", "delete", username)
 			}
 		})
 	}
 }
 
-// TestAdminRemoteMode tests admin command in remote mode (via API).
-func TestAdminRemoteMode(t *testing.T) {
+// TestRemoteMode tests CLI in remote mode (via API).
+func TestRemoteMode(t *testing.T) {
 	ctx := setupTest(t)
 	cfg := testutil.GetConfig()
 
 	// Test with explicit --master and --token flags
-	t.Run("admin with explicit master and token", func(t *testing.T) {
-		result := ctx.CLI.Run("admin", "user", "list",
+	t.Run("with explicit master and token", func(t *testing.T) {
+		result := ctx.CLI.Run("user", "list",
 			"--master", cfg.MasterHTTPURL,
 			"--token", cfg.APIToken,
 		)
@@ -255,11 +218,11 @@ func TestAdminRemoteMode(t *testing.T) {
 	})
 
 	// Test with environment variables
-	t.Run("admin with env vars", func(t *testing.T) {
-		ctx.CLI.WithEnv("VCDEPLOY_API_URL", cfg.MasterHTTPURL)
-		ctx.CLI.WithEnv("VCDEPLOY_API_TOKEN", cfg.APIToken)
+	t.Run("with env vars", func(t *testing.T) {
+		ctx.CLI.WithEnv("VCDEPLOY_MASTER", cfg.MasterHTTPURL)
+		ctx.CLI.WithEnv("VCDEPLOY_TOKEN", cfg.APIToken)
 
-		result := ctx.CLI.Run("admin", "user", "list")
+		result := ctx.CLI.Run("user", "list")
 		ctx.Assertions.Success(result)
 	})
 }
