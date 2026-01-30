@@ -1,6 +1,10 @@
 package services
 
-import "time"
+import (
+	"time"
+
+	"github.com/BlackOrder/vcdeploy/internal/config"
+)
 
 // Pagination contains pagination parameters.
 type Pagination struct {
@@ -11,10 +15,10 @@ type Pagination struct {
 // NewPagination creates pagination with defaults and bounds checking.
 func NewPagination(limit, offset int) Pagination {
 	if limit <= 0 {
-		limit = 50
+		limit = config.DefaultMaxQueryResults
 	}
-	if limit > 1000 {
-		limit = 1000
+	if limit > config.MaxQueryResultsLimit {
+		limit = config.MaxQueryResultsLimit
 	}
 	if offset < 0 {
 		offset = 0
