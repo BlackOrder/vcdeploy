@@ -1364,6 +1364,7 @@ func TestAPIKeyCmdStructure(t *testing.T) {
 		}
 	}
 }
+
 // --- Admin Command Tests ---
 
 // TestAdminCmdStructure tests the admin command structure and flags.

@@ -2309,9 +2309,9 @@ func TestHandleSetup_POST_ValidationErrors(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name     string
-		form     string
-		wantErr  string
+		name    string
+		form    string
+		wantErr string
 	}{
 		{"missing username", "email=test@example.com&password=Pass@123!&confirm_password=Pass@123!", "Username is required"},
 		{"missing email", "username=test&password=Pass@123!&confirm_password=Pass@123!", "Email is required"},
@@ -3519,4 +3519,3 @@ func TestAuthFlow_WithAuth_ValidSession(t *testing.T) {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
 }
-
