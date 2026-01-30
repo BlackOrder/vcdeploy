@@ -45,6 +45,44 @@ jobs:
       - name: Run golangci-lint
         run: golangci-lint run --timeout=5m
 
+  proto-check:
+    name: Proto Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - name: Install protoc-gen-go plugins
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+      - name: Verify proto stubs are up to date
+        run: |
+          # Generate fresh proto files
+          mkdir -p internal/proto
+          protoc --go_out=internal/proto --go_opt=paths=source_relative \
+            --go-grpc_out=internal/proto --go-grpc_opt=paths=source_relative \
+            api/proto/*.proto
+          # Check if there are any differences
+          if ! git diff --exit-code internal/proto/; then
+            echo "::error::Proto stubs are out of date. Run 'make proto' and commit the changes."
+            exit 1
+          fi
+          echo "Proto stubs are up to date"
+
   test:
     name: Test
     runs-on: ubuntu-latest
