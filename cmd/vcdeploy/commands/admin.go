@@ -187,7 +187,7 @@ func runAdminLocal(username, password, email string) error {
 		fmt.Println("If VCDEPLOY_ADMIN_PASSWORD is set, changes may be overwritten on restart.")
 		fmt.Print("Continue? [y/N]: ")
 		var confirm string
-		_, _ = fmt.Scanln(&confirm)
+		_, _ = fmt.Scanln(&confirm) //nolint:errcheck // user confirmation prompt
 		if !strings.EqualFold(confirm, "y") {
 			return fmt.Errorf("aborted")
 		}
@@ -242,7 +242,10 @@ func runAdminRemote(cmd *cobra.Command, username, password, email string) error 
 	}
 
 	var usersList []map[string]interface{}
-	_ = json.NewDecoder(resp.Body).Decode(&usersList)
+	if err := json.NewDecoder(resp.Body).Decode(&usersList); err != nil {
+		resp.Body.Close()
+		return fmt.Errorf("failed to decode users list: %w", err)
+	}
 	resp.Body.Close()
 
 	// Look for user by username

@@ -84,7 +84,7 @@ func (f *TestFixture) CreateTestUser(username, password string) {
 	user := &storage.User{
 		Username:     username,
 		Email:        username + "@test.com",
-		PasswordHash: hashPassword(password),
+		PasswordHash: hashPassword(f.T, password),
 		Role:         "admin",
 		CreatedAt:    time.Now(),
 	}
@@ -115,10 +115,12 @@ func (f *TestFixture) CreateTestProject(name, repo, branch string) *storage.Proj
 }
 
 // hashPassword creates a password hash for testing using proper bcrypt.
-func hashPassword(password string) string {
+// It requires a testing.T to properly fail tests on error.
+func hashPassword(t *testing.T, password string) string {
+	t.Helper()
 	hash, err := security.HashPassword(password)
 	if err != nil {
-		panic("failed to hash password: " + err.Error())
+		t.Fatalf("failed to hash password: %v", err)
 	}
 	return hash
 }
@@ -624,7 +626,7 @@ func TestUserCRUD(t *testing.T) {
 	user := &storage.User{
 		Username:     "testuser",
 		Email:        "testuser@test.com",
-		PasswordHash: hashPassword("password123"),
+		PasswordHash: hashPassword(t, "password123"),
 		Role:         "user",
 		CreatedAt:    time.Now(),
 	}

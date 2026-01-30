@@ -148,7 +148,7 @@ func runUserDelete(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Are you sure you want to delete user '%s'? (y/N): ", username)
 	var confirm string
-	_, _ = fmt.Scanln(&confirm)
+	_, _ = fmt.Scanln(&confirm) //nolint:errcheck // user confirmation prompt
 	if !strings.EqualFold(confirm, "y") {
 		return fmt.Errorf("aborted")
 	}
@@ -165,7 +165,10 @@ func runUserDelete(cmd *cobra.Command, args []string) error {
 	}
 
 	var users []map[string]interface{}
-	_ = json.NewDecoder(resp.Body).Decode(&users)
+	if err := json.NewDecoder(resp.Body).Decode(&users); err != nil {
+		resp.Body.Close()
+		return fmt.Errorf("failed to decode users list: %w", err)
+	}
 	resp.Body.Close()
 
 	var userID float64

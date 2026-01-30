@@ -99,7 +99,7 @@ func runConfigExport(cmd *cobra.Command, args []string) error {
 	}
 
 	// Output as JSON
-	_, _ = io.Copy(os.Stdout, resp.Body)
+	_, _ = io.Copy(os.Stdout, resp.Body) //nolint:errcheck // best-effort output to stdout
 	fmt.Println()
 	return nil
 }
