@@ -19,7 +19,7 @@ vcdeploy exposes standard Kubernetes health endpoints:
 These endpoints return `200 OK` if the process is running. They do not check dependencies.
 
 ```bash
-curl -i http://localhost:8080/healthz
+curl -i http://localhost:9000/healthz
 # HTTP/1.1 200 OK
 # ok
 ```
@@ -29,7 +29,7 @@ curl -i http://localhost:8080/healthz
 This endpoint checks if the server can serve traffic by verifying database connectivity.
 
 ```bash
-curl -i http://localhost:8080/readyz
+curl -i http://localhost:9000/readyz
 # HTTP/1.1 200 OK
 # ok
 
@@ -43,7 +43,7 @@ curl -i http://localhost:8080/readyz
 The detailed health endpoint provides comprehensive status information:
 
 ```bash
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/health
+curl -H "Authorization: Bearer $TOKEN" http://localhost:9000/api/v1/health
 ```
 
 Response:
@@ -131,7 +131,7 @@ The master server continuously monitors agent health:
 ### Connection Status
 
 ```bash
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/agents
+curl -H "Authorization: Bearer $TOKEN" http://localhost:9000/api/v1/agents
 ```
 
 Response includes health metrics:

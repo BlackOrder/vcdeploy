@@ -6,7 +6,7 @@ vcdeploy provides a comprehensive REST API for managing deployments, projects, a
 
 All API endpoints are relative to your vcdeploy master server URL:
 
-- **Local development:** `http://localhost:8080`
+- **Local development:** `http://localhost:9000`
 - **Production:** Your configured server URL
 
 ## Authentication
