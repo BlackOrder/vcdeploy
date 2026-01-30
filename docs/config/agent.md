@@ -8,7 +8,7 @@ Agents are configured via a YAML file, typically located at `/etc/vcdeploy/agent
 # /etc/vcdeploy/agent.yaml
 
 # Master connection
-master_address: "master.example.com:50051"
+master_address: "master.example.com:9001"
 token: "agent-secret-token"
 
 # Agent identity

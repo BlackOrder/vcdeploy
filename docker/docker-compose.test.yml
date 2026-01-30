@@ -15,8 +15,8 @@ services:
     container_name: vcdeploy-master-test
     restart: "no"
     ports:
-      - "${VCDEPLOY_HTTP_PORT:-8080}:8080"
-      - "${VCDEPLOY_GRPC_PORT:-9090}:9090"
+      - "${VCDEPLOY_HTTP_PORT:-9000}:9000"
+      - "${VCDEPLOY_GRPC_PORT:-9001}:9001"
     volumes:
       - ./config/master-test.yaml:/etc/vcdeploy/master.yaml:ro
       - test-data:/var/lib/vcdeploy

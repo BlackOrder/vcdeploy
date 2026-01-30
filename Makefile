@@ -177,8 +177,8 @@ docker-down: ## Stop development containers
 docker-test-up: ## Start test infrastructure
 	$(COMPOSE) -f docker/docker-compose.test.yml up -d --build --wait
 	@echo "Test infrastructure ready!"
-	@echo "  Master HTTP: http://localhost:8080"
-	@echo "  Master gRPC: localhost:9090"
+	@echo "  Master HTTP: http://localhost:9000"
+	@echo "  Master gRPC: localhost:9001"
 
 .PHONY: docker-test-down
 docker-test-down: ## Stop test infrastructure

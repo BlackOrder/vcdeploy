@@ -7,7 +7,7 @@ vcdeploy uses gRPC for communication between the master server and agents.
 | Property | Value |
 |----------|-------|
 | Protocol | gRPC over HTTP/2 |
-| Port | 9090 (default) |
+| Port | 9001 (default) |
 | TLS | Required in production |
 | Serialization | Protocol Buffers |
 
@@ -115,7 +115,7 @@ creds, err := credentials.NewClientTLSFromFile(certFile, "")
 
 // Create connection
 conn, err := grpc.Dial(
-    "master:9090",
+    "master:9001",
     grpc.WithTransportCredentials(creds),
     grpc.WithKeepaliveParams(keepalive.ClientParameters{
         Time:                10 * time.Second,
@@ -130,24 +130,13 @@ conn, err := grpc.Dial(
 ```yaml
 # master.yaml
 grpc:
-  port: 9090
+  listen: ":9001"
   
-  # TLS Configuration
-  tls:
-    enabled: true
-    cert_file: /etc/vcdeploy/certs/server.crt
-    key_file: /etc/vcdeploy/certs/server.key
-    ca_file: /etc/vcdeploy/certs/ca.crt
-    
-  # Connection limits
-  max_connections: 1000
-  max_concurrent_streams: 100
-  
-  # Keepalive
-  keepalive:
-    time: 30s
-    timeout: 10s
-    min_time: 10s
+  # TLS Configuration (via server.tls)
+  # tls:
+  #   enabled: true
+  #   cert: /etc/vcdeploy/tls/cert.pem
+  #   key: /etc/vcdeploy/tls/key.pem
 ```
 
 ## Authentication
@@ -159,7 +148,7 @@ Both client and server verify certificates:
 ```yaml
 # Agent configuration
 master:
-  address: master.example.com:9090
+  address: master.example.com:9001
   tls:
     cert_file: /etc/vcdeploy/certs/agent.crt
     key_file: /etc/vcdeploy/certs/agent.key
@@ -275,14 +264,14 @@ server := grpc.NewServer(
 
 ```bash
 # List services
-grpcurl -plaintext localhost:9090 list
+grpcurl -plaintext localhost:9001 list
 
 # Describe service
-grpcurl -plaintext localhost:9090 describe AgentService
+grpcurl -plaintext localhost:9001 describe AgentService
 
 # Call method
 grpcurl -plaintext -d '{"agent_id": "test"}' \
-  localhost:9090 vcdeploy.AgentService/Register
+  localhost:9001 vcdeploy.AgentService/Register
 ```
 
 ### Reflection

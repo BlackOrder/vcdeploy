@@ -14,21 +14,21 @@ Common issues and their solutions.
 1. Verify master address is correct:
    ```bash
    # Agent config
-   master_address: "master.example.com:50051"
+   master_address: "master.example.com:9001"
    ```
 
 2. Check network connectivity:
    ```bash
-   telnet master.example.com 50051
+   telnet master.example.com 9001
    # or
-   nc -zv master.example.com 50051
+   nc -zv master.example.com 9001
    ```
 
-3. Verify firewall rules allow port 50051
+3. Verify firewall rules allow port 9001
 
 4. Check TLS configuration:
    ```bash
-   openssl s_client -connect master.example.com:50051
+   openssl s_client -connect master.example.com:9001
    ```
 
 5. Verify token is correct:

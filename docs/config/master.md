@@ -9,12 +9,15 @@ The master server is configured via a YAML file, typically located at `/etc/vcde
 
 # Server settings
 server:
-  http_address: ":8080"        # HTTP API and UI
-  grpc_address: ":50051"       # Agent connections
-  https_enabled: true
+  listen: ":9000"              # HTTP API and UI
   tls:
-    cert_file: "/etc/vcdeploy/tls/server.crt"
-    key_file: "/etc/vcdeploy/tls/server.key"
+    enabled: true
+    cert: "/etc/vcdeploy/tls/cert.pem"
+    key: "/etc/vcdeploy/tls/key.pem"
+
+# gRPC settings (agent connections)
+grpc:
+  listen: ":9001"
 
 # Database settings
 database:
@@ -103,8 +106,8 @@ server:
 
 | Setting | Default |
 |---------|---------|
-| HTTP address | `:8080` |
-| gRPC address | `:50051` |
+| HTTP address | `:9000` |
+| gRPC address | `:9001` |
 | Database path | `/var/lib/vcdeploy/vcdeploy.db` |
 | Session timeout | `24h` |
 | Log level | `info` |

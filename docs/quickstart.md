@@ -61,11 +61,10 @@ sudo mv vcdeploy /usr/local/bin/
 ```yaml
 # /etc/vcdeploy/master.yaml
 server:
-  http_addr: ":8080"
-  grpc_addr: ":9090"
+  listen: ":9000"
 
-database:
-  path: /var/lib/vcdeploy/vcdeploy.db
+grpc:
+  listen: ":9001"
 
 security:
   session_secret: "generate-a-random-32-byte-string"
@@ -104,7 +103,7 @@ Open http://localhost:8080 in your browser.
 # /etc/vcdeploy/agent.yaml
 agent:
   id: "agent-001"
-  master_addr: "master.example.com:9090"
+  master_addr: "master.example.com:9001"
 
 security:
   # TLS certificates for mTLS (optional but recommended)

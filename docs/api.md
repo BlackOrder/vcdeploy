@@ -115,7 +115,7 @@ Returns detailed health information.
     },
     "grpc": {
       "status": "healthy",
-      "message": "listening on :50051"
+      "message": "listening on :9001"
     },
     "agents": {
       "status": "healthy",
