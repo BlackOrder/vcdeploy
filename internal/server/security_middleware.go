@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/BlackOrder/vcdeploy/internal/config"
 )
 
 // SecurityMiddleware provides security-related HTTP middleware.
@@ -88,7 +90,7 @@ func DefaultSecurityConfig() SecurityConfig {
 		EnableReferrerPolicy:      true,
 		ReferrerPolicy:            "strict-origin-when-cross-origin",
 		EnableCSRF:                true,
-		CSRFTokenLength:           32,
+		CSRFTokenLength:           config.DefaultCSRFTokenBytes,
 		CSRFTokenExpiry:           1 * time.Hour,
 		CSRFSafeMethods:           []string{"GET", "HEAD", "OPTIONS"},
 		CSRFExemptPaths: []string{
@@ -121,19 +123,19 @@ func defaultCSPDirectives() map[string]string {
 }
 
 // NewSecurityMiddleware creates a new security middleware.
-func NewSecurityMiddleware(config SecurityConfig) *SecurityMiddleware {
-	if config.CSRFTokenLength == 0 {
-		config.CSRFTokenLength = 32
+func NewSecurityMiddleware(cfg SecurityConfig) *SecurityMiddleware {
+	if cfg.CSRFTokenLength == 0 {
+		cfg.CSRFTokenLength = config.DefaultCSRFTokenBytes
 	}
-	if config.CSRFTokenExpiry == 0 {
-		config.CSRFTokenExpiry = 1 * time.Hour
+	if cfg.CSRFTokenExpiry == 0 {
+		cfg.CSRFTokenExpiry = 1 * time.Hour
 	}
-	if len(config.CSRFSafeMethods) == 0 {
-		config.CSRFSafeMethods = []string{"GET", "HEAD", "OPTIONS"}
+	if len(cfg.CSRFSafeMethods) == 0 {
+		cfg.CSRFSafeMethods = []string{"GET", "HEAD", "OPTIONS"}
 	}
 
 	sm := &SecurityMiddleware{
-		config:     config,
+		config:     cfg,
 		csrfTokens: make(map[string]csrfToken),
 		stopCh:     make(chan struct{}),
 	}
