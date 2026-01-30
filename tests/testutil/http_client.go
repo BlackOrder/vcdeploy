@@ -87,7 +87,7 @@ func (c *HTTPClient) Delete(path string) (*http.Response, error) {
 
 // GetWithRedirects makes a GET request and follows redirects, returning the final response.
 func (c *HTTPClient) GetWithRedirects(path string) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(context.Background(), "GET", c.baseURL+path, nil)
+	req, err := http.NewRequestWithContext(context.Background(), "GET", c.baseURL+path, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
