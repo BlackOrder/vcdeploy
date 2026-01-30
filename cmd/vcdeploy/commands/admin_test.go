@@ -697,6 +697,108 @@ func TestRunAgentTokenInvalidResponse(t *testing.T) {
 	}
 }
 
+// TestRunAgentDelete tests the runAgentDelete function.
+func TestRunAgentDelete(t *testing.T) {
+	server := newMockAPIServer(t)
+	defer server.Close()
+
+	cmd := createTestCommand(server.URL)
+
+	// Simulate user confirming deletion by providing "y" on stdin
+	oldStdin := os.Stdin
+	r, w, _ := os.Pipe()
+	os.Stdin = r
+	_, _ = w.WriteString("y\n")
+	w.Close()
+
+	oldStdout := os.Stdout
+	rOut, wOut, _ := os.Pipe()
+	os.Stdout = wOut
+
+	err := runAgentDelete(cmd, []string{"agent-1"})
+
+	wOut.Close()
+	var stdout bytes.Buffer
+	_, _ = io.Copy(&stdout, rOut)
+	os.Stdout = oldStdout
+	os.Stdin = oldStdin
+
+	if err != nil {
+		t.Fatalf("runAgentDelete() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "removed successfully") {
+		t.Errorf("output should confirm deletion, got: %s", output)
+	}
+}
+
+// TestRunAgentDeleteAborted tests runAgentDelete when user cancels.
+func TestRunAgentDeleteAborted(t *testing.T) {
+	server := newMockAPIServer(t)
+	defer server.Close()
+
+	cmd := createTestCommand(server.URL)
+
+	// Simulate user declining deletion by providing "n" on stdin
+	oldStdin := os.Stdin
+	r, w, _ := os.Pipe()
+	os.Stdin = r
+	_, _ = w.WriteString("n\n")
+	w.Close()
+
+	oldStdout := os.Stdout
+	_, wOut, _ := os.Pipe()
+	os.Stdout = wOut
+
+	err := runAgentDelete(cmd, []string{"agent-1"})
+
+	wOut.Close()
+	os.Stdout = oldStdout
+	os.Stdin = oldStdin
+
+	if err == nil {
+		t.Error("expected error when user aborts")
+	}
+	if !strings.Contains(err.Error(), "aborted") {
+		t.Errorf("error should mention aborted, got: %v", err)
+	}
+}
+
+// TestRunAgentDeleteAPIError tests runAgentDelete when API returns error.
+func TestRunAgentDeleteAPIError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	cmd := createTestCommand(server.URL)
+
+	// Simulate user confirming deletion
+	oldStdin := os.Stdin
+	r, w, _ := os.Pipe()
+	os.Stdin = r
+	_, _ = w.WriteString("y\n")
+	w.Close()
+
+	oldStdout := os.Stdout
+	_, wOut, _ := os.Pipe()
+	os.Stdout = wOut
+
+	err := runAgentDelete(cmd, []string{"agent-1"})
+
+	wOut.Close()
+	os.Stdout = oldStdout
+	os.Stdin = oldStdin
+
+	if err == nil {
+		t.Error("expected error for 404 response")
+	}
+	if !strings.Contains(err.Error(), "API error") {
+		t.Errorf("error should mention API error, got: %v", err)
+	}
+}
+
 // TestRunDeploymentList tests the runDeploymentList function.
 func TestRunDeploymentList(t *testing.T) {
 	server := newMockAPIServer(t)
