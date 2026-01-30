@@ -487,10 +487,10 @@ func (s *MasterServer) seedDefaultAdmin() error {
 	}
 
 	// Get admin password from environment variable or use default
-	// Default password meets minimum 12 character requirement
+	// Default password meets all complexity requirements (upper, lower, digit, special)
 	defaultPassword := os.Getenv("VCDEPLOY_ADMIN_PASSWORD")
 	if defaultPassword == "" {
-		defaultPassword = "adminpassword123" // Default that meets 12 char requirement
+		defaultPassword = "Admin@Password123!" // Default that meets all requirements
 	}
 	user, err := s.userService.Create(ctx, "admin", defaultPassword, "admin@localhost", "admin")
 	if err != nil {
