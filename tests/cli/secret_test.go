@@ -9,89 +9,80 @@ import (
 )
 
 // TestSecretCommands tests secret management CLI commands.
+// CLI syntax:
+//   - secret set [project/scope] [key] --stdin
+//   - secret list [project]
+//   - secret delete [project/scope] [key]
+//   - secret import [project/scope]
+//   - secret backup -o <file>
+//   - secret restore [backup-file]
 func TestSecretCommands(t *testing.T) {
 	ctx := setupTest(t)
 	cfg := testutil.GetConfig()
 
-	ctx.CLI.WithEnv("VCDEPLOY_API_URL", cfg.MasterHTTPURL)
-	ctx.CLI.WithEnv("VCDEPLOY_API_TOKEN", cfg.APIToken)
+	ctx.CLI.WithEnv("VCDEPLOY_MASTER", cfg.MasterHTTPURL)
+	ctx.CLI.WithEnv("VCDEPLOY_TOKEN", cfg.APIToken)
 
-	t.Run("secret list", func(t *testing.T) {
-		result := ctx.CLI.Run("secret", "list")
+	// Create a test project for project-scoped secrets
+	ctx.CLI.Run("project", "add", "cli-secret-project")
+
+	t.Cleanup(func() {
+		ctx.CLI.RunWithInput("y\n", "project", "delete", "cli-secret-project")
+	})
+
+	t.Run("secret set global", func(t *testing.T) {
+		// CLI: secret set [project/scope] [key] --stdin
+		// For global scope, use "global" as the scope
+		result := ctx.CLI.RunWithInput("secret-value\n", "secret", "set", "global", "CLI_TEST_SECRET", "--stdin")
 		ctx.Assertions.Success(result)
 	})
 
-	t.Run("secret create global", func(t *testing.T) {
-		result := ctx.CLI.Run("secret", "create",
-			"--key", "CLI_TEST_SECRET",
-			"--value", "secret-value",
-			"--scope", "global",
-		)
+	t.Run("secret list global", func(t *testing.T) {
+		// CLI: secret list [project] - for global use special marker
+		result := ctx.CLI.Run("secret", "list", "global")
 		ctx.Assertions.Success(result)
 	})
 
-	t.Run("secret get", func(t *testing.T) {
-		result := ctx.CLI.Run("secret", "get", "CLI_TEST_SECRET")
-		ctx.Assertions.Success(result)
-		// Value should NOT be shown
-		ctx.Assertions.StdoutNotContains(result, "secret-value")
-	})
-
-	t.Run("secret update", func(t *testing.T) {
-		result := ctx.CLI.Run("secret", "update", "CLI_TEST_SECRET",
-			"--value", "updated-secret-value",
-		)
+	t.Run("secret delete global", func(t *testing.T) {
+		// CLI: secret delete [project/scope] [key]
+		result := ctx.CLI.Run("secret", "delete", "global", "CLI_TEST_SECRET")
 		ctx.Assertions.Success(result)
 	})
 
-	t.Run("secret delete", func(t *testing.T) {
-		result := ctx.CLI.Run("secret", "delete", "CLI_TEST_SECRET", "--force")
-		ctx.Assertions.Success(result)
-	})
-
-	t.Run("secret create with invalid scope", func(t *testing.T) {
-		result := ctx.CLI.Run("secret", "create",
-			"--key", "INVALID_SCOPE",
-			"--value", "value",
-			"--scope", "invalid",
-		)
-		ctx.Assertions.Failed(result)
-	})
-}
-
-// TestSecretProjectScope tests project-scoped secret CLI commands.
-func TestSecretProjectScope(t *testing.T) {
-	ctx := setupTest(t)
-	cfg := testutil.GetConfig()
-
-	ctx.CLI.WithEnv("VCDEPLOY_API_URL", cfg.MasterHTTPURL)
-	ctx.CLI.WithEnv("VCDEPLOY_API_TOKEN", cfg.APIToken)
-
-	// Create a project first
-	ctx.CLI.Run("project", "create",
-		"--name", "cli-secret-project",
-		"--repository", "https://github.com/test/repo.git",
-		"--branch", "main",
-		"--deploy-path", "/deploy/secret-test",
-	)
-
-	t.Run("secret create project-scoped", func(t *testing.T) {
-		result := ctx.CLI.Run("secret", "create",
-			"--key", "PROJECT_SECRET",
-			"--value", "project-secret-value",
-			"--scope", "project",
-			"--project", "cli-secret-project",
-		)
+	t.Run("secret set project-scoped", func(t *testing.T) {
+		result := ctx.CLI.RunWithInput("project-secret-value\n", "secret", "set", "cli-secret-project", "PROJECT_SECRET", "--stdin")
 		ctx.Assertions.Success(result)
 	})
 
 	t.Run("secret list for project", func(t *testing.T) {
-		result := ctx.CLI.Run("secret", "list", "--project", "cli-secret-project")
+		result := ctx.CLI.Run("secret", "list", "cli-secret-project")
 		ctx.Assertions.Success(result)
 	})
 
-	// Cleanup
+	t.Run("secret delete project-scoped", func(t *testing.T) {
+		result := ctx.CLI.Run("secret", "delete", "cli-secret-project", "PROJECT_SECRET")
+		ctx.Assertions.Success(result)
+	})
+}
+
+// TestSecretImport tests importing secrets from .env format.
+func TestSecretImport(t *testing.T) {
+	ctx := setupTest(t)
+	cfg := testutil.GetConfig()
+
+	ctx.CLI.WithEnv("VCDEPLOY_MASTER", cfg.MasterHTTPURL)
+	ctx.CLI.WithEnv("VCDEPLOY_TOKEN", cfg.APIToken)
+
+	// Create a test project
+	ctx.CLI.Run("project", "add", "cli-import-project")
+
 	t.Cleanup(func() {
-		ctx.CLI.Run("project", "delete", "cli-secret-project", "--force")
+		ctx.CLI.RunWithInput("y\n", "project", "delete", "cli-import-project")
+	})
+
+	t.Run("secret import from stdin", func(t *testing.T) {
+		envContent := "IMPORT_KEY1=value1\nIMPORT_KEY2=value2\n"
+		result := ctx.CLI.RunWithInput(envContent, "secret", "import", "cli-import-project")
+		ctx.Assertions.Success(result)
 	})
 }

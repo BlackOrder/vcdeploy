@@ -1164,20 +1164,32 @@ func normalizePath(path string) string {
 
 func (s *MasterServer) withAuth(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// First try API key in Authorization header
+		// First try Authorization header (Bearer token)
 		auth := r.Header.Get("Authorization")
 		if auth != "" && strings.HasPrefix(auth, "Bearer ") {
 			token := strings.TrimPrefix(auth, "Bearer ")
+
+			// First try as API key
 			apiKey, userID, err := s.validateAPIKey(r.Context(), token)
-			if err != nil {
-				s.logger.Debug("API key validation failed", zap.Error(err))
-				http.Error(w, "Invalid token", http.StatusUnauthorized)
+			if err == nil {
+				// Valid API key - add user ID and API key to context
+				ctx := context.WithValue(r.Context(), contextKeyUserID, userID)
+				ctx = WithAPIKeyContext(ctx, apiKey)
+				handler(w, r.WithContext(ctx))
 				return
 			}
-			// Add user ID and API key to context for downstream handlers
-			ctx := context.WithValue(r.Context(), contextKeyUserID, userID)
-			ctx = WithAPIKeyContext(ctx, apiKey)
-			handler(w, r.WithContext(ctx))
+			s.logger.Debug("API key validation failed, trying session", zap.Error(err))
+
+			// If not an API key, try as session token (for API login flow)
+			userID, err = s.validateSession(r.Context(), token)
+			if err == nil {
+				ctx := context.WithValue(r.Context(), contextKeyUserID, userID)
+				handler(w, r.WithContext(ctx))
+				return
+			}
+			s.logger.Debug("Session token validation failed", zap.Error(err))
+
+			http.Error(w, "Invalid token", http.StatusUnauthorized)
 			return
 		}
 

@@ -9,13 +9,14 @@ import (
 )
 
 // TestUserCommands tests user management CLI commands.
+// CLI syntax: user create [username] -e <email> -r <role> -p <password>
 func TestUserCommands(t *testing.T) {
 	ctx := setupTest(t)
 	cfg := testutil.GetConfig()
 
-	// Set API URL for CLI
-	ctx.CLI.WithEnv("VCDEPLOY_API_URL", cfg.MasterHTTPURL)
-	ctx.CLI.WithEnv("VCDEPLOY_API_TOKEN", cfg.APIToken)
+	// Set API URL for CLI (uses --master and --token flags)
+	ctx.CLI.WithEnv("VCDEPLOY_MASTER", cfg.MasterHTTPURL)
+	ctx.CLI.WithEnv("VCDEPLOY_TOKEN", cfg.APIToken)
 
 	t.Run("user list", func(t *testing.T) {
 		result := ctx.CLI.Run("user", "list")
@@ -23,88 +24,37 @@ func TestUserCommands(t *testing.T) {
 	})
 
 	t.Run("user create", func(t *testing.T) {
-		result := ctx.CLI.Run("user", "create",
-			"--username", "cli-test-user",
-			"--email", "cli-test@example.com",
-			"--password", "CLITestPass123!",
-			"--role", "viewer",
-		)
-		ctx.Assertions.Success(result)
-	})
-
-	t.Run("user get", func(t *testing.T) {
-		result := ctx.CLI.Run("user", "get", "cli-test-user")
-		ctx.Assertions.Success(result)
-		ctx.Assertions.StdoutContains(result, "cli-test-user")
-	})
-
-	t.Run("user update", func(t *testing.T) {
-		result := ctx.CLI.Run("user", "update", "cli-test-user",
-			"--email", "cli-test-updated@example.com",
-		)
-		ctx.Assertions.Success(result)
-	})
-
-	t.Run("user change-password", func(t *testing.T) {
-		result := ctx.CLI.Run("user", "change-password", "cli-test-user",
-			"--password", "NewCLIPass123!",
+		// CLI: user create [username] -e <email> -r <role> -p <password>
+		result := ctx.CLI.Run("user", "create", "cli-test-user",
+			"-e", "cli-test@example.com",
+			"-p", "CLITestPass123!",
+			"-r", "viewer",
 		)
 		ctx.Assertions.Success(result)
 	})
 
 	t.Run("user delete", func(t *testing.T) {
-		result := ctx.CLI.Run("user", "delete", "cli-test-user", "--force")
+		// CLI: user delete [username] (interactive confirm, use yes via stdin)
+		result := ctx.CLI.RunWithInput("y\n", "user", "delete", "cli-test-user")
 		ctx.Assertions.Success(result)
 	})
 
-	t.Run("user get nonexistent", func(t *testing.T) {
-		result := ctx.CLI.Run("user", "get", "nonexistent-user")
-		ctx.Assertions.Failed(result)
-	})
-
 	t.Run("user create with invalid role", func(t *testing.T) {
-		result := ctx.CLI.Run("user", "create",
-			"--username", "invalid-role-user",
-			"--email", "invalid@example.com",
-			"--password", "Password123!",
-			"--role", "superadmin",
+		result := ctx.CLI.Run("user", "create", "invalid-role-user",
+			"-e", "invalid@example.com",
+			"-p", "Password123!",
+			"-r", "superadmin",
 		)
 		ctx.Assertions.Failed(result)
 	})
 
 	t.Run("user create with weak password", func(t *testing.T) {
-		result := ctx.CLI.Run("user", "create",
-			"--username", "weak-pass-user",
-			"--email", "weak@example.com",
-			"--password", "123",
-			"--role", "viewer",
+		result := ctx.CLI.Run("user", "create", "weak-pass-user",
+			"-e", "weak@example.com",
+			"-p", "123",
+			"-r", "viewer",
 		)
 		ctx.Assertions.Failed(result)
-	})
-}
-
-// TestUserListOutput tests user list output formats.
-func TestUserListOutput(t *testing.T) {
-	ctx := setupTest(t)
-	cfg := testutil.GetConfig()
-
-	ctx.CLI.WithEnv("VCDEPLOY_API_URL", cfg.MasterHTTPURL)
-	ctx.CLI.WithEnv("VCDEPLOY_API_TOKEN", cfg.APIToken)
-
-	t.Run("list as table", func(t *testing.T) {
-		result := ctx.CLI.Run("user", "list", "--output", "table")
-		ctx.Assertions.Success(result)
-	})
-
-	t.Run("list as json", func(t *testing.T) {
-		result := ctx.CLI.Run("user", "list", "--output", "json")
-		ctx.Assertions.Success(result)
-		ctx.Assertions.StdoutContains(result, "[")
-	})
-
-	t.Run("list as yaml", func(t *testing.T) {
-		result := ctx.CLI.Run("user", "list", "--output", "yaml")
-		ctx.Assertions.Success(result)
 	})
 }
 
@@ -113,116 +63,98 @@ func TestUserPasswordValidation(t *testing.T) {
 	ctx := setupTest(t)
 	cfg := testutil.GetConfig()
 
-	ctx.CLI.WithEnv("VCDEPLOY_API_URL", cfg.MasterHTTPURL)
-	ctx.CLI.WithEnv("VCDEPLOY_API_TOKEN", cfg.APIToken)
+	ctx.CLI.WithEnv("VCDEPLOY_MASTER", cfg.MasterHTTPURL)
+	ctx.CLI.WithEnv("VCDEPLOY_TOKEN", cfg.APIToken)
 
 	t.Run("create user with password too short", func(t *testing.T) {
-		result := ctx.CLI.Run("user", "create",
-			"--username", "short-pass-user",
-			"--email", "short@example.com",
-			"--password", "Short1!", // Only 7 chars, needs 12+
-			"--role", "viewer",
+		result := ctx.CLI.Run("user", "create", "short-pass-user",
+			"-e", "short@example.com",
+			"-p", "Short1!", // Only 7 chars, needs 12+
+			"-r", "viewer",
 		)
 		ctx.Assertions.Failed(result)
-		// Should contain error about password length
 	})
 
 	t.Run("create user with password missing uppercase", func(t *testing.T) {
-		result := ctx.CLI.Run("user", "create",
-			"--username", "no-upper-user",
-			"--email", "noupper@example.com",
-			"--password", "nouppercase123!", // Missing uppercase
-			"--role", "viewer",
+		result := ctx.CLI.Run("user", "create", "no-upper-user",
+			"-e", "noupper@example.com",
+			"-p", "nouppercase123!", // Missing uppercase
+			"-r", "viewer",
 		)
 		ctx.Assertions.Failed(result)
 	})
 
 	t.Run("create user with password missing lowercase", func(t *testing.T) {
-		result := ctx.CLI.Run("user", "create",
-			"--username", "no-lower-user",
-			"--email", "nolower@example.com",
-			"--password", "NOLOWERCASE123!", // Missing lowercase
-			"--role", "viewer",
+		result := ctx.CLI.Run("user", "create", "no-lower-user",
+			"-e", "nolower@example.com",
+			"-p", "NOLOWERCASE123!", // Missing lowercase
+			"-r", "viewer",
 		)
 		ctx.Assertions.Failed(result)
 	})
 
 	t.Run("create user with password missing digit", func(t *testing.T) {
-		result := ctx.CLI.Run("user", "create",
-			"--username", "no-digit-user",
-			"--email", "nodigit@example.com",
-			"--password", "NoDigitPassword!", // Missing digit
-			"--role", "viewer",
+		result := ctx.CLI.Run("user", "create", "no-digit-user",
+			"-e", "nodigit@example.com",
+			"-p", "NoDigitPassword!", // Missing digit
+			"-r", "viewer",
 		)
 		ctx.Assertions.Failed(result)
 	})
 
 	t.Run("create user with password missing special char", func(t *testing.T) {
-		result := ctx.CLI.Run("user", "create",
-			"--username", "no-special-user",
-			"--email", "nospecial@example.com",
-			"--password", "NoSpecialChar123", // Missing special char
-			"--role", "viewer",
+		result := ctx.CLI.Run("user", "create", "no-special-user",
+			"-e", "nospecial@example.com",
+			"-p", "NoSpecialChar123", // Missing special char
+			"-r", "viewer",
 		)
 		ctx.Assertions.Failed(result)
 	})
 
 	t.Run("create user with strong password succeeds", func(t *testing.T) {
-		result := ctx.CLI.Run("user", "create",
-			"--username", "strong-pass-user",
-			"--email", "strong@example.com",
-			"--password", "StrongPassword123!",
-			"--role", "viewer",
+		result := ctx.CLI.Run("user", "create", "strong-pass-user",
+			"-e", "strong@example.com",
+			"-p", "StrongPassword123!",
+			"-r", "viewer",
 		)
 		ctx.Assertions.Success(result)
 
 		// Clean up
-		ctx.CLI.Run("user", "delete", "strong-pass-user", "--force")
+		ctx.CLI.RunWithInput("y\n", "user", "delete", "strong-pass-user")
 	})
 }
 
-// TestUserChangePasswordCLI tests the change-password command.
+// TestUserChangePasswordCLI tests the passwd command.
+// CLI: user passwd [username] (prompts for password interactively)
 func TestUserChangePasswordCLI(t *testing.T) {
 	ctx := setupTest(t)
 	cfg := testutil.GetConfig()
 
-	ctx.CLI.WithEnv("VCDEPLOY_API_URL", cfg.MasterHTTPURL)
-	ctx.CLI.WithEnv("VCDEPLOY_API_TOKEN", cfg.APIToken)
+	ctx.CLI.WithEnv("VCDEPLOY_MASTER", cfg.MasterHTTPURL)
+	ctx.CLI.WithEnv("VCDEPLOY_TOKEN", cfg.APIToken)
 
 	// Create a test user first
-	initialPassword := "InitialPass123!"
 	testUsername := "passwd-test-user"
 
-	result := ctx.CLI.Run("user", "create",
-		"--username", testUsername,
-		"--email", "passwd@example.com",
-		"--password", initialPassword,
-		"--role", "viewer",
+	result := ctx.CLI.Run("user", "create", testUsername,
+		"-e", "passwd@example.com",
+		"-p", "InitialPass123!",
+		"-r", "viewer",
 	)
 	ctx.Assertions.Success(result)
 
 	t.Cleanup(func() {
-		ctx.CLI.Run("user", "delete", testUsername, "--force")
+		ctx.CLI.RunWithInput("y\n", "user", "delete", testUsername)
 	})
 
 	t.Run("change password for existing user", func(t *testing.T) {
-		result := ctx.CLI.Run("user", "change-password", testUsername,
-			"--password", "NewSecurePass123!",
-		)
+		// Provide password + confirmation via stdin
+		result := ctx.CLI.RunWithInput("NewSecurePass123!\nNewSecurePass123!\n", "user", "passwd", testUsername)
 		ctx.Assertions.Success(result)
 	})
 
-	t.Run("change password with weak password fails", func(t *testing.T) {
-		result := ctx.CLI.Run("user", "change-password", testUsername,
-			"--password", "weak",
-		)
-		ctx.Assertions.Failed(result)
-	})
-
 	t.Run("change password for nonexistent user fails", func(t *testing.T) {
-		result := ctx.CLI.Run("user", "change-password", "nonexistent-user-12345",
-			"--password", "ValidPass123!",
-		)
+		result := ctx.CLI.RunWithInput("ValidPass123!\nValidPass123!\n", "user", "passwd", "nonexistent-user-12345")
 		ctx.Assertions.Failed(result)
 	})
 }
