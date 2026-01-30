@@ -1695,7 +1695,9 @@ func TestIsServerRunning(t *testing.T) {
 	// For now, just verify the function doesn't panic
 	_ = isServerRunning(cfg)
 }
+
 // TestRunAdminRemote_APIError tests error handling when API returns an error.
+// The API returns a JSON object instead of array, causing decode to fail.
 func TestRunAdminRemote_APIError(t *testing.T) {
 	t.Parallel()
 
@@ -1716,27 +1718,21 @@ func TestRunAdminRemote_APIError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for API failure")
 	}
-	if !strings.Contains(err.Error(), "500") && !strings.Contains(err.Error(), "API") {
-		t.Errorf("expected API error message, got: %v", err)
+	// The API returns a JSON object instead of array, causing unmarshal to fail
+	if !strings.Contains(err.Error(), "decode") && !strings.Contains(err.Error(), "unmarshal") {
+		t.Errorf("expected decode/unmarshal error message, got: %v", err)
 	}
 }
 
-// TestRunAdminRemote_InvalidJSON tests handling of invalid JSON response.
-// When users list returns invalid JSON, the function treats it as empty and creates a new user.
+// TestRunAdminRemote_InvalidJSON tests error handling with invalid JSON response.
+// With proper error handling, invalid JSON should return an error instead of silently continuing.
 func TestRunAdminRemote_InvalidJSON(t *testing.T) {
 	t.Parallel()
 
-	var createUserCalled bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/users" && r.Method == http.MethodGet {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`invalid json response`))
-			return
-		}
-		if r.URL.Path == "/api/v1/users" && r.Method == http.MethodPost {
-			// When user list JSON is invalid, it creates a new user
-			createUserCalled = true
-			w.WriteHeader(http.StatusCreated)
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)
@@ -1748,11 +1744,12 @@ func TestRunAdminRemote_InvalidJSON(t *testing.T) {
 	cmd.Flags().String("token", "test-token", "")
 
 	err := runAdminRemote(cmd, "admin", "Test@Password123!", "admin@test.com")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	// With proper error handling, invalid JSON should return an error
+	if err == nil {
+		t.Fatal("expected error for invalid JSON response")
 	}
-	if !createUserCalled {
-		t.Error("expected create user to be called when JSON parse fails")
+	if !strings.Contains(err.Error(), "decode") && !strings.Contains(err.Error(), "invalid") {
+		t.Errorf("expected decode/invalid error message, got: %v", err)
 	}
 }
 
