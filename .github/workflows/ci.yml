@@ -218,6 +218,7 @@ jobs:
         run: go build -ldflags="-s -w" -o vcdeploy-agent-${{ matrix.os }}-${{ matrix.arch }} ./cmd/vcdeploy-agent
 
       - name: Upload artifacts
+        if: ${{ !env.ACT }}  # Skip when running locally
         uses: actions/upload-artifact@v4
         with:
           name: binaries-${{ matrix.os }}-${{ matrix.arch }}
@@ -342,6 +343,7 @@ jobs:
         run: go test -bench=. -benchmem -run=^$ ./... | tee benchmark.txt
 
       - name: Upload benchmark results
+        if: ${{ !env.ACT }}  # Skip when running locally with act/local runners
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-results
@@ -511,7 +513,7 @@ jobs:
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v4
-        if: always()
+        if: ${{ always() && !env.ACT }}  # Skip when running locally
         with:
           name: playwright-report
           path: tests/ui/playwright-report/
@@ -519,7 +521,7 @@ jobs:
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
-        if: always()
+        if: ${{ always() && !env.ACT }}  # Skip when running locally
         with:
           name: playwright-results
           path: tests/ui/test-results/
@@ -621,6 +623,7 @@ jobs:
           cyclonedx-gomod mod -output sbom/sbom.xml
 
       - name: Upload SBOM
+        if: ${{ !env.ACT }}  # Skip when running locally
         uses: actions/upload-artifact@v4
         with:
           name: sbom
