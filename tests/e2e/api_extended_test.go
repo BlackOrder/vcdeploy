@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"testing"
+	"time"
 )
 
 // TestAPIHostKeys tests the host keys API endpoints.
@@ -691,7 +692,7 @@ func TestAPIProjectTypes(t *testing.T) {
 // Helper functions
 
 func waitForHTTPEndpoint(url string) error {
-	return waitForEndpoint(context.TODO(), url, 30*1000000000) // 30 seconds in nanoseconds
+	return waitForEndpoint(context.Background(), url, 30*time.Second)
 }
 
 func doAuthRequest(method, url string, body interface{}, token string) (*http.Response, error) {
