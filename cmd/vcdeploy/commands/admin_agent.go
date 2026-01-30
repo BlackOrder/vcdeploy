@@ -140,7 +140,7 @@ func runAgentDelete(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Are you sure you want to remove agent '%s'? (y/N): ", agentID)
 	var confirm string
-	_, _ = fmt.Scanln(&confirm)
+	_, _ = fmt.Scanln(&confirm) //nolint:errcheck // user confirmation prompt
 	if !strings.EqualFold(confirm, "y") {
 		return fmt.Errorf("aborted")
 	}
