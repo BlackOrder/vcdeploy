@@ -340,9 +340,18 @@ func (s *MasterServer) renderTemplate(w http.ResponseWriter, name string, data i
 	// Add appearance settings if settings service is available
 	if s.settingsSvc != nil {
 		ctx := context.Background()
-		darkMode, _ := s.settingsSvc.GetBool(ctx, "appearance", "dark_mode", true)
-		themeColor, _ := s.settingsSvc.GetString(ctx, "appearance", "theme_color", "green")
-		theme, _ := s.settingsSvc.GetString(ctx, "appearance", "theme", "dark")
+		darkMode, err := s.settingsSvc.GetBool(ctx, "appearance", "dark_mode", true)
+		if err != nil {
+			s.logger.Warn("Failed to load dark_mode setting, using default", zap.Error(err))
+		}
+		themeColor, err := s.settingsSvc.GetString(ctx, "appearance", "theme_color", "green")
+		if err != nil {
+			s.logger.Warn("Failed to load theme_color setting, using default", zap.Error(err))
+		}
+		theme, err := s.settingsSvc.GetString(ctx, "appearance", "theme", "dark")
+		if err != nil {
+			s.logger.Warn("Failed to load theme setting, using default", zap.Error(err))
+		}
 
 		dataMap["DarkMode"] = darkMode
 		dataMap["ThemeColor"] = themeColor
