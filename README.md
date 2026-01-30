@@ -250,7 +250,43 @@ vcdeploy secret delete <project/scope> <key>
 vcdeploy secret import <project/scope>
 vcdeploy secret backup --output=file.vcbackup
 vcdeploy secret restore file.vcbackup
+
+# Admin management (lockout recovery)
+vcdeploy admin --username admin --email admin@example.com
 ```
+
+## Environment Variables
+
+### Admin Credentials
+
+On startup, vcdeploy checks for admin credentials via environment variables. This is useful for containerized deployments where credentials should be managed externally.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VCDEPLOY_ADMIN_PASSWORD` | Admin password (triggers credential sync on startup) | - |
+| `VCDEPLOY_ADMIN_USERNAME` | Admin username | `admin` |
+| `VCDEPLOY_ADMIN_EMAIL` | Admin email address | `admin@localhost` |
+
+**Behavior:**
+- If `VCDEPLOY_ADMIN_PASSWORD` is set: Admin credentials are synced from environment on every startup
+- If not set and no users exist: Web UI redirects to `/setup` wizard for initial configuration
+- Runtime password changes via UI are allowed but will be reset on restart when env vars are set
+
+### System Paths
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VCDEPLOY_DATA_DIR` | Data directory (database, logs) | `/var/lib/vcdeploy` |
+| `VCDEPLOY_CONFIG_DIR` | Configuration directory | `/etc/vcdeploy` |
+| `VCDEPLOY_RUN_DIR` | Runtime directory (PID files) | `/var/run/vcdeploy` |
+| `VCDEPLOY_LOG_DIR` | Log directory | `/var/log/vcdeploy` |
+
+### CLI Access
+
+| Variable | Description |
+|----------|-------------|
+| `VCDEPLOY_MASTER` | Master server address for remote CLI |
+| `VCDEPLOY_TOKEN` | API token for remote CLI authentication |
 
 ## Deployment Strategy
 
