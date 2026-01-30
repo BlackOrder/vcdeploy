@@ -266,16 +266,26 @@ jobs:
     needs: [lint, test]
     if: github.event_name == 'push' && !env.ACT
     steps:
+      - name: Skip in local ACT environment
+        if: ${{ env.ACT }}
+        run: |
+          echo "Skipping Docker build in local ACT environment (network isolation issues)"
+          exit 0
+
       - name: Checkout code
+        if: ${{ !env.ACT }}
         uses: actions/checkout@v4
 
       - name: Set up QEMU
+        if: ${{ !env.ACT }}
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
+        if: ${{ !env.ACT }}
         uses: docker/setup-buildx-action@v3
 
       - name: Login to GitHub Container Registry
+        if: ${{ !env.ACT }}
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -283,6 +293,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Docker meta (master)
+        if: ${{ !env.ACT }}
         id: meta-master
         uses: docker/metadata-action@v5
         with:
@@ -292,6 +303,7 @@ jobs:
             type=sha
 
       - name: Build and push master
+        if: ${{ !env.ACT }}
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -304,6 +316,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Docker meta (agent)
+        if: ${{ !env.ACT }}
         id: meta-agent
         uses: docker/metadata-action@v5
         with:
@@ -313,6 +326,7 @@ jobs:
             type=sha
 
       - name: Build and push agent
+        if: ${{ !env.ACT }}
         uses: docker/build-push-action@v5
         with:
           context: .
