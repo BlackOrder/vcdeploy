@@ -17,6 +17,9 @@
   * [Projects](config/projects.md)
   * [Secrets Management](config/secrets.md)
 
+* **CLI Reference**
+  * [Commands](cli/README.md)
+
 * **Operations**
   * [Health Checks](operations/health.md)
   * [Metrics & Monitoring](operations/metrics.md)
