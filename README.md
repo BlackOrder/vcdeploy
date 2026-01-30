@@ -393,16 +393,26 @@ make dev-agent
 
 ## Security
 
-### Default Credentials
+### Initial Admin Setup
 
-On first run, vcdeploy creates a default admin user:
+On first run, vcdeploy requires admin account setup via one of these methods:
 
-| Field    | Value   |
-|----------|---------|
-| Username | `admin` |
-| Password | `admin` |
+1. **Environment Variables** (recommended for containers):
+   ```bash
+   export VCDEPLOY_ADMIN_PASSWORD="YourSecurePassword123!"
+   export VCDEPLOY_ADMIN_USERNAME="admin"  # optional, defaults to "admin"
+   export VCDEPLOY_ADMIN_EMAIL="admin@example.com"  # optional
+   ```
 
-**⚠️ IMPORTANT:** You will be required to change the password on first login. The default credentials cannot be used for normal operations until the password is changed.
+2. **Setup Wizard**: If no password is set and no users exist, the web UI redirects to `/setup` for initial configuration.
+
+3. **CLI** (also for lockout recovery):
+   ```bash
+   vcdeploy admin --username admin --email admin@example.com
+   # You will be prompted for a password
+   ```
+
+**Note:** When `VCDEPLOY_ADMIN_PASSWORD` is set, credentials are synced on every startup. Runtime changes via UI are allowed but will be reset on restart.
 
 ### Security Features
 

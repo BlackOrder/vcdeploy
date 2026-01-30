@@ -66,9 +66,11 @@ npm run report
 | `VCDEPLOY_WEB_URL` | Base URL of the web application | `http://localhost:8080` |
 | `VCDEPLOY_API_URL` | Base URL of the API | `http://localhost:8080/api` |
 | `TEST_ADMIN_USERNAME` | Admin username for tests | `admin` |
-| `TEST_ADMIN_PASSWORD` | Admin password for tests | `Admin@Password123!` |
+| `TEST_ADMIN_PASSWORD` | Admin password for tests (must match server's `VCDEPLOY_ADMIN_PASSWORD`) | `Admin@Password123!` |
 | `TEST_NO_PARALLEL` | Disable parallel tests | `false` |
 | `CI` | CI environment flag | (auto-detected) |
+
+**Note:** The test admin credentials must match the `VCDEPLOY_ADMIN_PASSWORD` set when starting the server. If the server has no admin user and no env credentials, it will redirect to `/setup` and tests will fail.
 
 ## Project Structure
 

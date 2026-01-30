@@ -88,9 +88,13 @@ sudo systemctl enable --now vcdeploy-master
 
 ### 3. Access the Web UI
 
-Open http://localhost:8080 in your browser. Default credentials:
-- Username: `admin`
-- Password: `admin` (change immediately!)
+Open http://localhost:8080 in your browser.
+
+**If `VCDEPLOY_ADMIN_PASSWORD` was set**, log in with:
+- Username: `admin` (or your configured `VCDEPLOY_ADMIN_USERNAME`)
+- Password: Your configured password
+
+**If no password was set**, you'll be redirected to the setup wizard to create your admin account.
 
 ## Agent Setup
 
