@@ -1,3 +1,9 @@
+/**
+ * Project management UI tests.
+ * 
+ * Note: Some tests use `test.skip()` when API setup fails (e.g., resource already exists).
+ * This ensures test reliability in CI without requiring database cleanup between runs.
+ */
 import { test, expect, TEST_ADMIN_PASSWORD } from '../fixtures/test-fixtures';
 import { ProjectsPage, ProjectFormPage, ProjectDetailPage } from '../pages';
 
