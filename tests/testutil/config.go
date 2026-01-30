@@ -79,7 +79,7 @@ func loadConfig() *Config {
 		// Authentication
 		APIToken:      getEnvOrDefault("E2E_API_TOKEN", "test-api-token"),
 		AdminUsername: getEnvOrDefault("E2E_ADMIN_USER", "admin"),
-		AdminPassword: getEnvOrDefault("E2E_ADMIN_PASS", "adminpassword123"),
+		AdminPassword: getEnvOrDefault("E2E_ADMIN_PASS", "Admin@Password123!"),
 
 		// Test settings
 		Timeout:       timeout,

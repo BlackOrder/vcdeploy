@@ -24,7 +24,7 @@ auth:
 
 admin:
   username: admin
-  # Password is set via VCDEPLOY_ADMIN_PASSWORD env var (defaults to adminpassword123)
+  # Password is set via VCDEPLOY_ADMIN_PASSWORD env var (defaults to Admin@Password123!)
 
 logging:
   level: debug

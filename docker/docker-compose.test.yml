@@ -25,7 +25,7 @@ services:
       - TZ=UTC
       - VCDEPLOY_LOG_LEVEL=debug
       - VCDEPLOY_TEST_MODE=true
-      - VCDEPLOY_ADMIN_PASSWORD=${TEST_ADMIN_PASSWORD:-adminpassword123}
+      - VCDEPLOY_ADMIN_PASSWORD=${TEST_ADMIN_PASSWORD:-Admin@Password123!}
     networks:
       - vcdeploy-test
     healthcheck:
