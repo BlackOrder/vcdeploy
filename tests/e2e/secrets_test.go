@@ -45,9 +45,10 @@ func TestSecretsAPI(t *testing.T) {
 
 	t.Run("create global secret", func(t *testing.T) {
 		secret := map[string]interface{}{
-			"key":   "E2E_TEST_SECRET",
-			"value": "super-secret-value",
-			"scope": "global",
+			"project": "_global",
+			"key":     "E2E_TEST_SECRET",
+			"value":   "super-secret-value",
+			"scope":   "default",
 		}
 
 		resp, err := ctx.Client.Post("/api/v1/secrets", secret)

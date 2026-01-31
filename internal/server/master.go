@@ -669,9 +669,11 @@ func (s *MasterServer) startHTTP() error {
 	mux.HandleFunc("/api/v1/project-types", s.withAuth(s.handleProjectTypes))
 	mux.HandleFunc("/api/v1/project-types/", s.withAuth(s.handleProjectType))
 
-	// API Keys API
+	// API Keys API (both formats for compatibility)
 	mux.HandleFunc("/api/v1/apikeys", s.withAuth(s.handleAPIKeys))
 	mux.HandleFunc("/api/v1/apikeys/", s.withAuth(s.handleAPIKey))
+	mux.HandleFunc("/api/v1/api-keys", s.withAuth(s.handleAPIKeys))
+	mux.HandleFunc("/api/v1/api-keys/", s.withAuth(s.handleAPIKey))
 
 	// Audit API
 	mux.HandleFunc("/api/v1/audit", s.withAuth(s.handleAuditLogs))
