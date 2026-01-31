@@ -605,6 +605,18 @@ func (s *MasterServer) handleProjectsAPI(w http.ResponseWriter, r *http.Request)
 			s.jsonError(w, http.StatusBadRequest, "name is required")
 			return
 		}
+		if err := services.ValidateProjectName(req.Name); err != nil {
+			s.jsonError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if req.Repository == "" {
+			s.jsonError(w, http.StatusBadRequest, "repository is required")
+			return
+		}
+		if req.DeployPath == "" {
+			s.jsonError(w, http.StatusBadRequest, "deploy_path is required")
+			return
+		}
 		if req.Branch == "" {
 			req.Branch = "main"
 		}
