@@ -37,5 +37,5 @@
   * [Building from Source](development/building.md)
   * [Testing](development/testing.md)
 
-* **Release Notes**
+* **Reference**
   * [Changelog](changelog.md)
