@@ -10,6 +10,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 // agentCmd handles agent management commands
@@ -23,11 +24,13 @@ func init() {
 	rootCmd.AddCommand(agentCmd)
 
 	// Agent subcommands
-	agentCmd.AddCommand(&cobra.Command{
+	agentListCmd := &cobra.Command{
 		Use:   "list",
 		Short: "List all agents",
 		RunE:  runAgentList,
-	})
+	}
+	agentListCmd.Flags().StringP("output", "o", "table", "Output format: table, json, yaml")
+	agentCmd.AddCommand(agentListCmd)
 
 	agentCmd.AddCommand(&cobra.Command{
 		Use:   "show [agent-id]",
@@ -64,6 +67,8 @@ func init() {
 }
 
 func runAgentList(cmd *cobra.Command, args []string) error {
+	outputFormat, _ := cmd.Flags().GetString("output")
+
 	client, err := newAPIClient(cmd)
 	if err != nil {
 		return err
@@ -84,16 +89,25 @@ func runAgentList(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("decode response: %w", err)
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tHOSTNAME\tSTATUS\tLAST SEEN")
-	for _, a := range agents {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
-			a["id"], a["hostname"], a["status"], a["lastSeenAt"])
-	}
-	w.Flush()
+	switch outputFormat {
+	case "json":
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(agents)
+	case "yaml":
+		return yaml.NewEncoder(os.Stdout).Encode(agents)
+	default:
+		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(w, "ID\tHOSTNAME\tSTATUS\tLAST SEEN")
+		for _, a := range agents {
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
+				a["id"], a["hostname"], a["status"], a["lastSeenAt"])
+		}
+		w.Flush()
 
-	if len(agents) == 0 {
-		fmt.Println("No agents registered.")
+		if len(agents) == 0 {
+			fmt.Println("No agents registered.")
+		}
 	}
 	return nil
 }

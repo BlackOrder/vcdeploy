@@ -1620,7 +1620,6 @@ func TestActiveDeploymentStruct(t *testing.T) {
 	ad := &activeDeployment{
 		ID:         "deploy-123",
 		Project:    "test-project",
-		StartTime:  time.Now(),
 		State:      pb.DeploymentState_DEPLOYMENT_STATE_DEPLOYING,
 		Cancel:     cancel,
 		cancelDone: cancelDone,

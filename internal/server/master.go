@@ -1330,7 +1330,7 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.ResponseWriter.WriteHeader(code)
 }
 
-func (s *MasterServer) handleAgents(w http.ResponseWriter, r *http.Request) {
+func (s *MasterServer) handleAgents(w http.ResponseWriter, _ *http.Request) {
 	s.agentsMu.RLock()
 	agents := make([]map[string]interface{}, 0, len(s.agents))
 	for _, a := range s.agents {

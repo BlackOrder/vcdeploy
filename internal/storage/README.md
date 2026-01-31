@@ -183,3 +183,29 @@ if errors.Is(err, storage.ErrNotFound) {
     // Handle not found
 }
 ```
+
+## Design Decisions
+
+### MemoryStore.Backup() Returns ErrNotImplemented
+
+The `MemoryStore.Backup()` method intentionally returns `ErrNotImplemented`. This is a design decision, not an oversight:
+
+**Rationale:**
+- Backups operate at the SQLite database level, not the in-memory cache layer
+- The `MemoryStore` wraps a SQLite `DB` for persistence; the underlying `DB.Backup()` method handles actual backup operations
+- Calling `Backup()` on the memory layer doesn't make semantic sense—the in-memory data is already backed by SQLite writes
+
+**How to backup:**
+```go
+// Access the underlying DB for backup operations
+if memStore, ok := store.(*storage.MemoryStore); ok {
+    if db := memStore.GetDB(); db != nil {
+        err := db.Backup(ctx, destPath)
+    }
+}
+
+// Or use the SQLite DB directly if available
+db.Backup(ctx, "/path/to/backup.db")
+```
+
+This design keeps backup concerns at the appropriate abstraction level while allowing full backup functionality through the SQLite layer.

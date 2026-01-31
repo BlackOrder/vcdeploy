@@ -53,10 +53,7 @@ func TestAgentLabels(t *testing.T) {
 }
 
 // TestAgentOutputFormats tests agent list output formats.
-// Skip: The --output flag is not implemented in the current CLI.
 func TestAgentOutputFormats(t *testing.T) {
-	t.Skip("--output flag is not implemented in current CLI")
-
 	ctx := setupTest(t)
 	cfg := testutil.GetConfig()
 

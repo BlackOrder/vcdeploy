@@ -304,8 +304,9 @@ func runAdminRemote(cmd *cobra.Command, username, password, email string) error 
 }
 
 // isServerRunning checks if the server appears to be running.
-func isServerRunning(sysCfg *config.SystemConfig) bool {
-	// Try to connect to common ports
+// Uses default ports since MasterConfig may not be loaded yet.
+func isServerRunning(_ *config.SystemConfig) bool {
+	// Try to connect to default ports (8080 for HTTP, 9090 for gRPC)
 	ports := []string{":8080", ":9090"}
 
 	for _, port := range ports {

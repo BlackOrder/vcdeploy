@@ -177,12 +177,13 @@ func TestAuthMustChangePassword(t *testing.T) {
 		defer resp.Body.Close()
 
 		// Could be 403 (must change) or 401 (user doesn't exist from previous run)
-		if resp.StatusCode == http.StatusForbidden {
+		switch resp.StatusCode {
+		case http.StatusForbidden:
 			// Expected for must change password
 			t.Log("Got 403 as expected for must change password")
-		} else if resp.StatusCode == http.StatusUnauthorized {
+		case http.StatusUnauthorized:
 			t.Log("Got 401 - user may not exist or password changed in previous test run")
-		} else if resp.StatusCode == http.StatusOK {
+		case http.StatusOK:
 			t.Log("Got 200 - user may not have must_change_password flag set")
 		}
 	})
@@ -230,9 +231,10 @@ func TestAuthTOTP(t *testing.T) {
 		defer resp.Body.Close()
 
 		// Should fail because TOTP is required
-		if resp.StatusCode == http.StatusOK {
+		switch resp.StatusCode {
+		case http.StatusOK:
 			t.Log("Login succeeded - TOTP may not be enabled for this user")
-		} else if resp.StatusCode == http.StatusUnauthorized {
+		case http.StatusUnauthorized:
 			t.Log("Got 401 - TOTP required or user doesn't exist")
 		}
 	})

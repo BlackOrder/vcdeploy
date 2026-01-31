@@ -325,7 +325,7 @@ func (s *SymlinkStrategy) setupDirectories(ctx context.Context, basePath, releas
 	return nil
 }
 
-func (s *SymlinkStrategy) updateRepo(ctx context.Context, repoPath, repository, branch, commit string, logCh chan<- LogEntry) error {
+func (s *SymlinkStrategy) updateRepo(ctx context.Context, repoPath, repository, _ /* branch */, _ /* commit */ string, _ /* logCh */ chan<- LogEntry) error {
 	// Check if repo exists
 	result, _ := s.runner.Run(ctx, fmt.Sprintf("test -d %s/.git", repoPath), RunOptions{})
 

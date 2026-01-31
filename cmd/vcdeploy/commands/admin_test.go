@@ -1512,12 +1512,13 @@ func TestRunAdminRemote_WithMockedAPI(t *testing.T) {
 
 		switch r.URL.Path {
 		case "/api/v1/users":
-			if r.Method == http.MethodGet {
+			switch r.Method {
+			case http.MethodGet:
 				getUsersCalled = true
 				// Return empty list - admin doesn't exist
 				w.WriteHeader(http.StatusOK)
 				_ = json.NewEncoder(w).Encode([]map[string]interface{}{})
-			} else if r.Method == http.MethodPost {
+			case http.MethodPost:
 				createUserCalled = true
 				w.WriteHeader(http.StatusCreated)
 				_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": 1})
