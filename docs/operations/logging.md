@@ -1,41 +1,69 @@
 # Logging
 
-vcdeploy provides structured logging for debugging and observability.
+vcdeploy provides structured logging for debugging, operations, and compliance.
 
-## Log Levels
+## Log Categories
 
-| Level | Description |
-|-------|-------------|
-| `debug` | Verbose debugging information |
-| `info` | Normal operational messages |
-| `warn` | Warning conditions |
-| `error` | Error conditions |
+vcdeploy manages several types of logs:
+
+| Category | Description | Storage |
+|----------|-------------|---------|
+| **Application** | Master/agent operational logs | stdout/journal |
+| **Deployment** | Per-deployment execution logs | Database |
+| **Audit** | User actions and system events | Database |
 
 ## Configuration
 
-### Master Server
+### Master Configuration
 
 ```yaml
 # master.yaml
-logging:
-  level: "info"
-  format: "json"      # json or console
-  output: "stdout"    # stdout, stderr, or file path
+logs:
+  # Application logs
+  application:
+    level: "info"              # debug, info, warn, error
+    retention: "168h"          # 7 days
+
+  # Deployment logs
+  deployment:
+    retention: "720h"          # 30 days
+    max_size_mb: 100           # Per-deployment size limit
+
+  # Audit logs
+  audit:
+    retention: "8760h"         # 1 year
+    export:
+      enabled: false
+      destination: "/var/log/vcdeploy/audit"
+      schedule: "0 0 * * *"    # Daily at midnight
+
+  # Log rotation
+  rotation:
+    schedule: "0 2 * * *"      # Daily at 2 AM
 ```
 
-### Agent
+### Agent Configuration
 
 ```yaml
 # agent.yaml
-logging:
-  level: "info"
-  format: "json"
-  output: "stdout"
+# Agent logs go to stdout/stderr
+# Use systemd journal or redirect to file
 ```
 
-## Log Formats
+## Log Levels
 
-### JSON Format (Recommended for Production)
+| Level | Description | When to Use |
+|-------|-------------|-------------|
+| `debug` | Verbose debugging information | Development, troubleshooting |
+| `info` | Normal operational messages | Production default |
+| `warn` | Warning conditions | Production default |
+| `error` | Error conditions | Always enabled |
+
+## Application Logs
+
+Application logs are structured JSON for easy parsing:
+
+### JSON Format
 
 ```json
 {
@@ -49,29 +77,32 @@ logging:
 }
 ```
 
-### Console Format (Development)
+### Log Fields
 
-```
-2024-01-15T10:30:00.000Z INFO server/handler.go:123 deployment started {"request_id": "abc-123", "project": "myapp"}
-```
+| Field | Description |
+|-------|-------------|
+| `level` | Log severity |
+| `ts` | ISO 8601 timestamp |
+| `caller` | Source file and line |
+| `msg` | Log message |
+| `request_id` | Request correlation ID |
+| `error` | Error details (if applicable) |
 
-## Request Correlation
+### Request Correlation
 
-All requests include a unique `X-Request-ID` header:
+All HTTP requests include a unique `X-Request-ID` header. This ID appears in all related log entries:
 
 ```json
-{
-  "level": "info",
-  "msg": "handling request",
-  "request_id": "550e8400-e29b-41d4-a716-446655440000",
-  "method": "POST",
-  "path": "/api/v1/deployments"
-}
+{"level":"info","msg":"handling request","request_id":"550e8400-e29b-41d4-a716-446655440000","method":"POST","path":"/api/v1/deployments"}
+{"level":"info","msg":"deployment started","request_id":"550e8400-e29b-41d4-a716-446655440000","project":"myapp"}
+{"level":"info","msg":"deployment completed","request_id":"550e8400-e29b-41d4-a716-446655440000","status":"success"}
 ```
 
 ## Deployment Logs
 
-Deployment execution logs are captured and stored:
+Deployment execution logs are captured and stored in the database:
+
+### Viewing Logs
 
 ```bash
 # View deployment logs
@@ -79,21 +110,132 @@ vcdeploy deploy logs <deployment-id>
 
 # Stream logs in real-time
 vcdeploy deploy logs <deployment-id> --follow
+
+# Filter by level
+vcdeploy deploy logs <deployment-id> --level error
 ```
 
-### Log Storage
+### Log Entry Structure
 
-Deployment logs are stored in the database with:
-- Timestamp
-- Log level
-- Source (master/agent)
-- Message
+Each deployment log entry contains:
+- **Timestamp**: When the log was created
+- **Level**: Log severity (debug, info, warn, error)
+- **Source**: Where the log came from (git, hook name, etc.)
+- **Message**: Log content
+
+### Log Retention
+
+Deployment logs are automatically cleaned up based on retention settings:
+
+```yaml
+logs:
+  deployment:
+    retention: "720h"    # Keep logs for 30 days
+    max_size_mb: 100     # Truncate logs exceeding 100MB
+```
+
+## Audit Logs
+
+Audit logs track all user actions and system events for compliance:
+
+### Recorded Events
+
+| Event Type | Description |
+|------------|-------------|
+| `auth.login` | User login |
+| `auth.logout` | User logout |
+| `auth.failed` | Failed login attempt |
+| `user.create` | User created |
+| `user.update` | User modified |
+| `user.delete` | User deleted |
+| `project.create` | Project created |
+| `project.update` | Project modified |
+| `project.delete` | Project deleted |
+| `deploy.trigger` | Deployment triggered |
+| `deploy.cancel` | Deployment cancelled |
+| `secret.set` | Secret created/updated |
+| `secret.delete` | Secret deleted |
+| `agent.register` | Agent registered |
+| `agent.delete` | Agent removed |
+
+### Viewing Audit Logs
+
+```bash
+# List recent audit events
+vcdeploy audit list
+
+# Filter by user
+vcdeploy audit list --user admin
+
+# Filter by action
+vcdeploy audit list --action deploy.trigger
+
+# Filter by time range
+vcdeploy audit list --since "24h"
+```
+
+### Audit Export
+
+Export audit logs for compliance:
+
+```yaml
+logs:
+  audit:
+    export:
+      enabled: true
+      destination: "/var/log/vcdeploy/audit"
+      schedule: "0 0 * * *"   # Daily at midnight
+```
+
+Exported files are JSON-L format:
+```
+{"timestamp":"2024-01-15T10:30:00Z","user":"admin","action":"deploy.trigger","resource":"myapp","success":true}
+{"timestamp":"2024-01-15T10:31:00Z","user":"admin","action":"secret.set","resource":"myapp/DATABASE_URL","success":true}
+```
+
+## Systemd Integration
+
+When running as systemd services, logs go to the journal:
+
+### Viewing Logs
+
+```bash
+# Master logs
+journalctl -u vcdeploy -f
+
+# Agent logs
+journalctl -u vcdeploy-agent -f
+
+# Since last boot
+journalctl -u vcdeploy -b
+
+# Last hour
+journalctl -u vcdeploy --since "1 hour ago"
+
+# With JSON output
+journalctl -u vcdeploy -o json
+```
+
+### Filtering
+
+```bash
+# Only errors
+journalctl -u vcdeploy -p err
+
+# Specific time range
+journalctl -u vcdeploy --since "2024-01-15" --until "2024-01-16"
+
+# Grep pattern
+journalctl -u vcdeploy | grep "deployment"
+```
 
 ## Log Rotation
 
-For file-based logging, use logrotate:
+### Using logrotate
 
-```
+For file-based logging (if redirected):
+
+```bash
 # /etc/logrotate.d/vcdeploy
 /var/log/vcdeploy/*.log {
     daily
@@ -103,93 +245,97 @@ For file-based logging, use logrotate:
     missingok
     notifempty
     create 0644 vcdeploy vcdeploy
+    postrotate
+        systemctl reload vcdeploy 2>/dev/null || true
+    endscript
 }
 ```
 
-## Systemd Journal
+### Database Log Cleanup
 
-When running as a systemd service, logs go to the journal:
+vcdeploy automatically cleans up old logs:
 
-```bash
-# View master logs
-journalctl -u vcdeploy -f
-
-# View agent logs
-journalctl -u vcdeploy-agent -f
-
-# View logs since boot
-journalctl -u vcdeploy -b
-
-# View last hour
-journalctl -u vcdeploy --since "1 hour ago"
+```yaml
+logs:
+  rotation:
+    schedule: "0 2 * * *"   # Run cleanup daily at 2 AM
 ```
 
 ## Log Aggregation
 
 ### Shipping to External Systems
 
-For production, ship logs to a centralized system:
-
 **Loki (Grafana)**
-```yaml
-logging:
-  output: "stdout"
+```bash
+# Use Promtail to collect from journald
+# /etc/promtail/config.yml
+scrape_configs:
+  - job_name: vcdeploy
+    journal:
+      labels:
+        job: vcdeploy
+      matches:
+        - _SYSTEMD_UNIT=vcdeploy.service
 ```
-Use Promtail to collect from stdout.
 
 **Elasticsearch**
-```yaml
-logging:
-  format: "json"
-  output: "/var/log/vcdeploy/master.log"
+```bash
+# Use Filebeat to ship logs
+# /etc/filebeat/filebeat.yml
+filebeat.inputs:
+  - type: journald
+    id: vcdeploy
+    include_matches:
+      - _SYSTEMD_UNIT=vcdeploy.service
 ```
-Use Filebeat to ship to Elasticsearch.
+
+**Datadog**
+```bash
+# Configure Datadog agent
+# /etc/datadog-agent/conf.d/journald.d/conf.yaml
+logs:
+  - type: journald
+    container_mode: true
+    include_units:
+      - vcdeploy.service
+```
 
 ## Debugging
 
 ### Enable Debug Logging
 
-```bash
-# Via environment variable
-VCDEPLOY_LOG_LEVEL=debug vcdeploy master start
+Temporarily enable debug logging:
 
-# Via config
-logging:
-  level: "debug"
+```bash
+# Set environment variable
+export VCDEPLOY_LOG_LEVEL=debug
+vcdeploy master start
+
+# Or in config
+logs:
+  application:
+    level: "debug"
 ```
 
 ### Common Debug Scenarios
 
-**Agent Connection Issues:**
+**Agent Connection Issues**
 ```bash
-# On agent
-VCDEPLOY_LOG_LEVEL=debug vcdeploy-agent 2>&1 | grep -i "connect\|tls\|auth"
+journalctl -u vcdeploy-agent -f | grep -E "connect|error|retry"
 ```
 
-**Deployment Failures:**
+**Webhook Processing**
 ```bash
-# Check deployment logs
-vcdeploy deploy logs <id>
-
-# Check master logs during deployment
-journalctl -u vcdeploy --since "5 minutes ago" | grep <deployment-id>
+journalctl -u vcdeploy | grep webhook
 ```
 
-## Audit Logging
-
-Security-relevant events are logged separately:
-
+**Deployment Execution**
 ```bash
-# View audit log
-vcdeploy audit list
-
-# Export for compliance
-vcdeploy audit export --start 2024-01-01 --end 2024-01-31 > audit.json
+vcdeploy deploy logs <deployment-id> --level debug
 ```
 
-Events logged:
-- User authentication
-- Secret access
-- Configuration changes
-- Deployment triggers
-- Agent connections
+## Related Documentation
+
+- [Master Configuration](config/master.md) - Full log configuration
+- [Health Checks](operations/health.md) - Monitoring setup
+- [Troubleshooting](operations/troubleshooting.md) - Common issues

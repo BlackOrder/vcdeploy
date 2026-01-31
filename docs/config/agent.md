@@ -1,177 +1,367 @@
 # Agent Configuration
 
-Agents are configured via a YAML file, typically located at `/etc/vcdeploy/agent.yaml`.
+The vcdeploy agent is configured via a YAML file, typically located at `/etc/vcdeploy/agent.yaml`.
 
-## Configuration File
+## Complete Configuration Reference
 
 ```yaml
 # /etc/vcdeploy/agent.yaml
 
-# Master connection
-master_address: "master.example.com:9001"
-token: "agent-secret-token"
+# Master connection settings
+master:
+  address: "master.example.com:9001"   # Master gRPC address
+  token: ""                            # Authentication token (set after registration)
+  cert: /etc/vcdeploy/agent/cert.pem   # TLS certificate for mTLS
+  allow_insecure: false                # Allow unencrypted connection (NOT recommended)
+  reconnect:
+    initial_delay: 1s                  # Initial reconnect delay
+    max_delay: 5m                      # Maximum reconnect delay
+    heartbeat_interval: 10s            # Heartbeat frequency
 
 # Agent identity
-agent_id: ""                    # Auto-generated if empty
-hostname: ""                    # Auto-detected if empty
-labels:
-  environment: "production"
-  region: "us-east-1"
+agent:
+  id: ""                               # Unique agent ID (required)
+  labels:                              # Labels for agent selection
+    environment: production
+    role: web
+    datacenter: us-east-1
+  update_policy: immediate             # immediate | scheduled | manual
+  update_window_start: ""              # HH:MM format (for scheduled updates)
+  update_window_end: ""                # HH:MM format (for scheduled updates)
 
-# TLS settings (optional)
-tls:
-  enabled: true
-  insecure: false              # Skip certificate verification
-  cert_file: ""                # For mTLS authentication
-  key_file: ""
-  ca_file: ""                  # Custom CA certificate
+# Local paths
+paths:
+  repos: /var/lib/vcdeploy/repos/      # Git repository cache
+  releases: /var/www/                  # Release deployment root
 
-# Connection settings
-connection:
-  heartbeat_interval: "30s"
-  reconnect_delay: "5s"
-  max_reconnect_delay: "5m"
+# Command execution settings
+execution:
+  user: www-data                       # User to run commands as
+  group: www-data                      # Group to run commands as
+  timeout: 600s                        # Command timeout (10 minutes)
+  use_namespaces: true                 # Use Linux namespaces for isolation
+  allowed_env_vars:                    # Environment variables to preserve
+    - PATH
+    - HOME
+    - USER
+    - LANG
 
-# Deployment settings
-deploy:
-  base_path: "/var/www"        # Base directory for deployments
-  keep_releases: 5             # Number of releases to retain
-  shared_dirs:                 # Directories shared between releases
-    - "logs"
-    - "uploads"
-    - "storage"
-  shared_files:                # Files shared between releases
-    - ".env"
-  
-# Execution settings
-executor:
-  timeout: "30m"               # Max deployment time
-  shell: "/bin/bash"           # Shell for commands
-  working_dir: ""              # Override working directory
-  environment:                 # Additional environment variables
-    PATH: "/usr/local/bin:/usr/bin:/bin"
+# Health reporting
+health:
+  disk_warning_threshold: 90           # Disk usage warning threshold (%)
+  report_interval: 30s                 # Health report frequency
 
-# Logging
-logging:
-  level: "info"
-  format: "json"
-  output: "stdout"
+# Graceful shutdown
+graceful_shutdown:
+  drain_timeout: 600s                  # Time to wait for deployments to complete
+```
+
+## Configuration Sections
+
+### Master
+
+Connection settings for the master server.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `address` | string | - | Master gRPC address (host:port) |
+| `token` | string | - | Authentication token |
+| `cert` | string | `/etc/vcdeploy/agent/cert.pem` | TLS certificate path |
+| `allow_insecure` | bool | `false` | Allow unencrypted connection |
+| `reconnect.initial_delay` | duration | `1s` | Initial reconnect delay |
+| `reconnect.max_delay` | duration | `5m` | Maximum reconnect delay |
+| `reconnect.heartbeat_interval` | duration | `10s` | Heartbeat frequency |
+
+### Agent Identity
+
+Agent identification and update settings.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `id` | string | - | Unique agent identifier (required) |
+| `labels` | map | `{}` | Key-value labels for agent selection |
+| `update_policy` | string | `immediate` | Agent update policy |
+| `update_window_start` | string | - | Update window start (HH:MM) |
+| `update_window_end` | string | - | Update window end (HH:MM) |
+
+**Update Policies:**
+
+| Policy | Description |
+|--------|-------------|
+| `immediate` | Apply updates as soon as available |
+| `scheduled` | Apply updates only during update window |
+| `manual` | Never auto-update, require manual intervention |
+
+### Paths
+
+Local filesystem paths for deployments.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `repos` | string | `/var/lib/vcdeploy/repos/` | Git repository cache directory |
+| `releases` | string | `/var/www/` | Root directory for release deployments |
+
+### Execution
+
+Command execution settings for deployment hooks.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `user` | string | `www-data` | Unix user to run commands as |
+| `group` | string | `www-data` | Unix group to run commands as |
+| `timeout` | duration | `600s` | Maximum command execution time |
+| `use_namespaces` | bool | `true` | Use Linux namespaces for isolation |
+| `allowed_env_vars` | list | `[PATH, HOME, USER, LANG]` | Environment variables to preserve |
+
+### Health
+
+Health monitoring and reporting settings.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `disk_warning_threshold` | int | `90` | Disk usage warning threshold (%) |
+| `report_interval` | duration | `30s` | Health report frequency |
+
+### Graceful Shutdown
+
+Shutdown behavior when stopping the agent.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `drain_timeout` | duration | `600s` | Time to wait for deployments to complete |
+
+## Agent Registration
+
+Before the agent can connect, it must be registered with the master.
+
+### Method 1: CLI Registration
+
+```bash
+# On the master: generate a registration token
+vcdeploy agent token <agent-id>
+
+# On the agent server: register
+vcdeploy-agent register --master master.example.com:9001 --token <token>
+```
+
+### Method 2: Pre-configured Token
+
+1. Generate a token on the master
+2. Add the token to the agent config:
+
+```yaml
+master:
+  address: "master.example.com:9001"
+  token: "vcdeploy_agent_abc123..."
+```
+
+### Method 3: Environment Variable
+
+```bash
+export VCDEPLOY_AGENT_TOKEN="vcdeploy_agent_abc123..."
+vcdeploy-agent start
+```
+
+## Labels
+
+Labels are key-value pairs used to select agents for deployments.
+
+```yaml
+agent:
+  id: "web-prod-01"
+  labels:
+    environment: production
+    role: web
+    region: us-east-1
+    tier: frontend
+```
+
+In project configuration, you can select agents by label:
+
+```yaml
+targets:
+  production:
+    agents:
+      - label: environment=production,role=web
+```
+
+## Update Policies
+
+### Immediate (Default)
+
+Agent updates are applied as soon as they're available:
+
+```yaml
+agent:
+  update_policy: immediate
+```
+
+### Scheduled
+
+Updates are applied only during a maintenance window:
+
+```yaml
+agent:
+  update_policy: scheduled
+  update_window_start: "02:00"  # 2 AM
+  update_window_end: "04:00"    # 4 AM
+```
+
+### Manual
+
+Updates are never applied automatically:
+
+```yaml
+agent:
+  update_policy: manual
+```
+
+Trigger updates manually via:
+```bash
+vcdeploy agent update <agent-id>
+```
+
+## Execution Isolation
+
+When `use_namespaces: true`, deployment commands run in isolated Linux namespaces:
+
+- **PID namespace**: Commands can't see other processes
+- **Network namespace**: Commands can't access the network directly
+- **Mount namespace**: Limited filesystem visibility
+
+This provides security isolation between deployments.
+
+To disable (not recommended for production):
+
+```yaml
+execution:
+  use_namespaces: false
 ```
 
 ## Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| `VCDEPLOY_AGENT_MASTER_ADDRESS` | Master server address |
-| `VCDEPLOY_AGENT_TOKEN` | Authentication token |
-| `VCDEPLOY_AGENT_ID` | Agent identifier |
-| `VCDEPLOY_AGENT_HOSTNAME` | Override hostname |
-| `VCDEPLOY_AGENT_LOG_LEVEL` | Log verbosity |
+| Variable | Config Path | Description |
+|----------|-------------|-------------|
+| `VCDEPLOY_AGENT_ID` | `agent.id` | Agent identifier |
+| `VCDEPLOY_MASTER_ADDRESS` | `master.address` | Master address |
+| `VCDEPLOY_AGENT_TOKEN` | `master.token` | Authentication token |
 
-## Agent Labels
+## Systemd Service
 
-Labels are used for targeting specific agents:
+For production deployments, use systemd:
 
-```yaml
-labels:
-  environment: "production"
-  region: "us-east-1"
-  tier: "web"
+```ini
+# /etc/systemd/system/vcdeploy-agent.service
+[Unit]
+Description=VCDeploy Agent
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/vcdeploy-agent start --config /etc/vcdeploy/agent.yaml
+Restart=always
+RestartSec=5
+User=root
+Environment=HOME=/root
+
+[Install]
+WantedBy=multi-user.target
 ```
 
-In project configuration:
-```yaml
-deploy:
-  targets:
-    - agent_labels:
-        environment: "production"
-        tier: "web"
+Enable and start:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable vcdeploy-agent
+sudo systemctl start vcdeploy-agent
 ```
 
-## Directory Structure
+## Launchd Service (macOS)
 
-After deployment:
-```
-/var/www/myapp/
-├── current -> releases/20240115-120000/
-├── releases/
-│   ├── 20240115-120000/
-│   ├── 20240114-093000/
-│   └── 20240113-150000/
-└── shared/
-    ├── logs/
-    ├── uploads/
-    └── .env
-```
-
-## Shared Files/Directories
-
-Shared items persist across deployments:
-
-```yaml
-deploy:
-  shared_dirs:
-    - "logs"           # Logs persist
-    - "storage"        # User uploads
-    - "node_modules"   # Speed up builds
-  shared_files:
-    - ".env"           # Environment config
-    - "config/database.yml"
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.blackorder.vcdeploy-agent</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/vcdeploy-agent</string>
+        <string>start</string>
+        <string>--config</string>
+        <string>/etc/vcdeploy/agent.yaml</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+</dict>
+</plist>
 ```
 
-## Git Configuration
+Save to `/Library/LaunchDaemons/com.blackorder.vcdeploy-agent.plist` and load:
 
-For private repositories:
-
-```yaml
-git:
-  ssh_key_path: "/etc/vcdeploy/deploy_key"
-  strict_host_key_checking: false
+```bash
+sudo launchctl load /Library/LaunchDaemons/com.blackorder.vcdeploy-agent.plist
 ```
 
-Or use deploy tokens:
-```yaml
-git:
-  username: "deploy-token"
-  password: "glpat-xxxxxxxxxxxx"
-```
-
-## Resource Limits
-
-```yaml
-executor:
-  resource_limits:
-    max_memory: "2G"
-    max_cpu: 2
-    max_file_size: "100M"
-```
-
-## Security
-
-The agent runs with minimal permissions:
-- Creates directories under `base_path`
-- Executes configured commands
-- No inbound network connections
-
-For additional security:
-```yaml
-security:
-  allowed_commands:
-    - "npm"
-    - "yarn"
-    - "composer"
-    - "make"
-  disallowed_paths:
-    - "/etc"
-    - "/root"
-```
-
-## Default Values
+## Default Values Summary
 
 | Setting | Default |
 |---------|---------|
-| Heartbeat interval | `30s` |
-| Keep releases | `5` |
-| Deployment timeout | `30m` |
-| Shell | `/bin/bash` |
-| Log level | `info` |
+| Reconnect initial delay | `1s` |
+| Reconnect max delay | `5m` |
+| Heartbeat interval | `10s` |
+| Update policy | `immediate` |
+| Repos path | `/var/lib/vcdeploy/repos/` |
+| Releases path | `/var/www/` |
+| Execution user | `www-data` |
+| Execution timeout | `10 minutes` |
+| Use namespaces | `true` |
+| Disk warning threshold | `90%` |
+| Health report interval | `30s` |
+| Drain timeout | `10 minutes` |
+
+## Troubleshooting
+
+### Agent Won't Connect
+
+1. Check master address is correct and reachable:
+   ```bash
+   nc -zv master.example.com 9001
+   ```
+
+2. Verify token is valid:
+   ```bash
+   vcdeploy agent list  # on master
+   ```
+
+3. Check TLS certificates:
+   ```bash
+   openssl s_client -connect master.example.com:9001
+   ```
+
+### Deployments Fail
+
+1. Check execution user has permissions:
+   ```bash
+   sudo -u www-data ls /var/www/
+   ```
+
+2. Verify paths exist and are writable:
+   ```bash
+   ls -la /var/lib/vcdeploy/repos/
+   ls -la /var/www/
+   ```
+
+3. Check agent logs:
+   ```bash
+   journalctl -u vcdeploy-agent -f
+   ```
+
+## See Also
+
+- [Quick Start](../quickstart.md)
+- [Master Configuration](master.md)
+- [CLI Reference](../cli/README.md)

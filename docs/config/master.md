@@ -2,151 +2,333 @@
 
 The master server is configured via a YAML file, typically located at `/etc/vcdeploy/master.yaml`.
 
-## Configuration File
+## Complete Configuration Reference
 
 ```yaml
 # /etc/vcdeploy/master.yaml
 
-# Server settings
+# HTTP Server settings
 server:
-  listen: ":9000"              # HTTP API and UI
+  listen: ":9000"              # HTTP API and Web UI address
   tls:
-    enabled: true
+    enabled: true              # Enable HTTPS
     cert: "/etc/vcdeploy/tls/cert.pem"
     key: "/etc/vcdeploy/tls/key.pem"
 
-# gRPC settings (agent connections)
+# gRPC Server settings (agent connections)
 grpc:
-  listen: ":9001"
+  listen: ":9001"              # gRPC address for agents
 
-# Database settings
-database:
-  path: "/var/lib/vcdeploy/vcdeploy.db"
-  max_connections: 10
-  busy_timeout: "5s"
+# SSH settings (for SSH-based deployments)
+ssh:
+  default_user: "deploy"                      # Default SSH username
+  default_key: "/etc/vcdeploy/keys/default.pem"  # Default SSH private key
+  known_hosts: "/etc/vcdeploy/known_hosts"    # Known hosts file
+  connection_timeout: 30s
+  keepalive_interval: 15s
+  idle_timeout: 60s
+  jump_servers:                               # Bastion/jump servers
+    - name: bastion
+      host: bastion.example.com:22
+      user: deploy
+      key: /etc/vcdeploy/keys/bastion.pem
 
-# Authentication
-auth:
-  jwt_secret: "your-secure-secret"  # Generate with: openssl rand -base64 32
-  session_timeout: "24h"
-  totp_enabled: true               # Enable 2FA
+# Security settings
+security:
+  session_timeout: 24h                        # Web session timeout
+  require_2fa_admin: true                     # Require TOTP for admin users
+  key_rotation:
+    enabled: true                             # Enable automatic key rotation
+    interval: 720h                            # Rotation interval (30 days)
 
-# Logging
-logging:
-  level: "info"                    # debug, info, warn, error
-  format: "json"                   # json or console
-  output: "stdout"                 # stdout, stderr, or file path
+# Backup settings
+backup:
+  database:
+    enabled: true
+    interval: 720h                            # Backup interval (30 days)
+    retention: 8760h                          # Keep backups for 365 days
+    path: /var/lib/vcdeploy/backups/
+  config:
+    versions: 5                               # Keep 5 config backup versions
 
-# Tracing (OpenTelemetry)
+# Logging settings
+logs:
+  application:
+    level: info                               # debug, info, warn, error
+    retention: 720h                           # Keep logs for 30 days
+  deployment:
+    retention: 2160h                          # Keep deployment logs for 90 days
+    max_size_mb: 100                          # Max size per deployment log
+  audit:
+    retention: 8760h                          # Keep audit logs for 365 days
+    export:
+      enabled: false
+      destination: /var/log/vcdeploy/audit/
+      schedule: "0 0 1 * *"                   # Monthly export (cron format)
+  rotation:
+    schedule: "0 3 * * *"                     # Daily at 3 AM (cron format)
+
+# OpenTelemetry tracing
 tracing:
   enabled: false
-  endpoint: "localhost:4317"
-  service_name: "vcdeploy-master"
-  sample_rate: 0.1                 # 10% sampling
+  endpoint: "localhost:4317"                  # OTLP endpoint
+  service_name: "vcdeploy"
+  sample_rate: 0.1                            # 10% sampling
+  insecure: false                             # Use TLS for OTLP
 
-# Alerting
+# System alerting
 alerting:
   enabled: true
   disk_warning_percent: 80
   disk_critical_percent: 90
   memory_warning_percent: 85
   cpu_warning_percent: 90
-  deployment_timeout: "30m"
-  alert_cooldown: "15m"
+  deployment_timeout: 30m                     # Alert if deployment exceeds this
+  alert_cooldown: 15m                         # Minimum time between alerts
 
-# Notifications
-notifications:
-  slack:
+# Incoming webhook settings (from Git providers)
+webhooks:
+  github:
     enabled: true
-    webhook_url: "https://hooks.slack.com/services/..."
-  email:
-    enabled: false
-    smtp_host: "smtp.example.com"
-    smtp_port: 587
-    from: "vcdeploy@example.com"
+    path: /webhooks/github
+  gitlab:
+    enabled: true
+    path: /webhooks/gitlab
+  bitbucket:
+    enabled: true
+    path: /webhooks/bitbucket
+
+# Outgoing notification settings
+notifications:
+  providers:
+    slack:
+      enabled: false
+      webhook_url: "https://hooks.slack.com/services/..."
+      channel: "#deployments"
+      username: "VCDeploy"
+      icon_emoji: ":rocket:"
+    email:
+      enabled: false
+      smtp:
+        host: smtp.example.com
+        port: 587
+        user: ""
+        password: ""
+        tls: true
+        from_address: "vcdeploy@example.com"
+        from_name: "VCDeploy"
+        to_addresses:
+          - ops@example.com
+    discord:
+      enabled: false
+      webhook_url: "https://discord.com/api/webhooks/..."
+      username: "VCDeploy"
+      avatar_url: ""
+    webhook:
+      enabled: false
+      url: "https://example.com/webhook"
+      method: POST
+      headers:
+        Authorization: "Bearer token"
+      secret: ""
+
+# API settings
+api:
+  enabled: true
+
+# UI appearance
+appearance:
+  theme: dark                                 # dark or light
 ```
+
+## Configuration Sections
+
+### Server
+
+HTTP server configuration for the REST API and Web UI.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `listen` | string | `:9000` | Address to listen on |
+| `tls.enabled` | bool | `true` | Enable HTTPS |
+| `tls.cert` | string | `/etc/vcdeploy/tls/cert.pem` | TLS certificate path |
+| `tls.key` | string | `/etc/vcdeploy/tls/key.pem` | TLS private key path |
+
+### gRPC
+
+gRPC server for agent connections.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `listen` | string | `:9001` | gRPC listen address |
+
+### SSH
+
+SSH connection settings for SSH-based deployments (alternative to agents).
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `default_user` | string | `deploy` | Default SSH username |
+| `default_key` | string | - | Default SSH private key path |
+| `known_hosts` | string | - | SSH known hosts file |
+| `connection_timeout` | duration | `30s` | Connection timeout |
+| `keepalive_interval` | duration | `15s` | SSH keepalive interval |
+| `idle_timeout` | duration | `60s` | Idle connection timeout |
+| `jump_servers` | list | `[]` | Bastion/jump server configs |
+
+### Security
+
+Security and authentication settings.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `session_timeout` | duration | `24h` | Web session timeout |
+| `require_2fa_admin` | bool | `true` | Require TOTP for admin users |
+| `key_rotation.enabled` | bool | `true` | Enable automatic key rotation |
+| `key_rotation.interval` | duration | `720h` | Key rotation interval |
+
+### Backup
+
+Automatic backup configuration.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `database.enabled` | bool | `true` | Enable database backups |
+| `database.interval` | duration | `720h` | Backup frequency |
+| `database.retention` | duration | `8760h` | Backup retention period |
+| `database.path` | string | `/var/lib/vcdeploy/backups/` | Backup storage path |
+| `config.versions` | int | `5` | Config backup versions to keep |
+
+### Logs
+
+Logging configuration for different log types.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `application.level` | string | `info` | Log level (debug, info, warn, error) |
+| `application.retention` | duration | `720h` | Application log retention |
+| `deployment.retention` | duration | `2160h` | Deployment log retention |
+| `deployment.max_size_mb` | int | `100` | Max size per deployment log |
+| `audit.retention` | duration | `8760h` | Audit log retention |
+| `audit.export.enabled` | bool | `false` | Enable audit log export |
+| `rotation.schedule` | string | `0 3 * * *` | Log rotation schedule (cron) |
+
+### Tracing
+
+OpenTelemetry distributed tracing configuration.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | bool | `false` | Enable tracing |
+| `endpoint` | string | `localhost:4317` | OTLP collector endpoint |
+| `service_name` | string | `vcdeploy` | Service name in traces |
+| `sample_rate` | float | `0.1` | Trace sampling rate (0.0-1.0) |
+| `insecure` | bool | `false` | Use insecure OTLP connection |
+
+### Alerting
+
+System monitoring and alerting thresholds.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | bool | `true` | Enable alerting |
+| `disk_warning_percent` | float | `80` | Disk usage warning threshold |
+| `disk_critical_percent` | float | `90` | Disk usage critical threshold |
+| `memory_warning_percent` | float | `85` | Memory usage warning threshold |
+| `cpu_warning_percent` | float | `90` | CPU usage warning threshold |
+| `deployment_timeout` | duration | `30m` | Alert if deployment exceeds this |
+| `alert_cooldown` | duration | `15m` | Minimum time between alerts |
+
+### Webhooks
+
+Incoming webhook configuration for Git providers.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `github.enabled` | bool | `true` | Enable GitHub webhooks |
+| `github.path` | string | `/webhooks/github` | GitHub webhook path |
+| `gitlab.enabled` | bool | `true` | Enable GitLab webhooks |
+| `gitlab.path` | string | `/webhooks/gitlab` | GitLab webhook path |
+| `bitbucket.enabled` | bool | `true` | Enable Bitbucket webhooks |
+| `bitbucket.path` | string | `/webhooks/bitbucket` | Bitbucket webhook path |
+
+### Notifications
+
+Outgoing notification configuration.
+
+See [Notifications Guide](../operations/logging.md#notifications) for detailed setup.
 
 ## Environment Variables
 
-All configuration can also be set via environment variables:
+Configuration can be overridden via environment variables:
 
-| Variable | Description |
-|----------|-------------|
-| `VCDEPLOY_SERVER_HTTP_ADDRESS` | HTTP listen address |
-| `VCDEPLOY_SERVER_GRPC_ADDRESS` | gRPC listen address |
-| `VCDEPLOY_DATABASE_PATH` | Database file path |
-| `VCDEPLOY_AUTH_JWT_SECRET` | JWT signing secret |
-| `VCDEPLOY_LOG_LEVEL` | Log verbosity level |
+| Variable | Config Path | Description |
+|----------|-------------|-------------|
+| `VCDEPLOY_SERVER_LISTEN` | `server.listen` | HTTP listen address |
+| `VCDEPLOY_GRPC_LISTEN` | `grpc.listen` | gRPC listen address |
+| `VCDEPLOY_ADMIN_USERNAME` | - | Initial admin username |
+| `VCDEPLOY_ADMIN_PASSWORD` | - | Initial admin password |
+| `VCDEPLOY_LOG_LEVEL` | `logs.application.level` | Log level |
 
 ## TLS Configuration
 
-### Self-Signed Certificates (Development)
+### Generate Self-Signed Certificates (Development)
 
 ```bash
-# Generate self-signed certificate
-openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes
+# Generate CA
+openssl genrsa -out ca.key 4096
+openssl req -x509 -new -nodes -key ca.key -sha256 -days 365 -out ca.crt \
+  -subj "/CN=VCDeploy CA"
+
+# Generate server certificate
+openssl genrsa -out server.key 2048
+openssl req -new -key server.key -out server.csr \
+  -subj "/CN=vcdeploy.local"
+openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
+  -out server.crt -days 365 -sha256
 ```
 
-### Let's Encrypt (Production)
+### Using Let's Encrypt (Production)
 
-vcdeploy supports automatic ACME certificate management:
+Use certbot or similar to obtain certificates:
 
-```yaml
+```bash
+sudo certbot certonly --standalone -d vcdeploy.example.com
+
+# Update config
 server:
-  https_enabled: true
-  acme:
+  tls:
     enabled: true
-    email: "admin@example.com"
-    domains:
-      - "vcdeploy.example.com"
-    staging: false              # Set true for testing
+    cert: /etc/letsencrypt/live/vcdeploy.example.com/fullchain.pem
+    key: /etc/letsencrypt/live/vcdeploy.example.com/privkey.pem
 ```
 
-## Default Values
+## Database
+
+The database path is determined by the system configuration, typically:
+
+- Linux: `/var/lib/vcdeploy/vcdeploy.db`
+- macOS: `~/Library/Application Support/vcdeploy/vcdeploy.db`
+
+The database location is not configurable in the YAML file—it's determined by the operating system's standard data directories.
+
+## Default Values Summary
 
 | Setting | Default |
 |---------|---------|
 | HTTP address | `:9000` |
 | gRPC address | `:9001` |
-| Database path | `/var/lib/vcdeploy/vcdeploy.db` |
 | Session timeout | `24h` |
-| Log level | `info` |
-| Tracing enabled | `false` |
-| Alerting enabled | `true` |
+| Application log level | `info` |
+| Deployment log retention | `90 days` |
+| Audit log retention | `365 days` |
+| Key rotation interval | `30 days` |
+| Backup interval | `30 days` |
+| Backup retention | `365 days` |
 
-## Secrets Encryption
+## See Also
 
-The master encrypts all secrets at rest using AES-256-GCM:
-
-```yaml
-secrets:
-  encryption_key: "32-byte-key-here"  # Must be exactly 32 bytes
-```
-
-Generate a key:
-```bash
-openssl rand -base64 32
-```
-
-## RBAC Configuration
-
-```yaml
-auth:
-  rbac:
-    enabled: true
-    default_role: "viewer"    # Default role for new users
-```
-
-Available roles:
-- `admin`: Full access
-- `deployer`: Can trigger deployments
-- `viewer`: Read-only access
-
-## Rate Limiting
-
-```yaml
-rate_limit:
-  enabled: true
-  requests_per_second: 100
-  burst: 200
-```
+- [Quick Start](../quickstart.md)
+- [Agent Configuration](agent.md)
+- [Projects Configuration](projects.md)
+- [Secrets Management](secrets.md)

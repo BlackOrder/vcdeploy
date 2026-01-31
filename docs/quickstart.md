@@ -49,7 +49,7 @@ sudo rpm -i vcdeploy_amd64.rpm
 curl -sSL https://github.com/blackorder/vcdeploy/releases/latest/download/vcdeploy_linux_amd64.tar.gz | tar xz
 
 # Move to PATH
-sudo mv vcdeploy /usr/local/bin/
+sudo mv vcdeploy vcdeploy-agent /usr/local/bin/
 ```
 
 <!-- tabs:end -->
@@ -62,26 +62,44 @@ sudo mv vcdeploy /usr/local/bin/
 # /etc/vcdeploy/master.yaml
 server:
   listen: ":9000"
+  tls:
+    enabled: false
 
 grpc:
   listen: ":9001"
 
 security:
-  session_secret: "generate-a-random-32-byte-string"
-  kms_key: "generate-a-random-32-byte-key"
+  session_timeout: 24h
+  require_2fa_admin: false
+  key_rotation:
+    enabled: true
+    interval: 720h  # 30 days
 
-logging:
-  level: info
-  format: json
+logs:
+  application:
+    level: info
+    retention: 720h
+  deployment:
+    retention: 2160h  # 90 days
+    max_size_mb: 100
+  audit:
+    retention: 8760h  # 365 days
+
+backup:
+  database:
+    enabled: true
+    interval: 24h
+    retention: 168h  # 7 days
+    path: /var/lib/vcdeploy/backups
 ```
 
 ### 2. Start the Server
 
 ```bash
-# Direct
-vcdeploy master --config /etc/vcdeploy/master.yaml
+# Start in foreground
+vcdeploy master start
 
-# Or via systemd
+# Or via systemd (recommended for production)
 sudo systemctl enable --now vcdeploy-master
 ```
 
@@ -89,85 +107,213 @@ sudo systemctl enable --now vcdeploy-master
 
 Open http://localhost:9000 in your browser.
 
-**If `VCDEPLOY_ADMIN_PASSWORD` was set**, log in with:
-- Username: `admin` (or your configured `VCDEPLOY_ADMIN_USERNAME`)
-- Password: Your configured password
+**First-time setup:** You'll be redirected to the setup wizard to create your admin account.
 
-**If no password was set**, you'll be redirected to the setup wizard to create your admin account.
+**Or create admin via CLI:**
+```bash
+vcdeploy admin --username admin --email admin@example.com
+```
 
 ## Agent Setup
+
+Agents run on target servers and execute deployments.
 
 ### 1. Create Configuration
 
 ```yaml
 # /etc/vcdeploy/agent.yaml
+master:
+  address: "master.example.com:9001"
+  token: ""  # Set after registration
+  cert: /etc/vcdeploy/agent/cert.pem
+  allow_insecure: false
+  reconnect:
+    initial_delay: 1s
+    max_delay: 5m
+    heartbeat_interval: 10s
+
 agent:
   id: "agent-001"
-  master_addr: "master.example.com:9001"
+  labels:
+    environment: production
+    role: web
+  update_policy: immediate
 
-security:
-  # TLS certificates for mTLS (optional but recommended)
-  cert_file: /etc/vcdeploy/certs/agent.crt
-  key_file: /etc/vcdeploy/certs/agent.key
-  ca_file: /etc/vcdeploy/certs/ca.crt
+paths:
+  repos: /var/lib/vcdeploy/repos/
+  releases: /var/www/
 
-logging:
-  level: info
-  format: json
+execution:
+  user: www-data
+  group: www-data
+  timeout: 600s
+  use_namespaces: true
+  allowed_env_vars:
+    - PATH
+    - HOME
+    - USER
+    - LANG
+
+health:
+  disk_warning_threshold: 90
+  report_interval: 30s
+
+graceful_shutdown:
+  drain_timeout: 600s
 ```
 
-### 2. Start the Agent
+### 2. Register and Start the Agent
 
 ```bash
-# Direct
-vcdeploy agent --config /etc/vcdeploy/agent.yaml
+# Register with master (get token from master UI or CLI)
+vcdeploy-agent register --master master.example.com:9001 --token <registration-token>
 
-# Or via systemd
+# Start the agent
+vcdeploy-agent start
+
+# Or via systemd (recommended)
 sudo systemctl enable --now vcdeploy-agent
 ```
 
 ## Create Your First Project
 
-### 1. Define a Project
+### 1. Add a Project via CLI
+
+```bash
+vcdeploy project add myapp
+```
+
+You'll be prompted for:
+- Repository URL
+- Default branch
+- Deploy path
+- Project type
+
+### 2. Configure the Project
+
+Project configurations are stored in the database. You can also create a YAML file:
 
 ```yaml
-# /etc/vcdeploy/projects/myapp.yaml
+# Project configuration (via Web UI or API)
 name: myapp
-repo: git@github.com:myorg/myapp.git
-branch: main
-deploy_path: /var/www/myapp
+type: laravel  # or: nodejs, python, static, custom
+repository: git@github.com:myorg/myapp.git
+archived: false
 
-agents:
-  - agent-001
-  - agent-002
+watch:
+  branches:
+    - main
+    - develop
+  actions:
+    - push
+    - pull_request.merged
+  guards:
+    reject_force_push: true
+    require_ci_pass: false
+
+deployment:
+  on_busy: cancel  # cancel | queue | skip
+  strategy: symlink
+  keep_releases: 5
+
+targets:
+  production:
+    agents:
+      - agent-001
+      - agent-002
+    branch: main
+    path: /var/www/myapp
 
 hooks:
   pre_deploy:
-    - "systemctl stop myapp"
+    - command: systemctl stop myapp
   post_deploy:
-    - "composer install --no-dev"
-    - "systemctl start myapp"
+    - command: composer install --no-dev
+    - command: php artisan migrate --force
+    - command: php artisan config:cache
+  reload:
+    - service: php-fpm
+      action: reload
+  rollback:
+    - command: php artisan migrate:rollback
 
-health_check:
-  url: "http://localhost:8080/health"
+health:
+  url: https://myapp.example.com/health
   timeout: 30s
+  retries: 3
+  rollback_on_fail: true
 ```
 
-### 2. Deploy
+### 3. Set Secrets
 
 ```bash
-# Via CLI
-vcdeploy deploy myapp
+# Set database password
+vcdeploy secret set myapp DB_PASSWORD
 
-# Or via API
-curl -X POST http://localhost:9000/api/v1/deployments \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"project": "myapp"}'
+# Set from stdin
+echo "your-api-key" | vcdeploy secret set myapp API_KEY --stdin
+
+# Import from .env file
+cat .env.production | vcdeploy secret import myapp/production
 ```
+
+### 4. Deploy
+
+```bash
+# Deploy via CLI
+vcdeploy project deploy myapp
+
+# Deploy specific target
+vcdeploy project deploy myapp --target production
+
+# Dry run (validate without deploying)
+vcdeploy project deploy myapp --dry-run
+```
+
+### 5. Monitor Deployment
+
+```bash
+# List recent deployments
+vcdeploy deploy list
+
+# Check status
+vcdeploy deploy status <deployment-id>
+
+# View logs
+vcdeploy deploy logs <deployment-id> --follow
+```
+
+## Webhook Integration
+
+### GitHub
+
+1. In your GitHub repository, go to **Settings → Webhooks**
+2. Add webhook:
+   - **Payload URL:** `https://your-master:9000/webhooks/github`
+   - **Content type:** `application/json`
+   - **Secret:** Configure in vcdeploy settings
+   - **Events:** Push, Pull Requests
+
+### GitLab
+
+1. In your GitLab project, go to **Settings → Webhooks**
+2. Add webhook:
+   - **URL:** `https://your-master:9000/webhooks/gitlab`
+   - **Secret Token:** Configure in vcdeploy settings
+   - **Trigger:** Push events, Merge request events
+
+### Bitbucket
+
+1. In your Bitbucket repository, go to **Settings → Webhooks**
+2. Add webhook:
+   - **URL:** `https://your-master:9000/webhooks/bitbucket`
+   - **Triggers:** Repository push
 
 ## Next Steps
 
 - [Installation Guide](installation.md) - Detailed installation options
 - [Master Configuration](config/master.md) - All configuration options
+- [Agent Configuration](config/agent.md) - Agent setup and options
 - [Projects Configuration](config/projects.md) - Advanced project settings
-- [Metrics & Monitoring](operations/metrics.md) - Set up observability
+- [CLI Reference](cli/README.md) - Complete command reference
+- [API Reference](api.md) - REST API documentation

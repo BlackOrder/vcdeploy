@@ -2,30 +2,43 @@
 
 vcdeploy follows a master-agent architecture for distributed deployment orchestration.
 
-## Components
+## System Components
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      Master Server                          │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
-│  │ REST API │  │ Web UI   │  │ gRPC     │  │ Webhook  │   │
-│  │ Handler  │  │ Server   │  │ Server   │  │ Handler  │   │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘   │
-│       │             │             │             │          │
-│       └─────────────┴──────┬──────┴─────────────┘          │
-│                            │                               │
-│                    ┌───────▼───────┐                       │
-│                    │   Business    │                       │
-│                    │    Logic      │                       │
-│                    └───────┬───────┘                       │
-│                            │                               │
-│       ┌────────────┬───────┴───────┬────────────┐         │
-│       │            │               │            │          │
-│  ┌────▼────┐  ┌────▼────┐   ┌─────▼─────┐ ┌────▼────┐    │
-│  │ SQLite  │  │ Secret  │   │ Scheduler │ │ Agent   │    │
-│  │   DB    │  │   KMS   │   │           │ │ Manager │    │
-│  └─────────┘  └─────────┘   └───────────┘ └─────────┘    │
-└─────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                              Master Server                                     │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐   │
+│  │ REST API │  │ Web UI   │  │ gRPC     │  │ Webhook  │  │ Notification │   │
+│  │ Handler  │  │ Server   │  │ Server   │  │ Handler  │  │   Manager    │   │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘  └──────┬───────┘   │
+│       │             │             │             │                │           │
+│       └─────────────┴──────┬──────┴─────────────┴────────────────┘           │
+│                            │                                                  │
+│  ┌─────────────────────────▼──────────────────────────────────────────────┐  │
+│  │                        Security Middleware                              │  │
+│  │   • Auth (JWT/Session)   • RBAC Enforcement   • CSP   • Rate Limiting │  │
+│  └─────────────────────────────────────────────────────────────────────────┘  │
+│                            │                                                  │
+│  ┌─────────────────────────▼──────────────────────────────────────────────┐  │
+│  │                         Service Layer                                   │  │
+│  │  ┌──────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐            │  │
+│  │  │ Projects │ │Deployments │ │  Secrets   │ │   Users    │            │  │
+│  │  └──────────┘ └────────────┘ └────────────┘ └────────────┘            │  │
+│  │  ┌──────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐            │  │
+│  │  │  Agents  │ │  API Keys  │ │  Sessions  │ │  Webhooks  │            │  │
+│  │  └──────────┘ └────────────┘ └────────────┘ └────────────┘            │  │
+│  │  ┌──────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐            │  │
+│  │  │  Audit   │ │ Host Keys  │ │ Provision  │ │ Proj Types │            │  │
+│  │  └──────────┘ └────────────┘ └────────────┘ └────────────┘            │  │
+│  └─────────────────────────────────────────────────────────────────────────┘  │
+│                            │                                                  │
+│       ┌────────────┬───────┴───────┬───────────────┬────────────────┐        │
+│       │            │               │               │                │         │
+│  ┌────▼────┐  ┌────▼────┐   ┌─────▼─────┐   ┌─────▼─────┐   ┌──────▼─────┐  │
+│  │ SQLite  │  │   KMS   │   │ Scheduler │   │  Alert    │   │  Tracing   │  │
+│  │   DB    │  │         │   │           │   │  Manager  │   │ (OTel)     │  │
+│  └─────────┘  └─────────┘   └───────────┘   └───────────┘   └────────────┘  │
+└───────────────────────────────────────────────────────────────────────────────┘
                               │
                               │ gRPC (mTLS)
                               │
@@ -48,69 +61,262 @@ vcdeploy follows a master-agent architecture for distributed deployment orchestr
 
 ## Master Server
 
-The master server is the central control plane:
+The master server is the central control plane responsible for:
 
-- **REST API**: Handles HTTP requests from CLI and external systems
-- **Web UI**: Browser-based management interface
-- **gRPC Server**: Bidirectional streaming with agents
-- **Webhook Handler**: Receives webhooks from Git providers
+- **Orchestration**: Coordinating deployments across multiple agents
+- **Configuration**: Managing projects, secrets, and settings
+- **Interface**: Providing REST API, gRPC API, and Web UI
+- **Webhooks**: Processing Git provider events (GitHub, GitLab, Bitbucket)
+- **Notifications**: Sending alerts via Slack, Discord, Email, and custom webhooks
+- **Monitoring**: Tracking agent health and deployment status
 
-### Database
+### Entry Points
 
-SQLite is used by default for simplicity. The schema includes:
-- Users and authentication
-- Agents and connection state
-- Projects and configurations
-- Deployments and logs
-- Audit trail
+| Interface | Default Port | Purpose |
+|-----------|--------------|---------|
+| REST API | 8080 | CLI, automation, integrations |
+| Web UI | 8080 | Browser-based management |
+| gRPC | 9001 | Agent communication |
+| Webhooks | 8080 | Git provider callbacks |
 
-### Secret Management
+### Security Middleware Stack
 
-Secrets are encrypted using AES-256-GCM with a KMS key stored separately from the database.
+```
+Request → Auth → RBAC → CSP → Rate Limit → Handler
+```
+
+- **Authentication**: JWT tokens for API, sessions for Web UI
+- **RBAC Enforcement**: Role-based access control (admin, user, viewer)
+- **CSP Middleware**: Content Security Policy headers
+- **Rate Limiting**: Request throttling per user/IP
+
+### Service Layer
+
+The service layer encapsulates business logic:
+
+| Service | Responsibility |
+|---------|---------------|
+| `ProjectService` | CRUD operations for projects |
+| `DeploymentService` | Deployment orchestration |
+| `SecretService` | Encrypted secret management |
+| `UserService` | User account management |
+| `AgentService` | Agent registration and status |
+| `APIKeyService` | API key lifecycle |
+| `SessionService` | User session management |
+| `WebhookService` | Webhook configuration |
+| `AuditService` | Operation logging |
+| `HostKeyService` | SSH known hosts management |
+| `ProvisionService` | Remote server provisioning |
+| `ProjectTypeService` | Project templates |
+
+### Storage Layer
+
+SQLite database with multiple logical stores:
+
+```
+┌─────────────────────────────────────────────────┐
+│                   SQLite DB                      │
+├─────────────────────────────────────────────────┤
+│  • Users & Sessions    • Projects & Types       │
+│  • Agents & Status     • Deployments & Logs     │
+│  • Secrets (encrypted) • Settings               │
+│  • API Keys            • Audit Trail            │
+│  • SSH Host Keys       • Encryption Keys        │
+│  • Webhooks            • Health Configs         │
+└─────────────────────────────────────────────────┘
+```
+
+### Key Management System (KMS)
+
+Built-in encryption for secrets with key versioning:
+
+- **Algorithm**: AES-256-GCM
+- **Key Versioning**: Supports key rotation
+- **Ciphertext Format**: `v1:{key_id}:{nonce}:{ciphertext}`
+- **Backward Compatibility**: Old keys retained for decryption
+
+### Scheduler
+
+Background job scheduling for:
+- Database backups
+- Key rotation reminders
+- Log cleanup
+- Scheduled deployments
+- Health check polling
+
+### Alert Manager
+
+System health monitoring and alerting:
+
+| Alert Type | Trigger |
+|------------|---------|
+| `agent_disconnected` | Agent loses connection |
+| `agent_reconnected` | Agent comes back online |
+| `disk_warning` | Disk usage > 80% |
+| `disk_critical` | Disk usage > 90% |
+| `high_memory` | Memory usage > 85% |
+| `high_cpu` | CPU usage > 90% |
+| `deployment_stuck` | Deployment exceeds timeout |
+| `high_error_rate` | Error rate threshold exceeded |
+
+### Notification Manager
+
+Multi-channel notification delivery:
+
+| Channel | Configuration |
+|---------|--------------|
+| **Slack** | Webhook URL, channel, custom messages |
+| **Discord** | Webhook URL, embeds with status colors |
+| **Email** | SMTP configuration, HTML templates |
+| **Webhook** | Custom HTTP endpoints with HMAC signing |
 
 ## Agents
 
-Agents run on target servers and execute deployments:
+Lightweight daemons running on deployment targets:
 
-- **gRPC Client**: Maintains persistent connection to master
-- **Deploy Engine**: Executes deployment steps
-- **Health Reporting**: Sends metrics to master
+- **Connection**: Persistent gRPC stream to master
+- **Execution**: Git operations, scripts, service restarts
+- **Reporting**: Health metrics, deployment status
+- **Self-Update**: Remote binary updates from master
 
 ### Agent Lifecycle
 
-1. Agent starts and reads configuration
-2. Connects to master via gRPC
-3. Authenticates and registers
-4. Enters command loop
-5. Executes received commands
-6. Reports results via stream
+```
+┌────────────┐    ┌────────────┐    ┌────────────┐    ┌────────────┐
+│   Start    │───►│  Connect   │───►│  Register  │───►│   Ready    │
+└────────────┘    └────────────┘    └────────────┘    └─────┬──────┘
+                                                            │
+                        ┌───────────────────────────────────┘
+                        │
+                        ▼
+┌────────────────────────────────────────────────────────────────────┐
+│                        Command Loop                                 │
+│  ┌─────────┐   ┌─────────────┐   ┌───────────┐   ┌─────────────┐  │
+│  │ Receive │──►│   Execute   │──►│  Report   │──►│  Heartbeat  │  │
+│  │ Command │   │  (Deploy)   │   │  Status   │   │  (30s)      │  │
+│  └─────────┘   └─────────────┘   └───────────┘   └─────────────┘  │
+└────────────────────────────────────────────────────────────────────┘
+```
 
-## Communication Flow
+## Communication Flows
 
 ### Deployment Flow
 
 ```
-User → REST API → Master → gRPC Stream → Agent
-                    ↑                      ↓
-                    └──── Results ─────────┘
+┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐
+│ Trigger │───►│Validate │───►│Schedule │───►│ Execute │───►│ Notify  │
+└─────────┘    └─────────┘    └─────────┘    └─────────┘    └─────────┘
+     │              │              │              │              │
+     │              │              │              │              │
+  CLI/API/      Project        Queue for      Commands       Slack/
+  Webhook       config &       target         via gRPC       Discord/
+                secrets        agents         stream         Email
 ```
 
 ### Webhook Flow
 
 ```
-Git Provider → Webhook → Master → Project Match → Deploy
+┌────────────┐    ┌────────────┐    ┌────────────┐    ┌────────────┐
+│    Git     │    │  Webhook   │    │  Project   │    │   Deploy   │
+│  Provider  │───►│  Handler   │───►│   Match    │───►│  Trigger   │
+└────────────┘    └────────────┘    └────────────┘    └────────────┘
+    │                  │                  │                  │
+  Push/             Validate           Find             Queue for
+  Tag/PR            signature          matching          agents
+                                       project
+```
+
+### Secret Resolution Flow
+
+```
+┌────────────┐    ┌────────────┐    ┌────────────┐    ┌────────────┐
+│  Deploy    │    │   Lookup   │    │   KMS      │    │  Inject    │
+│  Start     │───►│   Secret   │───►│  Decrypt   │───►│  Into Env  │
+└────────────┘    └────────────┘    └────────────┘    └────────────┘
 ```
 
 ## Security Model
 
-- **Transport**: mTLS between master and agents
-- **Authentication**: JWT tokens for API access
-- **Authorization**: Role-based access control
-- **Secrets**: Encrypted at rest with AES-256-GCM
-- **Audit**: All operations logged with user context
+### Transport Security
+
+| Connection | Security |
+|------------|----------|
+| REST API | HTTPS (TLS 1.3) |
+| Web UI | HTTPS (TLS 1.3) |
+| gRPC | mTLS (mutual TLS) |
+| Webhooks | HMAC signature validation |
+
+### Authentication
+
+| Method | Use Case |
+|--------|----------|
+| Session Cookies | Web UI |
+| JWT Bearer Tokens | API access |
+| API Keys | Automation/CI |
+| Agent Tokens | Agent registration |
+| mTLS Certificates | Agent connections |
+
+### Authorization (RBAC)
+
+| Role | Permissions |
+|------|-------------|
+| `admin` | Full access, user management |
+| `user` | Create/manage own projects |
+| `viewer` | Read-only access |
+
+### Secrets at Rest
+
+- All secrets encrypted with AES-256-GCM
+- Encryption keys stored separately from data
+- Key rotation supported with version tracking
+
+### Audit Trail
+
+All operations logged with:
+- User identity
+- Action performed
+- Resource affected
+- Timestamp
+- IP address
+
+## Observability
+
+### Tracing (OpenTelemetry)
+
+Distributed tracing across:
+- HTTP requests
+- gRPC calls
+- Database operations
+- Deployment steps
+
+### Metrics
+
+Prometheus-compatible metrics:
+- Request latency
+- Deployment duration
+- Agent connection status
+- Error rates
+
+### Logging
+
+Structured logging (JSON) via Zap:
+- Request IDs for correlation
+- Log levels (debug, info, warn, error)
+- Configurable output (file, stdout)
+
+## Scalability Considerations
+
+| Component | Scaling Strategy |
+|-----------|-----------------|
+| Master | Single instance (SQLite) |
+| Agents | Horizontal (unlimited) |
+| Database | SQLite (local) |
+| Notifications | Async/parallel |
+
+For high-availability requirements exceeding single-master capacity, consider deploying multiple vcdeploy instances with separate agent pools.
 
 ## Next Steps
 
-- [Master Server](master.md) - Detailed master architecture
-- [Agents](agents.md) - Agent architecture and lifecycle
-- [Communication](grpc.md) - gRPC protocol details
+- [Master Server](architecture/master.md) - Detailed master architecture
+- [Agents](architecture/agents.md) - Agent architecture and lifecycle
+- [gRPC Communication](architecture/grpc.md) - Protocol details

@@ -21,7 +21,7 @@ This project adheres to a code of conduct. By participating, you are expected to
 
 ### Prerequisites
 
-- **Go 1.24+** - [Installation Guide](https://golang.org/doc/install)
+- **Go 1.25+** - [Installation Guide](https://golang.org/doc/install)
 - **golangci-lint** - `go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest`
 - **Make** (optional) - For running common tasks
 - **Docker** (optional) - For running integration tests
@@ -343,7 +343,7 @@ vcdeploy/
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the Apache 2.0 License.
+By contributing, you agree that your contributions will be licensed under the MIT License.
 
 ---
 
