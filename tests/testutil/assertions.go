@@ -44,6 +44,15 @@ func (a *Assertions) StatusCreatedOrOK(resp *http.Response) {
 	}
 }
 
+// StatusCreatedOrConflict asserts status is 200, 201, or 409 (for idempotent create operations).
+func (a *Assertions) StatusCreatedOrConflict(resp *http.Response) {
+	a.t.Helper()
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusConflict {
+		body, _ := io.ReadAll(resp.Body)
+		a.t.Errorf("expected status 200, 201, or 409, got %d: %s", resp.StatusCode, string(body))
+	}
+}
+
 // StatusNoContent asserts that the response status is 204 No Content.
 func (a *Assertions) StatusNoContent(resp *http.Response) {
 	a.t.Helper()

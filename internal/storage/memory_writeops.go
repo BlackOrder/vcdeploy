@@ -103,8 +103,14 @@ func (s *MemoryStore) executeUserOp(tx *sql.Tx, op WriteOp) error {
 		return err
 
 	case WriteOpDelete:
-		id, ok := op.Data.(int64)
-		if !ok {
+		// Accept both int64 and map[string]int64{"id": ...} formats
+		var id int64
+		switch v := op.Data.(type) {
+		case int64:
+			id = v
+		case map[string]int64:
+			id = v["id"]
+		default:
 			return fmt.Errorf("invalid data type for user delete")
 		}
 		_, err := tx.Exec(`DELETE FROM users WHERE id = ?`, id)

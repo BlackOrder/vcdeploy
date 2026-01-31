@@ -1652,8 +1652,17 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 // handleAPIKey handles individual API key operations.
 func (s *MasterServer) handleAPIKey(w http.ResponseWriter, r *http.Request) {
 	// Extract key ID from path: /api/v1/apikeys/{id} or /api/v1/api-keys/{id}
+	// Also handles /api/v1/apikeys/{id}/revoke for compatibility
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/apikeys/")
 	path = strings.TrimPrefix(path, "/api/v1/api-keys/")
+
+	// Check for /revoke suffix (POST to revoke is treated like DELETE)
+	isRevoke := false
+	if strings.HasSuffix(path, "/revoke") {
+		path = strings.TrimSuffix(path, "/revoke")
+		isRevoke = true
+	}
+
 	keyID, err := strconv.ParseInt(path, 10, 64)
 	if err != nil {
 		s.jsonError(w, http.StatusBadRequest, "Invalid key ID")
@@ -1677,6 +1686,15 @@ func (s *MasterServer) handleAPIKey(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.jsonResponse(w, key)
+
+	case http.MethodPost:
+		// POST to /revoke endpoint
+		if !isRevoke {
+			s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+			return
+		}
+		// Fall through to delete/revoke the key
+		fallthrough
 
 	case http.MethodDelete:
 		if err := s.apiKeyService.Delete(ctx, keyID); err != nil {

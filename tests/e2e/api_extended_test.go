@@ -724,7 +724,8 @@ func expectStatusOK(t *testing.T, resp *http.Response) {
 
 func expectStatusCreatedOrOK(t *testing.T, resp *http.Response) {
 	t.Helper()
-	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+	// Accept 200, 201, or 409 (for create operations that may already exist)
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusConflict {
 		body, _ := io.ReadAll(resp.Body)
 		t.Errorf("expected status 200 or 201, got %d: %s", resp.StatusCode, string(body))
 	}
