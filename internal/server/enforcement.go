@@ -83,6 +83,11 @@ func hasScope(key *storage.APIKey, required APIScope) bool {
 		return true
 	}
 
+	// Wildcard "*" scope grants all permissions
+	if slices.Contains(scopes, "*") {
+		return true
+	}
+
 	// admin scope implies all other scopes
 	if slices.Contains(scopes, string(ScopeAdmin)) {
 		return true
