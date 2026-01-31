@@ -681,3 +681,37 @@ func (s *MasterServer) handleAgentsNeedingUpdate(w http.ResponseWriter, r *http.
 
 	s.jsonResponse(w, results)
 }
+
+// handleAllAgentUpdateHistory handles GET /api/v1/agents/updates/history
+func (s *MasterServer) handleAllAgentUpdateHistory(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	// Read access
+	if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
+		http.Error(w, msg, status)
+		return
+	}
+
+	// Parse pagination
+	p := parsePaginationWithDefaults(r, 20)
+
+	history, total, err := s.store.ListAllAgentUpdateHistory(ctx, p.Limit, p.Offset)
+	if err != nil {
+		s.logger.Error("Failed to get all agent update history", zap.Error(err))
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	s.jsonResponse(w, map[string]interface{}{
+		"items":  history,
+		"total":  total,
+		"limit":  p.Limit,
+		"offset": p.Offset,
+	})
+}

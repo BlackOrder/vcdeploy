@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -957,6 +958,11 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if agentID == "updates" && len(parts) > 1 && parts[1] == "history" {
+		s.handleAllAgentUpdateHistory(w, r)
+		return
+	}
+
 	if agentID == "" {
 		s.jsonError(w, http.StatusBadRequest, "Agent ID required")
 		return
@@ -999,6 +1005,10 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 
 		agent, err := s.agentService.GetByID(ctx, agentID)
 		if err != nil {
+			if errors.Is(err, storage.ErrNotFound) {
+				s.jsonError(w, http.StatusNotFound, "Agent not found")
+				return
+			}
 			s.logger.Error("Failed to get agent", zap.Error(err))
 			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return

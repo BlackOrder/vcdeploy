@@ -487,6 +487,41 @@ func (s *MemoryStore) ListAgentUpdateHistory(ctx context.Context, agentID string
 	return all[offset:end], total, nil
 }
 
+// ListAllAgentUpdateHistory returns all update history across all agents with pagination.
+func (s *MemoryStore) ListAllAgentUpdateHistory(ctx context.Context, limit, offset int) ([]*AgentUpdateHistory, int64, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Collect all history
+	var all []*AgentUpdateHistory
+	for _, h := range s.agentUpdates {
+		cp := *h
+		all = append(all, &cp)
+	}
+
+	// Sort by StartedAt descending (newest first)
+	for i := 0; i < len(all)-1; i++ {
+		for j := i + 1; j < len(all); j++ {
+			if all[j].StartedAt.After(all[i].StartedAt) {
+				all[i], all[j] = all[j], all[i]
+			}
+		}
+	}
+
+	total := int64(len(all))
+
+	// Apply pagination
+	if offset >= len(all) {
+		return []*AgentUpdateHistory{}, total, nil
+	}
+	end := offset + limit
+	if end > len(all) {
+		end = len(all)
+	}
+
+	return all[offset:end], total, nil
+}
+
 // GetLatestAgentUpdateHistory returns the most recent update history for an agent.
 func (s *MemoryStore) GetLatestAgentUpdateHistory(ctx context.Context, agentID string) (*AgentUpdateHistory, error) {
 	s.mu.RLock()

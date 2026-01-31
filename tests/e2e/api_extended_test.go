@@ -38,11 +38,12 @@ func TestAPIHostKeys(t *testing.T) {
 
 	t.Run("create host key", func(t *testing.T) {
 		hostKey := map[string]interface{}{
-			"host":        "test-server.example.com",
+			"hostname":    "test-server.example.com",
 			"port":        22,
 			"key_type":    "ssh-ed25519",
+			"public_key":  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestPublicKeyForE2ETests==",
 			"fingerprint": "SHA256:testfingerprint123456789",
-			"verified":    true,
+			"trusted":     true,
 		}
 
 		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/hostkeys", hostKey, cfg.APIToken)
@@ -144,9 +145,9 @@ func TestAPIBlockedIPs(t *testing.T) {
 
 	t.Run("add blocked IP", func(t *testing.T) {
 		blockedIP := map[string]interface{}{
-			"ip":       "192.0.2.100",
-			"reason":   "E2E test block",
-			"duration": "24h",
+			"ip_address": "192.0.2.100",
+			"reason":     "E2E test block",
+			"duration":   "24h",
 		}
 
 		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/blocked", blockedIP, cfg.APIToken)
@@ -192,10 +193,9 @@ func TestAPIProvisionJobs(t *testing.T) {
 
 	t.Run("create provision job", func(t *testing.T) {
 		job := map[string]interface{}{
-			"type":     "agent",
-			"target":   "new-server.example.com",
-			"config":   map[string]interface{}{"port": 22, "user": "deploy"},
-			"priority": 5,
+			"target_host": "new-server.example.com",
+			"target_port": 22,
+			"target_user": "deploy",
 		}
 
 		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/provision", job, cfg.APIToken)
@@ -250,8 +250,8 @@ func TestAPISettings(t *testing.T) {
 	}
 
 	t.Run("update appearance settings", func(t *testing.T) {
-		settings := map[string]interface{}{
-			"dark_mode":    true,
+		settings := map[string]string{
+			"dark_mode":    "true",
 			"accent_color": "blue",
 		}
 

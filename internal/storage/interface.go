@@ -105,6 +105,7 @@ type AgentUpdateStore interface {
 	GetAgentUpdateHistory(ctx context.Context, id int64) (*AgentUpdateHistory, error)
 	UpdateAgentUpdateHistory(ctx context.Context, history *AgentUpdateHistory) error
 	ListAgentUpdateHistory(ctx context.Context, agentID string, limit, offset int) ([]*AgentUpdateHistory, int64, error)
+	ListAllAgentUpdateHistory(ctx context.Context, limit, offset int) ([]*AgentUpdateHistory, int64, error)
 	GetLatestAgentUpdateHistory(ctx context.Context, agentID string) (*AgentUpdateHistory, error)
 }
 
