@@ -724,7 +724,7 @@ components:
           type: string
         role:
           type: string
-          enum: [admin, user, readonly]
+          enum: [admin, user, viewer]
         created_at:
           type: string
           format: date-time
@@ -743,7 +743,7 @@ components:
           format: email
         role:
           type: string
-          enum: [admin, user, readonly]
+          enum: [admin, user, viewer]
           default: user
 
     Project:
