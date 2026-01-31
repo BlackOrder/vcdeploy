@@ -442,17 +442,29 @@ func runMasterStart(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Initialize database
+	// Initialize storage - use memory-cached store if enabled (default)
 	sysCfg := config.MustGetSystemConfig()
 	dbPath := sysCfg.DatabasePath()
-	db, err := storage.Open(dbPath)
-	if err != nil {
-		return fmt.Errorf("open database: %w", err)
+
+	var store storage.Store
+	if globalConfig.Storage.UseMemoryCache {
+		cachedStore, err := storage.NewCachedStore(dbPath, globalLogger)
+		if err != nil {
+			return fmt.Errorf("open cached storage: %w", err)
+		}
+		store = cachedStore
+		defer cachedStore.Close()
+	} else {
+		db, err := storage.Open(dbPath)
+		if err != nil {
+			return fmt.Errorf("open database: %w", err)
+		}
+		store = db
+		defer db.Close()
 	}
-	defer db.Close()
 
 	// Create and start master server
-	srv, err := server.NewMasterServer(globalConfig, db, globalLogger)
+	srv, err := server.NewMasterServer(globalConfig, store, globalLogger)
 	if err != nil {
 		return fmt.Errorf("create server: %w", err)
 	}
