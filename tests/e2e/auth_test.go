@@ -89,7 +89,7 @@ func TestAuthUnauthorized(t *testing.T) {
 		"/api/v1/agents",
 		"/api/v1/secrets",
 		"/api/v1/settings/general",
-		"/api/v1/apikeys",
+		"/api/v1/api-keys",
 		"/api/v1/audit",
 	}
 
