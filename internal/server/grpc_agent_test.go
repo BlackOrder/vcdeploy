@@ -13,7 +13,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func newTestAgentServer(t *testing.T) (*AgentServer, *storage.DB) {
+func newTestAgentServer(t *testing.T) (*AgentServer, storage.Store) {
 	t.Helper()
 
 	tmpDir := t.TempDir()
@@ -30,7 +30,7 @@ func newTestAgentServer(t *testing.T) (*AgentServer, *storage.DB) {
 	// We need a CA manager, but for tests we can use nil and skip cert generation
 	// In real tests we'd set up a proper CA
 	server := &AgentServer{
-		store:           db,
+		store:             db,
 		ca:                nil, // Will cause cert generation to fail, but we can test other paths
 		logger:            logger.Named("agent-grpc"),
 		tokens:            make(map[string]string),

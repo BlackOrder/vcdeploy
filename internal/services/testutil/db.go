@@ -38,6 +38,14 @@ func NewTestDB(t *testing.T) (*storage.DB, func()) {
 	return db, cleanup
 }
 
+// NewTestStore creates a temporary SQLite database for testing and returns
+// the storage.Store interface. This is the preferred method for new tests.
+func NewTestStore(t *testing.T) (storage.Store, func()) {
+	t.Helper()
+	db, cleanup := NewTestDB(t)
+	return db, cleanup
+}
+
 // SetupBenchDB creates a temporary SQLite database for benchmarks.
 // It returns the database instance and a cleanup function.
 // The caller should defer the cleanup function to ensure proper cleanup.
@@ -57,5 +65,13 @@ func SetupBenchDB(b *testing.B) (*storage.DB, func()) {
 		db.Close()
 	}
 
+	return db, cleanup
+}
+
+// SetupBenchStore creates a temporary SQLite database for benchmarks and returns
+// the storage.Store interface. This is the preferred method for new benchmarks.
+func SetupBenchStore(b *testing.B) (storage.Store, func()) {
+	b.Helper()
+	db, cleanup := SetupBenchDB(b)
 	return db, cleanup
 }

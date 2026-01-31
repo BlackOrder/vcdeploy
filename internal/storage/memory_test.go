@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"database/sql"
 	"sync"
 	"testing"
@@ -152,7 +153,7 @@ func TestMemoryStore_RunInTransaction(t *testing.T) {
 	defer s.Close()
 
 	// RunInTransaction should return an error for memory store
-	err := s.RunInTransaction(nil, func(tx *sql.Tx) error {
+	err := s.RunInTransaction(context.TODO(), func(tx *sql.Tx) error {
 		return nil
 	})
 	if err == nil {

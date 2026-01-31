@@ -10,10 +10,10 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 )
 
-func newTestService(t *testing.T) (*Service, *storage.DB) {
+func newTestService(t *testing.T) (*Service, storage.Store) {
 	t.Helper()
 
-	db, cleanup := testutil.NewTestDB(t)
+	db, cleanup := testutil.NewTestStore(t)
 	t.Cleanup(cleanup)
 
 	return New(db), db

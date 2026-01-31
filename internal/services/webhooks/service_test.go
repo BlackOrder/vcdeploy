@@ -12,15 +12,15 @@ import (
 
 func setupTest(t *testing.T) (*Service, func()) {
 	t.Helper()
-	db, cleanup := testutil.NewTestDB(t)
+	db, cleanup := testutil.NewTestStore(t)
 	svc := New(db, nil) // No KMS for tests
 	return svc, cleanup
 }
 
-func setupTestWithKMS(t *testing.T) (*Service, *storage.DB, func()) {
+func setupTestWithKMS(t *testing.T) (*Service, storage.Store, func()) {
 	t.Helper()
 
-	db, cleanup := testutil.NewTestDB(t)
+	db, cleanup := testutil.NewTestStore(t)
 
 	kms, err := security.NewKMS(db.Conn(), nil)
 	if err != nil {
@@ -38,7 +38,7 @@ func setupTestWithKMS(t *testing.T) (*Service, *storage.DB, func()) {
 // --- New() Tests ---
 
 func TestNew(t *testing.T) {
-	db, cleanup := testutil.NewTestDB(t)
+	db, cleanup := testutil.NewTestStore(t)
 	defer cleanup()
 
 	svc := New(db, nil)
@@ -948,10 +948,10 @@ func TestService_Get_EdgeCases(t *testing.T) {
 
 // --- DB Error Tests ---
 
-func setupTestWithDB(t *testing.T) (*Service, *storage.DB, func()) {
+func setupTestWithDB(t *testing.T) (*Service, storage.Store, func()) {
 	t.Helper()
 
-	db, cleanup := testutil.NewTestDB(t)
+	db, cleanup := testutil.NewTestStore(t)
 
 	return New(db, nil), db, cleanup
 }

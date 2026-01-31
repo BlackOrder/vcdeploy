@@ -56,15 +56,15 @@ type MemoryStore struct {
 	agentBinaries map[int64]*AgentBinary
 	agentUpdates  map[int64]*AgentUpdateHistory
 
-	deployments        map[string]*DeploymentRecord
-	deploymentLogs     map[string][]*DeploymentLog
+	deployments         map[string]*DeploymentRecord
+	deploymentLogs      map[string][]*DeploymentLog
 	deploymentRollbacks map[int64]*DeploymentRollback
-	scheduledDeploys   map[string]*ScheduledDeployment
+	scheduledDeploys    map[string]*ScheduledDeployment
 
 	auditLogs []*AuditEntry // append-only slice
 
-	blockedIPs     map[string]*BlockedIP
-	rateLimits     map[string]*RateLimitRecord // keyed by "key:bucket"
+	blockedIPs map[string]*BlockedIP
+	rateLimits map[string]*RateLimitRecord // keyed by "key:bucket"
 
 	provisionJobs map[string]*ProvisionJob
 	sshHostKeys   map[int64]*SSHHostKey
@@ -73,24 +73,23 @@ type MemoryStore struct {
 	healthCheckConfigs map[int64]*HealthCheckConfig
 
 	// ID generators (atomic)
-	nextUserID           atomic.Int64
-	nextAPIKeyID         atomic.Int64
-	nextProjectID        atomic.Int64
-	nextProjectTypeID    atomic.Int64
-	nextWebhookID        atomic.Int64
-	nextSecretID         atomic.Int64
-	nextAgentBinaryID    atomic.Int64
-	nextAgentUpdateID    atomic.Int64
-	nextDeploymentLogID  atomic.Int64
-	nextRollbackID       atomic.Int64
-	nextAuditID          atomic.Int64
-	nextBlockedIPID      atomic.Int64
-	nextRateLimitID      atomic.Int64
-	nextProvisionJobID   atomic.Int64
-	nextSSHHostKeyID     atomic.Int64
-	nextJumpServerID     atomic.Int64
-	nextHealthCheckID    atomic.Int64
-	nextSettingID        atomic.Int64
+	nextUserID          atomic.Int64
+	nextAPIKeyID        atomic.Int64
+	nextProjectID       atomic.Int64
+	nextProjectTypeID   atomic.Int64
+	nextWebhookID       atomic.Int64
+	nextSecretID        atomic.Int64
+	nextAgentBinaryID   atomic.Int64
+	nextAgentUpdateID   atomic.Int64
+	nextDeploymentLogID atomic.Int64
+	nextRollbackID      atomic.Int64
+	nextAuditID         atomic.Int64
+	nextBlockedIPID     atomic.Int64
+	nextRateLimitID     atomic.Int64
+	nextSSHHostKeyID    atomic.Int64
+	nextJumpServerID    atomic.Int64
+	nextHealthCheckID   atomic.Int64
+	nextSettingID       atomic.Int64
 
 	// Shutdown coordination
 	done chan struct{}

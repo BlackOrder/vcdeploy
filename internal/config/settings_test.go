@@ -13,7 +13,7 @@ import (
 )
 
 // setupTestSettingsDB creates a temporary database for testing
-func setupTestSettingsDB(t *testing.T) (*storage.DB, *security.KMS, func()) {
+func setupTestSettingsDB(t *testing.T) (storage.Store, *security.KMS, func()) {
 	t.Helper()
 
 	// Create temp directory

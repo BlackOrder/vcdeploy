@@ -42,20 +42,20 @@ type Services struct {
 }
 
 // NewServices creates a new service container with all services initialized.
-func NewServices(db *storage.DB, _ *zap.Logger) *Services {
+func NewServices(store storage.Store, _ *zap.Logger) *Services {
 	return &Services{
-		Users:        users.New(db),
-		Agents:       agents.New(db),
-		Projects:     projects.New(db),
-		ProjectTypes: projecttypes.New(db),
-		Deployments:  deployments.New(db),
-		Secrets:      secrets.New(db, nil), // KMS can be nil for CLI
-		Audit:        audit.New(db),
-		Sessions:     sessions.New(db),
-		APIKeys:      apikeys.New(db),
-		Settings:     settings.New(db, nil), // KMS can be nil for CLI
-		Webhooks:     webhooks.New(db, nil), // KMS can be nil for CLI
-		HostKeys:     hostkeys.New(db),
+		Users:        users.New(store),
+		Agents:       agents.New(store),
+		Projects:     projects.New(store),
+		ProjectTypes: projecttypes.New(store),
+		Deployments:  deployments.New(store),
+		Secrets:      secrets.New(store, nil), // KMS can be nil for CLI
+		Audit:        audit.New(store),
+		Sessions:     sessions.New(store),
+		APIKeys:      apikeys.New(store),
+		Settings:     settings.New(store, nil), // KMS can be nil for CLI
+		Webhooks:     webhooks.New(store, nil), // KMS can be nil for CLI
+		HostKeys:     hostkeys.New(store),
 	}
 }
 
@@ -94,7 +94,7 @@ var errStorageNotOpen = errors.New("storage not open - call OpenStorage first")
 // It provides a convenient way for CLI commands to access services.
 type CLIServices struct {
 	*Services
-	db     *storage.DB
+	store  storage.Store
 	kms    *security.KMS
 	logger *zap.Logger
 }
@@ -116,37 +116,41 @@ func InitCLIServices(dbPath string) (*CLIServices, func(), error) {
 		return nil, nil, fmt.Errorf("initialize KMS: %w", err)
 	}
 
+	// Use the db as a Store interface
+	// Use the db as a Store interface
+	var store storage.Store = db
+
 	svc := &CLIServices{
 		Services: &Services{
-			Users:        users.New(db),
-			Agents:       agents.New(db),
-			Projects:     projects.New(db),
-			ProjectTypes: projecttypes.New(db),
-			Deployments:  deployments.New(db),
-			Secrets:      secrets.New(db, kms),
-			Audit:        audit.New(db),
-			Sessions:     sessions.New(db),
-			APIKeys:      apikeys.New(db),
-			Settings:     settings.New(db, kms),
-			Webhooks:     webhooks.New(db, kms),
-			HostKeys:     hostkeys.New(db),
+			Users:        users.New(store),
+			Agents:       agents.New(store),
+			Projects:     projects.New(store),
+			ProjectTypes: projecttypes.New(store),
+			Deployments:  deployments.New(store),
+			Secrets:      secrets.New(store, kms),
+			Audit:        audit.New(store),
+			Sessions:     sessions.New(store),
+			APIKeys:      apikeys.New(store),
+			Settings:     settings.New(store, kms),
+			Webhooks:     webhooks.New(store, kms),
+			HostKeys:     hostkeys.New(store),
 		},
-		db:     db,
+		store:  store,
 		kms:    kms,
 		logger: logger,
 	}
 
 	cleanup := func() {
-		db.Close()
+		store.Close()
 	}
 
 	return svc, cleanup, nil
 }
 
-// DB returns the underlying database connection.
+// Store returns the underlying storage interface.
 // Use sparingly - prefer service methods when possible.
-func (s *CLIServices) DB() *storage.DB {
-	return s.db
+func (s *CLIServices) Store() storage.Store {
+	return s.store
 }
 
 // KMS returns the key management service.

@@ -24,7 +24,7 @@ import (
 // TestFixture provides test infrastructure for integration tests.
 type TestFixture struct {
 	T          *testing.T
-	DB         *storage.DB
+	DB         storage.Store
 	Server     *server.MasterServer
 	HTTPServer *httptest.Server
 	Logger     *zap.Logger
