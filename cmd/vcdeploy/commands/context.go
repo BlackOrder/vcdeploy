@@ -177,6 +177,8 @@ func (c *AppContext) InitLogger() error {
 }
 
 // OpenStorage opens the database connection.
+// If Storage.UseMemoryCache is enabled (default), uses an in-memory cache with
+// batched SQLite persistence to eliminate SQLITE_BUSY errors from concurrent access.
 func (c *AppContext) OpenStorage() error {
 	if c.Config == nil {
 		return fmt.Errorf("config not loaded")
@@ -189,6 +191,17 @@ func (c *AppContext) OpenStorage() error {
 		dbPath = c.Config.Backup.Database.Path
 	}
 
+	// Use memory-cached store if enabled (default)
+	if c.Config.Storage.UseMemoryCache {
+		cachedStore, err := storage.NewCachedStore(dbPath, c.Logger)
+		if err != nil {
+			return fmt.Errorf("open cached storage: %w", err)
+		}
+		c.Storage = cachedStore
+		return nil
+	}
+
+	// Fall back to direct SQLite access
 	db, err := storage.New(dbPath, c.Logger)
 	if err != nil {
 		return fmt.Errorf("open storage: %w", err)

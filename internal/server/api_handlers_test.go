@@ -1993,7 +1993,8 @@ func TestHandleUser_MethodNotAllowed(t *testing.T) {
 	server, apiKey, _, userID := newTestServerWithAuth(t)
 	defer server.store.Close()
 
-	req := httptest.NewRequest("PATCH", "/api/v1/users/1", nil)
+	// Use OPTIONS which is not supported by handleUser
+	req := httptest.NewRequest("OPTIONS", "/api/v1/users/1", nil)
 	req.Header.Set("X-API-Key", apiKey)
 	w := httptest.NewRecorder()
 

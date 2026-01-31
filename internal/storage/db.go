@@ -91,7 +91,7 @@ func (db *DB) RunInTransaction(ctx context.Context, fn func(tx *sql.Tx) error) e
 
 	if err := fn(tx); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
-			return fmt.Errorf("rollback failed: %v (original error: %w)", rbErr, err)
+			return errors.Join(fmt.Errorf("rollback failed: %w", rbErr), err)
 		}
 		return fmt.Errorf("transaction function: %w", err)
 	}
