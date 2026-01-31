@@ -439,13 +439,38 @@ func (s *MasterServer) handleSettingsCategory(w http.ResponseWriter, r *http.Req
 			return
 		}
 
-		var req map[string]string
+		var req map[string]interface{}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
 			s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
 			return
 		}
 
-		for key, value := range req {
+		for key, rawValue := range req {
+			// Type coercion: convert non-string values to strings
+			var value string
+			switch v := rawValue.(type) {
+			case string:
+				value = v
+			case bool:
+				if v {
+					value = "true"
+				} else {
+					value = "false"
+				}
+			case float64:
+				// JSON numbers are float64; format as integer if whole number
+				if v == float64(int64(v)) {
+					value = strconv.FormatInt(int64(v), 10)
+				} else {
+					value = strconv.FormatFloat(v, 'f', -1, 64)
+				}
+			case nil:
+				value = ""
+			default:
+				s.jsonError(w, http.StatusBadRequest, fmt.Sprintf("invalid type for setting %s", key))
+				return
+			}
+
 			if err := s.settingsSvc.Set(ctx, category, key, value, false); err != nil {
 				s.logger.Error("Failed to set setting", zap.String("key", key), zap.Error(err))
 				s.jsonError(w, http.StatusInternalServerError, "Internal server error")

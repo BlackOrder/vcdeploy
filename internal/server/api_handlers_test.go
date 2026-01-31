@@ -1677,6 +1677,49 @@ func TestHandleSettingsCategory_PutSuccess(t *testing.T) {
 	}
 }
 
+func TestHandleSettingsCategory_PutTypeCoercion(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	// Test with native types: bool, int, string, null
+	body := strings.NewReader(`{"bool_setting":true,"int_setting":42,"float_setting":3.14,"string_setting":"hello","null_setting":null}`)
+	req := httptest.NewRequest("PUT", "/api/v1/settings/coercion-test", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	req = requestWithUserContext(req, userID)
+	server.handleSettingsCategory(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+
+	// Verify the values are stored as strings
+	ctx := context.Background()
+	boolSetting, _ := server.settingsSvc.Get(ctx, "coercion-test", "bool_setting")
+	if boolSetting != "true" {
+		t.Errorf("expected bool_setting to be 'true', got '%s'", boolSetting)
+	}
+
+	intSetting, _ := server.settingsSvc.Get(ctx, "coercion-test", "int_setting")
+	if intSetting != "42" {
+		t.Errorf("expected int_setting to be '42', got '%s'", intSetting)
+	}
+
+	floatSetting, _ := server.settingsSvc.Get(ctx, "coercion-test", "float_setting")
+	if floatSetting != "3.14" {
+		t.Errorf("expected float_setting to be '3.14', got '%s'", floatSetting)
+	}
+
+	nullSetting, _ := server.settingsSvc.Get(ctx, "coercion-test", "null_setting")
+	if nullSetting != "" {
+		t.Errorf("expected null_setting to be '', got '%s'", nullSetting)
+	}
+}
+
 func TestHandleSettingsCategory_EmptyCategory(t *testing.T) {
 	t.Parallel()
 
