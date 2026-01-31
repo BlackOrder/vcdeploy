@@ -77,6 +77,21 @@ func (s *Service) GetByRawKey(ctx context.Context, rawKey string) (*storage.APIK
 	return key, nil
 }
 
+// GetByID retrieves an API key by its ID.
+func (s *Service) GetByID(ctx context.Context, keyID int64) (*storage.APIKey, error) {
+	key, err := s.store.GetAPIKeyByID(ctx, keyID)
+	if err != nil {
+		return nil, err // Returns ErrNotFound if not found
+	}
+
+	// Check if expired
+	if !key.IsValid() {
+		return nil, storage.ErrNotFound
+	}
+
+	return key, nil
+}
+
 // Delete removes an API key by ID.
 func (s *Service) Delete(ctx context.Context, keyID int64) error {
 	return s.store.DeleteAPIKey(ctx, keyID)

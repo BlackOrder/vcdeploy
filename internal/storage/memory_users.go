@@ -292,6 +292,26 @@ func (s *MemoryStore) CreateAPIKey(ctx context.Context, key *APIKey) error {
 	return nil
 }
 
+// GetAPIKeyByID retrieves an API key by ID from memory.
+func (s *MemoryStore) GetAPIKeyByID(ctx context.Context, keyID int64) (*APIKey, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for _, key := range s.apiKeys {
+		if key.ID == keyID {
+			// Check if expired
+			if key.ExpiresAt != nil && time.Now().After(*key.ExpiresAt) {
+				return nil, ErrNotFound
+			}
+			// Return a copy
+			copied := *key
+			return &copied, nil
+		}
+	}
+
+	return nil, ErrNotFound
+}
+
 // GetAPIKeyByHash retrieves an API key by hash from memory.
 func (s *MemoryStore) GetAPIKeyByHash(ctx context.Context, keyHash string) (*APIKey, error) {
 	s.mu.RLock()

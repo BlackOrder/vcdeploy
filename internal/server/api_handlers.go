@@ -1651,8 +1651,9 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 
 // handleAPIKey handles individual API key operations.
 func (s *MasterServer) handleAPIKey(w http.ResponseWriter, r *http.Request) {
-	// Extract key ID from path: /api/v1/apikeys/{id}
+	// Extract key ID from path: /api/v1/apikeys/{id} or /api/v1/api-keys/{id}
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/apikeys/")
+	path = strings.TrimPrefix(path, "/api/v1/api-keys/")
 	keyID, err := strconv.ParseInt(path, 10, 64)
 	if err != nil {
 		s.jsonError(w, http.StatusBadRequest, "Invalid key ID")
@@ -1663,6 +1664,20 @@ func (s *MasterServer) handleAPIKey(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	switch r.Method {
+	case http.MethodGet:
+		// Get API key by ID
+		key, err := s.apiKeyService.GetByID(ctx, keyID)
+		if err != nil {
+			if errors.Is(err, storage.ErrNotFound) {
+				s.jsonError(w, http.StatusNotFound, "API key not found")
+				return
+			}
+			s.logger.Error("Failed to get API key", zap.Error(err))
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+			return
+		}
+		s.jsonResponse(w, key)
+
 	case http.MethodDelete:
 		if err := s.apiKeyService.Delete(ctx, keyID); err != nil {
 			s.logger.Error("Failed to revoke API key", zap.Error(err))

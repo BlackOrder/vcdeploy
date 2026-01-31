@@ -93,6 +93,7 @@ type SessionServicer interface {
 // APIKeyServicer defines the interface for API key management.
 type APIKeyServicer interface {
 	Create(ctx context.Context, userID int64, name string, scopes []string, expiresAt *time.Time) (rawKey string, key *storage.APIKey, err error)
+	GetByID(ctx context.Context, keyID int64) (*storage.APIKey, error)
 	GetByRawKey(ctx context.Context, rawKey string) (*storage.APIKey, error)
 	Delete(ctx context.Context, keyID int64) error
 	List(ctx context.Context, userID int64) ([]*storage.APIKey, error)
