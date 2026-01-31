@@ -22,7 +22,7 @@ func TestAPIHostKeys(t *testing.T) {
 	}
 
 	t.Run("list host keys", func(t *testing.T) {
-		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/host-keys", nil, cfg.APIToken)
+		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/hostkeys", nil, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to list host keys: %v", err)
 		}
@@ -45,7 +45,7 @@ func TestAPIHostKeys(t *testing.T) {
 			"verified":    true,
 		}
 
-		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/host-keys", hostKey, cfg.APIToken)
+		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/hostkeys", hostKey, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to create host key: %v", err)
 		}
@@ -60,7 +60,7 @@ func TestAPIHostKeys(t *testing.T) {
 			"port": 22,
 		}
 
-		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/host-keys/verify", verifyReq, cfg.APIToken)
+		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/hostkeys/verify", verifyReq, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to verify host key: %v", err)
 		}
@@ -82,7 +82,7 @@ func TestAPIJumpServers(t *testing.T) {
 	}
 
 	t.Run("list jump servers", func(t *testing.T) {
-		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/jump-servers", nil, cfg.APIToken)
+		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/jumpservers", nil, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to list jump servers: %v", err)
 		}
@@ -100,7 +100,7 @@ func TestAPIJumpServers(t *testing.T) {
 			"priority": 10,
 		}
 
-		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/jump-servers", jumpServer, cfg.APIToken)
+		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/jumpservers", jumpServer, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to create jump server: %v", err)
 		}
@@ -111,7 +111,7 @@ func TestAPIJumpServers(t *testing.T) {
 
 	t.Run("test jump server connection", func(t *testing.T) {
 		// Test connection to a jump server (will fail if not configured, but endpoint should exist)
-		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/jump-servers/e2e-jump-server/test", nil, cfg.APIToken)
+		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/jumpservers/e2e-jump-server/test", nil, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to test jump server: %v", err)
 		}
@@ -133,7 +133,7 @@ func TestAPIBlockedIPs(t *testing.T) {
 	}
 
 	t.Run("list blocked IPs", func(t *testing.T) {
-		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/blocked-ips", nil, cfg.APIToken)
+		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/blocked", nil, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to list blocked IPs: %v", err)
 		}
@@ -149,7 +149,7 @@ func TestAPIBlockedIPs(t *testing.T) {
 			"duration": "24h",
 		}
 
-		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/blocked-ips", blockedIP, cfg.APIToken)
+		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/blocked", blockedIP, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to add blocked IP: %v", err)
 		}
@@ -159,7 +159,7 @@ func TestAPIBlockedIPs(t *testing.T) {
 	})
 
 	t.Run("remove blocked IP", func(t *testing.T) {
-		resp, err := doAuthRequest("DELETE", cfg.MasterHTTPURL+"/api/v1/blocked-ips/192.0.2.100", nil, cfg.APIToken)
+		resp, err := doAuthRequest("DELETE", cfg.MasterHTTPURL+"/api/v1/blocked/192.0.2.100", nil, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to remove blocked IP: %v", err)
 		}
@@ -181,7 +181,7 @@ func TestAPIProvisionJobs(t *testing.T) {
 	}
 
 	t.Run("list provision jobs", func(t *testing.T) {
-		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/provision/jobs", nil, cfg.APIToken)
+		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/provision", nil, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to list provision jobs: %v", err)
 		}
@@ -198,7 +198,7 @@ func TestAPIProvisionJobs(t *testing.T) {
 			"priority": 5,
 		}
 
-		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/provision/jobs", job, cfg.APIToken)
+		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/provision", job, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to create provision job: %v", err)
 		}
@@ -209,7 +209,7 @@ func TestAPIProvisionJobs(t *testing.T) {
 
 	t.Run("get provision job status", func(t *testing.T) {
 		// Try to get a job status (may not exist)
-		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/provision/jobs/test-job-id", nil, cfg.APIToken)
+		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/provision/test-job-id", nil, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to get provision job: %v", err)
 		}
