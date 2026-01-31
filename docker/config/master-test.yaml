@@ -39,7 +39,8 @@ features:
 webhook:
   secret: "test-webhook-secret"
 
-rate_limit:
-  enabled: false
+api:
+  rate_limit:
+    enabled: false
 
 test_mode: true
