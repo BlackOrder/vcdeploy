@@ -526,7 +526,8 @@ jobs:
           echo "Successfully created API token for CLI tests"
 
       - name: Run CLI tests
-        run: go test -v -tags=cli -timeout 15m ./tests/cli/...
+        # Use -p=1 to run tests sequentially and avoid SQLite locking issues
+        run: go test -v -tags=cli -timeout 15m -p=1 ./tests/cli/...
         env:
           VCDEPLOY_BINARY: "./bin/vcdeploy"
           E2E_MASTER_HTTP_URL: "http://localhost:9000"

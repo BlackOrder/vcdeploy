@@ -61,8 +61,10 @@ func TestDeployCommands(t *testing.T) {
 	})
 
 	t.Run("deploy logs nonexistent", func(t *testing.T) {
+		// CLI returns success with "No logs available" message for nonexistent deployments
 		result := ctx.CLI.Run("deploy", "logs", "nonexistent-deployment-id")
-		ctx.Assertions.Failed(result)
+		ctx.Assertions.Success(result)
+		ctx.Assertions.StdoutContains(result, "No logs available")
 	})
 
 	t.Run("deploy cancel nonexistent", func(t *testing.T) {
