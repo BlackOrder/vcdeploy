@@ -81,11 +81,11 @@ func TestProjectsAPI(t *testing.T) {
 	})
 
 	t.Run("get project", func(t *testing.T) {
-		if createdProjectID == nil {
+		if createdProjectName == "" {
 			t.Skip("no project created")
 		}
 
-		resp, err := ctx.Client.Get(fmt.Sprintf("/api/v1/projects/%v", createdProjectID))
+		resp, err := ctx.Client.Get("/api/v1/projects/" + createdProjectName)
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
@@ -103,7 +103,7 @@ func TestProjectsAPI(t *testing.T) {
 	})
 
 	t.Run("update project", func(t *testing.T) {
-		if createdProjectID == nil {
+		if createdProjectName == "" {
 			t.Skip("no project created")
 		}
 
@@ -111,7 +111,7 @@ func TestProjectsAPI(t *testing.T) {
 			"branch": "develop",
 		}
 
-		resp, err := ctx.Client.Put(fmt.Sprintf("/api/v1/projects/%v", createdProjectID), updates)
+		resp, err := ctx.Client.Put("/api/v1/projects/"+createdProjectName, updates)
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
@@ -120,7 +120,7 @@ func TestProjectsAPI(t *testing.T) {
 		ctx.Assertions.StatusOK(resp)
 
 		// Verify the update
-		getResp, _ := ctx.Client.Get(fmt.Sprintf("/api/v1/projects/%v", createdProjectID))
+		getResp, _ := ctx.Client.Get("/api/v1/projects/" + createdProjectName)
 		defer getResp.Body.Close()
 
 		var project map[string]interface{}
@@ -139,7 +139,7 @@ func TestProjectsAPI(t *testing.T) {
 	})
 
 	t.Run("create project with duplicate name", func(t *testing.T) {
-		if createdProjectID == nil {
+		if createdProjectName == "" {
 			t.Skip("no project created")
 		}
 
@@ -198,11 +198,11 @@ func TestProjectsAPI(t *testing.T) {
 	})
 
 	t.Run("delete project", func(t *testing.T) {
-		if createdProjectID == nil {
+		if createdProjectName == "" {
 			t.Skip("no project created")
 		}
 
-		resp, err := ctx.Client.Delete(fmt.Sprintf("/api/v1/projects/%v", createdProjectID))
+		resp, err := ctx.Client.Delete("/api/v1/projects/" + createdProjectName)
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
@@ -225,8 +225,9 @@ func TestProjectDeployments(t *testing.T) {
 	ctx.MustLogin(cfg.AdminUsername, cfg.AdminPassword)
 
 	// Create a test project first
+	projectName := "e2e-deploy-test-project"
 	project := map[string]interface{}{
-		"name":        "e2e-deploy-test-project",
+		"name":        projectName,
 		"repository":  "https://github.com/test/repo.git",
 		"branch":      "main",
 		"deploy_path": "/deploy/deploy-test",
@@ -239,16 +240,12 @@ func TestProjectDeployments(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	var projectResult map[string]interface{}
-	testutil.DecodeJSON(resp, &projectResult)
-	projectID := projectResult["id"]
-
 	t.Run("trigger deployment", func(t *testing.T) {
 		deployReq := map[string]interface{}{
 			"branch": "main",
 		}
 
-		resp, err := ctx.Client.Post(fmt.Sprintf("/api/v1/projects/%v/deploy", projectID), deployReq)
+		resp, err := ctx.Client.Post("/api/v1/projects/"+projectName+"/deploy", deployReq)
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
@@ -259,7 +256,7 @@ func TestProjectDeployments(t *testing.T) {
 	})
 
 	t.Run("get project deployments", func(t *testing.T) {
-		resp, err := ctx.Client.Get(fmt.Sprintf("/api/v1/projects/%v/deployments", projectID))
+		resp, err := ctx.Client.Get("/api/v1/projects/" + projectName + "/deployments")
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
@@ -269,7 +266,7 @@ func TestProjectDeployments(t *testing.T) {
 	})
 
 	t.Cleanup(func() {
-		ctx.Cleanup.DeleteProject(projectID)
+		ctx.Cleanup.DeleteProject(projectName)
 	})
 }
 
@@ -282,8 +279,9 @@ func TestProjectHealthCheck(t *testing.T) {
 	ctx.MustLogin(cfg.AdminUsername, cfg.AdminPassword)
 
 	// Create a test project first
+	projectName := "e2e-health-test-project"
 	project := map[string]interface{}{
-		"name":        "e2e-health-test-project",
+		"name":        projectName,
 		"repository":  "https://github.com/test/repo.git",
 		"branch":      "main",
 		"deploy_path": "/deploy/health-test",
@@ -294,10 +292,6 @@ func TestProjectHealthCheck(t *testing.T) {
 		t.Fatalf("failed to create project: %v", err)
 	}
 	defer resp.Body.Close()
-
-	var projectResult map[string]interface{}
-	testutil.DecodeJSON(resp, &projectResult)
-	projectID := projectResult["id"]
 
 	t.Run("configure health check", func(t *testing.T) {
 		healthConfig := map[string]interface{}{
@@ -312,7 +306,7 @@ func TestProjectHealthCheck(t *testing.T) {
 			"auto_rollback_releases": 1,
 		}
 
-		resp, err := ctx.Client.Put(fmt.Sprintf("/api/v1/projects/%v/health-check", projectID), healthConfig)
+		resp, err := ctx.Client.Put("/api/v1/projects/"+projectName+"/health-check", healthConfig)
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
@@ -322,7 +316,7 @@ func TestProjectHealthCheck(t *testing.T) {
 	})
 
 	t.Run("get health check config", func(t *testing.T) {
-		resp, err := ctx.Client.Get(fmt.Sprintf("/api/v1/projects/%v/health-check", projectID))
+		resp, err := ctx.Client.Get("/api/v1/projects/" + projectName + "/health-check")
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
@@ -332,6 +326,6 @@ func TestProjectHealthCheck(t *testing.T) {
 	})
 
 	t.Cleanup(func() {
-		ctx.Cleanup.DeleteProject(projectID)
+		ctx.Cleanup.DeleteProject(projectName)
 	})
 }

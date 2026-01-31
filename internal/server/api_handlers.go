@@ -1227,6 +1227,10 @@ func (s *MasterServer) handleDeploymentAPI(w http.ResponseWriter, r *http.Reques
 	case http.MethodGet:
 		deployment, err := s.deploymentService.GetByID(ctx, deploymentID)
 		if err != nil {
+			if errors.Is(err, storage.ErrNotFound) {
+				s.jsonError(w, http.StatusNotFound, "Deployment not found")
+				return
+			}
 			s.logger.Error("Failed to get deployment", zap.Error(err))
 			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
