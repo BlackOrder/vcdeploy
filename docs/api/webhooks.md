@@ -122,8 +122,8 @@ X-Gitlab-Token: your-secret-token
 In the Web UI or via API:
 
 ```bash
-# Set webhook secret for GitHub
-curl -X POST https://vcdeploy.example.com/api/v1/projects/myapp/webhooks \
+# Set webhook secret for GitHub (use project ID)
+curl -X POST https://vcdeploy.example.com/api/v1/projects/{id}/webhooks \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"provider": "github", "secret": "my-webhook-secret", "enabled": true}'
 ```
@@ -346,10 +346,10 @@ notifications:
 
 ```bash
 # List project webhooks
-GET /api/v1/projects/{project}/webhooks
+GET /api/v1/projects/{id}/webhooks
 
 # Configure webhook for provider
-POST /api/v1/projects/{project}/webhooks
+POST /api/v1/projects/{id}/webhooks
 {
   "provider": "github",
   "secret": "webhook-secret",
@@ -358,10 +358,10 @@ POST /api/v1/projects/{project}/webhooks
 }
 
 # Update webhook
-PUT /api/v1/projects/{project}/webhooks/{provider}
+PUT /api/v1/projects/{id}/webhooks/{provider}
 
 # Delete webhook
-DELETE /api/v1/projects/{project}/webhooks/{provider}
+DELETE /api/v1/projects/{id}/webhooks/{provider}
 ```
 
 ### Manual Trigger
@@ -369,7 +369,7 @@ DELETE /api/v1/projects/{project}/webhooks/{provider}
 Trigger deployment via API (not via Git webhook):
 
 ```bash
-POST /api/v1/projects/{project}/deploy
+POST /api/v1/projects/{id}/deploy
 {
   "target": "production",
   "branch": "main"

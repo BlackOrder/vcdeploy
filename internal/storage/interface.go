@@ -170,10 +170,13 @@ type SecretStore interface {
 // ProjectStore defines project-related operations.
 type ProjectStore interface {
 	CreateProject(project *Project) error
+	GetProjectByID(ctx context.Context, id int64) (*Project, error)
 	GetProjectByName(ctx context.Context, name string) (*Project, error)
 	ListProjects() ([]*Project, error)
+	UpdateProjectByID(ctx context.Context, p *Project) error
 	UpdateProjectByName(ctx context.Context, p *Project) error
 	UpdateProjectHealthCheck(ctx context.Context, projectID int64, healthCheckID *int64, autoRollback, rollbackOnHealthFail bool) error
+	DeleteProjectByID(ctx context.Context, id int64) error
 	DeleteProject(name string) error
 }
 

@@ -321,7 +321,7 @@ func (ca *CAManager) ValidateCertificate(cert *x509.Certificate) error
 
 Deployment initiated via:
 - CLI: `vcdeploy deploy trigger myapp`
-- API: `POST /api/v1/projects/{name}/deploy`
+- API: `POST /api/v1/projects/{id}/deploy`
 - Webhook: Push event from Git provider
 - Web UI: Deploy button
 

@@ -54,6 +54,15 @@ func (s *Service) Create(ctx context.Context, name, repository, branch, deployPa
 	return project, nil
 }
 
+// GetByID retrieves a project by ID.
+func (s *Service) GetByID(ctx context.Context, id int64) (*storage.Project, error) {
+	project, err := s.store.GetProjectByID(ctx, id)
+	if err != nil {
+		return nil, err // Returns ErrNotFound if not found
+	}
+	return project, nil
+}
+
 // GetByName retrieves a project by name.
 func (s *Service) GetByName(ctx context.Context, name string) (*storage.Project, error) {
 	project, err := s.store.GetProjectByName(ctx, name)
@@ -68,10 +77,26 @@ func (s *Service) List(ctx context.Context) ([]*storage.Project, error) {
 	return s.store.ListProjects()
 }
 
+// UpdateByID updates a project by ID.
+func (s *Service) UpdateByID(ctx context.Context, project *storage.Project) error {
+	if err := s.store.UpdateProjectByID(ctx, project); err != nil {
+		return fmt.Errorf("updating project: %w", err)
+	}
+	return nil
+}
+
 // Update updates a project.
 func (s *Service) Update(ctx context.Context, project *storage.Project) error {
 	if err := s.store.UpdateProjectByName(ctx, project); err != nil {
 		return fmt.Errorf("updating project: %w", err)
+	}
+	return nil
+}
+
+// DeleteByID removes a project by ID.
+func (s *Service) DeleteByID(ctx context.Context, id int64) error {
+	if err := s.store.DeleteProjectByID(ctx, id); err != nil {
+		return fmt.Errorf("deleting project: %w", err)
 	}
 	return nil
 }

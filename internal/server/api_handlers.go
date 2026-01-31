@@ -665,13 +665,19 @@ func (s *MasterServer) handleProjectsAPI(w http.ResponseWriter, r *http.Request)
 
 // handleProjectAPI handles individual project operations.
 func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) {
-	// Extract project name from path: /api/v1/projects/{name}
+	// Extract project ID from path: /api/v1/projects/{id}
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/projects/")
 	parts := strings.Split(path, "/")
-	projectName := parts[0]
+	projectIDStr := parts[0]
 
-	if projectName == "" {
-		s.jsonError(w, http.StatusBadRequest, "Project name required")
+	if projectIDStr == "" {
+		s.jsonError(w, http.StatusBadRequest, "Project ID required")
+		return
+	}
+
+	projectID, err := strconv.ParseInt(projectIDStr, 10, 64)
+	if err != nil {
+		s.jsonError(w, http.StatusBadRequest, "Invalid project ID: must be a number")
 		return
 	}
 
@@ -679,20 +685,13 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 	if len(parts) > 1 {
 		switch parts[1] {
 		case "webhooks":
-			s.handleProjectWebhooks(w, r, projectName)
+			s.handleProjectWebhooksByID(w, r, projectID)
 			return
 		case "deploy":
-			s.handleProjectDeploy(w, r, projectName)
+			s.handleProjectDeployByID(w, r, projectID)
 			return
 		case "health-config":
-			// Get project ID first
-			ctx := r.Context()
-			project, err := s.projectService.GetByName(ctx, projectName)
-			if err != nil {
-				s.jsonError(w, http.StatusNotFound, "Project not found")
-				return
-			}
-			s.handleProjectHealthConfig(w, r, project.ID)
+			s.handleProjectHealthConfig(w, r, projectID)
 			return
 		}
 	}
@@ -708,7 +707,7 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 
-		project, err := s.projectService.GetByName(ctx, projectName)
+		project, err := s.projectService.GetByID(ctx, projectID)
 		if err != nil {
 			s.jsonError(w, http.StatusNotFound, "Project not found")
 			return
@@ -723,6 +722,7 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 		}
 
 		var req struct {
+			Name       string `json:"name"`
 			Repository string `json:"repository"`
 			Branch     string `json:"branch"`
 			DeployPath string `json:"deploy_path"`
@@ -733,13 +733,16 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 
-		project, err := s.projectService.GetByName(ctx, projectName)
+		project, err := s.projectService.GetByID(ctx, projectID)
 		if err != nil {
 			s.jsonError(w, http.StatusNotFound, "Project not found")
 			return
 		}
 
 		// Update fields
+		if req.Name != "" {
+			project.Name = req.Name
+		}
 		if req.Repository != "" {
 			project.Repository = req.Repository
 		}
@@ -753,13 +756,13 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 			project.Type = req.Type
 		}
 
-		if err := s.projectService.Update(ctx, project); err != nil {
+		if err := s.projectService.UpdateByID(ctx, project); err != nil {
 			s.logger.Error("Failed to update project", zap.Error(err))
 			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
-		s.logAudit(r, "update", "project", fmt.Sprintf("Updated project: %s", projectName), "success")
+		s.logAudit(r, "update", "project", fmt.Sprintf("Updated project: %d", projectID), "success")
 		s.jsonResponse(w, project)
 
 	case http.MethodDelete:
@@ -770,7 +773,7 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 		}
 
 		// Fetch project before deletion to capture snapshot for audit
-		project, err := s.projectService.GetByName(ctx, projectName)
+		project, err := s.projectService.GetByID(ctx, projectID)
 		if err != nil {
 			if services.IsNotFound(err) {
 				s.jsonError(w, http.StatusNotFound, "Project not found")
@@ -781,14 +784,14 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 
-		if err := s.projectService.Delete(ctx, projectName); err != nil {
+		if err := s.projectService.DeleteByID(ctx, projectID); err != nil {
 			s.logger.Error("Failed to delete project", zap.Error(err))
 			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
 		// Log with snapshot of deleted resource
-		s.logAuditWithSnapshot(r, "delete", "project", fmt.Sprintf("%d", project.ID), project, fmt.Sprintf("Deleted project: %s", projectName), "success")
+		s.logAuditWithSnapshot(r, "delete", "project", fmt.Sprintf("%d", project.ID), project, fmt.Sprintf("Deleted project: %s (ID: %d)", project.Name, projectID), "success")
 		s.jsonResponse(w, map[string]string{"status": "deleted"})
 
 	default:
@@ -807,6 +810,25 @@ func (s *MasterServer) handleProjectWebhooks(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	s.handleProjectWebhooksInternal(w, r, ctx, project)
+}
+
+// handleProjectWebhooksByID handles webhook configuration for a project by ID.
+func (s *MasterServer) handleProjectWebhooksByID(w http.ResponseWriter, r *http.Request, projectID int64) {
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
+	defer cancel()
+
+	project, err := s.projectService.GetByID(ctx, projectID)
+	if err != nil {
+		s.jsonError(w, http.StatusNotFound, "Project not found")
+		return
+	}
+
+	s.handleProjectWebhooksInternal(w, r, ctx, project)
+}
+
+// handleProjectWebhooksInternal is the shared implementation for webhook handling.
+func (s *MasterServer) handleProjectWebhooksInternal(w http.ResponseWriter, r *http.Request, ctx context.Context, project *storage.Project) {
 	switch r.Method {
 	case http.MethodGet:
 		// Read access: viewer role + read scope
@@ -863,7 +885,7 @@ func (s *MasterServer) handleProjectWebhooks(w http.ResponseWriter, r *http.Requ
 			return
 		}
 
-		s.logAudit(r, "create", "webhook", fmt.Sprintf("Configured %s webhook for project: %s", req.Provider, projectName), "success")
+		s.logAudit(r, "create", "webhook", fmt.Sprintf("Configured %s webhook for project: %s", req.Provider, project.Name), "success")
 		w.WriteHeader(http.StatusCreated)
 		s.jsonResponse(w, map[string]string{"status": "created"})
 
@@ -888,6 +910,30 @@ func (s *MasterServer) handleProjectDeploy(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	s.handleProjectDeployInternal(w, r, ctx, project)
+}
+
+// handleProjectDeployByID triggers a deployment for a project by ID.
+func (s *MasterServer) handleProjectDeployByID(w http.ResponseWriter, r *http.Request, projectID int64) {
+	if r.Method != http.MethodPost {
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
+	defer cancel()
+
+	project, err := s.projectService.GetByID(ctx, projectID)
+	if err != nil {
+		s.jsonError(w, http.StatusNotFound, "Project not found")
+		return
+	}
+
+	s.handleProjectDeployInternal(w, r, ctx, project)
+}
+
+// handleProjectDeployInternal is the shared implementation for deployment triggering.
+func (s *MasterServer) handleProjectDeployInternal(w http.ResponseWriter, r *http.Request, ctx context.Context, project *storage.Project) {
 	var req struct {
 		Branch      string `json:"branch"`
 		Target      string `json:"target"`
@@ -930,7 +976,7 @@ func (s *MasterServer) handleProjectDeploy(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		s.logAudit(r, "schedule", "deployment", fmt.Sprintf("Scheduled deployment for %s at %s", projectName, scheduledTime), "success")
+		s.logAudit(r, "schedule", "deployment", fmt.Sprintf("Scheduled deployment for %s at %s", project.Name, scheduledTime), "success")
 		w.WriteHeader(http.StatusAccepted)
 		s.jsonResponse(w, map[string]interface{}{
 			"id":           deploymentID,
@@ -957,7 +1003,7 @@ func (s *MasterServer) handleProjectDeploy(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	s.logAudit(r, "trigger", "deployment", fmt.Sprintf("Triggered deployment for %s", projectName), "success")
+	s.logAudit(r, "trigger", "deployment", fmt.Sprintf("Triggered deployment for %s", project.Name), "success")
 	w.WriteHeader(http.StatusAccepted)
 	s.jsonResponse(w, deployment)
 }

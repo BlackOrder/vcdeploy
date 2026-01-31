@@ -781,6 +781,51 @@ func (db *DB) DeleteProject(name string) error {
 	return nil
 }
 
+// GetProjectByID retrieves a project by ID with context.
+func (db *DB) GetProjectByID(ctx context.Context, id int64) (*Project, error) {
+	var p Project
+	var lastDeploy sql.NullTime
+	var lastDeployStatus sql.NullString
+
+	err := db.conn.QueryRowContext(ctx, `
+		SELECT id, name, repository, branch, deploy_path, type, created_at, last_deploy_at, last_deploy_status
+		FROM projects WHERE id = ?
+	`, id).Scan(&p.ID, &p.Name, &p.Repository, &p.Branch, &p.DeployPath, &p.Type, &p.CreatedAt, &lastDeploy, &lastDeployStatus)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query project: %w", err)
+	}
+
+	if lastDeploy.Valid {
+		p.LastDeployAt = &lastDeploy.Time
+	}
+	p.LastDeployStatus = lastDeployStatus.String
+	return &p, nil
+}
+
+// UpdateProjectByID updates a project by ID.
+func (db *DB) UpdateProjectByID(ctx context.Context, p *Project) error {
+	_, err := db.conn.ExecContext(ctx, `
+		UPDATE projects SET name = ?, repository = ?, branch = ?, deploy_path = ?, type = ?
+		WHERE id = ?
+	`, p.Name, p.Repository, p.Branch, p.DeployPath, p.Type, p.ID)
+	if err != nil {
+		return fmt.Errorf("updating project: %w", err)
+	}
+	return nil
+}
+
+// DeleteProjectByID deletes a project by ID.
+func (db *DB) DeleteProjectByID(ctx context.Context, id int64) error {
+	_, err := db.conn.ExecContext(ctx, `DELETE FROM projects WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("deleting project: %w", err)
+	}
+	return nil
+}
+
 // --- Project Type operations ---
 
 // CreateProjectType creates a new project type.

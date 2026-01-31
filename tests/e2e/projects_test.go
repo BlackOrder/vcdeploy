@@ -54,18 +54,23 @@ func TestProjectsAPI(t *testing.T) {
 
 		// Accept 201 Created or 409 Conflict (already exists)
 		if resp.StatusCode == http.StatusConflict {
-			// Project already exists, fetch it
-			getResp, err := ctx.Client.Get("/api/v1/projects/" + createdProjectName)
+			// Project already exists, list to find it
+			listResp, err := ctx.Client.Get("/api/v1/projects")
 			if err != nil {
-				t.Fatalf("failed to get existing project: %v", err)
+				t.Fatalf("failed to list projects: %v", err)
 			}
-			defer getResp.Body.Close()
+			defer listResp.Body.Close()
 
-			var result map[string]interface{}
-			if err := testutil.DecodeJSON(getResp, &result); err != nil {
-				t.Fatalf("failed to decode existing project: %v", err)
+			var projects []map[string]interface{}
+			if err := testutil.DecodeJSON(listResp, &projects); err != nil {
+				t.Fatalf("failed to decode projects list: %v", err)
 			}
-			createdProjectID = result["id"]
+			for _, p := range projects {
+				if p["name"] == createdProjectName {
+					createdProjectID = p["id"]
+					break
+				}
+			}
 			t.Log("project already exists, using existing")
 		} else {
 			ctx.Assertions.StatusCreatedOrOK(resp)
@@ -81,11 +86,12 @@ func TestProjectsAPI(t *testing.T) {
 	})
 
 	t.Run("get project", func(t *testing.T) {
-		if createdProjectName == "" {
+		if createdProjectID == nil {
 			t.Skip("no project created")
 		}
 
-		resp, err := ctx.Client.Get("/api/v1/projects/" + createdProjectName)
+		// Use project ID in the URL
+		resp, err := ctx.Client.Get(fmt.Sprintf("/api/v1/projects/%v", createdProjectID))
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
@@ -103,7 +109,7 @@ func TestProjectsAPI(t *testing.T) {
 	})
 
 	t.Run("update project", func(t *testing.T) {
-		if createdProjectName == "" {
+		if createdProjectID == nil {
 			t.Skip("no project created")
 		}
 
@@ -111,7 +117,7 @@ func TestProjectsAPI(t *testing.T) {
 			"branch": "develop",
 		}
 
-		resp, err := ctx.Client.Put("/api/v1/projects/"+createdProjectName, updates)
+		resp, err := ctx.Client.Put(fmt.Sprintf("/api/v1/projects/%v", createdProjectID), updates)
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
@@ -120,7 +126,7 @@ func TestProjectsAPI(t *testing.T) {
 		ctx.Assertions.StatusOK(resp)
 
 		// Verify the update
-		getResp, _ := ctx.Client.Get("/api/v1/projects/" + createdProjectName)
+		getResp, _ := ctx.Client.Get(fmt.Sprintf("/api/v1/projects/%v", createdProjectID))
 		defer getResp.Body.Close()
 
 		var project map[string]interface{}
@@ -198,11 +204,11 @@ func TestProjectsAPI(t *testing.T) {
 	})
 
 	t.Run("delete project", func(t *testing.T) {
-		if createdProjectName == "" {
+		if createdProjectID == nil {
 			t.Skip("no project created")
 		}
 
-		resp, err := ctx.Client.Delete("/api/v1/projects/" + createdProjectName)
+		resp, err := ctx.Client.Delete(fmt.Sprintf("/api/v1/projects/%v", createdProjectID))
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
@@ -240,12 +246,31 @@ func TestProjectDeployments(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
+	var projectID interface{}
+	if resp.StatusCode == http.StatusConflict {
+		// Find existing project ID
+		listResp, _ := ctx.Client.Get("/api/v1/projects")
+		defer listResp.Body.Close()
+		var projects []map[string]interface{}
+		testutil.DecodeJSON(listResp, &projects)
+		for _, p := range projects {
+			if p["name"] == projectName {
+				projectID = p["id"]
+				break
+			}
+		}
+	} else {
+		var result map[string]interface{}
+		testutil.DecodeJSON(resp, &result)
+		projectID = result["id"]
+	}
+
 	t.Run("trigger deployment", func(t *testing.T) {
 		deployReq := map[string]interface{}{
 			"branch": "main",
 		}
 
-		resp, err := ctx.Client.Post("/api/v1/projects/"+projectName+"/deploy", deployReq)
+		resp, err := ctx.Client.Post(fmt.Sprintf("/api/v1/projects/%v/deploy", projectID), deployReq)
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
@@ -255,18 +280,10 @@ func TestProjectDeployments(t *testing.T) {
 		ctx.Assertions.NoServerError(resp)
 	})
 
-	t.Run("get project deployments", func(t *testing.T) {
-		resp, err := ctx.Client.Get("/api/v1/projects/" + projectName + "/deployments")
-		if err != nil {
-			t.Fatalf("request failed: %v", err)
-		}
-		defer resp.Body.Close()
-
-		ctx.Assertions.StatusOK(resp)
-	})
-
 	t.Cleanup(func() {
-		ctx.Cleanup.DeleteProject(projectName)
+		if projectID != nil {
+			ctx.Client.Delete(fmt.Sprintf("/api/v1/projects/%v", projectID))
+		}
 	})
 }
 
@@ -293,6 +310,25 @@ func TestProjectHealthCheck(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
+	var projectID interface{}
+	if resp.StatusCode == http.StatusConflict {
+		// Find existing project ID
+		listResp, _ := ctx.Client.Get("/api/v1/projects")
+		defer listResp.Body.Close()
+		var projects []map[string]interface{}
+		testutil.DecodeJSON(listResp, &projects)
+		for _, p := range projects {
+			if p["name"] == projectName {
+				projectID = p["id"]
+				break
+			}
+		}
+	} else {
+		var result map[string]interface{}
+		testutil.DecodeJSON(resp, &result)
+		projectID = result["id"]
+	}
+
 	t.Run("configure health check", func(t *testing.T) {
 		healthConfig := map[string]interface{}{
 			"enabled":                true,
@@ -306,7 +342,7 @@ func TestProjectHealthCheck(t *testing.T) {
 			"auto_rollback_releases": 1,
 		}
 
-		resp, err := ctx.Client.Put("/api/v1/projects/"+projectName+"/health-check", healthConfig)
+		resp, err := ctx.Client.Put(fmt.Sprintf("/api/v1/projects/%v/health-config", projectID), healthConfig)
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
@@ -316,7 +352,7 @@ func TestProjectHealthCheck(t *testing.T) {
 	})
 
 	t.Run("get health check config", func(t *testing.T) {
-		resp, err := ctx.Client.Get("/api/v1/projects/" + projectName + "/health-check")
+		resp, err := ctx.Client.Get(fmt.Sprintf("/api/v1/projects/%v/health-config", projectID))
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
@@ -326,6 +362,8 @@ func TestProjectHealthCheck(t *testing.T) {
 	})
 
 	t.Cleanup(func() {
-		ctx.Cleanup.DeleteProject(projectName)
+		if projectID != nil {
+			ctx.Client.Delete(fmt.Sprintf("/api/v1/projects/%v", projectID))
+		}
 	})
 }

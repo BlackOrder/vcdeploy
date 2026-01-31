@@ -33,6 +33,21 @@ func (s *MemoryStore) CreateProject(project *Project) error {
 	return nil
 }
 
+// GetProjectByID retrieves a project by ID from memory.
+func (s *MemoryStore) GetProjectByID(ctx context.Context, id int64) (*Project, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	project, ok := s.projects[id]
+	if !ok {
+		return nil, ErrNotFound
+	}
+
+	// Return a copy
+	copied := *project
+	return &copied, nil
+}
+
 // GetProjectByName retrieves a project by name from memory.
 func (s *MemoryStore) GetProjectByName(ctx context.Context, name string) (*Project, error) {
 	s.mu.RLock()
@@ -60,6 +75,36 @@ func (s *MemoryStore) ListProjects() ([]*Project, error) {
 	}
 
 	return projects, nil
+}
+
+// UpdateProjectByID updates a project by ID in memory and queues persistence.
+func (s *MemoryStore) UpdateProjectByID(ctx context.Context, p *Project) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	existing, ok := s.projects[p.ID]
+	if !ok {
+		return ErrNotFound
+	}
+
+	// Preserve immutable fields
+	p.CreatedAt = existing.CreatedAt
+	p.UpdatedAt = time.Now()
+
+	// Handle name change - update projectsByName map
+	if existing.Name != p.Name {
+		delete(s.projectsByName, existing.Name)
+	}
+
+	// Store a copy
+	stored := *p
+	s.projects[p.ID] = &stored
+	s.projectsByName[p.Name] = &stored
+
+	// Queue persistence
+	s.queueWrite(s.projectsWrites, NewWriteOp(WriteOpUpdate, "projects", &stored))
+
+	return nil
 }
 
 // UpdateProjectByName updates a project in memory and queues persistence.
@@ -109,6 +154,32 @@ func (s *MemoryStore) UpdateProjectHealthCheck(ctx context.Context, projectID in
 		"auto_rollback_enabled":   autoRollback,
 		"rollback_on_health_fail": rollbackOnHealthFail,
 	}))
+
+	return nil
+}
+
+// DeleteProjectByID removes a project by ID from memory and queues persistence.
+func (s *MemoryStore) DeleteProjectByID(ctx context.Context, id int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	project, ok := s.projects[id]
+	if !ok {
+		return nil // Not an error to delete non-existent
+	}
+
+	delete(s.projects, id)
+	delete(s.projectsByName, project.Name)
+
+	// Cascade delete webhooks for this project
+	for webhookID, webhook := range s.webhooks {
+		if webhook.ProjectID == id {
+			delete(s.webhooks, webhookID)
+		}
+	}
+
+	// Queue persistence
+	s.queueWrite(s.projectsWrites, NewWriteOp(WriteOpDelete, "projects", id))
 
 	return nil
 }
