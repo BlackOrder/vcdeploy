@@ -130,8 +130,8 @@ func TestHandleUsers_Create(t *testing.T) {
 	req = requestWithUserContext(req, userID)
 	server.handleUsers(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	if w.Code != http.StatusCreated {
+		t.Errorf("expected status %d, got %d: %s", http.StatusCreated, w.Code, w.Body.String())
 	}
 
 	// Verify user was created
