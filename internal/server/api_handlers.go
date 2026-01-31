@@ -309,6 +309,70 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 		s.logAuditWithSnapshot(r, "delete", "user", fmt.Sprintf("%d", user.ID), userSnapshot, fmt.Sprintf("Deleted user: %s", user.Username), "success")
 		s.jsonResponse(w, map[string]string{"status": "deleted"})
 
+	case http.MethodPatch:
+		// Admin-only: partial updates (e.g., password change)
+		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
+			http.Error(w, msg, status)
+			return
+		}
+
+		var req struct {
+			Email    string `json:"email,omitempty"`
+			Role     string `json:"role,omitempty"`
+			Password string `json:"password,omitempty"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
+			s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
+			return
+		}
+
+		user, err := s.userService.GetByID(ctx, userID)
+		if err != nil {
+			if services.IsNotFound(err) {
+				s.jsonError(w, http.StatusNotFound, "User not found")
+				return
+			}
+			s.logger.Error("Failed to get user", zap.Error(err))
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+			return
+		}
+
+		// Update only provided fields
+		updated := false
+		if req.Email != "" {
+			user.Email = req.Email
+			updated = true
+		}
+		if req.Role != "" {
+			user.Role = req.Role
+			updated = true
+		}
+
+		// Handle password update via service
+		if req.Password != "" {
+			if err := s.userService.UpdatePassword(ctx, userID, req.Password); err != nil {
+				s.logger.Error("Failed to update password", zap.Error(err))
+				if strings.Contains(err.Error(), "password validation failed") {
+					s.jsonError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+				return
+			}
+			updated = true
+		}
+
+		if updated && (req.Email != "" || req.Role != "") {
+			if err := s.userService.Update(ctx, user); err != nil {
+				s.logger.Error("Failed to update user", zap.Error(err))
+				s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+				return
+			}
+		}
+
+		s.logAudit(r, "update", "user", fmt.Sprintf("Updated user: %s", user.Username), "success")
+		s.jsonResponse(w, map[string]string{"status": "updated"})
+
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
