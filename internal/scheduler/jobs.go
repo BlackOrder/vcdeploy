@@ -71,15 +71,15 @@ func (j *KeyRotationJob) Run(ctx context.Context) error {
 
 // DatabaseBackupJob backs up the database on a schedule.
 type DatabaseBackupJob struct {
-	db     *storage.DB
+	store  storage.Store
 	config *config.DatabaseBackupConfig
 	logger *zap.Logger
 }
 
 // NewDatabaseBackupJob creates a new database backup job.
-func NewDatabaseBackupJob(db *storage.DB, cfg *config.DatabaseBackupConfig, logger *zap.Logger) *DatabaseBackupJob {
+func NewDatabaseBackupJob(store storage.Store, cfg *config.DatabaseBackupConfig, logger *zap.Logger) *DatabaseBackupJob {
 	return &DatabaseBackupJob{
-		db:     db,
+		store:  store,
 		config: cfg,
 		logger: logger,
 	}
@@ -97,8 +97,8 @@ func (j *DatabaseBackupJob) Enabled() bool {
 
 // Run executes the database backup.
 func (j *DatabaseBackupJob) Run(ctx context.Context) error {
-	if j.db == nil {
-		return fmt.Errorf("database not initialized")
+	if j.store == nil {
+		return fmt.Errorf("store not initialized")
 	}
 
 	backupDir := j.config.Path
@@ -117,7 +117,7 @@ func (j *DatabaseBackupJob) Run(ctx context.Context) error {
 
 	j.logger.Info("Starting database backup", zap.String("path", backupPath))
 
-	if err := j.db.Backup(backupPath); err != nil {
+	if err := j.store.Backup(backupPath); err != nil {
 		return fmt.Errorf("backing up database: %w", err)
 	}
 
@@ -169,15 +169,15 @@ func (j *DatabaseBackupJob) cleanOldBackups(dir string) error {
 
 // AuditExportJob exports audit logs on a schedule.
 type AuditExportJob struct {
-	db     *storage.DB
+	store  storage.Store
 	config *config.AuditExportConfig
 	logger *zap.Logger
 }
 
 // NewAuditExportJob creates a new audit export job.
-func NewAuditExportJob(db *storage.DB, cfg *config.AuditExportConfig, logger *zap.Logger) *AuditExportJob {
+func NewAuditExportJob(store storage.Store, cfg *config.AuditExportConfig, logger *zap.Logger) *AuditExportJob {
 	return &AuditExportJob{
-		db:     db,
+		store:  store,
 		config: cfg,
 		logger: logger,
 	}
@@ -195,8 +195,8 @@ func (j *AuditExportJob) Enabled() bool {
 
 // Run executes the audit log export.
 func (j *AuditExportJob) Run(ctx context.Context) error {
-	if j.db == nil {
-		return fmt.Errorf("database not initialized")
+	if j.store == nil {
+		return fmt.Errorf("store not initialized")
 	}
 
 	dest := j.config.Destination
@@ -217,7 +217,7 @@ func (j *AuditExportJob) Run(ctx context.Context) error {
 
 	// Export audit logs from the last 24 hours
 	since := time.Now().Add(-24 * time.Hour)
-	entries, err := j.db.ListAuditLogsSince(ctx, since)
+	entries, err := j.store.ListAuditLogsSince(ctx, since)
 	if err != nil {
 		return fmt.Errorf("listing audit logs: %w", err)
 	}

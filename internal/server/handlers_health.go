@@ -59,7 +59,7 @@ func (s *MasterServer) handleHealthzReady(w http.ResponseWriter, r *http.Request
 	defer cancel()
 
 	// Check database connectivity
-	if err := s.db.Conn().PingContext(ctx); err != nil {
+	if err := s.store.Conn().PingContext(ctx); err != nil {
 		s.logger.Warn("Readiness check failed: database not ready", zap.Error(err))
 		http.Error(w, "database not ready", http.StatusServiceUnavailable)
 		return
@@ -79,7 +79,7 @@ func (s *MasterServer) buildDetailedHealth(ctx context.Context) HealthStatus {
 
 	// Database check
 	dbStart := time.Now()
-	if err := s.db.Conn().PingContext(ctx); err != nil {
+	if err := s.store.Conn().PingContext(ctx); err != nil {
 		health.Status = "unhealthy"
 		health.Checks["database"] = CheckResult{
 			Status:  "unhealthy",

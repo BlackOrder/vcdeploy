@@ -123,7 +123,7 @@ func newTestServerWithAuth(t *testing.T) (*MasterServer, string, string, int64) 
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}
-	if err := server.db.CreateUser(ctx, user); err != nil {
+	if err := server.store.CreateUser(ctx, user); err != nil {
 		t.Fatalf("failed to create test user: %v", err)
 	}
 
@@ -138,7 +138,7 @@ func newTestServerWithAuth(t *testing.T) (*MasterServer, string, string, int64) 
 		Scopes:    `["admin"]`,
 		CreatedAt: time.Now(),
 	}
-	if err := server.db.CreateAPIKey(ctx, apiKey); err != nil {
+	if err := server.store.CreateAPIKey(ctx, apiKey); err != nil {
 		t.Fatalf("failed to create test API key: %v", err)
 	}
 
@@ -152,7 +152,7 @@ func newTestServerWithAuth(t *testing.T) (*MasterServer, string, string, int64) 
 		CreatedAt: time.Now(),
 		ExpiresAt: time.Now().Add(24 * time.Hour),
 	}
-	if err := server.db.CreateSession(ctx, session); err != nil {
+	if err := server.store.CreateSession(ctx, session); err != nil {
 		t.Fatalf("failed to create test session: %v", err)
 	}
 
@@ -173,7 +173,7 @@ func createTestAdminUser(t *testing.T, server *MasterServer) int64 {
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}
-	if err := server.db.CreateUser(ctx, user); err != nil {
+	if err := server.store.CreateUser(ctx, user); err != nil {
 		t.Fatalf("failed to create test admin user: %v", err)
 	}
 	return user.ID
@@ -216,7 +216,7 @@ func TestNewMasterServer(t *testing.T) {
 	if server.config != cfg {
 		t.Error("config not set")
 	}
-	if server.db != db {
+	if server.store != db {
 		t.Error("db not set")
 	}
 	if server.agents == nil {
@@ -795,7 +795,7 @@ func TestHandleSecretsDelete(t *testing.T) {
 	ctx := context.Background()
 
 	// First create a secret via SetSecretEncrypted
-	if err := server.db.SetSecretEncrypted(ctx, "test-project", "env", "DELETE_ME", []byte("encrypted-value")); err != nil {
+	if err := server.store.SetSecretEncrypted(ctx, "test-project", "env", "DELETE_ME", []byte("encrypted-value")); err != nil {
 		t.Fatalf("failed to create secret: %v", err)
 	}
 
@@ -886,7 +886,7 @@ func TestHandleProjectType(t *testing.T) {
 		BuildCmd:    "pip install -r requirements.txt",
 		CreatedAt:   time.Now(),
 	}
-	if err := server.db.CreateProjectType(pt); err != nil {
+	if err := server.store.CreateProjectType(pt); err != nil {
 		t.Fatalf("failed to create project type: %v", err)
 	}
 
@@ -923,7 +923,7 @@ func TestHandleProjectTypeDelete(t *testing.T) {
 		Description: "To be deleted",
 		CreatedAt:   time.Now(),
 	}
-	if err := server.db.CreateProjectType(pt); err != nil {
+	if err := server.store.CreateProjectType(pt); err != nil {
 		t.Fatalf("failed to create project type: %v", err)
 	}
 
@@ -939,7 +939,7 @@ func TestHandleProjectTypeDelete(t *testing.T) {
 	}
 
 	// Verify it was deleted
-	_, err := server.db.GetProjectTypeByName("delete-me")
+	_, err := server.store.GetProjectTypeByName("delete-me")
 	if err == nil {
 		t.Error("project type should have been deleted")
 	}
@@ -958,7 +958,7 @@ func TestHandleProjectTypePut(t *testing.T) {
 		BuildCmd:    "npm build",
 		CreatedAt:   time.Now(),
 	}
-	if err := server.db.CreateProjectType(pt); err != nil {
+	if err := server.store.CreateProjectType(pt); err != nil {
 		t.Fatalf("failed to create project type: %v", err)
 	}
 
@@ -976,7 +976,7 @@ func TestHandleProjectTypePut(t *testing.T) {
 	}
 
 	// Verify the update
-	updated, err := server.db.GetProjectTypeByName("update-me")
+	updated, err := server.store.GetProjectTypeByName("update-me")
 	if err != nil {
 		t.Fatalf("failed to get updated project type: %v", err)
 	}
@@ -1034,7 +1034,7 @@ func TestHandleProjectType_MethodNotAllowed(t *testing.T) {
 		Description: "Test",
 		CreatedAt:   time.Now(),
 	}
-	if err := server.db.CreateProjectType(pt); err != nil {
+	if err := server.store.CreateProjectType(pt); err != nil {
 		t.Fatalf("failed to create project type: %v", err)
 	}
 
@@ -1061,7 +1061,7 @@ func TestHandleProjectType_InvalidJSON(t *testing.T) {
 		Description: "Test",
 		CreatedAt:   time.Now(),
 	}
-	if err := server.db.CreateProjectType(pt); err != nil {
+	if err := server.store.CreateProjectType(pt); err != nil {
 		t.Fatalf("failed to create project type: %v", err)
 	}
 
@@ -1086,7 +1086,7 @@ func TestHandleDeploymentLogs(t *testing.T) {
 
 	// Create a test project
 	project := &storage.Project{Name: "test-project", Repository: "https://github.com/test/test"}
-	_ = server.db.CreateProject(project)
+	_ = server.store.CreateProject(project)
 
 	// Create a test deployment
 	deployment := &storage.DeploymentRecord{
@@ -1097,7 +1097,7 @@ func TestHandleDeploymentLogs(t *testing.T) {
 		CommitHash:  "abc123",
 		TriggeredBy: "test",
 	}
-	_ = server.db.CreateDeployment(ctx, deployment)
+	_ = server.store.CreateDeployment(ctx, deployment)
 
 	// Test streaming logs with a context that cancels quickly
 	// This simulates a client disconnecting
@@ -1125,8 +1125,8 @@ func TestSecretsFilterByProject(t *testing.T) {
 	ctx := context.Background()
 
 	// Create secrets for different projects
-	_ = server.db.SetSecretEncrypted(ctx, "project-a", "env", "KEY1", []byte("value1"))
-	_ = server.db.SetSecretEncrypted(ctx, "project-b", "env", "KEY2", []byte("value2"))
+	_ = server.store.SetSecretEncrypted(ctx, "project-a", "env", "KEY1", []byte("value1"))
+	_ = server.store.SetSecretEncrypted(ctx, "project-b", "env", "KEY2", []byte("value2"))
 
 	// Filter by project-a
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/secrets?project=project-a", nil)
@@ -1430,7 +1430,7 @@ func TestWithAuth_ExpiredAPIKey(t *testing.T) {
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}
-	_ = server.db.CreateUser(ctx, user)
+	_ = server.store.CreateUser(ctx, user)
 
 	// Create an expired API key
 	expiredKey := "expired-api-key-12345"
@@ -1444,7 +1444,7 @@ func TestWithAuth_ExpiredAPIKey(t *testing.T) {
 		CreatedAt: time.Now(),
 		ExpiresAt: &pastTime, // Expired
 	}
-	_ = server.db.CreateAPIKey(ctx, apiKey)
+	_ = server.store.CreateAPIKey(ctx, apiKey)
 
 	called := false
 	handler := server.withAuth(func(w http.ResponseWriter, r *http.Request) {
@@ -1480,7 +1480,7 @@ func TestWithUIAuth_ExpiredSession(t *testing.T) {
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}
-	_ = server.db.CreateUser(ctx, user)
+	_ = server.store.CreateUser(ctx, user)
 
 	// Create an expired session
 	expiredSession := &storage.Session{
@@ -1491,7 +1491,7 @@ func TestWithUIAuth_ExpiredSession(t *testing.T) {
 		CreatedAt: time.Now().Add(-48 * time.Hour),
 		ExpiresAt: time.Now().Add(-24 * time.Hour), // Expired
 	}
-	_ = server.db.CreateSession(ctx, expiredSession)
+	_ = server.store.CreateSession(ctx, expiredSession)
 
 	called := false
 	handler := server.withUIAuth(func(w http.ResponseWriter, r *http.Request) {
@@ -2421,7 +2421,7 @@ func BenchmarkWithAuth(b *testing.B) {
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}
-	_ = server.db.CreateUser(ctx, user)
+	_ = server.store.CreateUser(ctx, user)
 
 	rawAPIKey := "bench-api-key-12345"
 	hash := sha256.Sum256([]byte(rawAPIKey))
@@ -2432,7 +2432,7 @@ func BenchmarkWithAuth(b *testing.B) {
 		Scopes:    `["*"]`,
 		CreatedAt: time.Now(),
 	}
-	_ = server.db.CreateAPIKey(ctx, apiKey)
+	_ = server.store.CreateAPIKey(ctx, apiKey)
 
 	// Initialize API key service for lookup
 	server.apiKeyService = apikeys.New(db)
@@ -3420,7 +3420,7 @@ func TestAuthFlow_WithAuth_ExpiredSession(t *testing.T) {
 		CreatedAt: time.Now().Add(-48 * time.Hour),
 		ExpiresAt: time.Now().Add(-1 * time.Hour), // Expired 1 hour ago
 	}
-	if err := server.db.CreateSession(ctx, expiredSession); err != nil {
+	if err := server.store.CreateSession(ctx, expiredSession); err != nil {
 		t.Fatalf("failed to create expired session: %v", err)
 	}
 
@@ -3461,7 +3461,7 @@ func TestAuthFlow_WithUIAuth_ExpiredSession(t *testing.T) {
 		CreatedAt: time.Now().Add(-48 * time.Hour),
 		ExpiresAt: time.Now().Add(-1 * time.Hour), // Expired 1 hour ago
 	}
-	if err := server.db.CreateSession(ctx, expiredSession); err != nil {
+	if err := server.store.CreateSession(ctx, expiredSession); err != nil {
 		t.Fatalf("failed to create expired session: %v", err)
 	}
 

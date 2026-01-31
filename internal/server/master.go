@@ -133,7 +133,7 @@ func createNotifyManager(cfg config.NotificationsConfig, logger *zap.Logger) *no
 // MasterServer is the main daemon server.
 type MasterServer struct {
 	config     *config.MasterConfig
-	db         *storage.DB
+	store      storage.Store
 	logger     *zap.Logger
 	httpServer *http.Server
 	grpcServer *grpc.Server
@@ -209,9 +209,9 @@ type webhookHandlerAdapter struct {
 	handler *webhookshandler.Handler
 }
 
-// webhookSecretStoreAdapter implements webhooks.SecretStore using the DB.
+// webhookSecretStoreAdapter implements webhooks.SecretStore using the Store.
 type webhookSecretStoreAdapter struct {
-	db     *storage.DB
+	store  storage.Store
 	kms    *security.KMS
 	logger *zap.Logger
 }
@@ -221,7 +221,7 @@ func (a *webhookSecretStoreAdapter) GetWebhookSecret(projectID string) (string, 
 	defer cancel()
 
 	// Look up project by name (projectID in URL is the project name/slug)
-	project, err := a.db.GetProjectByName(ctx, projectID)
+	project, err := a.store.GetProjectByName(ctx, projectID)
 	if errors.Is(err, storage.ErrNotFound) {
 		return "", fmt.Errorf("project not found: %s", projectID)
 	}
@@ -232,7 +232,7 @@ func (a *webhookSecretStoreAdapter) GetWebhookSecret(projectID string) (string, 
 	// Try each provider (github, gitlab, bitbucket)
 	providers := []string{"github", "gitlab", "bitbucket"}
 	for _, provider := range providers {
-		webhook, err := a.db.GetProjectWebhook(ctx, project.ID, provider)
+		webhook, err := a.store.GetProjectWebhook(ctx, project.ID, provider)
 		if errors.Is(err, storage.ErrNotFound) {
 			continue
 		}
@@ -264,7 +264,7 @@ func (a *webhookSecretStoreAdapter) IsSecretRequired(projectID string) bool {
 	defer cancel()
 
 	// Look up project by name
-	project, err := a.db.GetProjectByName(ctx, projectID)
+	project, err := a.store.GetProjectByName(ctx, projectID)
 	if err != nil {
 		return false // If we can't find the project, don't require secret
 	}
@@ -272,7 +272,7 @@ func (a *webhookSecretStoreAdapter) IsSecretRequired(projectID string) bool {
 	// Check each provider for require_secret setting
 	providers := []string{"github", "gitlab", "bitbucket"}
 	for _, provider := range providers {
-		webhook, err := a.db.GetProjectWebhook(ctx, project.ID, provider)
+		webhook, err := a.store.GetProjectWebhook(ctx, project.ID, provider)
 		if err != nil {
 			continue
 		}
@@ -285,47 +285,52 @@ func (a *webhookSecretStoreAdapter) IsSecretRequired(projectID string) bool {
 }
 
 // NewMasterServer creates a new master server instance.
-func NewMasterServer(cfg *config.MasterConfig, db *storage.DB, logger *zap.Logger) (*MasterServer, error) {
+func NewMasterServer(cfg *config.MasterConfig, store storage.Store, logger *zap.Logger) (*MasterServer, error) {
 	sysCfg := config.MustGetSystemConfig()
 	s := &MasterServer{
 		config:       cfg,
-		db:           db,
+		store:        store,
 		logger:       logger,
 		agents:       make(map[string]*AgentConnection),
 		shutdown:     make(chan struct{}),
 		templatesDir: sysCfg.TemplatesDir(),
 	}
 
-	// Initialize KMS for encryption services
-	kms, kmsErr := security.NewKMS(db.Conn(), logger)
-	if kmsErr != nil {
-		logger.Warn("Failed to create KMS, some features will be unavailable", zap.Error(kmsErr))
-	} else {
-		// Initialize KMS with a key if none exists
-		if initErr := kms.Initialize(context.Background()); initErr != nil {
-			logger.Warn("Failed to initialize KMS", zap.Error(initErr))
+	// Initialize KMS for encryption services (requires database connection)
+	conn := store.Conn()
+	if conn != nil {
+		kms, kmsErr := security.NewKMS(conn, logger)
+		if kmsErr != nil {
+			logger.Warn("Failed to create KMS, some features will be unavailable", zap.Error(kmsErr))
 		} else {
-			s.kms = kms
+			// Initialize KMS with a key if none exists
+			if initErr := kms.Initialize(context.Background()); initErr != nil {
+				logger.Warn("Failed to initialize KMS", zap.Error(initErr))
+			} else {
+				s.kms = kms
+			}
 		}
+	} else {
+		logger.Info("No database connection available, KMS disabled")
 	}
 
 	// Initialize service layer (services that don't need KMS)
-	s.userService = users.New(s.db)
-	s.sessionService = sessions.New(s.db)
-	s.apiKeyService = apikeys.New(s.db)
-	s.projectService = projects.New(s.db)
-	s.projectTypeService = projecttypes.New(s.db)
-	s.deploymentService = deployments.New(s.db)
-	s.agentService = agents.New(s.db)
-	s.auditService = audit.New(s.db)
-	s.hostKeyService = hostkeys.New(s.db)
-	s.provisionService = provision.New(s.db)
+	s.userService = users.New(s.store)
+	s.sessionService = sessions.New(s.store)
+	s.apiKeyService = apikeys.New(s.store)
+	s.projectService = projects.New(s.store)
+	s.projectTypeService = projecttypes.New(s.store)
+	s.deploymentService = deployments.New(s.store)
+	s.agentService = agents.New(s.store)
+	s.auditService = audit.New(s.store)
+	s.hostKeyService = hostkeys.New(s.store)
+	s.provisionService = provision.New(s.store)
 
 	// Initialize KMS-dependent services
 	if s.kms != nil {
-		s.secretService = secrets.New(s.db, s.kms)
-		s.settingsSvc = settings.New(s.db, s.kms)
-		s.webhookService = webhooks.New(s.db, s.kms)
+		s.secretService = secrets.New(s.store, s.kms)
+		s.settingsSvc = settings.New(s.store, s.kms)
+		s.webhookService = webhooks.New(s.store, s.kms)
 	}
 
 	// Sync admin credentials from env or mark system as requiring setup
@@ -366,7 +371,7 @@ func NewMasterServer(cfg *config.MasterConfig, db *storage.DB, logger *zap.Logge
 func (s *MasterServer) SetCAManager(ca *security.CAManager) {
 	s.caManager = ca
 	// Create the gRPC agent server with the CA manager
-	s.agentServer = NewAgentServer(s.db, ca, s.logger)
+	s.agentServer = NewAgentServer(s.store, ca, s.logger)
 }
 
 // SetKMS configures the KMS for secret encryption/decryption.
@@ -380,9 +385,9 @@ func (s *MasterServer) SetWebhookHandler(kms *security.KMS, processor webhooksha
 	s.kms = kms
 
 	// Initialize KMS-dependent services
-	s.secretService = secrets.New(s.db, kms)
-	s.settingsSvc = settings.New(s.db, kms)
-	s.webhookService = webhooks.New(s.db, kms)
+	s.secretService = secrets.New(s.store, kms)
+	s.settingsSvc = settings.New(s.store, kms)
+	s.webhookService = webhooks.New(s.store, kms)
 
 	// Inject services into AgentServer if it exists
 	if s.agentServer != nil {
@@ -418,7 +423,7 @@ func (s *MasterServer) SetWebhookHandler(kms *security.KMS, processor webhooksha
 	}
 
 	secretStore := &webhookSecretStoreAdapter{
-		db:     s.db,
+		store:  s.store,
 		kms:    kms,
 		logger: s.logger,
 	}
@@ -920,7 +925,7 @@ func (s *MasterServer) setupScheduledJobs() {
 
 	// Database backup job
 	if s.config.Backup.Database.Enabled {
-		dbBackupJob := scheduler.NewDatabaseBackupJob(s.db, &s.config.Backup.Database, s.logger)
+		dbBackupJob := scheduler.NewDatabaseBackupJob(s.store, &s.config.Backup.Database, s.logger)
 		schedule := &scheduler.IntervalSchedule{Interval: s.config.Backup.Database.Interval}
 		if err := s.scheduler.AddJob(dbBackupJob, schedule); err != nil {
 			s.logger.Error("Failed to add database backup job", zap.Error(err))
@@ -929,7 +934,7 @@ func (s *MasterServer) setupScheduledJobs() {
 
 	// Audit export job
 	if s.config.Logs.Audit.Export.Enabled {
-		auditExportJob := scheduler.NewAuditExportJob(s.db, &s.config.Logs.Audit.Export, s.logger)
+		auditExportJob := scheduler.NewAuditExportJob(s.store, &s.config.Logs.Audit.Export, s.logger)
 		var schedule scheduler.Schedule
 		if s.config.Logs.Audit.Export.Schedule != "" {
 			var err error

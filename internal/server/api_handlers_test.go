@@ -27,7 +27,7 @@ func TestHandleStats(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("GET", "/api/v1/stats", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -61,7 +61,7 @@ func TestHandleStats_MethodNotAllowed(t *testing.T) {
 	t.Parallel()
 
 	server, _, _, _ := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("POST", "/api/v1/stats", nil)
 	w := httptest.NewRecorder()
@@ -78,7 +78,7 @@ func TestHandleUsers_List(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("GET", "/api/v1/users", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -113,7 +113,7 @@ func TestHandleUsers_Create(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	body := bytes.NewBufferString(`{
 		"username": "newuser",
@@ -136,7 +136,7 @@ func TestHandleUsers_Create(t *testing.T) {
 
 	// Verify user was created
 	ctx := context.Background()
-	user, err := server.db.GetUserByUsername(ctx, "newuser")
+	user, err := server.store.GetUserByUsername(ctx, "newuser")
 	if err != nil {
 		t.Fatalf("failed to get created user: %v", err)
 	}
@@ -152,7 +152,7 @@ func TestHandleUsers_CreateMissingFields(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	body := bytes.NewBufferString(`{
 		"username": "incomplete"
@@ -176,11 +176,11 @@ func TestHandleUser_Get(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	// Get test user ID
 	ctx := context.Background()
-	user, err := server.db.GetUserByUsername(ctx, "testuser")
+	user, err := server.store.GetUserByUsername(ctx, "testuser")
 	if err != nil {
 		t.Fatalf("failed to get test user: %v", err)
 	}
@@ -204,7 +204,7 @@ func TestHandleProjectsAPI_List(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("GET", "/api/v1/projects", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -227,7 +227,7 @@ func TestHandleProjectsAPI_Create(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	body := bytes.NewBufferString(`{
 		"name": "test-project",
@@ -250,7 +250,7 @@ func TestHandleProjectsAPI_Create(t *testing.T) {
 	}
 
 	// Verify project was created
-	project, err := server.db.GetProjectByName(context.Background(), "test-project")
+	project, err := server.store.GetProjectByName(context.Background(), "test-project")
 	if err != nil {
 		t.Fatalf("failed to get created project: %v", err)
 	}
@@ -264,7 +264,7 @@ func TestHandleAgentsAPI_List(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("GET", "/api/v1/agents", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -287,7 +287,7 @@ func TestHandleAgentsAPI_MethodNotAllowed(t *testing.T) {
 	t.Parallel()
 
 	server, _, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("POST", "/api/v1/agents", nil)
 	req = requestWithUserContext(req, userID)
@@ -305,7 +305,7 @@ func TestHandleDeploymentsAPI_List(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("GET", "/api/v1/deployments", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -329,11 +329,11 @@ func TestHandleAPIKeys_List(t *testing.T) {
 	t.Parallel()
 
 	server, _, sessionToken, _ := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	// Get the user ID from the session
 	ctx := context.Background()
-	session, err := server.db.GetSessionByToken(ctx, sessionToken)
+	session, err := server.store.GetSessionByToken(ctx, sessionToken)
 	if err != nil {
 		t.Fatalf("failed to get session: %v", err)
 	}
@@ -368,11 +368,11 @@ func TestHandleAPIKeys_Create(t *testing.T) {
 	t.Parallel()
 
 	server, _, sessionToken, _ := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	// Get the user ID from the session
 	ctx := context.Background()
-	session, err := server.db.GetSessionByToken(ctx, sessionToken)
+	session, err := server.store.GetSessionByToken(ctx, sessionToken)
 	if err != nil {
 		t.Fatalf("failed to get session: %v", err)
 	}
@@ -412,11 +412,11 @@ func TestHandleSettingsCategory_Get(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	// First, set a setting
 	ctx := context.Background()
-	if err := server.db.SetSetting(ctx, "test", "setting1", "value1", "string", false); err != nil {
+	if err := server.store.SetSetting(ctx, "test", "setting1", "value1", "string", false); err != nil {
 		t.Fatalf("failed to set setting: %v", err)
 	}
 
@@ -438,7 +438,7 @@ func TestHandleSettingsExport(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("GET", "/api/v1/settings/export", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -463,7 +463,7 @@ func TestHandleSettingsImport(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	// Format must match the expected struct: map[category]map[key]{value, type, encrypted}
 	body := bytes.NewBufferString(`{
@@ -501,7 +501,7 @@ func TestHandleUsers_MethodNotAllowed(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("PUT", "/api/v1/users", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -519,7 +519,7 @@ func TestHandleProjectsAPI_MethodNotAllowed(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("DELETE", "/api/v1/projects", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -538,7 +538,7 @@ func TestHandleProjectsAPI_CreateInvalidJSON(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	body := bytes.NewBufferString(`{invalid json}`)
 
@@ -560,7 +560,7 @@ func TestHandleUsers_CreateInvalidJSON(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	body := bytes.NewBufferString(`not json at all`)
 
@@ -601,7 +601,7 @@ func TestHandleUsers_CreateWeakPassword(t *testing.T) {
 			t.Parallel()
 
 			server, apiKey, _, userID := newTestServerWithAuth(t)
-			defer server.db.Close()
+			defer server.store.Close()
 
 			body := bytes.NewBufferString(fmt.Sprintf(`{
 				"username": "testuser_%s",
@@ -631,7 +631,7 @@ func TestHandleUser_UpdateWeakPassword(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	// First create a user with valid password
 	createBody := bytes.NewBufferString(`{
@@ -684,7 +684,7 @@ func TestHandleProjectAPI_Get(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	// Create a project first
 	project := &storage.Project{
@@ -694,7 +694,7 @@ func TestHandleProjectAPI_Get(t *testing.T) {
 		DeployPath: "/var/www/test",
 		Type:       "static",
 	}
-	_ = server.db.CreateProject(project)
+	_ = server.store.CreateProject(project)
 
 	// GET specific project
 	req := httptest.NewRequest("GET", "/api/v1/projects/test-project", nil)
@@ -713,7 +713,7 @@ func TestHandleProjectAPI_GetNotFound(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("GET", "/api/v1/projects/nonexistent", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -731,7 +731,7 @@ func TestHandleProjectAPI_Update(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	// Create a project first
 	project := &storage.Project{
@@ -741,7 +741,7 @@ func TestHandleProjectAPI_Update(t *testing.T) {
 		DeployPath: "/var/www/test",
 		Type:       "static",
 	}
-	_ = server.db.CreateProject(project)
+	_ = server.store.CreateProject(project)
 
 	// Update the project
 	updateBody := bytes.NewBufferString(`{"branch": "develop", "deploy_path": "/var/www/new"}`)
@@ -762,7 +762,7 @@ func TestHandleProjectAPI_Delete(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	// Create a project first
 	project := &storage.Project{
@@ -772,7 +772,7 @@ func TestHandleProjectAPI_Delete(t *testing.T) {
 		DeployPath: "/var/www/test",
 		Type:       "static",
 	}
-	_ = server.db.CreateProject(project)
+	_ = server.store.CreateProject(project)
 
 	// Delete the project
 	req := httptest.NewRequest("DELETE", "/api/v1/projects/delete-project", nil)
@@ -791,7 +791,7 @@ func TestHandleProjectAPI_EmptyName(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	// Empty project name
 	req := httptest.NewRequest("GET", "/api/v1/projects/", nil)
@@ -810,7 +810,7 @@ func TestHandleProjectAPI_MethodNotAllowed(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("PATCH", "/api/v1/projects/test-project", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -830,7 +830,7 @@ func TestHandleAgentAPI_Get(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	ctx := context.Background()
 
@@ -840,7 +840,7 @@ func TestHandleAgentAPI_Get(t *testing.T) {
 		Hostname: "agent.example.com",
 		Status:   "online",
 	}
-	_ = server.db.UpsertAgent(ctx, agent)
+	_ = server.store.UpsertAgent(ctx, agent)
 
 	// GET specific agent
 	req := httptest.NewRequest("GET", "/api/v1/agents/test-agent-1", nil)
@@ -859,7 +859,7 @@ func TestHandleAgentAPI_GetNotFound(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("GET", "/api/v1/agents/nonexistent", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -878,7 +878,7 @@ func TestHandleAgentAPI_Delete(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	ctx := context.Background()
 
@@ -888,7 +888,7 @@ func TestHandleAgentAPI_Delete(t *testing.T) {
 		Hostname: "delete.example.com",
 		Status:   "online",
 	}
-	_ = server.db.UpsertAgent(ctx, agent)
+	_ = server.store.UpsertAgent(ctx, agent)
 
 	// Delete the agent
 	req := httptest.NewRequest("DELETE", "/api/v1/agents/delete-agent-1", nil)
@@ -907,7 +907,7 @@ func TestHandleAgentAPI_EmptyID(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("GET", "/api/v1/agents/", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -925,7 +925,7 @@ func TestHandleAgentAPI_MethodNotAllowed(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("POST", "/api/v1/agents/test-agent", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -945,7 +945,7 @@ func TestHandleDeploymentsAPI_ListWithDeployment(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	ctx := context.Background()
 
@@ -957,7 +957,7 @@ func TestHandleDeploymentsAPI_ListWithDeployment(t *testing.T) {
 		Branch:  "main",
 		Status:  "completed",
 	}
-	_ = server.db.CreateDeployment(ctx, deployment)
+	_ = server.store.CreateDeployment(ctx, deployment)
 
 	// List deployments
 	req := httptest.NewRequest("GET", "/api/v1/deployments", nil)
@@ -976,7 +976,7 @@ func TestHandleDeploymentsAPI_MethodNotAllowed(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("PUT", "/api/v1/deployments", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -994,7 +994,7 @@ func TestHandleDeploymentAPI_Get(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	ctx := context.Background()
 
@@ -1006,7 +1006,7 @@ func TestHandleDeploymentAPI_Get(t *testing.T) {
 		Branch:  "main",
 		Status:  "completed",
 	}
-	_ = server.db.CreateDeployment(ctx, deployment)
+	_ = server.store.CreateDeployment(ctx, deployment)
 
 	// Get specific deployment
 	req := httptest.NewRequest("GET", "/api/v1/deployments/get-deploy-1", nil)
@@ -1025,7 +1025,7 @@ func TestHandleDeploymentAPI_GetNotFound(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("GET", "/api/v1/deployments/nonexistent", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -1044,7 +1044,7 @@ func TestHandleDeploymentAPI_EmptyID(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("GET", "/api/v1/deployments/", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -1062,7 +1062,7 @@ func TestHandleDeploymentAPI_MethodNotAllowed(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("PUT", "/api/v1/deployments/test-deploy", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -1082,7 +1082,7 @@ func TestHandleAPIKey_Delete(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	ctx := context.Background()
 
@@ -1092,7 +1092,7 @@ func TestHandleAPIKey_Delete(t *testing.T) {
 		Name:    "delete-key",
 		KeyHash: "delete-hash",
 	}
-	_ = server.db.CreateAPIKey(ctx, newKey)
+	_ = server.store.CreateAPIKey(ctx, newKey)
 
 	// Delete the API key - note the correct path is /api/v1/apikeys/
 	req := httptest.NewRequest("DELETE", fmt.Sprintf("/api/v1/apikeys/%d", newKey.ID), nil)
@@ -1111,7 +1111,7 @@ func TestHandleAPIKey_EmptyID(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("DELETE", "/api/v1/apikeys/", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -1129,7 +1129,7 @@ func TestHandleAPIKey_InvalidID(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("DELETE", "/api/v1/apikeys/invalid", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -1147,7 +1147,7 @@ func TestHandleAPIKey_MethodNotAllowed(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("GET", "/api/v1/apikeys/1", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -1167,7 +1167,7 @@ func TestHandleProjectWebhooks_Get(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	// Create a project first
 	project := &storage.Project{
@@ -1177,7 +1177,7 @@ func TestHandleProjectWebhooks_Get(t *testing.T) {
 		DeployPath: "/var/www/test",
 		Type:       "static",
 	}
-	_ = server.db.CreateProject(project)
+	_ = server.store.CreateProject(project)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/api/v1/projects/webhook-project/webhooks", nil)
@@ -1195,7 +1195,7 @@ func TestHandleProjectWebhooks_Post(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	// Create a project first
 	project := &storage.Project{
@@ -1205,7 +1205,7 @@ func TestHandleProjectWebhooks_Post(t *testing.T) {
 		DeployPath: "/var/www/test",
 		Type:       "static",
 	}
-	_ = server.db.CreateProject(project)
+	_ = server.store.CreateProject(project)
 
 	body := strings.NewReader(`{"provider":"github","secret":"test-secret","enabled":true}`)
 	w := httptest.NewRecorder()
@@ -1225,7 +1225,7 @@ func TestHandleProjectWebhooks_PostMissingFields(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	// Create a project first
 	project := &storage.Project{
@@ -1235,7 +1235,7 @@ func TestHandleProjectWebhooks_PostMissingFields(t *testing.T) {
 		DeployPath: "/var/www/test",
 		Type:       "static",
 	}
-	_ = server.db.CreateProject(project)
+	_ = server.store.CreateProject(project)
 
 	body := strings.NewReader(`{"provider":"github"}`)
 	w := httptest.NewRecorder()
@@ -1255,7 +1255,7 @@ func TestHandleProjectWebhooks_NotFound(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/api/v1/projects/nonexistent/webhooks", nil)
@@ -1273,7 +1273,7 @@ func TestHandleProjectWebhooks_MethodNotAllowed(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	// Create a project first
 	project := &storage.Project{
@@ -1283,7 +1283,7 @@ func TestHandleProjectWebhooks_MethodNotAllowed(t *testing.T) {
 		DeployPath: "/var/www/test",
 		Type:       "static",
 	}
-	_ = server.db.CreateProject(project)
+	_ = server.store.CreateProject(project)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("DELETE", "/api/v1/projects/webhook-method-project/webhooks", nil)
@@ -1303,7 +1303,7 @@ func TestHandleProjectDeploy_Success(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	// Create a project first
 	project := &storage.Project{
@@ -1313,7 +1313,7 @@ func TestHandleProjectDeploy_Success(t *testing.T) {
 		DeployPath: "/var/www/test",
 		Type:       "static",
 	}
-	_ = server.db.CreateProject(project)
+	_ = server.store.CreateProject(project)
 
 	body := strings.NewReader(`{"branch":"main","target":"production"}`)
 	w := httptest.NewRecorder()
@@ -1333,7 +1333,7 @@ func TestHandleProjectDeploy_NotFound(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	body := strings.NewReader(`{}`)
 	w := httptest.NewRecorder()
@@ -1352,7 +1352,7 @@ func TestHandleProjectDeploy_MethodNotAllowed(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/api/v1/projects/test/deploy", nil)
@@ -1370,7 +1370,7 @@ func TestHandleProjectDeploy_ScheduledDeployment(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	// Create a project first
 	project := &storage.Project{
@@ -1380,7 +1380,7 @@ func TestHandleProjectDeploy_ScheduledDeployment(t *testing.T) {
 		DeployPath: "/var/www/test",
 		Type:       "static",
 	}
-	_ = server.db.CreateProject(project)
+	_ = server.store.CreateProject(project)
 
 	scheduledTime := time.Now().Add(1 * time.Hour).Format(time.RFC3339)
 	body := strings.NewReader(fmt.Sprintf(`{"branch":"main","target":"production","scheduled_at":"%s"}`, scheduledTime))
@@ -1401,7 +1401,7 @@ func TestHandleProjectDeploy_InvalidScheduledTime(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	// Create a project first
 	project := &storage.Project{
@@ -1411,7 +1411,7 @@ func TestHandleProjectDeploy_InvalidScheduledTime(t *testing.T) {
 		DeployPath: "/var/www/test",
 		Type:       "static",
 	}
-	_ = server.db.CreateProject(project)
+	_ = server.store.CreateProject(project)
 
 	body := strings.NewReader(`{"branch":"main","target":"production","scheduled_at":"invalid-time"}`)
 	w := httptest.NewRecorder()
@@ -1433,7 +1433,7 @@ func TestHandleAgentToken_Success(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	ctx := context.Background()
 
@@ -1443,7 +1443,7 @@ func TestHandleAgentToken_Success(t *testing.T) {
 		Hostname: "agent.example.com",
 		Status:   "online",
 	}
-	_ = server.db.UpsertAgent(ctx, agent)
+	_ = server.store.UpsertAgent(ctx, agent)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/api/v1/agents/token-agent-1/token", nil)
@@ -1470,7 +1470,7 @@ func TestHandleAgentToken_MethodNotAllowed(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/api/v1/agents/test-agent/token", nil)
@@ -1490,7 +1490,7 @@ func TestHandleDeploymentLogs_GetNotFound(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/api/v1/deployments/nonexistent/logs", nil)
@@ -1510,7 +1510,7 @@ func TestHandleDeploymentLogs_MethodNotAllowed(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/api/v1/deployments/test/logs", nil)
@@ -1530,7 +1530,7 @@ func TestHandleDeploymentCancel_NotFound(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/api/v1/deployments/nonexistent/cancel", nil)
@@ -1548,7 +1548,7 @@ func TestHandleDeploymentCancel_MethodNotAllowed(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/api/v1/deployments/test/cancel", nil)
@@ -1566,7 +1566,7 @@ func TestHandleDeploymentCancel_NotCancellable(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	ctx := context.Background()
 
@@ -1575,7 +1575,7 @@ func TestHandleDeploymentCancel_NotCancellable(t *testing.T) {
 		ID:     "cancel-completed-deploy",
 		Status: "completed",
 	}
-	_ = server.db.CreateDeployment(ctx, deployment)
+	_ = server.store.CreateDeployment(ctx, deployment)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/api/v1/deployments/cancel-completed-deploy/cancel", nil)
@@ -1593,7 +1593,7 @@ func TestHandleDeploymentCancel_Success(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	ctx := context.Background()
 
@@ -1602,7 +1602,7 @@ func TestHandleDeploymentCancel_Success(t *testing.T) {
 		ID:     "cancel-running-deploy",
 		Status: "running",
 	}
-	_ = server.db.CreateDeployment(ctx, deployment)
+	_ = server.store.CreateDeployment(ctx, deployment)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/api/v1/deployments/cancel-running-deploy/cancel", nil)
@@ -1622,7 +1622,7 @@ func TestHandleDeploymentRollback_NotFound(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/api/v1/deployments/nonexistent/rollback", nil)
@@ -1640,7 +1640,7 @@ func TestHandleDeploymentRollback_MethodNotAllowed(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/api/v1/deployments/test/rollback", nil)
@@ -1660,7 +1660,7 @@ func TestHandleSettingsCategory_PutSuccess(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	body := strings.NewReader(`{"setting1":"value1","setting2":"value2"}`)
 	req := httptest.NewRequest("PUT", "/api/v1/settings/test-category", body)
@@ -1680,7 +1680,7 @@ func TestHandleSettingsCategory_EmptyCategory(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("GET", "/api/v1/settings/", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -1698,7 +1698,7 @@ func TestHandleSettingsCategory_MethodNotAllowed(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("DELETE", "/api/v1/settings/test-category", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -1716,7 +1716,7 @@ func TestHandleSettingsCategory_PutInvalidJSON(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	body := strings.NewReader(`{invalid json}`)
 	req := httptest.NewRequest("PUT", "/api/v1/settings/test-category", body)
@@ -1736,7 +1736,7 @@ func TestHandleSettingsExport_MethodNotAllowed(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("POST", "/api/v1/settings/export", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -1754,7 +1754,7 @@ func TestHandleSettingsImport_MethodNotAllowed(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("GET", "/api/v1/settings/import", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -1772,7 +1772,7 @@ func TestHandleSettingsImport_InvalidJSON(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	body := strings.NewReader(`not valid json`)
 	req := httptest.NewRequest("POST", "/api/v1/settings/import", body)
@@ -1794,11 +1794,11 @@ func TestHandleUser_GetSuccess(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	// Get test user ID
 	ctx := context.Background()
-	user, _ := server.db.GetUserByUsername(ctx, "testuser")
+	user, _ := server.store.GetUserByUsername(ctx, "testuser")
 
 	req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/users/%d", user.ID), nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -1822,7 +1822,7 @@ func TestHandleUser_GetNotFound(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("GET", "/api/v1/users/99999", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -1840,11 +1840,11 @@ func TestHandleUser_UpdateSuccess(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	// Get test user ID
 	ctx := context.Background()
-	user, _ := server.db.GetUserByUsername(ctx, "testuser")
+	user, _ := server.store.GetUserByUsername(ctx, "testuser")
 
 	body := strings.NewReader(`{"email":"newemail@example.com","role":"admin"}`)
 	req := httptest.NewRequest("PUT", fmt.Sprintf("/api/v1/users/%d", user.ID), body)
@@ -1864,7 +1864,7 @@ func TestHandleUser_UpdateNotFound(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	body := strings.NewReader(`{"email":"test@test.com"}`)
 	req := httptest.NewRequest("PUT", "/api/v1/users/99999", body)
@@ -1884,10 +1884,10 @@ func TestHandleUser_UpdateInvalidJSON(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	ctx := context.Background()
-	user, _ := server.db.GetUserByUsername(ctx, "testuser")
+	user, _ := server.store.GetUserByUsername(ctx, "testuser")
 
 	body := strings.NewReader(`{invalid}`)
 	req := httptest.NewRequest("PUT", fmt.Sprintf("/api/v1/users/%d", user.ID), body)
@@ -1907,7 +1907,7 @@ func TestHandleUser_DeleteSuccess(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	// Create a user to delete
 	ctx := context.Background()
@@ -1919,7 +1919,7 @@ func TestHandleUser_DeleteSuccess(t *testing.T) {
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}
-	_ = server.db.CreateUser(ctx, newUser)
+	_ = server.store.CreateUser(ctx, newUser)
 
 	req := httptest.NewRequest("DELETE", fmt.Sprintf("/api/v1/users/%d", newUser.ID), nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -1937,7 +1937,7 @@ func TestHandleUser_DeleteNotFound(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("DELETE", "/api/v1/users/99999", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -1955,7 +1955,7 @@ func TestHandleUser_InvalidID(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("GET", "/api/v1/users/invalid", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -1973,7 +1973,7 @@ func TestHandleUser_EmptyID(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("GET", "/api/v1/users/", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -1991,7 +1991,7 @@ func TestHandleUser_MethodNotAllowed(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("PATCH", "/api/v1/users/1", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -2011,10 +2011,10 @@ func TestHandleAPIKeys_CreateMissingName(t *testing.T) {
 	t.Parallel()
 
 	server, _, sessionToken, _ := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	ctx := context.Background()
-	session, _ := server.db.GetSessionByToken(ctx, sessionToken)
+	session, _ := server.store.GetSessionByToken(ctx, sessionToken)
 
 	body := strings.NewReader(`{}`)
 	req := httptest.NewRequest("POST", "/api/v1/apikeys", body)
@@ -2033,10 +2033,10 @@ func TestHandleAPIKeys_CreateInvalidJSON(t *testing.T) {
 	t.Parallel()
 
 	server, _, sessionToken, _ := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	ctx := context.Background()
-	session, _ := server.db.GetSessionByToken(ctx, sessionToken)
+	session, _ := server.store.GetSessionByToken(ctx, sessionToken)
 
 	body := strings.NewReader(`{invalid}`)
 	req := httptest.NewRequest("POST", "/api/v1/apikeys", body)
@@ -2055,10 +2055,10 @@ func TestHandleAPIKeys_CreateWithExpiry(t *testing.T) {
 	t.Parallel()
 
 	server, _, sessionToken, _ := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	ctx := context.Background()
-	session, _ := server.db.GetSessionByToken(ctx, sessionToken)
+	session, _ := server.store.GetSessionByToken(ctx, sessionToken)
 
 	body := strings.NewReader(`{"name":"expiring-key","expires_in_days":30}`)
 	req := httptest.NewRequest("POST", "/api/v1/apikeys", body)
@@ -2083,7 +2083,7 @@ func TestHandleAPIKeys_Unauthorized(t *testing.T) {
 	t.Parallel()
 
 	server, _, _, _ := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("GET", "/api/v1/apikeys", nil)
 	w := httptest.NewRecorder()
@@ -2099,10 +2099,10 @@ func TestHandleAPIKeys_MethodNotAllowed(t *testing.T) {
 	t.Parallel()
 
 	server, _, sessionToken, _ := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	ctx := context.Background()
-	session, _ := server.db.GetSessionByToken(ctx, sessionToken)
+	session, _ := server.store.GetSessionByToken(ctx, sessionToken)
 
 	req := httptest.NewRequest("PUT", "/api/v1/apikeys", nil)
 	req = requestWithUserContext(req, session.UserID)
@@ -2121,7 +2121,7 @@ func TestHandleAgentAPI_Update(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	ctx := context.Background()
 	agent := &storage.Agent{
@@ -2129,7 +2129,7 @@ func TestHandleAgentAPI_Update(t *testing.T) {
 		Hostname: "agent.example.com",
 		Status:   "online",
 	}
-	_ = server.db.UpsertAgent(ctx, agent)
+	_ = server.store.UpsertAgent(ctx, agent)
 
 	body := strings.NewReader(`{"status":"offline","labels":{"env":"prod"}}`)
 	req := httptest.NewRequest("PUT", "/api/v1/agents/update-agent-1", body)
@@ -2149,7 +2149,7 @@ func TestHandleAgentAPI_UpdateNotFound(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	body := strings.NewReader(`{"status":"offline"}`)
 	req := httptest.NewRequest("PUT", "/api/v1/agents/nonexistent", body)
@@ -2169,7 +2169,7 @@ func TestHandleAgentAPI_UpdateInvalidJSON(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	ctx := context.Background()
 	agent := &storage.Agent{
@@ -2177,7 +2177,7 @@ func TestHandleAgentAPI_UpdateInvalidJSON(t *testing.T) {
 		Hostname: "agent.example.com",
 		Status:   "online",
 	}
-	_ = server.db.UpsertAgent(ctx, agent)
+	_ = server.store.UpsertAgent(ctx, agent)
 
 	body := strings.NewReader(`{invalid}`)
 	req := httptest.NewRequest("PUT", "/api/v1/agents/invalid-json-agent", body)
@@ -2199,7 +2199,7 @@ func TestHandleDeploymentsAPI_CreateMissingProject(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	body := strings.NewReader(`{"branch":"main"}`)
 	req := httptest.NewRequest("POST", "/api/v1/deployments", body)
@@ -2219,7 +2219,7 @@ func TestHandleDeploymentsAPI_CreateInvalidJSON(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	body := strings.NewReader(`{invalid}`)
 	req := httptest.NewRequest("POST", "/api/v1/deployments", body)
@@ -2239,7 +2239,7 @@ func TestHandleDeploymentsAPI_ListWithLimit(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	ctx := context.Background()
 	for i := 0; i < 10; i++ {
@@ -2248,7 +2248,7 @@ func TestHandleDeploymentsAPI_ListWithLimit(t *testing.T) {
 			Project: "test-project",
 			Status:  "completed",
 		}
-		_ = server.db.CreateDeployment(ctx, deployment)
+		_ = server.store.CreateDeployment(ctx, deployment)
 	}
 
 	req := httptest.NewRequest("GET", "/api/v1/deployments?limit=5", nil)
@@ -2267,14 +2267,14 @@ func TestHandleDeploymentAPI_DeleteScheduled(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	ctx := context.Background()
 	deployment := &storage.DeploymentRecord{
 		ID:     "scheduled-deploy-1",
 		Status: "scheduled",
 	}
-	_ = server.db.CreateDeployment(ctx, deployment)
+	_ = server.store.CreateDeployment(ctx, deployment)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/deployments/scheduled-deploy-1", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -2292,7 +2292,7 @@ func TestHandleDeploymentAPI_DeleteNotFound(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("DELETE", "/api/v1/deployments/nonexistent", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -2312,7 +2312,7 @@ func TestHandleDeploymentRollback_Success(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	ctx := context.Background()
 
@@ -2323,7 +2323,7 @@ func TestHandleDeploymentRollback_Success(t *testing.T) {
 		Branch:     "main",
 		DeployPath: "/var/www/test",
 	}
-	_ = server.db.CreateProject(project)
+	_ = server.store.CreateProject(project)
 
 	// Create a deployment to rollback
 	deployment := &storage.DeploymentRecord{
@@ -2333,7 +2333,7 @@ func TestHandleDeploymentRollback_Success(t *testing.T) {
 		Branch:  "main",
 		Status:  "success",
 	}
-	_ = server.db.CreateDeployment(ctx, deployment)
+	_ = server.store.CreateDeployment(ctx, deployment)
 
 	req := httptest.NewRequest("POST", "/api/v1/deployments/rollback-deploy-1/rollback", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -2353,7 +2353,7 @@ func TestHandleDeploymentLogsStream_NoFlusher(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	ctx := context.Background()
 	deployment := &storage.DeploymentRecord{
@@ -2361,7 +2361,7 @@ func TestHandleDeploymentLogsStream_NoFlusher(t *testing.T) {
 		Status:  "running",
 		Project: "test-project",
 	}
-	_ = server.db.CreateDeployment(ctx, deployment)
+	_ = server.store.CreateDeployment(ctx, deployment)
 
 	// Create a recorder that we can test with
 	// Use a context with timeout to prevent the streaming handler from blocking forever
@@ -2389,7 +2389,7 @@ func TestHandleProjectsAPI_CreateMissingName(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	body := strings.NewReader(`{"repository":"https://github.com/test/repo"}`)
 	req := httptest.NewRequest("POST", "/api/v1/projects", body)
@@ -2409,7 +2409,7 @@ func TestHandleProjectsAPI_CreateDefaultBranch(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	body := strings.NewReader(`{"name":"default-branch-project","repository":"https://github.com/test/repo"}`)
 	req := httptest.NewRequest("POST", "/api/v1/projects", body)
@@ -2425,7 +2425,7 @@ func TestHandleProjectsAPI_CreateDefaultBranch(t *testing.T) {
 	}
 
 	// Verify default branch was set
-	project, _ := server.db.GetProjectByName(context.Background(), "default-branch-project")
+	project, _ := server.store.GetProjectByName(context.Background(), "default-branch-project")
 	if project.Branch != "main" {
 		t.Errorf("expected default branch 'main', got '%s'", project.Branch)
 	}
@@ -2435,7 +2435,7 @@ func TestHandleProjectAPI_UpdateInvalidJSON(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	// Create a project first
 	project := &storage.Project{
@@ -2443,7 +2443,7 @@ func TestHandleProjectAPI_UpdateInvalidJSON(t *testing.T) {
 		Repository: "https://github.com/test/repo",
 		Branch:     "main",
 	}
-	_ = server.db.CreateProject(project)
+	_ = server.store.CreateProject(project)
 
 	body := strings.NewReader(`{invalid}`)
 	req := httptest.NewRequest("PUT", "/api/v1/projects/update-invalid-json", body)
@@ -2463,7 +2463,7 @@ func TestHandleProjectAPI_UpdateNotFound(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	body := strings.NewReader(`{"branch":"develop"}`)
 	req := httptest.NewRequest("PUT", "/api/v1/projects/nonexistent", body)
@@ -2485,7 +2485,7 @@ func TestHandleProjectWebhooks_PostInvalidJSON(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	// Create a project first
 	project := &storage.Project{
@@ -2493,7 +2493,7 @@ func TestHandleProjectWebhooks_PostInvalidJSON(t *testing.T) {
 		Repository: "https://github.com/test/repo",
 		Branch:     "main",
 	}
-	_ = server.db.CreateProject(project)
+	_ = server.store.CreateProject(project)
 
 	body := strings.NewReader(`{invalid}`)
 	req := httptest.NewRequest("POST", "/api/v1/projects/webhook-invalid-json/webhooks", body)
@@ -2515,19 +2515,19 @@ func TestHandleStats_WithData(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	ctx := context.Background()
 
 	// Create some test data
 	project := &storage.Project{Name: "stats-project", Repository: "https://github.com/test/repo"}
-	_ = server.db.CreateProject(project)
+	_ = server.store.CreateProject(project)
 
 	agent := &storage.Agent{ID: "stats-agent", Status: "connected"}
-	_ = server.db.UpsertAgent(ctx, agent)
+	_ = server.store.UpsertAgent(ctx, agent)
 
 	deployment := &storage.DeploymentRecord{ID: "stats-deploy", Project: "stats-project", Status: "success"}
-	_ = server.db.CreateDeployment(ctx, deployment)
+	_ = server.store.CreateDeployment(ctx, deployment)
 
 	req := httptest.NewRequest("GET", "/api/v1/stats", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -2560,7 +2560,7 @@ func TestHandleDeploymentRollback_WithUserContext(t *testing.T) {
 	t.Parallel()
 
 	server, _, _, _ := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	ctx := context.Background()
 
@@ -2570,7 +2570,7 @@ func TestHandleDeploymentRollback_WithUserContext(t *testing.T) {
 		Email:    "rollback@example.com",
 		Role:     "admin",
 	}
-	_ = server.db.CreateUser(ctx, testUser)
+	_ = server.store.CreateUser(ctx, testUser)
 
 	// Create a project
 	project := &storage.Project{
@@ -2579,7 +2579,7 @@ func TestHandleDeploymentRollback_WithUserContext(t *testing.T) {
 		Branch:     "main",
 		DeployPath: "/var/www/test",
 	}
-	_ = server.db.CreateProject(project)
+	_ = server.store.CreateProject(project)
 
 	// Create a deployment to rollback
 	deployment := &storage.DeploymentRecord{
@@ -2589,10 +2589,10 @@ func TestHandleDeploymentRollback_WithUserContext(t *testing.T) {
 		Branch:  "main",
 		Status:  "success",
 	}
-	_ = server.db.CreateDeployment(ctx, deployment)
+	_ = server.store.CreateDeployment(ctx, deployment)
 
 	// Get the user ID
-	user, _ := server.db.GetUserByUsername(ctx, "rollback-user")
+	user, _ := server.store.GetUserByUsername(ctx, "rollback-user")
 
 	req := httptest.NewRequest("POST", "/api/v1/deployments/rollback-ctx-deploy/rollback", nil)
 	req = requestWithUserContext(req, user.ID)
@@ -2611,7 +2611,7 @@ func TestHandleDeploymentLogsStream_MethodNotAllowed(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("POST", "/api/v1/deployments/test-deploy/logs?stream=true", nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -2629,7 +2629,7 @@ func TestHandleDeploymentLogsStream_WithExistingLogs(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	ctx := context.Background()
 
@@ -2639,7 +2639,7 @@ func TestHandleDeploymentLogsStream_WithExistingLogs(t *testing.T) {
 		Status:  "running",
 		Project: "test-project",
 	}
-	_ = server.db.CreateDeployment(ctx, deployment)
+	_ = server.store.CreateDeployment(ctx, deployment)
 
 	// Create some logs
 	log1 := &storage.DeploymentLog{
@@ -2654,8 +2654,8 @@ func TestHandleDeploymentLogsStream_WithExistingLogs(t *testing.T) {
 		Message:      "Deployment in progress",
 		Source:       "agent",
 	}
-	_ = server.db.CreateDeploymentLog(ctx, log1)
-	_ = server.db.CreateDeploymentLog(ctx, log2)
+	_ = server.store.CreateDeploymentLog(ctx, log1)
+	_ = server.store.CreateDeploymentLog(ctx, log2)
 
 	// Use context with short timeout
 	cancelCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
@@ -2688,7 +2688,7 @@ func TestHandleDeploymentLogsStream_CompletedDeployment(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	ctx := context.Background()
 
@@ -2700,7 +2700,7 @@ func TestHandleDeploymentLogsStream_CompletedDeployment(t *testing.T) {
 		Project:     "test-project",
 		CompletedAt: &completedAt,
 	}
-	_ = server.db.CreateDeployment(ctx, deployment)
+	_ = server.store.CreateDeployment(ctx, deployment)
 
 	// Use context with longer timeout to allow for the ticker loop to run
 	cancelCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
@@ -2726,7 +2726,7 @@ func TestHandleSettingsExport_Success(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.db.Close()
+	defer server.store.Close()
 
 	req := httptest.NewRequest("GET", "/api/v1/settings/export", nil)
 	req.Header.Set("X-API-Key", apiKey)

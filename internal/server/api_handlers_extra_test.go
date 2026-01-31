@@ -344,7 +344,7 @@ func TestHandleJumpServers_List(t *testing.T) {
 		Username:  "jumpuser",
 		CreatedAt: time.Now(),
 	}
-	_ = server.db.CreateJumpServer(ctx, js)
+	_ = server.store.CreateJumpServer(ctx, js)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/jumpservers", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
@@ -515,7 +515,7 @@ func TestHandleJumpServer_Get(t *testing.T) {
 		Username:  "testuser",
 		CreatedAt: time.Now(),
 	}
-	_ = server.db.CreateJumpServer(ctx, js)
+	_ = server.store.CreateJumpServer(ctx, js)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/jumpservers/1", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
@@ -543,7 +543,7 @@ func TestHandleJumpServer_Delete(t *testing.T) {
 		Username:  "deluser",
 		CreatedAt: time.Now(),
 	}
-	_ = server.db.CreateJumpServer(ctx, js)
+	_ = server.store.CreateJumpServer(ctx, js)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/jumpservers/1", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
@@ -605,7 +605,7 @@ func TestHandleJumpServer_Update(t *testing.T) {
 		Username:  "updateuser",
 		CreatedAt: time.Now(),
 	}
-	_ = server.db.CreateJumpServer(ctx, js)
+	_ = server.store.CreateJumpServer(ctx, js)
 
 	body := bytes.NewBufferString(`{
 		"name": "updated-bastion",
@@ -643,7 +643,7 @@ func TestHandleBlockedIPs_List(t *testing.T) {
 		ExpiresAt: time.Now().Add(24 * time.Hour),
 		BlockedBy: "test",
 	}
-	_ = server.db.BlockIP(ctx, block)
+	_ = server.store.BlockIP(ctx, block)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/blocked", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
@@ -695,7 +695,7 @@ func TestHandleBlockedIP_Unblock(t *testing.T) {
 		ExpiresAt: time.Now().Add(24 * time.Hour),
 		BlockedBy: "test",
 	}
-	_ = server.db.BlockIP(ctx, block)
+	_ = server.store.BlockIP(ctx, block)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/blocked/172.16.0.1", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
@@ -723,7 +723,7 @@ func TestHandleBlockedIP_Get(t *testing.T) {
 		ExpiresAt: time.Now().Add(24 * time.Hour),
 		BlockedBy: "test",
 	}
-	_ = server.db.BlockIP(ctx, block)
+	_ = server.store.BlockIP(ctx, block)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/blocked/10.0.0.1", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
@@ -945,7 +945,7 @@ func TestNewEndpoints_RequireAdminAccess(t *testing.T) {
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}
-	_ = server.db.CreateUser(ctx, viewer)
+	_ = server.store.CreateUser(ctx, viewer)
 
 	endpoints := []struct {
 		method string
