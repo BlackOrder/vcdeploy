@@ -750,8 +750,8 @@ func TestHandleSecretsPost(t *testing.T) {
 	server.handleSecrets(rec, req)
 
 	// Should succeed with services configured
-	if rec.Code != http.StatusCreated && rec.Code != http.StatusOK {
-		t.Errorf("status = %d, want %d or %d, body: %s", rec.Code, http.StatusOK, http.StatusCreated, rec.Body.String())
+	if rec.Code != http.StatusCreated {
+		t.Errorf("status = %d, want %d, body: %s", rec.Code, http.StatusCreated, rec.Body.String())
 	}
 }
 

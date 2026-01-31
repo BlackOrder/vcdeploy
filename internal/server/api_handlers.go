@@ -172,6 +172,7 @@ func (s *MasterServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 
 		s.logAudit(r, "create", "user", fmt.Sprintf("Created user: %s", req.Username), "success")
 
+		w.WriteHeader(http.StatusCreated)
 		s.jsonResponse(w, map[string]interface{}{
 			"id":       user.ID,
 			"username": user.Username,
