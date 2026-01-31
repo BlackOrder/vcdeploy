@@ -404,7 +404,7 @@ func (f *DBFixtures) ExpiredSession() *storage.Session {
 }
 
 // SeedTestDB seeds a database with common test data.
-func (f *DBFixtures) SeedTestDB(db *storage.DB) error {
+func (f *DBFixtures) SeedTestDB(store storage.Store) error {
 	f.t.Helper()
 	ctx := context.Background()
 
@@ -413,7 +413,7 @@ func (f *DBFixtures) SeedTestDB(db *storage.DB) error {
 		f.DefaultAgent(),
 		f.OfflineAgent(),
 	} {
-		if err := db.UpsertAgent(ctx, agent); err != nil {
+		if err := store.UpsertAgent(ctx, agent); err != nil {
 			return err
 		}
 	}
@@ -424,7 +424,7 @@ func (f *DBFixtures) SeedTestDB(db *storage.DB) error {
 		f.ViewerUser(),
 		f.OperatorUser(),
 	} {
-		if err := db.CreateUser(ctx, user); err != nil {
+		if err := store.CreateUser(ctx, user); err != nil {
 			return err
 		}
 	}
@@ -434,7 +434,7 @@ func (f *DBFixtures) SeedTestDB(db *storage.DB) error {
 		f.DefaultProjectType(),
 		f.PHPProjectType(),
 	} {
-		if err := db.CreateProjectType(pt); err != nil {
+		if err := store.CreateProjectType(pt); err != nil {
 			return err
 		}
 	}

@@ -13,10 +13,14 @@ import (
 func TestAuthHelpers(t *testing.T) {
 	t.Parallel()
 
+	// NOTE: Subtests below that test "without context" share a server but only
+	// perform stateless read operations. They run sequentially to avoid any
+	// potential race conditions with the shared server instance.
+
 	server := newTestServer(t)
 
 	t.Run("requireReadAccess denies without context", func(t *testing.T) {
-		t.Parallel()
+		// No t.Parallel() - shares server instance
 
 		rec := httptest.NewRecorder()
 		ctx := context.Background()
@@ -33,7 +37,7 @@ func TestAuthHelpers(t *testing.T) {
 	})
 
 	t.Run("requireWriteAccess denies without context", func(t *testing.T) {
-		t.Parallel()
+		// No t.Parallel() - shares server instance
 
 		rec := httptest.NewRecorder()
 		ctx := context.Background()
@@ -49,7 +53,7 @@ func TestAuthHelpers(t *testing.T) {
 	})
 
 	t.Run("requireAdminAccess denies without context", func(t *testing.T) {
-		t.Parallel()
+		// No t.Parallel() - shares server instance
 
 		rec := httptest.NewRecorder()
 		ctx := context.Background()
@@ -65,7 +69,7 @@ func TestAuthHelpers(t *testing.T) {
 	})
 
 	t.Run("requireReadAccessJSON returns JSON error", func(t *testing.T) {
-		t.Parallel()
+		// No t.Parallel() - shares server instance
 
 		rec := httptest.NewRecorder()
 		ctx := context.Background()
@@ -81,7 +85,7 @@ func TestAuthHelpers(t *testing.T) {
 	})
 
 	t.Run("requireAdminAccessJSON returns JSON error", func(t *testing.T) {
-		t.Parallel()
+		// No t.Parallel() - shares server instance
 
 		rec := httptest.NewRecorder()
 		ctx := context.Background()

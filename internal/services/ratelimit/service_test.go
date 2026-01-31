@@ -13,7 +13,7 @@ import (
 
 func setupTest(t *testing.T) (*Service, func()) {
 	t.Helper()
-	db, cleanup := testutil.NewTestDB(t)
+	db, cleanup := testutil.NewTestStore(t)
 	svc := New(db)
 	return svc, cleanup
 }

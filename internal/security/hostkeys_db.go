@@ -10,7 +10,7 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 )
 
-// DBHostKeyStore adapts storage.DB to the HostKeyStore interface.
+// DBHostKeyStore adapts storage.Store to the HostKeyStore interface.
 type DBHostKeyStore struct {
 	store storage.Store
 }

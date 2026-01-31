@@ -10,10 +10,10 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 )
 
-func newTestService(t *testing.T) (*Service, *storage.DB) {
+func newTestService(t *testing.T) (*Service, storage.Store) {
 	t.Helper()
 
-	db, cleanup := testutil.NewTestDB(t)
+	db, cleanup := testutil.NewTestStore(t)
 	t.Cleanup(cleanup)
 
 	kms, err := security.NewKMS(db.Conn(), nil)
@@ -786,7 +786,7 @@ func TestService_List_MetadataFields(t *testing.T) {
 }
 
 func TestNew(t *testing.T) {
-	db, cleanup := testutil.NewTestDB(t)
+	db, cleanup := testutil.NewTestStore(t)
 	defer cleanup()
 
 	kms, err := security.NewKMS(db.Conn(), nil)

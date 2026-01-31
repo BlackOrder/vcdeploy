@@ -19,7 +19,7 @@ import (
 )
 
 // setupTestCleanupDB creates a temporary database for testing
-func setupTestCleanupDB(t *testing.T) (*storage.DB, func()) {
+func setupTestCleanupDB(t *testing.T) (storage.Store, func()) {
 	t.Helper()
 
 	// Create temp directory
@@ -45,14 +45,14 @@ func setupTestCleanupDB(t *testing.T) (*storage.DB, func()) {
 }
 
 // createTestServices creates real service instances for testing
-func createTestServices(db *storage.DB) CleanupServices {
+func createTestServices(store storage.Store) CleanupServices {
 	return CleanupServices{
-		SessionService:    sessions.New(db),
-		DeploymentService: deployments.New(db),
-		AuditService:      audit.New(db),
-		AgentService:      agents.New(db),
-		APIKeyService:     apikeys.New(db),
-		WebhookService:    webhooks.New(db, nil),
+		SessionService:    sessions.New(store),
+		DeploymentService: deployments.New(store),
+		AuditService:      audit.New(store),
+		AgentService:      agents.New(store),
+		APIKeyService:     apikeys.New(store),
+		WebhookService:    webhooks.New(store, nil),
 	}
 }
 

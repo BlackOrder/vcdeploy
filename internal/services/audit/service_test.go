@@ -12,7 +12,7 @@ import (
 func newTestService(t *testing.T) *Service {
 	t.Helper()
 
-	db, cleanup := testutil.NewTestDB(t)
+	db, cleanup := testutil.NewTestStore(t)
 	t.Cleanup(cleanup)
 
 	return New(db)

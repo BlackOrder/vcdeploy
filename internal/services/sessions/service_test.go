@@ -9,16 +9,16 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 )
 
-func newTestService(t *testing.T) (*Service, *storage.DB) {
+func newTestService(t *testing.T) (*Service, storage.Store) {
 	t.Helper()
 
-	db, cleanup := testutil.NewTestDB(t)
+	db, cleanup := testutil.NewTestStore(t)
 	t.Cleanup(cleanup)
 
 	return New(db), db
 }
 
-func createTestUser(t *testing.T, db *storage.DB) int64 {
+func createTestUser(t *testing.T, db storage.Store) int64 {
 	t.Helper()
 	ctx := context.Background()
 

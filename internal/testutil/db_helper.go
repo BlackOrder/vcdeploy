@@ -21,6 +21,12 @@ type TestDB struct {
 	cleanup func()
 }
 
+// Store returns the storage.Store interface for use with services.
+// This allows tests to use the Store interface consistently.
+func (tdb *TestDB) Store() storage.Store {
+	return tdb.DB
+}
+
 // NewTestDB creates a new isolated SQLite database for testing.
 // The database is automatically cleaned up when the test completes.
 func NewTestDB(t *testing.T) *TestDB {

@@ -8,7 +8,7 @@ import (
 
 func TestNewTestMemoryStore(t *testing.T) {
 	store := NewTestMemoryStore(t)
-	
+
 	if store == nil {
 		t.Fatal("NewTestMemoryStore() returned nil")
 	}
@@ -18,7 +18,7 @@ func TestNewTestMemoryStore(t *testing.T) {
 	if store.t != t {
 		t.Fatal("NewTestMemoryStore().t is incorrect")
 	}
-	
+
 	// Verify store is functional by creating a user
 	user := store.MustCreateUser("pingtest", "ping@example.com", "hash")
 	if user.ID == 0 {
@@ -28,16 +28,16 @@ func TestNewTestMemoryStore(t *testing.T) {
 
 func TestTestMemoryStore_MustCreateUser(t *testing.T) {
 	store := NewTestMemoryStore(t)
-	
+
 	user := store.MustCreateUser("testuser", "test@example.com", "passhash")
-	
+
 	if user.ID == 0 {
 		t.Error("user.ID should be assigned")
 	}
 	if user.Username != "testuser" {
 		t.Errorf("user.Username = %q, want %q", user.Username, "testuser")
 	}
-	
+
 	// Verify it was stored
 	got, err := store.GetUserByUsername(context.Background(), "testuser")
 	if err != nil {
@@ -50,16 +50,16 @@ func TestTestMemoryStore_MustCreateUser(t *testing.T) {
 
 func TestTestMemoryStore_MustCreateProject(t *testing.T) {
 	store := NewTestMemoryStore(t)
-	
+
 	project := store.MustCreateProject("test-project")
-	
+
 	if project.ID == 0 {
 		t.Error("project.ID should be assigned")
 	}
 	if project.Name != "test-project" {
 		t.Errorf("project.Name = %q, want %q", project.Name, "test-project")
 	}
-	
+
 	// Verify it was stored
 	got, err := store.GetProjectByName(context.Background(), "test-project")
 	if err != nil {
@@ -72,18 +72,18 @@ func TestTestMemoryStore_MustCreateProject(t *testing.T) {
 
 func TestTestMemoryStore_MustCreateSession(t *testing.T) {
 	store := NewTestMemoryStore(t)
-	
+
 	user := store.MustCreateUser("sessionuser", "session@example.com", "hash")
 	expires := time.Now().Add(time.Hour)
 	session := store.MustCreateSession(user.ID, "test-token", expires)
-	
+
 	if session.ID == "" {
 		t.Error("session.ID should be assigned")
 	}
 	if session.UserID != user.ID {
 		t.Errorf("session.UserID = %d, want %d", session.UserID, user.ID)
 	}
-	
+
 	// Verify it was stored
 	got, err := store.GetSessionByToken(context.Background(), "test-token")
 	if err != nil {
@@ -96,17 +96,17 @@ func TestTestMemoryStore_MustCreateSession(t *testing.T) {
 
 func TestTestMemoryStore_MustCreateAPIKey(t *testing.T) {
 	store := NewTestMemoryStore(t)
-	
+
 	user := store.MustCreateUser("apikeyuser", "apikey@example.com", "hash")
 	key := store.MustCreateAPIKey(user.ID, "test-key", "key-hash-123")
-	
+
 	if key.ID == 0 {
 		t.Error("key.ID should be assigned")
 	}
 	if key.Name != "test-key" {
 		t.Errorf("key.Name = %q, want %q", key.Name, "test-key")
 	}
-	
+
 	// Verify it was stored
 	got, err := store.GetAPIKeyByHash(context.Background(), "key-hash-123")
 	if err != nil {
@@ -119,16 +119,16 @@ func TestTestMemoryStore_MustCreateAPIKey(t *testing.T) {
 
 func TestTestMemoryStore_MustUpsertAgent(t *testing.T) {
 	store := NewTestMemoryStore(t)
-	
+
 	agent := store.MustUpsertAgent("agent-test-1", "host1.example.com", "online")
-	
+
 	if agent.ID != "agent-test-1" {
 		t.Errorf("agent.ID = %q, want %q", agent.ID, "agent-test-1")
 	}
 	if agent.Hostname != "host1.example.com" {
 		t.Errorf("agent.Hostname = %q, want %q", agent.Hostname, "host1.example.com")
 	}
-	
+
 	// Verify it was stored
 	got, err := store.GetAgent(context.Background(), "agent-test-1")
 	if err != nil {
@@ -141,17 +141,17 @@ func TestTestMemoryStore_MustUpsertAgent(t *testing.T) {
 
 func TestTestMemoryStore_MustCreateDeployment(t *testing.T) {
 	store := NewTestMemoryStore(t)
-	
+
 	project := store.MustCreateProject("deploy-project")
 	deployment := store.MustCreateDeployment("deploy-test-1", project.Name, "running")
-	
+
 	if deployment.ID != "deploy-test-1" {
 		t.Errorf("deployment.ID = %q, want %q", deployment.ID, "deploy-test-1")
 	}
 	if deployment.Status != "running" {
 		t.Errorf("deployment.Status = %q, want %q", deployment.Status, "running")
 	}
-	
+
 	// Verify it was stored
 	got, err := store.GetDeployment(context.Background(), "deploy-test-1")
 	if err != nil {
@@ -164,9 +164,9 @@ func TestTestMemoryStore_MustCreateDeployment(t *testing.T) {
 
 func TestTestMemoryStore_MustSetSetting(t *testing.T) {
 	store := NewTestMemoryStore(t)
-	
+
 	store.MustSetSetting("test", "key1", "value1")
-	
+
 	// Verify it was stored
 	got, err := store.GetSetting(context.Background(), "test", "key1")
 	if err != nil {
@@ -179,17 +179,17 @@ func TestTestMemoryStore_MustSetSetting(t *testing.T) {
 
 func TestTestMemoryStore_MustBlockIP(t *testing.T) {
 	store := NewTestMemoryStore(t)
-	
+
 	expires := time.Now().Add(time.Hour)
 	blocked := store.MustBlockIP("192.168.1.100", "testing", expires)
-	
+
 	if blocked.ID == 0 {
 		t.Error("blocked.ID should be assigned")
 	}
 	if blocked.IPAddress != "192.168.1.100" {
 		t.Errorf("blocked.IPAddress = %q, want %q", blocked.IPAddress, "192.168.1.100")
 	}
-	
+
 	// Verify it was stored
 	isBlocked, err := store.IsIPBlocked(context.Background(), "192.168.1.100")
 	if err != nil {
@@ -202,16 +202,16 @@ func TestTestMemoryStore_MustBlockIP(t *testing.T) {
 
 func TestTestMemoryStore_MustLogAudit(t *testing.T) {
 	store := NewTestMemoryStore(t)
-	
+
 	entry := store.MustLogAudit("test_action", "testuser", "test_resource")
-	
+
 	if entry.ID == 0 {
 		t.Error("entry.ID should be assigned")
 	}
 	if entry.Action != "test_action" {
 		t.Errorf("entry.Action = %q, want %q", entry.Action, "test_action")
 	}
-	
+
 	// Verify it was stored
 	entries, err := store.ListAuditLogs(context.Background(), 100, 0)
 	if err != nil {
@@ -227,9 +227,9 @@ func TestTestMemoryStore_MustLogAudit(t *testing.T) {
 
 func TestTestMemoryStore_SeedTestData(t *testing.T) {
 	store := NewTestMemoryStore(t)
-	
+
 	data := store.SeedTestData()
-	
+
 	// Verify all data was created
 	if data.AdminUser == nil || data.AdminUser.ID == 0 {
 		t.Error("AdminUser should be created")
@@ -264,7 +264,7 @@ func TestTestMemoryStore_SeedTestData(t *testing.T) {
 	if data.Deployment2 == nil || data.Deployment2.ID == "" {
 		t.Error("Deployment2 should be created")
 	}
-	
+
 	// Verify settings
 	setting, err := store.GetSetting(context.Background(), "app", "name")
 	if err != nil {
@@ -277,9 +277,9 @@ func TestTestMemoryStore_SeedTestData(t *testing.T) {
 
 func TestTestMemoryStore_SeedTestData_DataRelationships(t *testing.T) {
 	store := NewTestMemoryStore(t)
-	
+
 	data := store.SeedTestData()
-	
+
 	// Verify session belongs to correct user
 	session, err := store.GetSessionByToken(context.Background(), "admin-session-token")
 	if err != nil {
@@ -288,7 +288,7 @@ func TestTestMemoryStore_SeedTestData_DataRelationships(t *testing.T) {
 	if session.UserID != data.AdminUser.ID {
 		t.Errorf("AdminSession.UserID = %d, want %d", session.UserID, data.AdminUser.ID)
 	}
-	
+
 	// Verify API key belongs to correct user
 	apiKey, err := store.GetAPIKeyByHash(context.Background(), "admin-key-hash")
 	if err != nil {
@@ -297,7 +297,7 @@ func TestTestMemoryStore_SeedTestData_DataRelationships(t *testing.T) {
 	if apiKey.UserID != data.AdminUser.ID {
 		t.Errorf("AdminAPIKey.UserID = %d, want %d", apiKey.UserID, data.AdminUser.ID)
 	}
-	
+
 	// Verify deployment belongs to correct project
 	deployment, err := store.GetDeployment(context.Background(), data.Deployment1.ID)
 	if err != nil {

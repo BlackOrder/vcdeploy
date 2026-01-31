@@ -9,10 +9,10 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 )
 
-func newTestService(t *testing.T) (*Service, *storage.DB) {
+func newTestService(t *testing.T) (*Service, storage.Store) {
 	t.Helper()
 
-	db, cleanup := testutil.NewTestDB(t)
+	db, cleanup := testutil.NewTestStore(t)
 	t.Cleanup(cleanup)
 
 	return New(db), db
@@ -650,7 +650,7 @@ func TestService_Create_BranchDefaults(t *testing.T) {
 }
 
 func TestNew(t *testing.T) {
-	db, cleanup := testutil.NewTestDB(t)
+	db, cleanup := testutil.NewTestStore(t)
 	defer cleanup()
 
 	svc := New(db)

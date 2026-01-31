@@ -44,8 +44,8 @@ func (s *MemoryStore) GetProjectByName(ctx context.Context, name string) (*Proje
 	}
 
 	// Return a copy
-	copy := *project
-	return &copy, nil
+	copied := *project
+	return &copied, nil
 }
 
 // ListProjects returns all projects from memory.
@@ -55,8 +55,8 @@ func (s *MemoryStore) ListProjects() ([]*Project, error) {
 
 	projects := make([]*Project, 0, len(s.projects))
 	for _, project := range s.projects {
-		copy := *project
-		projects = append(projects, &copy)
+		copied := *project
+		projects = append(projects, &copied)
 	}
 
 	return projects, nil
@@ -104,9 +104,9 @@ func (s *MemoryStore) UpdateProjectHealthCheck(ctx context.Context, projectID in
 
 	// Queue persistence
 	s.queueWrite(s.projectsWrites, NewWriteOp(WriteOpUpdate, "projects", map[string]any{
-		"id":                     projectID,
-		"health_check_id":        healthCheckID,
-		"auto_rollback_enabled":  autoRollback,
+		"id":                      projectID,
+		"health_check_id":         healthCheckID,
+		"auto_rollback_enabled":   autoRollback,
 		"rollback_on_health_fail": rollbackOnHealthFail,
 	}))
 
@@ -180,8 +180,8 @@ func (s *MemoryStore) ListProjectTypes() ([]*ProjectType, error) {
 
 	types := make([]*ProjectType, 0, len(s.projectTypes))
 	for _, pt := range s.projectTypes {
-		copy := *pt
-		types = append(types, &copy)
+		copied := *pt
+		types = append(types, &copied)
 	}
 
 	return types, nil
@@ -194,8 +194,8 @@ func (s *MemoryStore) GetProjectTypeByName(name string) (*ProjectType, error) {
 
 	for _, pt := range s.projectTypes {
 		if pt.Name == name {
-			copy := *pt
-			return &copy, nil
+			copied := *pt
+			return &copied, nil
 		}
 	}
 
@@ -208,18 +208,19 @@ func (s *MemoryStore) UpdateProjectTypeByName(pt *ProjectType) error {
 	defer s.mu.Unlock()
 
 	for id, existing := range s.projectTypes {
-		if existing.Name == pt.Name {
-			pt.ID = id
-			pt.CreatedAt = existing.CreatedAt
-
-			stored := *pt
-			s.projectTypes[id] = &stored
-
-			// Queue persistence
-			s.queueWrite(s.projectsWrites, NewWriteOp(WriteOpUpdate, "project_types", &stored))
-
-			return nil
+		if existing.Name != pt.Name {
+			continue
 		}
+		pt.ID = id
+		pt.CreatedAt = existing.CreatedAt
+
+		stored := *pt
+		s.projectTypes[id] = &stored
+
+		// Queue persistence
+		s.queueWrite(s.projectsWrites, NewWriteOp(WriteOpUpdate, "project_types", &stored))
+
+		return nil
 	}
 
 	return ErrNotFound
@@ -253,8 +254,8 @@ func (s *MemoryStore) GetProjectWebhook(ctx context.Context, projectID int64, pr
 
 	for _, webhook := range s.webhooks {
 		if webhook.ProjectID == projectID && webhook.Provider == provider {
-			copy := *webhook
-			return &copy, nil
+			copied := *webhook
+			return &copied, nil
 		}
 	}
 
@@ -270,18 +271,19 @@ func (s *MemoryStore) SetProjectWebhook(ctx context.Context, projectID int64, pr
 
 	// Check if webhook already exists
 	for _, webhook := range s.webhooks {
-		if webhook.ProjectID == projectID && webhook.Provider == provider {
-			// Update existing
-			webhook.SecretEncrypted = secretEncrypted
-			webhook.Enabled = enabled
-			webhook.RequireSecret = requireSecret
-			webhook.UpdatedAt = now
-
-			// Queue persistence
-			s.queueWrite(s.projectsWrites, NewWriteOp(WriteOpUpdate, "project_webhooks", webhook))
-
-			return nil
+		if webhook.ProjectID != projectID || webhook.Provider != provider {
+			continue
 		}
+		// Update existing
+		webhook.SecretEncrypted = secretEncrypted
+		webhook.Enabled = enabled
+		webhook.RequireSecret = requireSecret
+		webhook.UpdatedAt = now
+
+		// Queue persistence
+		s.queueWrite(s.projectsWrites, NewWriteOp(WriteOpUpdate, "project_webhooks", webhook))
+
+		return nil
 	}
 
 	// Create new
@@ -312,8 +314,8 @@ func (s *MemoryStore) ListProjectWebhooks(ctx context.Context, projectID int64) 
 	var webhooks []*ProjectWebhook
 	for _, webhook := range s.webhooks {
 		if webhook.ProjectID == projectID {
-			copy := *webhook
-			webhooks = append(webhooks, &copy)
+			copied := *webhook
+			webhooks = append(webhooks, &copied)
 		}
 	}
 
@@ -395,8 +397,8 @@ func (s *MemoryStore) GetSecret(ctx context.Context, project, scope, key string)
 	}
 
 	// Return a copy
-	copy := *secret
-	return &copy, nil
+	copied := *secret
+	return &copied, nil
 }
 
 // ListSecrets returns secret metadata for a scope (legacy method without context).
@@ -426,8 +428,8 @@ func (s *MemoryStore) ListSecretsCtx(ctx context.Context, project string) ([]*Se
 	var secrets []*Secret
 	for _, secret := range s.secrets {
 		if secret.Project == project {
-			copy := *secret
-			secrets = append(secrets, &copy)
+			copied := *secret
+			secrets = append(secrets, &copied)
 		}
 	}
 
@@ -442,8 +444,8 @@ func (s *MemoryStore) ListSecretsWithScope(ctx context.Context, project, scope s
 	var secrets []*Secret
 	for _, secret := range s.secrets {
 		if secret.Project == project && secret.Scope == scope {
-			copy := *secret
-			secrets = append(secrets, &copy)
+			copied := *secret
+			secrets = append(secrets, &copied)
 		}
 	}
 
@@ -457,8 +459,8 @@ func (s *MemoryStore) ListAllSecretsCtx(ctx context.Context) ([]*Secret, error) 
 
 	secrets := make([]*Secret, 0, len(s.secrets))
 	for _, secret := range s.secrets {
-		copy := *secret
-		secrets = append(secrets, &copy)
+		copied := *secret
+		secrets = append(secrets, &copied)
 	}
 
 	return secrets, nil

@@ -24,8 +24,8 @@ type AppContext struct {
 	// Config is the master configuration
 	Config *config.MasterConfig
 
-	// Storage is the database connection
-	Storage *storage.DB
+	// Storage is the database connection (implements storage.Store interface)
+	Storage storage.Store
 
 	// Stdout is the output writer (defaults to os.Stdout)
 	Stdout io.Writer
@@ -69,8 +69,8 @@ func (c *AppContext) WithConfig(cfg *config.MasterConfig) *AppContext {
 }
 
 // WithStorage sets the storage and returns the context for chaining.
-func (c *AppContext) WithStorage(db *storage.DB) *AppContext {
-	c.Storage = db
+func (c *AppContext) WithStorage(store storage.Store) *AppContext {
+	c.Storage = store
 	return c
 }
 

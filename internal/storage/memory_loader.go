@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -332,7 +333,7 @@ func (s *MemoryStore) loadDeploymentRollbacks(ctx context.Context, db *DB) error
 
 	for _, depID := range deploymentIDs {
 		rollback, err := db.GetLatestRollbackForDeployment(ctx, depID)
-		if err == ErrNotFound {
+		if errors.Is(err, ErrNotFound) {
 			continue
 		}
 		if err != nil {

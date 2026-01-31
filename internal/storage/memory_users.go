@@ -45,8 +45,8 @@ func (s *MemoryStore) GetUserByUsername(ctx context.Context, username string) (*
 	}
 
 	// Return a copy to prevent mutation
-	copy := *user
-	return &copy, nil
+	copied := *user
+	return &copied, nil
 }
 
 // GetUserByID retrieves a user by ID from memory.
@@ -60,8 +60,8 @@ func (s *MemoryStore) GetUserByID(ctx context.Context, id int64) (*User, error) 
 	}
 
 	// Return a copy to prevent mutation
-	copy := *user
-	return &copy, nil
+	copied := *user
+	return &copied, nil
 }
 
 // ListUsers returns all users from memory.
@@ -71,8 +71,8 @@ func (s *MemoryStore) ListUsers(ctx context.Context) ([]*User, error) {
 
 	users := make([]*User, 0, len(s.users))
 	for _, user := range s.users {
-		copy := *user
-		users = append(users, &copy)
+		copied := *user
+		users = append(users, &copied)
 	}
 
 	return users, nil
@@ -191,8 +191,8 @@ func (s *MemoryStore) GetSessionByToken(ctx context.Context, token string) (*Ses
 	}
 
 	// Return a copy
-	copy := *session
-	return &copy, nil
+	copied := *session
+	return &copied, nil
 }
 
 // DeleteSession removes a session from memory and queues persistence.
@@ -256,8 +256,8 @@ func (s *MemoryStore) ListUserSessions(ctx context.Context, userID int64) ([]*Se
 	var sessions []*Session
 	for _, session := range s.sessions {
 		if session.UserID == userID {
-			copy := *session
-			sessions = append(sessions, &copy)
+			copied := *session
+			sessions = append(sessions, &copied)
 		}
 	}
 
@@ -308,8 +308,8 @@ func (s *MemoryStore) GetAPIKeyByHash(ctx context.Context, keyHash string) (*API
 	}
 
 	// Return a copy
-	copy := *key
-	return &copy, nil
+	copied := *key
+	return &copied, nil
 }
 
 // UpdateAPIKeyUsage updates the last used timestamp for an API key.
@@ -380,8 +380,8 @@ func (s *MemoryStore) ListAPIKeys(ctx context.Context, userID int64) ([]*APIKey,
 	keys := s.apiKeysByUser[userID]
 	result := make([]*APIKey, len(keys))
 	for i, key := range keys {
-		copy := *key
-		result[i] = &copy
+		copied := *key
+		result[i] = &copied
 	}
 
 	return result, nil

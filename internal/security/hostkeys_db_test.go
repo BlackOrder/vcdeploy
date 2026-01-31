@@ -12,7 +12,7 @@ import (
 )
 
 // setupTestDB creates a test database and returns a cleanup function.
-func setupTestDB(t *testing.T) (*storage.DB, func()) {
+func setupTestDB(t *testing.T) (storage.Store, func()) {
 	t.Helper()
 	tmpDir := t.TempDir()
 

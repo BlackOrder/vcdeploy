@@ -193,21 +193,22 @@ func (s *MemoryStore) MarkStaleAgents(ctx context.Context, cutoff time.Time) (in
 	for id, agent := range s.agents {
 		// Only mark non-stale agents that haven't been seen recently
 		// Agent uses LastSeenAt field (not LastSeen)
-		if agent.Status != "stale" && agent.LastSeenAt.Before(cutoff) {
-			// Create a copy for update
-			updated := *agent
-			// Deep copy Labels map if present
-			if agent.Labels != nil {
-				updated.Labels = make(map[string]string, len(agent.Labels))
-				for k, v := range agent.Labels {
-					updated.Labels[k] = v
-				}
-			}
-			updated.Status = "stale"
-			s.agents[id] = &updated
-			s.queueWrite(s.agentsWrites, NewWriteOp(WriteOpUpdate, "agents", &updated))
-			marked++
+		if agent.Status == "stale" || !agent.LastSeenAt.Before(cutoff) {
+			continue
 		}
+		// Create a copy for update
+		updated := *agent
+		// Deep copy Labels map if present
+		if agent.Labels != nil {
+			updated.Labels = make(map[string]string, len(agent.Labels))
+			for k, v := range agent.Labels {
+				updated.Labels[k] = v
+			}
+		}
+		updated.Status = "stale"
+		s.agents[id] = &updated
+		s.queueWrite(s.agentsWrites, NewWriteOp(WriteOpUpdate, "agents", &updated))
+		marked++
 	}
 	return marked, nil
 }
