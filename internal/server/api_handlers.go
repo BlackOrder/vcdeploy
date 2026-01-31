@@ -1523,8 +1523,10 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 		}
 
 		var req struct {
-			Name      string `json:"name"`
-			ExpiresIn int    `json:"expires_in_days"` // 0 = no expiry
+			Name        string   `json:"name"`
+			Description string   `json:"description"`
+			Scopes      []string `json:"scopes"`
+			ExpiresIn   int      `json:"expires_in_days"` // 0 = no expiry
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
 			s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
@@ -1536,6 +1538,12 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// Default to wildcard scope if not specified
+		scopes := req.Scopes
+		if len(scopes) == 0 {
+			scopes = []string{"*"}
+		}
+
 		var expiresAt *time.Time
 		if req.ExpiresIn > 0 {
 			exp := time.Now().AddDate(0, 0, req.ExpiresIn)
@@ -1543,7 +1551,7 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Create API key using service (handles generation and hashing)
-		rawKey, apiKey, err := s.apiKeyService.Create(ctx, userID, req.Name, []string{"*"}, expiresAt)
+		rawKey, apiKey, err := s.apiKeyService.Create(ctx, userID, req.Name, scopes, expiresAt)
 		if err != nil {
 			s.logger.Error("Failed to create API key", zap.Error(err))
 			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
@@ -1558,6 +1566,7 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 			"id":        apiKey.ID,
 			"name":      apiKey.Name,
 			"key":       rawKey, // Only returned on creation!
+			"scopes":    scopes,
 			"expiresAt": expiresAt,
 		})
 
