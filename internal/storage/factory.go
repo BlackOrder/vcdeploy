@@ -3,6 +3,7 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
@@ -18,6 +19,12 @@ type CachedStore struct {
 // UnderlyingDB returns the underlying DB for direct access (e.g., migrations).
 func (cs *CachedStore) UnderlyingDB() *DB {
 	return cs.db
+}
+
+// Conn returns the underlying database connection for health checks.
+// This overrides MemoryStore.Conn() which returns nil.
+func (cs *CachedStore) Conn() *sql.DB {
+	return cs.db.Conn()
 }
 
 // Close closes the CachedStore, flushing pending writes and closing the database.

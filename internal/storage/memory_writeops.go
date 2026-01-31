@@ -123,15 +123,15 @@ func (s *MemoryStore) executeSessionOp(tx *sql.Tx, op WriteOp) error {
 			return fmt.Errorf("invalid data type for session insert")
 		}
 		_, err := tx.Exec(`
-			INSERT INTO sessions (id, user_id, token, ip_address, user_agent, created_at, expires_at, last_used)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		`, session.ID, session.UserID, session.Token, session.IPAddress, session.UserAgent, session.CreatedAt, session.ExpiresAt, session.LastUsed)
+			INSERT INTO sessions (id, user_id, ip_address, user_agent, created_at, expires_at)
+			VALUES (?, ?, ?, ?, ?, ?)
+		`, session.ID, session.UserID, session.IPAddress, session.UserAgent, session.CreatedAt, session.ExpiresAt)
 		return err
 
 	case WriteOpDelete:
 		switch v := op.Data.(type) {
 		case string:
-			_, err := tx.Exec(`DELETE FROM sessions WHERE token = ?`, v)
+			_, err := tx.Exec(`DELETE FROM sessions WHERE id = ?`, v)
 			return err
 		case int64:
 			_, err := tx.Exec(`DELETE FROM sessions WHERE user_id = ?`, v)

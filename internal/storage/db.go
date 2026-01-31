@@ -31,14 +31,14 @@ func New(path string, logger *zap.Logger) (*DB, error) {
 		logger = zap.NewNop()
 	}
 
-	conn, err := sql.Open("sqlite", path+"?_journal_mode=WAL&_busy_timeout=30000")
+	conn, err := sql.Open("sqlite", path+"?_journal_mode=WAL&_busy_timeout=5000")
 	if err != nil {
 		return nil, fmt.Errorf("opening database: %w", err)
 	}
 
-	// Configure connection pool - limit connections to prevent SQLite locking
-	conn.SetMaxOpenConns(1)
-	conn.SetMaxIdleConns(1)
+	// Configure connection pool for SQLite
+	conn.SetMaxOpenConns(25)
+	conn.SetMaxIdleConns(5)
 	conn.SetConnMaxLifetime(5 * time.Minute)
 
 	// Test connection
