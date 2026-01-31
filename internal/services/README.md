@@ -98,13 +98,13 @@ var _ services.UserServicer = (*Service)(nil)
 
 // Service handles user management.
 type Service struct {
-    db     *storage.DB
+    store  storage.Store
     logger *zap.Logger  // Optional: for services that need logging
 }
 
 // New creates a new users Service.
-func New(db *storage.DB) *Service {
-    return &Service{db: db}
+func New(store storage.Store) *Service {
+    return &Service{store: store}
 }
 
 // Create creates a new user.
@@ -118,7 +118,7 @@ func (s *Service) Create(ctx context.Context, username, password, email, role st
     // ...
     
     // 3. Persist via storage layer
-    if err := s.db.CreateUser(ctx, user); err != nil {
+    if err := s.store.CreateUser(ctx, user); err != nil {
         return nil, fmt.Errorf("creating user: %w", err)
     }
     
@@ -247,8 +247,8 @@ type MasterServer struct {
 }
 
 // Initialize in SetWebhookHandler or similar
-s.userService = users.New(s.db)
-s.projectService = projects.New(s.db)
+s.userService = users.New(s.store)
+s.projectService = projects.New(s.store)
 
 // Use in handlers
 func (s *MasterServer) handleUsers(w http.ResponseWriter, r *http.Request) {
@@ -274,9 +274,9 @@ Some services need the KMS for encryption:
 
 ```go
 // Secrets and Settings services require KMS
-s.secretService = secrets.New(s.db, kms)
-s.settingsSvc = settings.New(s.db, kms)
-s.webhookService = webhooks.New(s.db, kms)
+s.secretService = secrets.New(s.store, kms)
+s.settingsSvc = settings.New(s.store, kms)
+s.webhookService = webhooks.New(s.store, kms)
 ```
 
 ## Testing
@@ -292,14 +292,14 @@ import (
 )
 
 func TestMyService(t *testing.T) {
-    // Create test database (automatically cleaned up)
-    db, cleanup := testutil.NewTestDB(t)
+    // Create test store (automatically cleaned up)
+    store, cleanup := testutil.NewTestStore(t)
     defer cleanup()
 
     // Create no-op logger for tests
     logger := testutil.NewTestLogger(t)
 
-    svc := myservice.New(db)
+    svc := myservice.New(store)
     
     // Use constants for consistent test data
     user := &storage.User{
@@ -313,9 +313,10 @@ func TestMyService(t *testing.T) {
 ### Test Helpers
 
 ```go
-// Database helpers
-testutil.NewTestDB(t)     // Creates temp SQLite DB for tests
-testutil.SetupBenchDB(b)  // Creates temp SQLite DB for benchmarks
+// Storage helpers
+testutil.NewTestStore(t)  // Creates temp storage.Store for tests
+testutil.NewTestDB(t)     // Creates temp SQLite *storage.DB for tests
+testutil.SetupBenchStore(b) // Creates temp storage.Store for benchmarks
 testutil.NewTestLogger(t) // Returns zap.NewNop() logger
 
 // Constants for consistent test data
@@ -403,11 +404,11 @@ go test -race ./internal/services/...
    var _ services.MyServicer = (*Service)(nil)
    
    type Service struct {
-       db *storage.DB
+       store storage.Store
    }
-   
-   func New(db *storage.DB) *Service {
-       return &Service{db: db}
+
+   func New(store storage.Store) *Service {
+       return &Service{store: store}
    }
    ```
 
@@ -421,25 +422,25 @@ go test -race ./internal/services/...
 
 4. **Initialize** in `SetWebhookHandler`:
    ```go
-   s.myService = myservice.New(s.db)
+   s.myService = myservice.New(s.store)
    ```
 
 5. **Write tests** in `internal/services/myservice/service_test.go`
 
 ## Migration from Direct DB Calls
 
-When migrating handlers from direct `s.db.*` calls to services:
+When migrating handlers from direct `s.store.*` calls to services:
 
-1. Identify all `s.db.SomeMethod()` calls in the handler
+1. Identify all `s.store.SomeMethod()` calls in the handler
 2. Map to appropriate service method (create service method if needed)
-3. Replace `s.db.SomeMethod()` with `s.someService.SomeMethod()`
+3. Replace `s.store.SomeMethod()` with `s.someService.SomeMethod()`
 4. Update error handling (services may return different errors)
 5. Run tests to verify behavior
 
 Example migration:
 ```go
 // Before
-user, err := s.db.GetUserByUsername(ctx, username)
+user, err := s.store.GetUserByUsername(ctx, username)
 
 // After  
 user, err := s.userService.GetByUsername(ctx, username)
