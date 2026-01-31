@@ -303,7 +303,7 @@ func (s *SymlinkStrategy) Deploy(ctx context.Context, cmd *DeployCommand, logCh 
 func (s *SymlinkStrategy) getNextReleaseNumber(ctx context.Context, releasesPath string) (int, error) {
 	result, err := s.runner.Run(ctx, fmt.Sprintf("ls -1 %s 2>/dev/null | sort -n | tail -1", releasesPath), RunOptions{})
 	if err != nil {
-		return 1, nil // First release
+		return 1, nil //nolint:nilerr // No releases yet
 	}
 	var lastRelease int
 	_, _ = fmt.Sscanf(result.Stdout, "%d", &lastRelease)

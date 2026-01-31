@@ -168,10 +168,8 @@ func TestLogEntry(t *testing.T) {
 	t.Parallel()
 
 	entry := LogEntry{
-		Timestamp: time.Now(),
-		Level:     LogInfo,
-		Message:   "Test message",
-		Source:    "deploy",
+		Level:  LogInfo,
+		Source: "deploy",
 	}
 
 	if entry.Level != LogInfo {
@@ -2179,9 +2177,6 @@ func TestDeployCommandWithEnvVars(t *testing.T) {
 	t.Parallel()
 
 	cmd := &DeployCommand{
-		DeploymentID: "test",
-		Project:      "test",
-		Repository:   "repo",
 		EnvVars: map[string]string{
 			"KEY1": "value1",
 			"KEY2": "value2",
@@ -2248,7 +2243,6 @@ func TestDeployResultDuration(t *testing.T) {
 	end := time.Now()
 
 	result := &DeployResult{
-		Success:     true,
 		StartedAt:   start,
 		CompletedAt: end,
 	}
@@ -2606,7 +2600,6 @@ func TestLogEntryFields(t *testing.T) {
 	entry := LogEntry{
 		Timestamp: now,
 		Level:     LogWarn,
-		Message:   "Warning message",
 		Source:    "deploy",
 	}
 
@@ -2628,8 +2621,6 @@ func TestDeployResultLogs(t *testing.T) {
 	t.Parallel()
 
 	result := &DeployResult{
-		Success:       true,
-		ReleaseNumber: 10,
 		Logs: []LogEntry{
 			{Message: "Starting deployment", Level: LogInfo},
 			{Message: "Creating release", Level: LogInfo},
