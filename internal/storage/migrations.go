@@ -63,6 +63,7 @@ var migrations = []Migration{
 					user_id INTEGER NOT NULL,
 					name TEXT NOT NULL,
 					key_hash TEXT UNIQUE NOT NULL,
+					key_prefix TEXT,
 					scopes TEXT,
 					created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 					last_used_at DATETIME,
@@ -866,25 +867,6 @@ var migrations = []Migration{
 				DROP TABLE IF EXISTS health_check_configs;
 			`)
 			return err
-		},
-	},
-	{
-		Version:     17,
-		Description: "Add key_prefix column to api_keys table",
-		Up: func(tx *sql.Tx) error {
-			// Add key_prefix column to api_keys table
-			_, err := tx.Exec(`ALTER TABLE api_keys ADD COLUMN key_prefix TEXT`)
-			if err != nil {
-				// Column might already exist
-				if !strings.Contains(err.Error(), "duplicate column name") {
-					return fmt.Errorf("adding key_prefix column: %w", err)
-				}
-			}
-			return nil
-		},
-		Down: func(tx *sql.Tx) error {
-			// SQLite doesn't support DROP COLUMN easily, so we skip it
-			return nil
 		},
 	},
 }
