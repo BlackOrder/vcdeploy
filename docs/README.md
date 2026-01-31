@@ -92,7 +92,8 @@ vcdeploy agent --config /etc/vcdeploy/agent.yaml
 - [Quick Start Guide](quickstart.md) - Get up and running in 5 minutes
 - [Installation Guide](installation.md) - Detailed installation instructions
 - [Architecture Overview](architecture/overview.md) - How vcdeploy works
-- [API Reference](api/rest.md) - REST and gRPC API documentation
+- [API Reference](api.md) - REST API documentation
+- [gRPC API](api/grpc.md) - Agent communication protocol
 
 ## License
 
