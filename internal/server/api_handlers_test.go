@@ -648,7 +648,7 @@ func TestHandleUser_UpdateWeakPassword(t *testing.T) {
 	req = requestWithUserContext(req, userID)
 	server.handleUsers(w, req)
 
-	if w.Code != http.StatusOK {
+	if w.Code != http.StatusCreated {
 		t.Fatalf("failed to create user: %d - %s", w.Code, w.Body.String())
 	}
 
