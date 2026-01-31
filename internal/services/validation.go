@@ -128,3 +128,37 @@ func ValidateStringID(field, id string) error {
 	}
 	return nil
 }
+
+// ValidAPIKeyScopes defines the valid scopes for API keys.
+var ValidAPIKeyScopes = map[string]bool{
+	"*":                true, // admin/full access
+	"read:projects":    true,
+	"write:projects":   true,
+	"read:deployments": true,
+	"write:deployments": true,
+	"read:agents":      true,
+	"write:agents":     true,
+	"read:users":       true,
+	"write:users":      true,
+	"read:settings":    true,
+	"write:settings":   true,
+	"read:secrets":     true,
+	"write:secrets":    true,
+	"read:apikeys":     true,
+	"write:apikeys":    true,
+	"admin":            true, // legacy admin scope
+}
+
+// ValidateAPIKeyScopes validates a list of API key scopes.
+// Returns an error if any scope is invalid.
+func ValidateAPIKeyScopes(scopes []string) error {
+	if len(scopes) == 0 {
+		return nil // Empty means default to "*", handled by caller
+	}
+	for _, scope := range scopes {
+		if !ValidAPIKeyScopes[scope] {
+			return InvalidInput("validation", "invalid scope: "+scope)
+		}
+	}
+	return nil
+}

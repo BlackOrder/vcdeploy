@@ -2081,6 +2081,50 @@ func TestHandleAPIKeys_CreateWithExpiry(t *testing.T) {
 	}
 }
 
+func TestHandleAPIKeys_CreateInvalidScopes(t *testing.T) {
+	t.Parallel()
+
+	server, _, sessionToken, _ := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	ctx := context.Background()
+	session, _ := server.store.GetSessionByToken(ctx, sessionToken)
+
+	body := strings.NewReader(`{"name":"invalid-scope-key","scopes":["invalid:scope"]}`)
+	req := httptest.NewRequest("POST", "/api/v1/api-keys", body)
+	req.Header.Set("Content-Type", "application/json")
+	req = requestWithUserContext(req, session.UserID)
+	w := httptest.NewRecorder()
+
+	server.handleAPIKeys(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleAPIKeys_CreateValidScopes(t *testing.T) {
+	t.Parallel()
+
+	server, _, sessionToken, _ := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	ctx := context.Background()
+	session, _ := server.store.GetSessionByToken(ctx, sessionToken)
+
+	body := strings.NewReader(`{"name":"valid-scope-key","scopes":["read:projects","write:deployments"]}`)
+	req := httptest.NewRequest("POST", "/api/v1/api-keys", body)
+	req.Header.Set("Content-Type", "application/json")
+	req = requestWithUserContext(req, session.UserID)
+	w := httptest.NewRecorder()
+
+	server.handleAPIKeys(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Errorf("expected status %d, got %d: %s", http.StatusCreated, w.Code, w.Body.String())
+	}
+}
+
 func TestHandleAPIKeys_Unauthorized(t *testing.T) {
 	t.Parallel()
 

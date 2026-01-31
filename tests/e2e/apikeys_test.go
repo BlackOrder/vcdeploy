@@ -169,10 +169,8 @@ func TestAPIKeysAPI(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		// Currently the API doesn't validate scopes and accepts anything
-		// This is a permissive design - unknown scopes are simply ignored
-		// So we expect 201 Created, not 400
-		ctx.Assertions.StatusCreated(resp)
+		// API validates scopes and rejects invalid ones
+		ctx.Assertions.StatusBadRequest(resp)
 	})
 
 	t.Cleanup(func() {
