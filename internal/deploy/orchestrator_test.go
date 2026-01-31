@@ -908,23 +908,10 @@ func TestOrchestrator_NilCallbacks(t *testing.T) {
 func TestDeployment_Fields(t *testing.T) {
 	t.Parallel()
 
-	now := time.Now()
 	deployment := &Deployment{
 		ID:            "deploy-123",
-		ProjectID:     "project",
-		TargetID:      "prod",
-		AgentID:       "agent-1",
-		Status:        StatusDeploying,
 		Progress:      50,
-		CurrentStep:   "building",
 		ReleaseNumber: 42,
-		Repository:    "git@github.com:test/repo.git",
-		Branch:        "main",
-		Commit:        "abc123",
-		CreatedAt:     now,
-		TriggeredBy:   "user@test.com",
-		TriggerSource: "api",
-		Error:         errors.New("test error"),
 		Logs: []LogEntry{
 			{Message: "Log 1", Level: LogInfo},
 			{Message: "Log 2", Level: LogWarn},

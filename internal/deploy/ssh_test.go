@@ -967,7 +967,6 @@ func TestRunOptionsAllFields(t *testing.T) {
 			"PORT":    "8080",
 		},
 		User:    "www-data",
-		Group:   "www-data",
 		Timeout: 5 * time.Minute,
 	}
 
@@ -1240,7 +1239,6 @@ func TestCommandResultFields(t *testing.T) {
 	result := &CommandResult{
 		ExitCode: 127,
 		Stdout:   "some output\nwith newlines",
-		Stderr:   "error output",
 		Duration: 5 * time.Second,
 	}
 

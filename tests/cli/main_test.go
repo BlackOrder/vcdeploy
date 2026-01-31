@@ -27,10 +27,3 @@ func setupTest(t *testing.T) *testutil.CLITestContext {
 	t.Helper()
 	return testutil.NewCLITestContext(t)
 }
-
-// setupTestParallel creates a new CLI test context for parallel tests.
-func setupTestParallel(t *testing.T) *testutil.CLITestContext {
-	t.Helper()
-	testutil.SetupParallel(t)
-	return setupTest(t)
-}

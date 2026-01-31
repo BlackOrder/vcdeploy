@@ -47,17 +47,9 @@ func TestEvent(t *testing.T) {
 	t.Parallel()
 
 	event := Event{
-		Type:        "deployment",
-		ProjectID:   "proj-001",
-		ProjectName: "Test Project",
-		Environment: "production",
-		DeployID:    "deploy-123",
-		Version:     "v1.2.0",
-		Status:      "success",
-		User:        "admin",
-		Message:     "Deployment completed successfully",
-		URL:         "https://deploy.example.com/123",
-		Timestamp:   time.Now(),
+		Type:      "deployment",
+		Status:    "success",
+		Timestamp: time.Now(),
 	}
 
 	if event.Type != "deployment" {
@@ -285,10 +277,8 @@ func TestSlackConfig(t *testing.T) {
 	t.Parallel()
 
 	cfg := SlackConfig{
-		WebhookURL: "https://hooks.slack.com/services/xxx",
-		Channel:    "#deployments",
-		Username:   "VCDeploy Bot",
-		IconEmoji:  ":rocket:",
+		Channel:   "#deployments",
+		IconEmoji: ":rocket:",
 	}
 
 	if cfg.Channel != "#deployments" {
@@ -425,8 +415,6 @@ func TestEmailConfig(t *testing.T) {
 	cfg := EmailConfig{
 		SMTPHost:    "smtp.example.com",
 		SMTPPort:    587,
-		Username:    "notify@example.com",
-		Password:    "secret",
 		FromAddress: "notify@example.com",
 		FromName:    "VCDeploy",
 		ToAddresses: []string{"team@example.com", "ops@example.com"},
@@ -648,7 +636,6 @@ func TestWebhookConfig(t *testing.T) {
 	t.Parallel()
 
 	cfg := WebhookConfig{
-		URL:     "https://webhook.example.com/deploy",
 		Method:  "POST",
 		Secret:  "webhook-secret",
 		Headers: map[string]string{"X-Custom": "value"},
@@ -1617,11 +1604,7 @@ func TestEmailConfigWithAllFields(t *testing.T) {
 		SMTPHost:    "smtp.gmail.com",
 		SMTPPort:    587,
 		Username:    "user@gmail.com",
-		Password:    "app-password",
-		FromAddress: "deploy@company.com",
-		FromName:    "Deploy System",
 		ToAddresses: []string{"team@company.com", "ops@company.com", "manager@company.com"},
-		TemplateDir: "/etc/vcdeploy/templates",
 	}
 
 	if cfg.SMTPHost != "smtp.gmail.com" {

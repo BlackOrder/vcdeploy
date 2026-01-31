@@ -551,7 +551,9 @@ func tryPidFileStop() error {
 	if err != nil {
 		fmt.Println("Could not find running master process.")
 		fmt.Println("If using systemd, use: systemctl stop vcdeploy-master")
-		return nil
+		// Not finding a PID file is not an error - the process may not be running
+		// or may be managed by systemd. Return nil to indicate graceful handling.
+		return nil //nolint:nilerr // Intentional: missing PID file is not an error condition
 	}
 
 	var pid int

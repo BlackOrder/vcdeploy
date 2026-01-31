@@ -195,9 +195,7 @@ func TestNewSortOption(t *testing.T) {
 
 func TestAuditFilter(t *testing.T) {
 	filter := AuditFilter{
-		Action:   "create",
-		Resource: "user",
-		User:     "admin",
+		Action: "create",
 		DateRange: DateRange{
 			From: time.Now().Add(-24 * time.Hour),
 			To:   time.Now(),
@@ -219,8 +217,6 @@ func TestAuditFilter(t *testing.T) {
 func TestDeploymentFilter(t *testing.T) {
 	filter := DeploymentFilter{
 		Project: "myapp",
-		Status:  "running",
-		Agent:   "agent-1",
 		DateRange: DateRange{
 			From: time.Now().Add(-7 * 24 * time.Hour),
 		},
