@@ -233,7 +233,7 @@ func TestHandleProjectsAPI_Create(t *testing.T) {
 		"name": "test-project",
 		"repository": "https://github.com/test/repo.git",
 		"branch": "main",
-		"deployPath": "/var/www/test",
+		"deploy_path": "/var/www/test",
 		"type": "php"
 	}`)
 
@@ -2407,13 +2407,74 @@ func TestHandleProjectsAPI_CreateMissingName(t *testing.T) {
 	}
 }
 
+func TestHandleProjectsAPI_CreateMissingRepository(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	body := strings.NewReader(`{"name":"test-project","deploy_path":"/var/www/test"}`)
+	req := httptest.NewRequest("POST", "/api/v1/projects", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	req = requestWithUserContext(req, userID)
+	server.handleProjectsAPI(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleProjectsAPI_CreateMissingDeployPath(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	body := strings.NewReader(`{"name":"test-project","repository":"https://github.com/test/repo"}`)
+	req := httptest.NewRequest("POST", "/api/v1/projects", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	req = requestWithUserContext(req, userID)
+	server.handleProjectsAPI(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleProjectsAPI_CreateInvalidName(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	// Name starting with number (invalid per ValidateProjectName)
+	body := strings.NewReader(`{"name":"123-invalid","repository":"https://github.com/test/repo","deploy_path":"/var/www/test"}`)
+	req := httptest.NewRequest("POST", "/api/v1/projects", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	req = requestWithUserContext(req, userID)
+	server.handleProjectsAPI(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
+	}
+}
+
 func TestHandleProjectsAPI_CreateDefaultBranch(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
 	defer server.store.Close()
 
-	body := strings.NewReader(`{"name":"default-branch-project","repository":"https://github.com/test/repo"}`)
+	body := strings.NewReader(`{"name":"default-branch-project","repository":"https://github.com/test/repo","deploy_path":"/var/www/default"}`)
 	req := httptest.NewRequest("POST", "/api/v1/projects", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", apiKey)
