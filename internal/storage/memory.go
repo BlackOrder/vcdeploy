@@ -425,3 +425,6 @@ func secretKey(project, scope, key string) string {
 func rateLimitKey(key, bucket string) string {
 	return key + ":" + bucket
 }
+
+// Ensure MemoryStore implements Store at compile time.
+var _ Store = (*MemoryStore)(nil)
