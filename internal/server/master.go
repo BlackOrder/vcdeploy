@@ -637,6 +637,7 @@ func (s *MasterServer) startHTTP() error {
 
 	// Auth API (for programmatic login)
 	mux.HandleFunc("/api/v1/auth/login", s.handleAPILogin)
+	mux.HandleFunc("/api/v1/auth/me", s.withAuth(s.handleAPICurrentUser))
 
 	// Stats endpoint
 	mux.HandleFunc("/api/v1/stats", s.withAuth(s.handleStats))

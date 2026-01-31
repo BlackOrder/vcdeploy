@@ -231,6 +231,41 @@ func (s *MasterServer) handleAPILogin(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleAPICurrentUser handles GET /api/v1/auth/me
+// Returns the currently authenticated user's information.
+func (s *MasterServer) handleAPICurrentUser(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	// Get the user from context (set by withAuth middleware)
+	userID, ok := GetUserIDFromContext(r.Context())
+	if !ok || userID == 0 {
+		s.jsonError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	ctx := r.Context()
+	user, err := s.userService.GetByID(ctx, userID)
+	if err != nil {
+		if services.IsNotFound(err) {
+			s.jsonError(w, http.StatusNotFound, "User not found")
+			return
+		}
+		s.logger.Error("Failed to get user", zap.Error(err))
+		s.jsonError(w, http.StatusInternalServerError, "Internal error")
+		return
+	}
+
+	s.jsonResponse(w, map[string]interface{}{
+		"id":       user.ID,
+		"username": user.Username,
+		"email":    user.Email,
+		"role":     user.Role,
+	})
+}
+
 // handleLogin handles the web UI login page.
 func (s *MasterServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {

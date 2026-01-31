@@ -160,19 +160,19 @@ type SecretInfo struct {
 
 // Project represents a deployment project.
 type Project struct {
-	ID                   int64
-	Name                 string
-	Repository           string
-	Branch               string
-	DeployPath           string
-	Type                 string
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
-	LastDeployAt         *time.Time
-	LastDeployStatus     string
-	HealthCheckID        *int64 // Reference to health_check_configs, nil uses global
-	AutoRollbackEnabled  bool   // Whether to auto-rollback on deployment issues
-	RollbackOnHealthFail bool   // Whether to rollback if health check fails
+	ID                   int64      `json:"id"`
+	Name                 string     `json:"name"`
+	Repository           string     `json:"repository"`
+	Branch               string     `json:"branch"`
+	DeployPath           string     `json:"deployPath"`
+	Type                 string     `json:"type"`
+	CreatedAt            time.Time  `json:"createdAt"`
+	UpdatedAt            time.Time  `json:"updatedAt"`
+	LastDeployAt         *time.Time `json:"lastDeployAt,omitempty"`
+	LastDeployStatus     string     `json:"lastDeployStatus,omitempty"`
+	HealthCheckID        *int64     `json:"healthCheckId,omitempty"` // Reference to health_check_configs, nil uses global
+	AutoRollbackEnabled  bool       `json:"autoRollbackEnabled"`     // Whether to auto-rollback on deployment issues
+	RollbackOnHealthFail bool       `json:"rollbackOnHealthFail"`    // Whether to rollback if health check fails
 }
 
 // ProjectType represents a project type template.
@@ -215,15 +215,15 @@ type Session struct {
 
 // APIKey represents an API key.
 type APIKey struct {
-	ID         int64
-	UserID     int64
-	Name       string
-	KeyHash    string // SHA-256 hash of the key
-	KeyPrefix  string // First 8 characters of the key for identification
-	Scopes     string // JSON array of scopes/permissions
-	ExpiresAt  *time.Time
-	LastUsedAt *time.Time
-	CreatedAt  time.Time
+	ID         int64      `json:"id"`
+	UserID     int64      `json:"userId"`
+	Name       string     `json:"name"`
+	KeyHash    string     `json:"-"` // Never expose in JSON
+	KeyPrefix  string     `json:"keyPrefix,omitempty"`
+	Scopes     string     `json:"scopes,omitempty"`
+	ExpiresAt  *time.Time `json:"expiresAt"`
+	LastUsedAt *time.Time `json:"lastUsedAt,omitempty"`
+	CreatedAt  time.Time  `json:"createdAt"`
 }
 
 // IsValid checks if an API key is valid (not expired).
