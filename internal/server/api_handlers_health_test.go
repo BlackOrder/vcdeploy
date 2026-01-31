@@ -103,7 +103,7 @@ func TestHandleHealthCheckConfig(t *testing.T) {
 		RetryDelaySeconds: 5,
 		Enabled:           true,
 	}
-	if err := s.db.CreateHealthCheckConfig(ctx, config); err != nil {
+	if err := s.store.CreateHealthCheckConfig(ctx, config); err != nil {
 		t.Fatalf("Failed to create test config: %v", err)
 	}
 
@@ -173,7 +173,7 @@ func TestHandleHealthCheckConfig(t *testing.T) {
 			RetryDelaySeconds: 1,
 			Enabled:           true,
 		}
-		if err := s.db.CreateHealthCheckConfig(ctx, toDelete); err != nil {
+		if err := s.store.CreateHealthCheckConfig(ctx, toDelete); err != nil {
 			t.Fatalf("Failed to create config to delete: %v", err)
 		}
 
@@ -186,7 +186,7 @@ func TestHandleHealthCheckConfig(t *testing.T) {
 		}
 
 		// Verify deletion
-		_, err := s.db.GetHealthCheckConfig(ctx, toDelete.ID)
+		_, err := s.store.GetHealthCheckConfig(ctx, toDelete.ID)
 		if err == nil {
 			t.Error("Expected error when getting deleted config")
 		}
@@ -214,7 +214,7 @@ func TestHandleHealthCheckConfig(t *testing.T) {
 
 	t.Run("DELETE - cannot delete global config", func(t *testing.T) {
 		// Get the global config ID
-		globalConfig, err := s.db.GetGlobalHealthCheckConfig(ctx)
+		globalConfig, err := s.store.GetGlobalHealthCheckConfig(ctx)
 		if err != nil {
 			t.Skipf("No global config to test: %v", err)
 		}
@@ -265,7 +265,7 @@ func TestHandleProjectHealthConfig(t *testing.T) {
 		AutoRollbackEnabled:  false,
 		RollbackOnHealthFail: false,
 	}
-	if err := s.db.CreateProject(project); err != nil {
+	if err := s.store.CreateProject(project); err != nil {
 		t.Fatalf("Failed to create test project: %v", err)
 	}
 
@@ -303,7 +303,7 @@ func TestHandleProjectHealthConfig(t *testing.T) {
 			RetryDelaySeconds: 5,
 			Enabled:           true,
 		}
-		if err := s.db.CreateHealthCheckConfig(ctx, healthConfig); err != nil {
+		if err := s.store.CreateHealthCheckConfig(ctx, healthConfig); err != nil {
 			t.Fatalf("Failed to create health config: %v", err)
 		}
 
@@ -354,7 +354,7 @@ func TestHandleRollbackRecords(t *testing.T) {
 		Branch:     "main",
 		DeployPath: "/var/www/test",
 	}
-	if err := s.db.CreateProject(project); err != nil {
+	if err := s.store.CreateProject(project); err != nil {
 		t.Fatalf("Failed to create test project: %v", err)
 	}
 
@@ -368,7 +368,7 @@ func TestHandleRollbackRecords(t *testing.T) {
 		StartedAt:     time.Now(),
 		TriggeredBy:   "test",
 	}
-	if err := s.db.CreateDeployment(ctx, deployment); err != nil {
+	if err := s.store.CreateDeployment(ctx, deployment); err != nil {
 		t.Fatalf("Failed to create test deployment: %v", err)
 	}
 
@@ -385,7 +385,7 @@ func TestHandleRollbackRecords(t *testing.T) {
 		Status:            "completed",
 		StartedAt:         time.Now(),
 	}
-	if err := s.db.CreateDeploymentRollback(ctx, rollback); err != nil {
+	if err := s.store.CreateDeploymentRollback(ctx, rollback); err != nil {
 		t.Fatalf("Failed to create test rollback: %v", err)
 	}
 
@@ -473,7 +473,7 @@ func TestHandleRollbackRecord(t *testing.T) {
 		Branch:     "main",
 		DeployPath: "/var/www/test",
 	}
-	if err := s.db.CreateProject(project); err != nil {
+	if err := s.store.CreateProject(project); err != nil {
 		t.Fatalf("Failed to create test project: %v", err)
 	}
 
@@ -487,7 +487,7 @@ func TestHandleRollbackRecord(t *testing.T) {
 		StartedAt:     time.Now(),
 		TriggeredBy:   "test",
 	}
-	if err := s.db.CreateDeployment(ctx, deployment); err != nil {
+	if err := s.store.CreateDeployment(ctx, deployment); err != nil {
 		t.Fatalf("Failed to create test deployment: %v", err)
 	}
 
@@ -503,7 +503,7 @@ func TestHandleRollbackRecord(t *testing.T) {
 		Status:            "completed",
 		StartedAt:         time.Now(),
 	}
-	if err := s.db.CreateDeploymentRollback(ctx, rollback); err != nil {
+	if err := s.store.CreateDeploymentRollback(ctx, rollback); err != nil {
 		t.Fatalf("Failed to create test rollback: %v", err)
 	}
 
@@ -566,7 +566,7 @@ func TestHandleTestHealthCheck(t *testing.T) {
 		RetryDelaySeconds: 1,
 		Enabled:           true,
 	}
-	if err := s.db.CreateHealthCheckConfig(ctx, config); err != nil {
+	if err := s.store.CreateHealthCheckConfig(ctx, config); err != nil {
 		t.Fatalf("Failed to create health config: %v", err)
 	}
 
@@ -603,7 +603,7 @@ func TestHandleTestHealthCheck(t *testing.T) {
 		RetryDelaySeconds: 1,
 		Enabled:           true,
 	}
-	if err := s.db.CreateHealthCheckConfig(ctx, failConfig); err != nil {
+	if err := s.store.CreateHealthCheckConfig(ctx, failConfig); err != nil {
 		t.Fatalf("Failed to create fail config: %v", err)
 	}
 

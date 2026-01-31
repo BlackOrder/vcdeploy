@@ -38,7 +38,7 @@ func (s *MasterServer) handleAgentBinaries(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		binaries, err := s.db.ListAgentBinaries(ctx)
+		binaries, err := s.store.ListAgentBinaries(ctx)
 		if err != nil {
 			s.logger.Error("Failed to list agent binaries", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -129,7 +129,7 @@ func (s *MasterServer) handleAgentBinaries(w http.ResponseWriter, r *http.Reques
 			IsCurrent:      setAsCurrent,
 		}
 
-		if err := s.db.CreateAgentBinary(ctx, binary); err != nil {
+		if err := s.store.CreateAgentBinary(ctx, binary); err != nil {
 			os.Remove(destPath)
 			s.logger.Error("Failed to create binary record", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -138,7 +138,7 @@ func (s *MasterServer) handleAgentBinaries(w http.ResponseWriter, r *http.Reques
 
 		// If set_current, mark this as the current binary
 		if setAsCurrent {
-			if err := s.db.SetCurrentAgentBinary(ctx, binary.ID); err != nil {
+			if err := s.store.SetCurrentAgentBinary(ctx, binary.ID); err != nil {
 				s.logger.Error("Failed to set current binary", zap.Error(err))
 			}
 		}
@@ -203,7 +203,7 @@ func (s *MasterServer) handleAgentBinary(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
-		binary, err := s.db.GetAgentBinary(ctx, id)
+		binary, err := s.store.GetAgentBinary(ctx, id)
 		if err != nil {
 			if services.IsNotFound(err) {
 				http.Error(w, "Binary not found", http.StatusNotFound)
@@ -223,7 +223,7 @@ func (s *MasterServer) handleAgentBinary(w http.ResponseWriter, r *http.Request)
 		}
 
 		// Get binary to find file path
-		binary, err := s.db.GetAgentBinary(ctx, id)
+		binary, err := s.store.GetAgentBinary(ctx, id)
 		if err != nil {
 			if services.IsNotFound(err) {
 				http.Error(w, "Binary not found", http.StatusNotFound)
@@ -242,7 +242,7 @@ func (s *MasterServer) handleAgentBinary(w http.ResponseWriter, r *http.Request)
 		}
 
 		// Delete database record
-		if err := s.db.DeleteAgentBinary(ctx, id); err != nil {
+		if err := s.store.DeleteAgentBinary(ctx, id); err != nil {
 			s.logger.Error("Failed to delete binary record", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
@@ -274,7 +274,7 @@ func (s *MasterServer) handleAgentBinaryDownload(w http.ResponseWriter, r *http.
 		return
 	}
 
-	binary, err := s.db.GetAgentBinary(ctx, id)
+	binary, err := s.store.GetAgentBinary(ctx, id)
 	if err != nil {
 		if services.IsNotFound(err) {
 			http.Error(w, "Binary not found", http.StatusNotFound)
@@ -321,7 +321,7 @@ func (s *MasterServer) handleSetCurrentBinary(w http.ResponseWriter, r *http.Req
 	}
 
 	// Verify binary exists
-	binary, err := s.db.GetAgentBinary(ctx, id)
+	binary, err := s.store.GetAgentBinary(ctx, id)
 	if err != nil {
 		if services.IsNotFound(err) {
 			http.Error(w, "Binary not found", http.StatusNotFound)
@@ -333,7 +333,7 @@ func (s *MasterServer) handleSetCurrentBinary(w http.ResponseWriter, r *http.Req
 	}
 
 	// Set as current
-	if err := s.db.SetCurrentAgentBinary(ctx, id); err != nil {
+	if err := s.store.SetCurrentAgentBinary(ctx, id); err != nil {
 		s.logger.Error("Failed to set current binary", zap.Error(err))
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
@@ -369,7 +369,7 @@ func (s *MasterServer) handleAgentBinaryLatest(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	binary, err := s.db.GetCurrentAgentBinary(ctx, osType, arch)
+	binary, err := s.store.GetCurrentAgentBinary(ctx, osType, arch)
 	if err != nil {
 		if services.IsNotFound(err) {
 			http.Error(w, "No current binary found for this platform", http.StatusNotFound)
@@ -463,7 +463,7 @@ func (s *MasterServer) handleAgentUpdateConfig(w http.ResponseWriter, r *http.Re
 			}
 		}
 
-		if err := s.db.UpdateAgentUpdatePolicy(ctx, agentID, req.UpdatePolicy, req.UpdateWindowStart, req.UpdateWindowEnd); err != nil {
+		if err := s.store.UpdateAgentUpdatePolicy(ctx, agentID, req.UpdatePolicy, req.UpdateWindowStart, req.UpdateWindowEnd); err != nil {
 			s.logger.Error("Failed to update agent update policy", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
@@ -497,7 +497,7 @@ func (s *MasterServer) handleAgentUpdateHistory(w http.ResponseWriter, r *http.R
 	// Parse pagination
 	p := parsePaginationWithDefaults(r, 20)
 
-	history, total, err := s.db.ListAgentUpdateHistory(ctx, agentID, p.Limit, p.Offset)
+	history, total, err := s.store.ListAgentUpdateHistory(ctx, agentID, p.Limit, p.Offset)
 	if err != nil {
 		s.logger.Error("Failed to get agent update history", zap.Error(err))
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -559,7 +559,7 @@ func (s *MasterServer) handleTriggerAgentUpdate(w http.ResponseWriter, r *http.R
 	}
 
 	// Get current binary for agent's platform
-	binary, err := s.db.GetCurrentAgentBinary(ctx, agent.OS, agent.Arch)
+	binary, err := s.store.GetCurrentAgentBinary(ctx, agent.OS, agent.Arch)
 	if err != nil {
 		if services.IsNotFound(err) {
 			http.Error(w, "No current binary available for agent's platform", http.StatusNotFound)
@@ -587,7 +587,7 @@ func (s *MasterServer) handleTriggerAgentUpdate(w http.ResponseWriter, r *http.R
 		Status:      "pending",
 		StartedAt:   time.Now(),
 	}
-	if err := s.db.CreateAgentUpdateHistory(ctx, history); err != nil {
+	if err := s.store.CreateAgentUpdateHistory(ctx, history); err != nil {
 		s.logger.Error("Failed to create update history", zap.Error(err))
 		// Continue anyway - update history is not critical
 	}
@@ -654,7 +654,7 @@ func (s *MasterServer) handleAgentsNeedingUpdate(w http.ResponseWriter, r *http.
 		return
 	}
 
-	agents, err := s.db.ListAgentsNeedingUpdate(ctx)
+	agents, err := s.store.ListAgentsNeedingUpdate(ctx)
 	if err != nil {
 		s.logger.Error("Failed to list agents needing update", zap.Error(err))
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -669,7 +669,7 @@ func (s *MasterServer) handleAgentsNeedingUpdate(w http.ResponseWriter, r *http.
 
 	results := make([]agentUpdate, 0, len(agents))
 	for _, agent := range agents {
-		binary, err := s.db.GetCurrentAgentBinary(ctx, agent.OS, agent.Arch)
+		binary, err := s.store.GetCurrentAgentBinary(ctx, agent.OS, agent.Arch)
 		if err != nil {
 			continue
 		}

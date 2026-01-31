@@ -26,7 +26,7 @@ import (
 type AgentServer struct {
 	proto.UnimplementedAgentServiceServer
 
-	db     *storage.DB
+	store  storage.Store
 	ca     *security.CAManager
 	logger *zap.Logger
 
@@ -62,9 +62,9 @@ type GRPCAgentConnection struct {
 }
 
 // NewAgentServer creates a new agent gRPC server.
-func NewAgentServer(db *storage.DB, ca *security.CAManager, logger *zap.Logger) *AgentServer {
+func NewAgentServer(store storage.Store, ca *security.CAManager, logger *zap.Logger) *AgentServer {
 	return &AgentServer{
-		db:              db,
+		store:           store,
 		ca:              ca,
 		logger:          logger.Named("agent-grpc"),
 		tokens:          make(map[string]string),

@@ -29,7 +29,7 @@ func TestHandleAgentBinaries(t *testing.T) {
 			UploadedAt:     time.Now(),
 			IsCurrent:      true,
 		}
-		if err := s.db.CreateAgentBinary(ctx, binary); err != nil {
+		if err := s.store.CreateAgentBinary(ctx, binary); err != nil {
 			t.Fatalf("Failed to create binary: %v", err)
 		}
 
@@ -68,7 +68,7 @@ func TestHandleAgentBinaryLatest(t *testing.T) {
 			UploadedAt:     time.Now().Add(-time.Hour),
 			IsCurrent:      false,
 		}
-		if err := s.db.CreateAgentBinary(ctx, binary1); err != nil {
+		if err := s.store.CreateAgentBinary(ctx, binary1); err != nil {
 			t.Fatalf("Failed to create binary1: %v", err)
 		}
 
@@ -82,7 +82,7 @@ func TestHandleAgentBinaryLatest(t *testing.T) {
 			UploadedAt:     time.Now(),
 			IsCurrent:      true,
 		}
-		if err := s.db.CreateAgentBinary(ctx, binary2); err != nil {
+		if err := s.store.CreateAgentBinary(ctx, binary2); err != nil {
 			t.Fatalf("Failed to create binary2: %v", err)
 		}
 
@@ -136,7 +136,7 @@ func TestHandleAgentUpdateConfig(t *testing.T) {
 		Status:       "online",
 		UpdatePolicy: "immediate",
 	}
-	if err := s.db.UpsertAgent(ctx, agent); err != nil {
+	if err := s.store.UpsertAgent(ctx, agent); err != nil {
 		t.Fatalf("Failed to create agent: %v", err)
 	}
 
@@ -171,7 +171,7 @@ func TestHandleAgentUpdateConfig(t *testing.T) {
 		}
 
 		// Verify the change
-		updatedAgent, err := s.db.GetAgent(ctx, "test-agent-1")
+		updatedAgent, err := s.store.GetAgent(ctx, "test-agent-1")
 		if err != nil {
 			t.Fatalf("Failed to get agent: %v", err)
 		}
@@ -216,7 +216,7 @@ func TestHandleAgentUpdateHistory(t *testing.T) {
 		Hostname: "test-host",
 		Status:   "online",
 	}
-	if err := s.db.UpsertAgent(ctx, agent); err != nil {
+	if err := s.store.UpsertAgent(ctx, agent); err != nil {
 		t.Fatalf("Failed to create agent: %v", err)
 	}
 
@@ -228,7 +228,7 @@ func TestHandleAgentUpdateHistory(t *testing.T) {
 		Status:      "completed",
 		StartedAt:   time.Now().Add(-2 * time.Hour),
 	}
-	if err := s.db.CreateAgentUpdateHistory(ctx, history1); err != nil {
+	if err := s.store.CreateAgentUpdateHistory(ctx, history1); err != nil {
 		t.Fatalf("Failed to create history1: %v", err)
 	}
 
@@ -239,7 +239,7 @@ func TestHandleAgentUpdateHistory(t *testing.T) {
 		Status:      "completed",
 		StartedAt:   time.Now().Add(-time.Hour),
 	}
-	if err := s.db.CreateAgentUpdateHistory(ctx, history2); err != nil {
+	if err := s.store.CreateAgentUpdateHistory(ctx, history2); err != nil {
 		t.Fatalf("Failed to create history2: %v", err)
 	}
 
@@ -305,7 +305,7 @@ func TestHandleAgentsNeedingUpdate(t *testing.T) {
 		UploadedAt:     time.Now(),
 		IsCurrent:      true,
 	}
-	if err := s.db.CreateAgentBinary(ctx, binary); err != nil {
+	if err := s.store.CreateAgentBinary(ctx, binary); err != nil {
 		t.Fatalf("Failed to create binary: %v", err)
 	}
 
@@ -318,7 +318,7 @@ func TestHandleAgentsNeedingUpdate(t *testing.T) {
 		OS:       "linux",
 		Arch:     "amd64",
 	}
-	if err := s.db.UpsertAgent(ctx, agentUpToDate); err != nil {
+	if err := s.store.UpsertAgent(ctx, agentUpToDate); err != nil {
 		t.Fatalf("Failed to create agent: %v", err)
 	}
 
@@ -330,7 +330,7 @@ func TestHandleAgentsNeedingUpdate(t *testing.T) {
 		OS:       "linux",
 		Arch:     "amd64",
 	}
-	if err := s.db.UpsertAgent(ctx, agentNeedsUpdate); err != nil {
+	if err := s.store.UpsertAgent(ctx, agentNeedsUpdate); err != nil {
 		t.Fatalf("Failed to create agent: %v", err)
 	}
 
@@ -373,7 +373,7 @@ func TestHandleTriggerAgentUpdate(t *testing.T) {
 		OS:       "linux",
 		Arch:     "amd64",
 	}
-	if err := s.db.UpsertAgent(ctx, agent); err != nil {
+	if err := s.store.UpsertAgent(ctx, agent); err != nil {
 		t.Fatalf("Failed to create agent: %v", err)
 	}
 
@@ -388,7 +388,7 @@ func TestHandleTriggerAgentUpdate(t *testing.T) {
 		UploadedAt:     time.Now(),
 		IsCurrent:      true,
 	}
-	if err := s.db.CreateAgentBinary(ctx, binary); err != nil {
+	if err := s.store.CreateAgentBinary(ctx, binary); err != nil {
 		t.Fatalf("Failed to create binary: %v", err)
 	}
 
@@ -446,7 +446,7 @@ func TestHandleTriggerAgentUpdate(t *testing.T) {
 			OS:       "linux",
 			Arch:     "amd64",
 		}
-		if err := s.db.UpsertAgent(ctx, agentUpToDate); err != nil {
+		if err := s.store.UpsertAgent(ctx, agentUpToDate); err != nil {
 			t.Fatalf("Failed to create agent: %v", err)
 		}
 
@@ -521,7 +521,7 @@ func TestHandleAgentBinary(t *testing.T) {
 		UploadedAt:     time.Now(),
 		IsCurrent:      false,
 	}
-	if err := s.db.CreateAgentBinary(ctx, binary); err != nil {
+	if err := s.store.CreateAgentBinary(ctx, binary); err != nil {
 		t.Fatalf("Failed to create binary: %v", err)
 	}
 
@@ -596,7 +596,7 @@ func TestHandleAgentBinary(t *testing.T) {
 			UploadedAt:     time.Now(),
 			IsCurrent:      false,
 		}
-		if err := s.db.CreateAgentBinary(ctx, binaryToDelete); err != nil {
+		if err := s.store.CreateAgentBinary(ctx, binaryToDelete); err != nil {
 			t.Fatalf("Failed to create binary to delete: %v", err)
 		}
 
@@ -618,7 +618,7 @@ func TestHandleAgentBinary(t *testing.T) {
 		}
 
 		// Verify deletion
-		_, err := s.db.GetAgentBinary(ctx, binaryToDelete.ID)
+		_, err := s.store.GetAgentBinary(ctx, binaryToDelete.ID)
 		if err != storage.ErrNotFound {
 			t.Errorf("Expected ErrNotFound, got %v", err)
 		}
@@ -657,7 +657,7 @@ func TestHandleAgentBinaryDownload(t *testing.T) {
 		UploadedAt:     time.Now(),
 		IsCurrent:      false,
 	}
-	if err := s.db.CreateAgentBinary(ctx, binary); err != nil {
+	if err := s.store.CreateAgentBinary(ctx, binary); err != nil {
 		t.Fatalf("Failed to create binary: %v", err)
 	}
 
@@ -724,7 +724,7 @@ func TestHandleSetCurrentBinary(t *testing.T) {
 		UploadedAt:     time.Now(),
 		IsCurrent:      true,
 	}
-	if err := s.db.CreateAgentBinary(ctx, binary1); err != nil {
+	if err := s.store.CreateAgentBinary(ctx, binary1); err != nil {
 		t.Fatalf("Failed to create binary1: %v", err)
 	}
 
@@ -738,7 +738,7 @@ func TestHandleSetCurrentBinary(t *testing.T) {
 		UploadedAt:     time.Now(),
 		IsCurrent:      false,
 	}
-	if err := s.db.CreateAgentBinary(ctx, binary2); err != nil {
+	if err := s.store.CreateAgentBinary(ctx, binary2); err != nil {
 		t.Fatalf("Failed to create binary2: %v", err)
 	}
 
@@ -765,7 +765,7 @@ func TestHandleSetCurrentBinary(t *testing.T) {
 		}
 
 		// Verify in database
-		updatedBinary, err := s.db.GetAgentBinary(ctx, binary2.ID)
+		updatedBinary, err := s.store.GetAgentBinary(ctx, binary2.ID)
 		if err != nil {
 			t.Fatalf("Failed to get binary: %v", err)
 		}

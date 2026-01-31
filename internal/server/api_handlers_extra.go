@@ -225,7 +225,7 @@ func (s *MasterServer) handleJumpServers(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
-		servers, err := s.db.ListJumpServers(ctx)
+		servers, err := s.store.ListJumpServers(ctx)
 		if err != nil {
 			s.logger.Error("Failed to list jump servers", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -281,7 +281,7 @@ func (s *MasterServer) handleJumpServers(w http.ResponseWriter, r *http.Request)
 			CreatedAt: time.Now(),
 		}
 
-		if err := s.db.CreateJumpServer(ctx, server); err != nil {
+		if err := s.store.CreateJumpServer(ctx, server); err != nil {
 			s.logger.Error("Failed to create jump server", zap.Error(err))
 			http.Error(w, "Failed to create jump server", http.StatusInternalServerError)
 			return
@@ -317,7 +317,7 @@ func (s *MasterServer) handleJumpServer(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 
-		server, err := s.db.GetJumpServer(ctx, id)
+		server, err := s.store.GetJumpServer(ctx, id)
 		if err != nil {
 			if services.IsNotFound(err) {
 				http.Error(w, "Jump server not found", http.StatusNotFound)
@@ -361,7 +361,7 @@ func (s *MasterServer) handleJumpServer(w http.ResponseWriter, r *http.Request) 
 			SSHKeyID: input.SSHKeyID,
 		}
 
-		if err := s.db.UpdateJumpServer(ctx, server); err != nil {
+		if err := s.store.UpdateJumpServer(ctx, server); err != nil {
 			s.logger.Error("Failed to update jump server", zap.Error(err))
 			http.Error(w, "Failed to update jump server", http.StatusInternalServerError)
 			return
@@ -378,7 +378,7 @@ func (s *MasterServer) handleJumpServer(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 
-		if err := s.db.DeleteJumpServer(ctx, id); err != nil {
+		if err := s.store.DeleteJumpServer(ctx, id); err != nil {
 			s.logger.Error("Failed to delete jump server", zap.Error(err))
 			http.Error(w, "Failed to delete jump server", http.StatusInternalServerError)
 			return
@@ -406,7 +406,7 @@ func (s *MasterServer) handleBlockedIPs(w http.ResponseWriter, r *http.Request) 
 		}
 
 		// Use pagination with reasonable defaults
-		blocked, _, err := s.db.ListBlockedIPs(ctx, 100, 0)
+		blocked, _, err := s.store.ListBlockedIPs(ctx, 100, 0)
 		if err != nil {
 			s.logger.Error("Failed to list blocked IPs", zap.Error(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -466,7 +466,7 @@ func (s *MasterServer) handleBlockedIPs(w http.ResponseWriter, r *http.Request) 
 			BlockedBy: blockedBy,
 		}
 
-		if err := s.db.BlockIP(ctx, blocked); err != nil {
+		if err := s.store.BlockIP(ctx, blocked); err != nil {
 			s.logger.Error("Failed to block IP", zap.Error(err))
 			http.Error(w, "Failed to block IP", http.StatusInternalServerError)
 			return
@@ -501,7 +501,7 @@ func (s *MasterServer) handleBlockedIP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		blocked, err := s.db.GetBlockedIP(ctx, ip)
+		blocked, err := s.store.GetBlockedIP(ctx, ip)
 		if err != nil {
 			if services.IsNotFound(err) {
 				http.Error(w, "IP not blocked", http.StatusNotFound)
@@ -523,7 +523,7 @@ func (s *MasterServer) handleBlockedIP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if err := s.db.UnblockIP(ctx, ip); err != nil {
+		if err := s.store.UnblockIP(ctx, ip); err != nil {
 			s.logger.Error("Failed to unblock IP", zap.Error(err))
 			http.Error(w, "Failed to unblock IP", http.StatusInternalServerError)
 			return
