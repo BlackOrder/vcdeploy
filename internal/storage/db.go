@@ -31,14 +31,14 @@ func New(path string, logger *zap.Logger) (*DB, error) {
 		logger = zap.NewNop()
 	}
 
-	conn, err := sql.Open("sqlite", path+"?_journal_mode=WAL&_busy_timeout=5000")
+	conn, err := sql.Open("sqlite", path+"?_journal_mode=WAL&_busy_timeout=30000")
 	if err != nil {
 		return nil, fmt.Errorf("opening database: %w", err)
 	}
 
-	// Configure connection pool
-	conn.SetMaxOpenConns(25)
-	conn.SetMaxIdleConns(5)
+	// Configure connection pool - limit connections to prevent SQLite locking
+	conn.SetMaxOpenConns(1)
+	conn.SetMaxIdleConns(1)
 	conn.SetConnMaxLifetime(5 * time.Minute)
 
 	// Test connection
@@ -2421,6 +2421,47 @@ func (db *DB) ListAgentUpdateHistory(ctx context.Context, agentID string, limit,
 	`, agentID, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("listing agent update history: %w", err)
+	}
+	defer rows.Close()
+
+	var histories []*AgentUpdateHistory
+	for rows.Next() {
+		var history AgentUpdateHistory
+		var completedAt sql.NullTime
+		var errorMsg sql.NullString
+
+		if err := rows.Scan(&history.ID, &history.AgentID, &history.FromVersion, &history.ToVersion,
+			&history.Status, &errorMsg, &history.StartedAt, &completedAt, &history.RolledBack); err != nil {
+			return nil, 0, fmt.Errorf("scanning agent update history: %w", err)
+		}
+		if errorMsg.Valid {
+			history.ErrorMessage = errorMsg.String
+		}
+		if completedAt.Valid {
+			history.CompletedAt = &completedAt.Time
+		}
+		histories = append(histories, &history)
+	}
+	return histories, total, rows.Err()
+}
+
+// ListAllAgentUpdateHistory returns all update history across all agents with pagination.
+func (db *DB) ListAllAgentUpdateHistory(ctx context.Context, limit, offset int) ([]*AgentUpdateHistory, int64, error) {
+	// Get total count
+	var total int64
+	err := db.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM agent_update_history`).Scan(&total)
+	if err != nil {
+		return nil, 0, fmt.Errorf("counting all update history: %w", err)
+	}
+
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, agent_id, from_version, to_version, status, error_message, started_at, completed_at, rolled_back
+		FROM agent_update_history 
+		ORDER BY started_at DESC
+		LIMIT ? OFFSET ?
+	`, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("listing all agent update history: %w", err)
 	}
 	defer rows.Close()
 
