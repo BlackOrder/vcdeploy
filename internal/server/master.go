@@ -357,11 +357,22 @@ func NewMasterServer(cfg *config.MasterConfig, store storage.Store, logger *zap.
 	// Initialize log size enforcer
 	s.logSizeEnforcer = NewLogSizeEnforcer(cfg.Logs.Deployment.MaxSizeMB, logger)
 
-	// Initialize rate limiter
-	var err error
-	s.rateLimiter, err = NewRateLimiter(nil, DefaultRateLimitConfig())
-	if err != nil {
-		logger.Warn("Failed to create rate limiter, continuing without it", zap.Error(err))
+	// Initialize rate limiter only if enabled in config
+	if cfg.API.RateLimit.Enabled {
+		var err error
+		rateLimitConfig := DefaultRateLimitConfig()
+		if cfg.API.RateLimit.RequestsPerSecond > 0 {
+			rateLimitConfig.RequestsPerSecond = cfg.API.RateLimit.RequestsPerSecond
+		}
+		if cfg.API.RateLimit.BurstSize > 0 {
+			rateLimitConfig.BurstSize = cfg.API.RateLimit.BurstSize
+		}
+		s.rateLimiter, err = NewRateLimiter(nil, rateLimitConfig)
+		if err != nil {
+			logger.Warn("Failed to create rate limiter, continuing without it", zap.Error(err))
+		}
+	} else {
+		logger.Info("Rate limiting disabled in configuration")
 	}
 
 	return s, nil

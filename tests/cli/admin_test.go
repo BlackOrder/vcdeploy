@@ -120,13 +120,13 @@ func TestUserPasswd(t *testing.T) {
 	})
 
 	t.Run("user passwd for existing user", func(t *testing.T) {
-		// passwd command reads password from stdin (password + confirmation)
-		result := ctx.CLI.RunWithInput("NewAdmin@Pass123!\nNewAdmin@Pass123!\n", "user", "passwd", testUsername)
+		// Use -p flag for non-interactive password change
+		result := ctx.CLI.Run("user", "passwd", testUsername, "-p", "NewAdmin@Pass123!")
 		ctx.Assertions.Success(result)
 	})
 
 	t.Run("user passwd nonexistent user fails", func(t *testing.T) {
-		result := ctx.CLI.RunWithInput("ValidPass123!\nValidPass123!\n", "user", "passwd", "nonexistent-user-12345")
+		result := ctx.CLI.Run("user", "passwd", "nonexistent-user-12345", "-p", "ValidPass123!")
 		ctx.Assertions.Failed(result)
 	})
 }

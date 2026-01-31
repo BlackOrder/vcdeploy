@@ -49,12 +49,14 @@ func init() {
 		RunE:  runUserDelete,
 	})
 
-	userCmd.AddCommand(&cobra.Command{
+	passwdCmd := &cobra.Command{
 		Use:   "passwd [username]",
 		Short: "Change user password",
 		Args:  cobra.ExactArgs(1),
 		RunE:  runUserPasswd,
-	})
+	}
+	passwdCmd.Flags().StringP("password", "p", "", "New password (if not set, will prompt)")
+	userCmd.AddCommand(passwdCmd)
 }
 
 func runUserList(cmd *cobra.Command, args []string) error {
@@ -203,22 +205,32 @@ func runUserDelete(cmd *cobra.Command, args []string) error {
 func runUserPasswd(cmd *cobra.Command, args []string) error {
 	username := args[0]
 
-	fmt.Print("Enter new password: ")
-	pwBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
-	if err != nil {
-		return fmt.Errorf("read password: %w", err)
-	}
-	fmt.Println()
+	var password string
 
-	fmt.Print("Confirm new password: ")
-	pwBytes2, err := term.ReadPassword(int(os.Stdin.Fd()))
-	if err != nil {
-		return fmt.Errorf("read password: %w", err)
-	}
-	fmt.Println()
+	// Check if password was provided via flag
+	passwordFlag, _ := cmd.Flags().GetString("password")
+	if passwordFlag != "" {
+		password = passwordFlag
+	} else {
+		// Prompt for password interactively
+		fmt.Print("Enter new password: ")
+		pwBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
+		if err != nil {
+			return fmt.Errorf("read password: %w", err)
+		}
+		fmt.Println()
 
-	if !bytes.Equal(pwBytes, pwBytes2) {
-		return fmt.Errorf("passwords do not match")
+		fmt.Print("Confirm new password: ")
+		pwBytes2, err := term.ReadPassword(int(os.Stdin.Fd()))
+		if err != nil {
+			return fmt.Errorf("read password: %w", err)
+		}
+		fmt.Println()
+
+		if !bytes.Equal(pwBytes, pwBytes2) {
+			return fmt.Errorf("passwords do not match")
+		}
+		password = string(pwBytes)
 	}
 
 	client, err := newAPIClient(cmd)
@@ -256,7 +268,7 @@ func runUserPasswd(cmd *cobra.Command, args []string) error {
 
 	// Update user password via PATCH
 	data, _ := json.Marshal(map[string]string{
-		"password": string(pwBytes),
+		"password": password,
 	})
 
 	resp, err = client.do("PATCH", fmt.Sprintf("/api/v1/users/%.0f", userID), strings.NewReader(string(data)))

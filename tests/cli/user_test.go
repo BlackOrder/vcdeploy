@@ -125,7 +125,7 @@ func TestUserPasswordValidation(t *testing.T) {
 }
 
 // TestUserChangePasswordCLI tests the passwd command.
-// CLI: user passwd [username] (prompts for password interactively)
+// CLI: user passwd [username] -p <password>
 func TestUserChangePasswordCLI(t *testing.T) {
 	ctx := setupTest(t)
 	cfg := testutil.GetConfig()
@@ -148,13 +148,13 @@ func TestUserChangePasswordCLI(t *testing.T) {
 	})
 
 	t.Run("change password for existing user", func(t *testing.T) {
-		// Provide password + confirmation via stdin
-		result := ctx.CLI.RunWithInput("NewSecurePass123!\nNewSecurePass123!\n", "user", "passwd", testUsername)
+		// Use -p flag for non-interactive password change
+		result := ctx.CLI.Run("user", "passwd", testUsername, "-p", "NewSecurePass123!")
 		ctx.Assertions.Success(result)
 	})
 
 	t.Run("change password for nonexistent user fails", func(t *testing.T) {
-		result := ctx.CLI.RunWithInput("ValidPass123!\nValidPass123!\n", "user", "passwd", "nonexistent-user-12345")
+		result := ctx.CLI.Run("user", "passwd", "nonexistent-user-12345", "-p", "ValidPass123!")
 		ctx.Assertions.Failed(result)
 	})
 }

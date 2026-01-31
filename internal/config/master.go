@@ -227,7 +227,15 @@ type DiscordNotificationConfig struct {
 
 // APIConfig defines API settings.
 type APIConfig struct {
-	Enabled bool `yaml:"enabled"`
+	Enabled   bool            `yaml:"enabled"`
+	RateLimit RateLimitConfig `yaml:"rate_limit"`
+}
+
+// RateLimitConfig defines rate limiting settings.
+type RateLimitConfig struct {
+	Enabled           bool    `yaml:"enabled"`
+	RequestsPerSecond float64 `yaml:"requests_per_second"`
+	BurstSize         int     `yaml:"burst_size"`
 }
 
 // AppearanceConfig defines UI appearance settings.
@@ -310,6 +318,11 @@ func DefaultMasterConfig() *MasterConfig {
 		},
 		API: APIConfig{
 			Enabled: true,
+			RateLimit: RateLimitConfig{
+				Enabled:           true,
+				RequestsPerSecond: 10,
+				BurstSize:         20,
+			},
 		},
 		Appearance: AppearanceConfig{
 			Theme: "dark",
