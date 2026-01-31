@@ -1014,9 +1014,9 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64) ([]*Session, e
 // CreateAPIKey creates a new API key.
 func (db *DB) CreateAPIKey(ctx context.Context, key *APIKey) error {
 	result, err := db.conn.ExecContext(ctx, `
-		INSERT INTO api_keys (user_id, name, key_hash, scopes, expires_at, created_at)
-		VALUES (?, ?, ?, ?, ?, ?)
-	`, key.UserID, key.Name, key.KeyHash, key.Scopes, key.ExpiresAt, key.CreatedAt)
+		INSERT INTO api_keys (user_id, name, key_hash, key_prefix, scopes, expires_at, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, key.UserID, key.Name, key.KeyHash, key.KeyPrefix, key.Scopes, key.ExpiresAt, key.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("create API key: %w", err)
 	}
@@ -1033,14 +1033,14 @@ func (db *DB) CreateAPIKey(ctx context.Context, key *APIKey) error {
 func (db *DB) GetAPIKeyByHash(ctx context.Context, keyHash string) (*APIKey, error) {
 	var key APIKey
 	var expiresAt, lastUsedAt sql.NullTime
-	var scopes sql.NullString
+	var scopes, keyPrefix sql.NullString
 
 	err := db.conn.QueryRowContext(ctx, `
-		SELECT id, user_id, name, key_hash, scopes, expires_at, last_used_at, created_at
+		SELECT id, user_id, name, key_hash, key_prefix, scopes, expires_at, last_used_at, created_at
 		FROM api_keys WHERE key_hash = ?
 	`, keyHash).Scan(
 		&key.ID, &key.UserID, &key.Name, &key.KeyHash,
-		&scopes, &expiresAt, &lastUsedAt, &key.CreatedAt,
+		&keyPrefix, &scopes, &expiresAt, &lastUsedAt, &key.CreatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
@@ -1049,6 +1049,7 @@ func (db *DB) GetAPIKeyByHash(ctx context.Context, keyHash string) (*APIKey, err
 		return nil, fmt.Errorf("get API key: %w", err)
 	}
 
+	key.KeyPrefix = keyPrefix.String
 	key.Scopes = scopes.String
 	if expiresAt.Valid {
 		key.ExpiresAt = &expiresAt.Time
