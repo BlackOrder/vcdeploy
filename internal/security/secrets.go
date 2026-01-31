@@ -14,8 +14,8 @@ import (
 
 // SecretService handles secret management with encryption via KMS.
 type SecretService struct {
-	db  *storage.DB
-	kms *KMS
+	store storage.Store
+	kms   *KMS
 }
 
 // SecretEntry represents a decrypted secret.
@@ -40,10 +40,10 @@ type SecretMetadata struct {
 }
 
 // NewSecretService creates a new SecretService.
-func NewSecretService(db *storage.DB, kms *KMS) *SecretService {
+func NewSecretService(store storage.Store, kms *KMS) *SecretService {
 	return &SecretService{
-		db:  db,
-		kms: kms,
+		store: store,
+		kms:   kms,
 	}
 }
 
@@ -66,7 +66,7 @@ func (s *SecretService) Set(ctx context.Context, project, scope, key, value stri
 	}
 
 	// Store the encrypted value
-	if err := s.db.SetSecretEncrypted(ctx, project, scope, key, []byte(encrypted)); err != nil {
+	if err := s.store.SetSecretEncrypted(ctx, project, scope, key, []byte(encrypted)); err != nil {
 		return fmt.Errorf("storing secret: %w", err)
 	}
 
@@ -75,7 +75,7 @@ func (s *SecretService) Set(ctx context.Context, project, scope, key, value stri
 
 // Get retrieves and decrypts a secret.
 func (s *SecretService) Get(ctx context.Context, project, scope, key string) (*SecretEntry, error) {
-	secret, err := s.db.GetSecret(ctx, project, scope, key)
+	secret, err := s.store.GetSecret(ctx, project, scope, key)
 	if errors.Is(err, storage.ErrNotFound) {
 		return nil, nil
 	}
@@ -102,12 +102,12 @@ func (s *SecretService) Get(ctx context.Context, project, scope, key string) (*S
 
 // Delete removes a secret.
 func (s *SecretService) Delete(ctx context.Context, project, scope, key string) error {
-	return s.db.DeleteSecretCtx(ctx, project, scope, key)
+	return s.store.DeleteSecretCtx(ctx, project, scope, key)
 }
 
 // List returns metadata for all secrets in a scope (values not decrypted).
 func (s *SecretService) List(ctx context.Context, project, scope string) ([]*SecretMetadata, error) {
-	secrets, err := s.db.ListSecretsWithScope(ctx, project, scope)
+	secrets, err := s.store.ListSecretsWithScope(ctx, project, scope)
 	if err != nil {
 		return nil, fmt.Errorf("listing secrets: %w", err)
 	}
@@ -128,7 +128,7 @@ func (s *SecretService) List(ctx context.Context, project, scope string) ([]*Sec
 
 // ListByProject returns metadata for all secrets in a project (all scopes).
 func (s *SecretService) ListByProject(ctx context.Context, project string) ([]*SecretMetadata, error) {
-	secrets, err := s.db.ListSecretsCtx(ctx, project)
+	secrets, err := s.store.ListSecretsCtx(ctx, project)
 	if err != nil {
 		return nil, fmt.Errorf("listing secrets: %w", err)
 	}
@@ -149,7 +149,7 @@ func (s *SecretService) ListByProject(ctx context.Context, project string) ([]*S
 
 // ListAll returns metadata for all secrets across all projects (admin only).
 func (s *SecretService) ListAll(ctx context.Context) ([]*SecretMetadata, error) {
-	secrets, err := s.db.ListAllSecretsCtx(ctx)
+	secrets, err := s.store.ListAllSecretsCtx(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("listing secrets: %w", err)
 	}
@@ -170,7 +170,7 @@ func (s *SecretService) ListAll(ctx context.Context) ([]*SecretMetadata, error) 
 
 // Export returns all decrypted secrets for a scope as a map.
 func (s *SecretService) Export(ctx context.Context, project, scope string) (map[string]string, error) {
-	secrets, err := s.db.ListSecretsWithScope(ctx, project, scope)
+	secrets, err := s.store.ListSecretsWithScope(ctx, project, scope)
 	if err != nil {
 		return nil, fmt.Errorf("listing secrets: %w", err)
 	}
@@ -219,7 +219,7 @@ func (s *SecretService) Import(ctx context.Context, project, scope string, secre
 // Useful after key rotation.
 func (s *SecretService) ReEncryptAll(ctx context.Context) error {
 	// Get all secrets from all projects/scopes
-	secrets, err := s.db.ListAllSecretsCtx(ctx)
+	secrets, err := s.store.ListAllSecretsCtx(ctx)
 	if err != nil {
 		return fmt.Errorf("listing all secrets: %w", err)
 	}
@@ -231,7 +231,7 @@ func (s *SecretService) ReEncryptAll(ctx context.Context) error {
 			return fmt.Errorf("re-encrypting secret %s/%s/%s: %w", sec.Project, sec.Scope, sec.Key, err)
 		}
 
-		if err := s.db.SetSecretEncrypted(ctx, sec.Project, sec.Scope, sec.Key, []byte(reencrypted)); err != nil {
+		if err := s.store.SetSecretEncrypted(ctx, sec.Project, sec.Scope, sec.Key, []byte(reencrypted)); err != nil {
 			return fmt.Errorf("storing re-encrypted secret: %w", err)
 		}
 	}

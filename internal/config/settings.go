@@ -16,26 +16,26 @@ import (
 
 // SettingsService manages configuration stored in the database.
 type SettingsService struct {
-	db  *storage.DB
-	kms *security.KMS
+	store storage.Store
+	kms   *security.KMS
 }
 
 // NewSettingsService creates a new SettingsService.
-func NewSettingsService(db *storage.DB, kms *security.KMS) *SettingsService {
+func NewSettingsService(store storage.Store, kms *security.KMS) *SettingsService {
 	return &SettingsService{
-		db:  db,
-		kms: kms,
+		store: store,
+		kms:   kms,
 	}
 }
 
 // IsInitialized checks if the system has been initialized.
 func (s *SettingsService) IsInitialized(ctx context.Context) (bool, error) {
-	return s.db.HasSettings(ctx)
+	return s.store.HasSettings(ctx)
 }
 
 // Get retrieves a setting value as a string.
 func (s *SettingsService) Get(ctx context.Context, category, key string) (string, error) {
-	setting, err := s.db.GetSetting(ctx, category, key)
+	setting, err := s.store.GetSetting(ctx, category, key)
 	if errors.Is(err, storage.ErrNotFound) {
 		return "", nil
 	}
@@ -171,22 +171,22 @@ func (s *SettingsService) Set(ctx context.Context, category, key, value string, 
 		storeValue = encryptedVal
 	}
 
-	return s.db.SetSetting(ctx, category, key, storeValue, valueType, encrypted)
+	return s.store.SetSetting(ctx, category, key, storeValue, valueType, encrypted)
 }
 
 // SetInt stores an integer setting.
 func (s *SettingsService) SetInt(ctx context.Context, category, key string, value int) error {
-	return s.db.SetSetting(ctx, category, key, strconv.Itoa(value), "int", false)
+	return s.store.SetSetting(ctx, category, key, strconv.Itoa(value), "int", false)
 }
 
 // SetBool stores a boolean setting.
 func (s *SettingsService) SetBool(ctx context.Context, category, key string, value bool) error {
-	return s.db.SetSetting(ctx, category, key, strconv.FormatBool(value), "bool", false)
+	return s.store.SetSetting(ctx, category, key, strconv.FormatBool(value), "bool", false)
 }
 
 // SetDuration stores a duration setting.
 func (s *SettingsService) SetDuration(ctx context.Context, category, key string, value time.Duration) error {
-	return s.db.SetSetting(ctx, category, key, value.String(), "duration", false)
+	return s.store.SetSetting(ctx, category, key, value.String(), "duration", false)
 }
 
 // SetRaw stores a setting with explicit value type (for import scenarios).
@@ -202,12 +202,12 @@ func (s *SettingsService) SetRaw(ctx context.Context, category, key, value, valu
 		storeValue = encryptedVal
 	}
 
-	return s.db.SetSetting(ctx, category, key, storeValue, valueType, encrypted)
+	return s.store.SetSetting(ctx, category, key, storeValue, valueType, encrypted)
 }
 
 // Delete removes a setting.
 func (s *SettingsService) Delete(ctx context.Context, category, key string) error {
-	return s.db.DeleteSetting(ctx, category, key)
+	return s.store.DeleteSetting(ctx, category, key)
 }
 
 // SettingMetadata represents setting info returned by list operations.
@@ -223,7 +223,7 @@ type SettingMetadata struct {
 
 // ListByCategory returns all settings in a category.
 func (s *SettingsService) ListByCategory(ctx context.Context, category string) ([]*SettingMetadata, error) {
-	settings, err := s.db.ListSettingsByCategory(ctx, category)
+	settings, err := s.store.ListSettingsByCategory(ctx, category)
 	if err != nil {
 		return nil, fmt.Errorf("listing settings: %w", err)
 	}
@@ -245,7 +245,7 @@ func (s *SettingsService) ListByCategory(ctx context.Context, category string) (
 
 // ListAll returns all settings across all categories.
 func (s *SettingsService) ListAll(ctx context.Context) ([]*SettingMetadata, error) {
-	settings, err := s.db.ListAllSettings(ctx)
+	settings, err := s.store.ListAllSettings(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("listing settings: %w", err)
 	}
@@ -267,7 +267,7 @@ func (s *SettingsService) ListAll(ctx context.Context) ([]*SettingMetadata, erro
 
 // GetCategory retrieves all settings in a category as a map.
 func (s *SettingsService) GetCategory(ctx context.Context, category string) (map[string]string, error) {
-	settings, err := s.db.ListSettingsByCategory(ctx, category)
+	settings, err := s.store.ListSettingsByCategory(ctx, category)
 	if err != nil {
 		return nil, err
 	}
@@ -504,7 +504,7 @@ func (s *SettingsService) GetMasterConfig(ctx context.Context) (*MasterConfig, e
 
 // Export exports all settings as YAML.
 func (s *SettingsService) Export(ctx context.Context) ([]byte, error) {
-	settings, err := s.db.ListAllSettings(ctx)
+	settings, err := s.store.ListAllSettings(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -552,7 +552,7 @@ func (s *SettingsService) Export(ctx context.Context) ([]byte, error) {
 
 // ExportJSON exports all settings as JSON.
 func (s *SettingsService) ExportJSON(ctx context.Context) ([]byte, error) {
-	settings, err := s.db.ListAllSettings(ctx)
+	settings, err := s.store.ListAllSettings(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -640,7 +640,7 @@ func (s *SettingsService) Import(ctx context.Context, data []byte) error {
 				}
 			}
 
-			if err := s.db.SetSetting(ctx, category, key, strVal, valType, encrypted); err != nil {
+			if err := s.store.SetSetting(ctx, category, key, strVal, valType, encrypted); err != nil {
 				return fmt.Errorf("setting %s/%s: %w", category, key, err)
 			}
 		}

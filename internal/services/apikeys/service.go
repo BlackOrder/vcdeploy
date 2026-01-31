@@ -19,12 +19,12 @@ var _ services.APIKeyServicer = (*Service)(nil)
 
 // Service handles API key management.
 type Service struct {
-	db *storage.DB
+	store storage.Store
 }
 
 // New creates a new API keys Service.
-func New(db *storage.DB) *Service {
-	return &Service{db: db}
+func New(store storage.Store) *Service {
+	return &Service{store: store}
 }
 
 // Create creates a new API key and returns the raw key (only shown once).
@@ -54,7 +54,7 @@ func (s *Service) Create(ctx context.Context, userID int64, name string, scopes 
 		CreatedAt: time.Now(),
 	}
 
-	if err := s.db.CreateAPIKey(ctx, key); err != nil {
+	if err := s.store.CreateAPIKey(ctx, key); err != nil {
 		return "", nil, fmt.Errorf("creating API key: %w", err)
 	}
 
@@ -64,7 +64,7 @@ func (s *Service) Create(ctx context.Context, userID int64, name string, scopes 
 // GetByRawKey retrieves an API key by its raw value.
 func (s *Service) GetByRawKey(ctx context.Context, rawKey string) (*storage.APIKey, error) {
 	hash := hashAPIKey(rawKey)
-	key, err := s.db.GetAPIKeyByHash(ctx, hash)
+	key, err := s.store.GetAPIKeyByHash(ctx, hash)
 	if err != nil {
 		return nil, err // Returns ErrNotFound if not found
 	}
@@ -79,22 +79,22 @@ func (s *Service) GetByRawKey(ctx context.Context, rawKey string) (*storage.APIK
 
 // Delete removes an API key by ID.
 func (s *Service) Delete(ctx context.Context, keyID int64) error {
-	return s.db.DeleteAPIKey(ctx, keyID)
+	return s.store.DeleteAPIKey(ctx, keyID)
 }
 
 // List returns all API keys for a user.
 func (s *Service) List(ctx context.Context, userID int64) ([]*storage.APIKey, error) {
-	return s.db.ListAPIKeys(ctx, userID)
+	return s.store.ListAPIKeys(ctx, userID)
 }
 
 // UpdateUsage updates the last used timestamp for an API key.
 func (s *Service) UpdateUsage(ctx context.Context, keyID int64) error {
-	return s.db.UpdateAPIKeyUsage(ctx, keyID)
+	return s.store.UpdateAPIKeyUsage(ctx, keyID)
 }
 
 // CleanupExpired removes all expired API keys.
 func (s *Service) CleanupExpired(ctx context.Context) (int64, error) {
-	return s.db.CleanupExpiredAPIKeys(ctx, time.Now())
+	return s.store.CleanupExpiredAPIKeys(ctx, time.Now())
 }
 
 // generateAPIKey creates a cryptographically secure API key.

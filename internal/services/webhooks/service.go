@@ -15,18 +15,18 @@ var _ services.WebhookServicer = (*Service)(nil)
 
 // Service handles project webhook configuration.
 type Service struct {
-	db  *storage.DB
-	kms *security.KMS
+	store storage.Store
+	kms   *security.KMS
 }
 
 // New creates a new webhooks Service.
-func New(db *storage.DB, kms *security.KMS) *Service {
-	return &Service{db: db, kms: kms}
+func New(store storage.Store, kms *security.KMS) *Service {
+	return &Service{store: store, kms: kms}
 }
 
 // Get retrieves a webhook config for a project and provider.
 func (s *Service) Get(ctx context.Context, projectID int64, provider string) (*storage.ProjectWebhook, error) {
-	webhook, err := s.db.GetProjectWebhook(ctx, projectID, provider)
+	webhook, err := s.store.GetProjectWebhook(ctx, projectID, provider)
 	if err != nil {
 		return nil, err // Returns ErrNotFound if not found
 	}
@@ -49,7 +49,7 @@ func (s *Service) Set(ctx context.Context, projectID int64, provider string, sec
 		encryptedSecret = secret
 	}
 
-	if err = s.db.SetProjectWebhook(ctx, projectID, provider, encryptedSecret, enabled, requireSecret); err != nil {
+	if err = s.store.SetProjectWebhook(ctx, projectID, provider, encryptedSecret, enabled, requireSecret); err != nil {
 		return fmt.Errorf("setting webhook config: %w", err)
 	}
 
@@ -58,7 +58,7 @@ func (s *Service) Set(ctx context.Context, projectID int64, provider string, sec
 
 // List returns all webhooks for a project.
 func (s *Service) List(ctx context.Context, projectID int64) ([]*storage.ProjectWebhook, error) {
-	webhooks, err := s.db.ListProjectWebhooks(ctx, projectID)
+	webhooks, err := s.store.ListProjectWebhooks(ctx, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("listing webhooks: %w", err)
 	}
@@ -67,7 +67,7 @@ func (s *Service) List(ctx context.Context, projectID int64) ([]*storage.Project
 
 // Delete removes a webhook config.
 func (s *Service) Delete(ctx context.Context, projectID int64, provider string) error {
-	if err := s.db.DeleteProjectWebhook(ctx, projectID, provider); err != nil {
+	if err := s.store.DeleteProjectWebhook(ctx, projectID, provider); err != nil {
 		return fmt.Errorf("deleting webhook: %w", err)
 	}
 	return nil
@@ -75,7 +75,7 @@ func (s *Service) Delete(ctx context.Context, projectID int64, provider string) 
 
 // GetDecryptedSecret retrieves and decrypts a webhook secret.
 func (s *Service) GetDecryptedSecret(ctx context.Context, projectID int64, provider string) ([]byte, error) {
-	webhook, err := s.db.GetProjectWebhook(ctx, projectID, provider)
+	webhook, err := s.store.GetProjectWebhook(ctx, projectID, provider)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +98,7 @@ func (s *Service) GetDecryptedSecret(ctx context.Context, projectID int64, provi
 
 // CleanupOrphanedWebhooks removes webhooks that reference deleted projects.
 func (s *Service) CleanupOrphanedWebhooks(ctx context.Context) (int64, error) {
-	count, err := s.db.CleanupOrphanedWebhooks(ctx)
+	count, err := s.store.CleanupOrphanedWebhooks(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("cleaning up orphaned webhooks: %w", err)
 	}

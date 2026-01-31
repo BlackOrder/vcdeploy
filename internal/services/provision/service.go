@@ -13,15 +13,15 @@ import (
 
 // Service handles agent provisioning operations.
 type Service struct {
-	db *storage.DB
+	store storage.Store
 }
 
 // Ensure Service implements ProvisionServicer.
 var _ services.ProvisionServicer = (*Service)(nil)
 
 // New creates a new provision service.
-func New(db *storage.DB) *Service {
-	return &Service{db: db}
+func New(store storage.Store) *Service {
+	return &Service{store: store}
 }
 
 // CreateJob creates a new provisioning job.
@@ -46,7 +46,7 @@ func (s *Service) CreateJob(ctx context.Context, job *storage.ProvisionJob) erro
 	}
 	job.StartedAt = time.Now()
 
-	if err := s.db.CreateProvisionJob(ctx, job); err != nil {
+	if err := s.store.CreateProvisionJob(ctx, job); err != nil {
 		return &services.ServiceError{
 			Op:  op,
 			Err: err,
@@ -60,7 +60,7 @@ func (s *Service) CreateJob(ctx context.Context, job *storage.ProvisionJob) erro
 func (s *Service) GetJob(ctx context.Context, id string) (*storage.ProvisionJob, error) {
 	const op = "provision.GetJob"
 
-	job, err := s.db.GetProvisionJob(ctx, id)
+	job, err := s.store.GetProvisionJob(ctx, id)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
 			return nil, &services.ServiceError{
@@ -98,7 +98,7 @@ func (s *Service) UpdateStatus(ctx context.Context, id, status, stage, errorMess
 		}
 	}
 
-	if err := s.db.UpdateProvisionJobStatus(ctx, id, status, stage, errorMessage, progress); err != nil {
+	if err := s.store.UpdateProvisionJobStatus(ctx, id, status, stage, errorMessage, progress); err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
 			return &services.ServiceError{
 				Op:       op,
@@ -120,7 +120,7 @@ func (s *Service) UpdateStatus(ctx context.Context, id, status, stage, errorMess
 func (s *Service) ListPending(ctx context.Context) ([]*storage.ProvisionJob, error) {
 	const op = "provision.ListPending"
 
-	jobs, err := s.db.ListPendingProvisionJobs(ctx)
+	jobs, err := s.store.ListPendingProvisionJobs(ctx)
 	if err != nil {
 		return nil, &services.ServiceError{
 			Op:  op,
@@ -137,7 +137,7 @@ func (s *Service) ListByHost(ctx context.Context, host string, pagination servic
 
 	pagination = services.NewPagination(pagination.Limit, pagination.Offset)
 
-	jobs, total, err := s.db.ListProvisionJobsByHost(ctx, host, pagination.Limit, pagination.Offset)
+	jobs, total, err := s.store.ListProvisionJobsByHost(ctx, host, pagination.Limit, pagination.Offset)
 	if err != nil {
 		return nil, &services.ServiceError{
 			Op:  op,
@@ -176,7 +176,7 @@ func (s *Service) Cancel(ctx context.Context, id string) error {
 func (s *Service) Cleanup(ctx context.Context, before time.Time) (int64, error) {
 	const op = "provision.Cleanup"
 
-	count, err := s.db.CleanupOldProvisionJobs(ctx, before)
+	count, err := s.store.CleanupOldProvisionJobs(ctx, before)
 	if err != nil {
 		return 0, &services.ServiceError{
 			Op:  op,
