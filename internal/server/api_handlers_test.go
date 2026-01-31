@@ -338,7 +338,7 @@ func TestHandleAPIKeys_List(t *testing.T) {
 		t.Fatalf("failed to get session: %v", err)
 	}
 
-	req := httptest.NewRequest("GET", "/api/v1/apikeys", nil)
+	req := httptest.NewRequest("GET", "/api/v1/api-keys", nil)
 	req.AddCookie(&http.Cookie{
 		Name:  "session",
 		Value: sessionToken,
@@ -381,7 +381,7 @@ func TestHandleAPIKeys_Create(t *testing.T) {
 		"name": "new-api-key"
 	}`)
 
-	req := httptest.NewRequest("POST", "/api/v1/apikeys", body)
+	req := httptest.NewRequest("POST", "/api/v1/api-keys", body)
 	req.Header.Set("Content-Type", "application/json")
 	// Add user context directly for direct handler testing
 	req = requestWithUserContext(req, session.UserID)
@@ -1094,8 +1094,8 @@ func TestHandleAPIKey_Delete(t *testing.T) {
 	}
 	_ = server.store.CreateAPIKey(ctx, newKey)
 
-	// Delete the API key - note the correct path is /api/v1/apikeys/
-	req := httptest.NewRequest("DELETE", fmt.Sprintf("/api/v1/apikeys/%d", newKey.ID), nil)
+	// Delete the API key - note the correct path is /api/v1/api-keys/
+	req := httptest.NewRequest("DELETE", fmt.Sprintf("/api/v1/api-keys/%d", newKey.ID), nil)
 	req.Header.Set("X-API-Key", apiKey)
 	w := httptest.NewRecorder()
 
@@ -1113,7 +1113,7 @@ func TestHandleAPIKey_EmptyID(t *testing.T) {
 	server, apiKey, _, userID := newTestServerWithAuth(t)
 	defer server.store.Close()
 
-	req := httptest.NewRequest("DELETE", "/api/v1/apikeys/", nil)
+	req := httptest.NewRequest("DELETE", "/api/v1/api-keys/", nil)
 	req.Header.Set("X-API-Key", apiKey)
 	w := httptest.NewRecorder()
 
@@ -1131,7 +1131,7 @@ func TestHandleAPIKey_InvalidID(t *testing.T) {
 	server, apiKey, _, userID := newTestServerWithAuth(t)
 	defer server.store.Close()
 
-	req := httptest.NewRequest("DELETE", "/api/v1/apikeys/invalid", nil)
+	req := httptest.NewRequest("DELETE", "/api/v1/api-keys/invalid", nil)
 	req.Header.Set("X-API-Key", apiKey)
 	w := httptest.NewRecorder()
 
@@ -1149,7 +1149,8 @@ func TestHandleAPIKey_MethodNotAllowed(t *testing.T) {
 	server, apiKey, _, userID := newTestServerWithAuth(t)
 	defer server.store.Close()
 
-	req := httptest.NewRequest("GET", "/api/v1/apikeys/1", nil)
+	// PUT is not allowed on individual API keys
+	req := httptest.NewRequest("PUT", "/api/v1/api-keys/1", nil)
 	req.Header.Set("X-API-Key", apiKey)
 	w := httptest.NewRecorder()
 
@@ -2018,7 +2019,7 @@ func TestHandleAPIKeys_CreateMissingName(t *testing.T) {
 	session, _ := server.store.GetSessionByToken(ctx, sessionToken)
 
 	body := strings.NewReader(`{}`)
-	req := httptest.NewRequest("POST", "/api/v1/apikeys", body)
+	req := httptest.NewRequest("POST", "/api/v1/api-keys", body)
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithUserContext(req, session.UserID)
 	w := httptest.NewRecorder()
@@ -2040,7 +2041,7 @@ func TestHandleAPIKeys_CreateInvalidJSON(t *testing.T) {
 	session, _ := server.store.GetSessionByToken(ctx, sessionToken)
 
 	body := strings.NewReader(`{invalid}`)
-	req := httptest.NewRequest("POST", "/api/v1/apikeys", body)
+	req := httptest.NewRequest("POST", "/api/v1/api-keys", body)
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithUserContext(req, session.UserID)
 	w := httptest.NewRecorder()
@@ -2062,7 +2063,7 @@ func TestHandleAPIKeys_CreateWithExpiry(t *testing.T) {
 	session, _ := server.store.GetSessionByToken(ctx, sessionToken)
 
 	body := strings.NewReader(`{"name":"expiring-key","expires_in_days":30}`)
-	req := httptest.NewRequest("POST", "/api/v1/apikeys", body)
+	req := httptest.NewRequest("POST", "/api/v1/api-keys", body)
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithUserContext(req, session.UserID)
 	w := httptest.NewRecorder()
@@ -2086,7 +2087,7 @@ func TestHandleAPIKeys_Unauthorized(t *testing.T) {
 	server, _, _, _ := newTestServerWithAuth(t)
 	defer server.store.Close()
 
-	req := httptest.NewRequest("GET", "/api/v1/apikeys", nil)
+	req := httptest.NewRequest("GET", "/api/v1/api-keys", nil)
 	w := httptest.NewRecorder()
 
 	server.handleAPIKeys(w, req)
@@ -2105,7 +2106,7 @@ func TestHandleAPIKeys_MethodNotAllowed(t *testing.T) {
 	ctx := context.Background()
 	session, _ := server.store.GetSessionByToken(ctx, sessionToken)
 
-	req := httptest.NewRequest("PUT", "/api/v1/apikeys", nil)
+	req := httptest.NewRequest("PUT", "/api/v1/api-keys", nil)
 	req = requestWithUserContext(req, session.UserID)
 	w := httptest.NewRecorder()
 

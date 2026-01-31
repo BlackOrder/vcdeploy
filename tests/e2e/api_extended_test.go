@@ -22,7 +22,7 @@ func TestAPIHostKeys(t *testing.T) {
 	}
 
 	t.Run("list host keys", func(t *testing.T) {
-		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/hostkeys", nil, cfg.APIToken)
+		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/host-keys", nil, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to list host keys: %v", err)
 		}
@@ -46,7 +46,7 @@ func TestAPIHostKeys(t *testing.T) {
 			"trusted":     true,
 		}
 
-		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/hostkeys", hostKey, cfg.APIToken)
+		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/host-keys", hostKey, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to create host key: %v", err)
 		}
@@ -61,7 +61,7 @@ func TestAPIHostKeys(t *testing.T) {
 			"port": 22,
 		}
 
-		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/hostkeys/verify", verifyReq, cfg.APIToken)
+		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/host-keys/verify", verifyReq, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to verify host key: %v", err)
 		}
@@ -83,7 +83,7 @@ func TestAPIJumpServers(t *testing.T) {
 	}
 
 	t.Run("list jump servers", func(t *testing.T) {
-		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/jumpservers", nil, cfg.APIToken)
+		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/jump-servers", nil, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to list jump servers: %v", err)
 		}
@@ -101,7 +101,7 @@ func TestAPIJumpServers(t *testing.T) {
 			"priority": 10,
 		}
 
-		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/jumpservers", jumpServer, cfg.APIToken)
+		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/jump-servers", jumpServer, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to create jump server: %v", err)
 		}
@@ -112,7 +112,7 @@ func TestAPIJumpServers(t *testing.T) {
 
 	t.Run("test jump server connection", func(t *testing.T) {
 		// Test connection to a jump server (will fail if not configured, but endpoint should exist)
-		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/jumpservers/e2e-jump-server/test", nil, cfg.APIToken)
+		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/jump-servers/e2e-jump-server/test", nil, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to test jump server: %v", err)
 		}

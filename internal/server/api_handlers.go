@@ -1661,10 +1661,9 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 
 // handleAPIKey handles individual API key operations.
 func (s *MasterServer) handleAPIKey(w http.ResponseWriter, r *http.Request) {
-	// Extract key ID from path: /api/v1/apikeys/{id} or /api/v1/api-keys/{id}
-	// Also handles /api/v1/apikeys/{id}/revoke for compatibility
-	path := strings.TrimPrefix(r.URL.Path, "/api/v1/apikeys/")
-	path = strings.TrimPrefix(path, "/api/v1/api-keys/")
+	// Extract key ID from path: /api/v1/api-keys/{id}
+	// Also handles /api/v1/api-keys/{id}/revoke
+	path := strings.TrimPrefix(r.URL.Path, "/api/v1/api-keys/")
 
 	// Check for /revoke suffix (POST to revoke is treated like DELETE)
 	isRevoke := false

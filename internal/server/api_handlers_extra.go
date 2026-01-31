@@ -113,14 +113,14 @@ func (s *MasterServer) handleHostKeys(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleHostKey handles operations on a specific host key:
-// GET /api/v1/hostkeys/{id} - get details
-// PUT /api/v1/hostkeys/{id} - update trust status
-// DELETE /api/v1/hostkeys/{id} - delete
+// GET /api/v1/host-keys/{id} - get details
+// PUT /api/v1/host-keys/{id} - update trust status
+// DELETE /api/v1/host-keys/{id} - delete
 func (s *MasterServer) handleHostKey(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	// Extract ID from path
-	path := strings.TrimPrefix(r.URL.Path, "/api/v1/hostkeys/")
+	path := strings.TrimPrefix(r.URL.Path, "/api/v1/host-keys/")
 	id, err := strconv.ParseInt(path, 10, 64)
 	if err != nil {
 		http.Error(w, "Invalid host key ID", http.StatusBadRequest)
@@ -303,7 +303,7 @@ func (s *MasterServer) handleJumpServer(w http.ResponseWriter, r *http.Request) 
 	ctx := r.Context()
 
 	// Extract ID from path
-	path := strings.TrimPrefix(r.URL.Path, "/api/v1/jumpservers/")
+	path := strings.TrimPrefix(r.URL.Path, "/api/v1/jump-servers/")
 	id, err := strconv.ParseInt(path, 10, 64)
 	if err != nil {
 		http.Error(w, "Invalid jump server ID", http.StatusBadRequest)

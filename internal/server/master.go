@@ -670,22 +670,20 @@ func (s *MasterServer) startHTTP() error {
 	mux.HandleFunc("/api/v1/project-types", s.withAuth(s.handleProjectTypes))
 	mux.HandleFunc("/api/v1/project-types/", s.withAuth(s.handleProjectType))
 
-	// API Keys API (both formats for compatibility)
-	mux.HandleFunc("/api/v1/apikeys", s.withAuth(s.handleAPIKeys))
-	mux.HandleFunc("/api/v1/apikeys/", s.withAuth(s.handleAPIKey))
+	// API Keys API (canonical kebab-case only)
 	mux.HandleFunc("/api/v1/api-keys", s.withAuth(s.handleAPIKeys))
 	mux.HandleFunc("/api/v1/api-keys/", s.withAuth(s.handleAPIKey))
 
 	// Audit API
 	mux.HandleFunc("/api/v1/audit", s.withAuth(s.handleAuditLogs))
 
-	// Host Keys API
-	mux.HandleFunc("/api/v1/hostkeys", s.withAuth(s.handleHostKeys))
-	mux.HandleFunc("/api/v1/hostkeys/", s.withAuth(s.handleHostKey))
+	// Host Keys API (canonical kebab-case only)
+	mux.HandleFunc("/api/v1/host-keys", s.withAuth(s.handleHostKeys))
+	mux.HandleFunc("/api/v1/host-keys/", s.withAuth(s.handleHostKey))
 
-	// Jump Servers API
-	mux.HandleFunc("/api/v1/jumpservers", s.withAuth(s.handleJumpServers))
-	mux.HandleFunc("/api/v1/jumpservers/", s.withAuth(s.handleJumpServer))
+	// Jump Servers API (canonical kebab-case only)
+	mux.HandleFunc("/api/v1/jump-servers", s.withAuth(s.handleJumpServers))
+	mux.HandleFunc("/api/v1/jump-servers/", s.withAuth(s.handleJumpServer))
 
 	// Blocked IPs API
 	mux.HandleFunc("/api/v1/blocked", s.withAuth(s.handleBlockedIPs))

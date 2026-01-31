@@ -18,7 +18,7 @@ func TestAPIKeysAPI(t *testing.T) {
 	ctx.MustLogin(cfg.AdminUsername, cfg.AdminPassword)
 
 	t.Run("list API keys", func(t *testing.T) {
-		resp, err := ctx.Client.Get("/api/v1/apikeys")
+		resp, err := ctx.Client.Get("/api/v1/api-keys")
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
@@ -36,7 +36,7 @@ func TestAPIKeysAPI(t *testing.T) {
 			"permissions": []string{"read:projects", "read:deployments"},
 		}
 
-		resp, err := ctx.Client.Post("/api/v1/apikeys", apiKey)
+		resp, err := ctx.Client.Post("/api/v1/api-keys", apiKey)
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
@@ -61,7 +61,7 @@ func TestAPIKeysAPI(t *testing.T) {
 			t.Skip("no API key created")
 		}
 
-		resp, err := ctx.Client.Get(fmt.Sprintf("/api/v1/apikeys/%v", createdKeyID))
+		resp, err := ctx.Client.Get(fmt.Sprintf("/api/v1/api-keys/%v", createdKeyID))
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
@@ -118,7 +118,7 @@ func TestAPIKeysAPI(t *testing.T) {
 			t.Skip("no API key created")
 		}
 
-		resp, err := ctx.Client.Post(fmt.Sprintf("/api/v1/apikeys/%v/revoke", createdKeyID), nil)
+		resp, err := ctx.Client.Post(fmt.Sprintf("/api/v1/api-keys/%v/revoke", createdKeyID), nil)
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
@@ -148,7 +148,7 @@ func TestAPIKeysAPI(t *testing.T) {
 			t.Skip("no API key created")
 		}
 
-		resp, err := ctx.Client.Delete(fmt.Sprintf("/api/v1/apikeys/%v", createdKeyID))
+		resp, err := ctx.Client.Delete(fmt.Sprintf("/api/v1/api-keys/%v", createdKeyID))
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
@@ -163,7 +163,7 @@ func TestAPIKeysAPI(t *testing.T) {
 			"scopes": []string{"invalid:scope"},
 		}
 
-		resp, err := ctx.Client.Post("/api/v1/apikeys", apiKey)
+		resp, err := ctx.Client.Post("/api/v1/api-keys", apiKey)
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
@@ -208,7 +208,7 @@ func TestAPIKeyScopes(t *testing.T) {
 				"permissions": ps.permissions,
 			}
 
-			resp, err := ctx.Client.Post("/api/v1/apikeys", apiKey)
+			resp, err := ctx.Client.Post("/api/v1/api-keys", apiKey)
 			if err != nil {
 				t.Fatalf("request failed: %v", err)
 			}
