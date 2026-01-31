@@ -51,15 +51,15 @@ func ValidatePassword(password string) error {
 }
 
 // ValidateRole validates a user role.
-// Valid roles are: admin, user, readonly.
+// Valid roles are: admin, user, viewer.
 func ValidateRole(role string) error {
 	validRoles := map[string]bool{
-		"admin":    true,
-		"user":     true,
-		"readonly": true,
+		"admin":  true,
+		"user":   true,
+		"viewer": true,
 	}
 	if !validRoles[strings.ToLower(role)] {
-		return InvalidInput("validation", "role must be admin, user, or readonly")
+		return InvalidInput("validation", "role must be admin, user, or viewer")
 	}
 	return nil
 }
