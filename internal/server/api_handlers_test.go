@@ -696,8 +696,8 @@ func TestHandleProjectAPI_Get(t *testing.T) {
 	}
 	_ = server.store.CreateProject(project)
 
-	// GET specific project
-	req := httptest.NewRequest("GET", "/api/v1/projects/test-project", nil)
+	// GET specific project by ID
+	req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/projects/%d", project.ID), nil)
 	req.Header.Set("X-API-Key", apiKey)
 	w := httptest.NewRecorder()
 
@@ -715,7 +715,8 @@ func TestHandleProjectAPI_GetNotFound(t *testing.T) {
 	server, apiKey, _, userID := newTestServerWithAuth(t)
 	defer server.store.Close()
 
-	req := httptest.NewRequest("GET", "/api/v1/projects/nonexistent", nil)
+	// Use a non-existent ID
+	req := httptest.NewRequest("GET", "/api/v1/projects/99999", nil)
 	req.Header.Set("X-API-Key", apiKey)
 	w := httptest.NewRecorder()
 
@@ -724,6 +725,25 @@ func TestHandleProjectAPI_GetNotFound(t *testing.T) {
 
 	if w.Code != http.StatusNotFound {
 		t.Errorf("expected status %d, got %d", http.StatusNotFound, w.Code)
+	}
+}
+
+func TestHandleProjectAPI_GetInvalidID(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	// Use an invalid (non-numeric) ID
+	req := httptest.NewRequest("GET", "/api/v1/projects/invalid-name", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	req = requestWithUserContext(req, userID)
+	server.handleProjectAPI(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
 	}
 }
 
@@ -743,9 +763,9 @@ func TestHandleProjectAPI_Update(t *testing.T) {
 	}
 	_ = server.store.CreateProject(project)
 
-	// Update the project
+	// Update the project by ID
 	updateBody := bytes.NewBufferString(`{"branch": "develop", "deploy_path": "/var/www/new"}`)
-	req := httptest.NewRequest("PUT", "/api/v1/projects/update-project", updateBody)
+	req := httptest.NewRequest("PUT", fmt.Sprintf("/api/v1/projects/%d", project.ID), updateBody)
 	req.Header.Set("X-API-Key", apiKey)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -774,8 +794,8 @@ func TestHandleProjectAPI_Delete(t *testing.T) {
 	}
 	_ = server.store.CreateProject(project)
 
-	// Delete the project
-	req := httptest.NewRequest("DELETE", "/api/v1/projects/delete-project", nil)
+	// Delete the project by ID
+	req := httptest.NewRequest("DELETE", fmt.Sprintf("/api/v1/projects/%d", project.ID), nil)
 	req.Header.Set("X-API-Key", apiKey)
 	w := httptest.NewRecorder()
 
@@ -787,13 +807,13 @@ func TestHandleProjectAPI_Delete(t *testing.T) {
 	}
 }
 
-func TestHandleProjectAPI_EmptyName(t *testing.T) {
+func TestHandleProjectAPI_EmptyID(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
 	defer server.store.Close()
 
-	// Empty project name
+	// Empty project ID
 	req := httptest.NewRequest("GET", "/api/v1/projects/", nil)
 	req.Header.Set("X-API-Key", apiKey)
 	w := httptest.NewRecorder()
@@ -812,7 +832,17 @@ func TestHandleProjectAPI_MethodNotAllowed(t *testing.T) {
 	server, apiKey, _, userID := newTestServerWithAuth(t)
 	defer server.store.Close()
 
-	req := httptest.NewRequest("PATCH", "/api/v1/projects/test-project", nil)
+	// Create a project first so we have a valid ID
+	project := &storage.Project{
+		Name:       "method-test-project",
+		Repository: "https://github.com/test/repo",
+		Branch:     "main",
+		DeployPath: "/var/www/test",
+		Type:       "static",
+	}
+	_ = server.store.CreateProject(project)
+
+	req := httptest.NewRequest("PATCH", fmt.Sprintf("/api/v1/projects/%d", project.ID), nil)
 	req.Header.Set("X-API-Key", apiKey)
 	w := httptest.NewRecorder()
 
@@ -2596,7 +2626,7 @@ func TestHandleProjectAPI_UpdateInvalidJSON(t *testing.T) {
 	_ = server.store.CreateProject(project)
 
 	body := strings.NewReader(`{invalid}`)
-	req := httptest.NewRequest("PUT", "/api/v1/projects/update-invalid-json", body)
+	req := httptest.NewRequest("PUT", fmt.Sprintf("/api/v1/projects/%d", project.ID), body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", apiKey)
 	w := httptest.NewRecorder()
@@ -2616,7 +2646,7 @@ func TestHandleProjectAPI_UpdateNotFound(t *testing.T) {
 	defer server.store.Close()
 
 	body := strings.NewReader(`{"branch":"develop"}`)
-	req := httptest.NewRequest("PUT", "/api/v1/projects/nonexistent", body)
+	req := httptest.NewRequest("PUT", "/api/v1/projects/99999", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", apiKey)
 	w := httptest.NewRecorder()

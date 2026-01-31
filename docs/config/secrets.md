@@ -198,11 +198,11 @@ vcdeploy master key delete KEY_ID --confirm-destroy
 ### Secrets API
 
 ```bash
-# List secrets for a project
-GET /api/v1/projects/{project}/secrets
+# List secrets for a project (use project ID)
+GET /api/v1/projects/{id}/secrets
 
 # Set a secret
-POST /api/v1/projects/{project}/secrets
+POST /api/v1/projects/{id}/secrets
 Content-Type: application/json
 {
   "scope": "production",
@@ -211,7 +211,7 @@ Content-Type: application/json
 }
 
 # Delete a secret
-DELETE /api/v1/projects/{project}/secrets/{scope}/{key}
+DELETE /api/v1/projects/{id}/secrets/{scope}/{key}
 ```
 
 ### Key Management API

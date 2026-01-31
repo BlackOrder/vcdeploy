@@ -453,7 +453,8 @@ Configure webhooks from Git providers (GitHub, GitLab, Bitbucket) to automatical
 ### Via API
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/projects/myapp/deploy \
+# Use project ID in the URL (e.g., 123)
+curl -X POST http://localhost:8080/api/v1/projects/{id}/deploy \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"target": "production", "branch": "main"}'
