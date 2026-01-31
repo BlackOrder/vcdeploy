@@ -35,9 +35,9 @@ func TestSettingsAPI(t *testing.T) {
 	}
 
 	t.Run("update appearance settings", func(t *testing.T) {
-		// API expects all values as strings
+		// API now accepts native types and coerces to strings
 		settings := map[string]interface{}{
-			"dark_mode":    "true",
+			"dark_mode":    true, // bool - coerced to "true"
 			"accent_color": "blue",
 		}
 		resp, err := ctx.Client.Put("/api/v1/settings/appearance", settings)
@@ -47,7 +47,7 @@ func TestSettingsAPI(t *testing.T) {
 		defer resp.Body.Close()
 		ctx.Assertions.StatusOK(resp)
 
-		// Verify the change
+		// Verify the change - value should be stored as "true" string
 		getResp, _ := ctx.Client.Get("/api/v1/settings/appearance")
 		defer getResp.Body.Close()
 		var result map[string]interface{}
@@ -69,10 +69,10 @@ func TestSettingsAPI(t *testing.T) {
 	})
 
 	t.Run("update security settings", func(t *testing.T) {
-		// API expects all values as strings
+		// API now accepts native types and coerces to strings
 		settings := map[string]interface{}{
-			"require_2fa_admin":  "false",
-			"max_login_attempts": "5",
+			"require_2fa_admin":  false, // bool - coerced to "false"
+			"max_login_attempts": 5,     // int - coerced to "5"
 		}
 		resp, err := ctx.Client.Put("/api/v1/settings/security", settings)
 		if err != nil {
