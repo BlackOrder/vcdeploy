@@ -389,7 +389,17 @@ jobs:
           ln -sf ../web/templates data/templates
           ln -sf ../web/static data/static
           ./bin/vcdeploy master start --config=configs/master-dev.yaml &
-          sleep 15  # Wait for server to start
+          # Wait for server to be ready
+          echo "Waiting for server to be ready..."
+          for i in {1..30}; do
+            if curl -sf http://localhost:9000/api/v1/health > /dev/null 2>&1; then
+              echo "Server is ready!"
+              break
+            fi
+            echo "Attempt $i/30: Server not ready yet, waiting..."
+            sleep 2
+          done
+          curl -sf http://localhost:9000/api/v1/health || exit 1
         env:
           VCDEPLOY_TEST_MODE: "true"
           VCDEPLOY_ADMIN_PASSWORD: "Admin@Password123!"
@@ -398,11 +408,42 @@ jobs:
           VCDEPLOY_RUN_DIR: "./data"
           VCDEPLOY_LOG_DIR: "./data"
 
+      - name: Create API token for tests
+        id: create-token
+        run: |
+          # Login to get a session token
+          LOGIN_RESPONSE=$(curl -s -X POST http://localhost:9000/api/v1/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"username":"admin","password":"Admin@Password123!"}')
+          echo "Login response: $LOGIN_RESPONSE"
+          
+          SESSION_TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r '.token // empty')
+          if [ -z "$SESSION_TOKEN" ]; then
+            echo "::error::Failed to get session token from login"
+            exit 1
+          fi
+          
+          # Create an API key using the session token
+          APIKEY_RESPONSE=$(curl -s -X POST http://localhost:9000/api/v1/apikeys \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $SESSION_TOKEN" \
+            -d '{"name":"e2e-test-key","description":"E2E test API key","scopes":["*"]}')
+          echo "API key response: $APIKEY_RESPONSE"
+          
+          API_TOKEN=$(echo "$APIKEY_RESPONSE" | jq -r '.key // empty')
+          if [ -z "$API_TOKEN" ]; then
+            echo "::error::Failed to create API key"
+            exit 1
+          fi
+          
+          echo "API_TOKEN=$API_TOKEN" >> $GITHUB_OUTPUT
+          echo "Successfully created API token for E2E tests"
+
       - name: Run E2E API tests
         run: go test -v -tags=e2e -timeout 20m ./tests/e2e/...
         env:
           E2E_MASTER_HTTP_URL: "http://localhost:9000"
-          E2E_API_TOKEN: ""
+          E2E_API_TOKEN: ${{ steps.create-token.outputs.API_TOKEN }}
           E2E_ADMIN_USER: "admin"
           E2E_ADMIN_PASS: "Admin@Password123!"
 
@@ -619,17 +660,59 @@ jobs:
       - name: Start test infrastructure
         run: |
           docker compose -f docker/docker-compose.test.yml up -d --build
-          sleep 60  # Wait for all services to be ready
+          # Wait for master to be healthy
+          echo "Waiting for master to be ready..."
+          for i in {1..60}; do
+            if curl -sf http://localhost:9000/api/v1/health > /dev/null 2>&1; then
+              echo "Master is ready!"
+              break
+            fi
+            echo "Attempt $i/60: Master not ready yet, waiting..."
+            sleep 2
+          done
+          curl -sf http://localhost:9000/api/v1/health || (docker compose -f docker/docker-compose.test.yml logs master && exit 1)
         env:
           TEST_ADMIN_PASSWORD: "Admin@Password123!"
 
       - name: Check infrastructure status
         run: docker compose -f docker/docker-compose.test.yml ps
 
+      - name: Create API token for tests
+        id: create-token
+        run: |
+          # Login to get a session token
+          LOGIN_RESPONSE=$(curl -s -X POST http://localhost:9000/api/v1/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"username":"admin","password":"Admin@Password123!"}')
+          echo "Login response: $LOGIN_RESPONSE"
+          
+          SESSION_TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r '.token // empty')
+          if [ -z "$SESSION_TOKEN" ]; then
+            echo "::error::Failed to get session token from login"
+            exit 1
+          fi
+          
+          # Create an API key using the session token
+          APIKEY_RESPONSE=$(curl -s -X POST http://localhost:9000/api/v1/apikeys \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $SESSION_TOKEN" \
+            -d '{"name":"full-e2e-test-key","description":"Full E2E test API key","scopes":["*"]}')
+          echo "API key response: $APIKEY_RESPONSE"
+          
+          API_TOKEN=$(echo "$APIKEY_RESPONSE" | jq -r '.key // empty')
+          if [ -z "$API_TOKEN" ]; then
+            echo "::error::Failed to create API key"
+            exit 1
+          fi
+          
+          echo "API_TOKEN=$API_TOKEN" >> $GITHUB_OUTPUT
+          echo "Successfully created API token for Full E2E tests"
+
       - name: Run E2E API tests
         run: go test -v -tags=e2e -timeout 30m ./tests/e2e/...
         env:
           E2E_MASTER_HTTP_URL: "http://localhost:9000"
+          E2E_API_TOKEN: ${{ steps.create-token.outputs.API_TOKEN }}
           E2E_ADMIN_PASS: "Admin@Password123!"
 
       - name: Build CLI binary
@@ -639,6 +722,8 @@ jobs:
         run: go test -v -tags=cli -timeout 15m ./tests/cli/...
         env:
           VCDEPLOY_BINARY: "./bin/vcdeploy"
+          VCDEPLOY_MASTER: "http://localhost:9000"
+          VCDEPLOY_TOKEN: ${{ steps.create-token.outputs.API_TOKEN }}
           E2E_MASTER_HTTP_URL: "http://localhost:9000"
           E2E_ADMIN_PASS: "Admin@Password123!"
 
