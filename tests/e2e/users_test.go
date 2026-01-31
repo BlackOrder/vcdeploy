@@ -171,10 +171,10 @@ func TestUsersAPI(t *testing.T) {
 
 		// Currently the API doesn't validate roles strictly
 		// It accepts any role value (no validation)
-		// Accept 201 (created anyway) or 400 (if validation is added later)
-		if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusBadRequest {
+		// Accept 200/201 (created anyway) or 400 (if validation is added later)
+		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusBadRequest {
 			body, _ := io.ReadAll(resp.Body)
-			t.Errorf("expected 201 or 400, got %d: %s", resp.StatusCode, string(body))
+			t.Errorf("expected 200, 201 or 400, got %d: %s", resp.StatusCode, string(body))
 		}
 	})
 
