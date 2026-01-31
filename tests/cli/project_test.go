@@ -3,12 +3,16 @@
 package cli
 
 import (
+	"os"
 	"testing"
 
 	"github.com/BlackOrder/vcdeploy/tests/testutil"
 )
 
 // TestProjectCommands tests project management CLI commands.
+// NOTE: Project commands currently use local database mode only.
+// These tests require a local master instance with database access.
+// When VCDEPLOY_MASTER is set (remote mode), skip these tests.
 // CLI syntax:
 //   - project list
 //   - project add [name]
@@ -16,10 +20,15 @@ import (
 //   - project delete [name]
 //   - project validate [name]
 func TestProjectCommands(t *testing.T) {
+	// Skip if in remote mode - project commands require local database access
+	if os.Getenv("VCDEPLOY_MASTER") != "" || os.Getenv("E2E_MASTER_HTTP_URL") != "" {
+		t.Skip("Skipping project tests in remote mode - these commands require local database access")
+	}
+
 	ctx := setupTest(t)
 	cfg := testutil.GetConfig()
 
-	// Set API URL for CLI
+	// Set API URL for CLI (only used for remote-capable commands)
 	ctx.CLI.WithEnv("VCDEPLOY_MASTER", cfg.MasterHTTPURL)
 	ctx.CLI.WithEnv("VCDEPLOY_TOKEN", cfg.APIToken)
 
@@ -63,10 +72,16 @@ func TestProjectCommands(t *testing.T) {
 }
 
 // TestProjectDeployCommands tests project deployment commands.
+// NOTE: These commands require local database access.
 // CLI syntax:
 //   - project deploy [name] --target <target> --dry-run --force
 //   - project rollback [name] --target <target> --release <num>
 func TestProjectDeployCommands(t *testing.T) {
+	// Skip if in remote mode - project commands require local database access
+	if os.Getenv("VCDEPLOY_MASTER") != "" || os.Getenv("E2E_MASTER_HTTP_URL") != "" {
+		t.Skip("Skipping project tests in remote mode - these commands require local database access")
+	}
+
 	ctx := setupTest(t)
 	cfg := testutil.GetConfig()
 

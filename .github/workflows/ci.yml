@@ -427,7 +427,7 @@ jobs:
           APIKEY_RESPONSE=$(curl -s -X POST http://localhost:9000/api/v1/apikeys \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $SESSION_TOKEN" \
-            -d '{"name":"e2e-test-key","description":"E2E test API key","scopes":["*"]}')
+            -d '{"name":"e2e-test-key","description":"E2E test API key","scopes":["admin"]}')
           echo "API key response: $APIKEY_RESPONSE"
           
           API_TOKEN=$(echo "$APIKEY_RESPONSE" | jq -r '.key // empty')
@@ -513,7 +513,7 @@ jobs:
           APIKEY_RESPONSE=$(curl -s -X POST http://localhost:9000/api/v1/apikeys \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $SESSION_TOKEN" \
-            -d '{"name":"ci-test-key","description":"CI test API key","scopes":["*"]}')
+            -d '{"name":"ci-test-key","description":"CI test API key","scopes":["admin"]}')
           echo "API key response: $APIKEY_RESPONSE"
           
           API_TOKEN=$(echo "$APIKEY_RESPONSE" | jq -r '.key // empty')
@@ -696,7 +696,7 @@ jobs:
           APIKEY_RESPONSE=$(curl -s -X POST http://localhost:9000/api/v1/apikeys \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $SESSION_TOKEN" \
-            -d '{"name":"full-e2e-test-key","description":"Full E2E test API key","scopes":["*"]}')
+            -d '{"name":"full-e2e-test-key","description":"Full E2E test API key","scopes":["admin"]}')
           echo "API key response: $APIKEY_RESPONSE"
           
           API_TOKEN=$(echo "$APIKEY_RESPONSE" | jq -r '.key // empty')

@@ -3,12 +3,16 @@
 package cli
 
 import (
+	"os"
 	"testing"
 
 	"github.com/BlackOrder/vcdeploy/tests/testutil"
 )
 
 // TestSecretCommands tests secret management CLI commands.
+// NOTE: Secret commands currently use local database mode only.
+// These tests require a local master instance with database access.
+// When VCDEPLOY_MASTER is set (remote mode), skip these tests.
 // CLI syntax:
 //   - secret set [project/scope] [key] --stdin
 //   - secret list [project]
@@ -17,6 +21,11 @@ import (
 //   - secret backup -o <file>
 //   - secret restore [backup-file]
 func TestSecretCommands(t *testing.T) {
+	// Skip if in remote mode - secret commands require local database access
+	if os.Getenv("VCDEPLOY_MASTER") != "" || os.Getenv("E2E_MASTER_HTTP_URL") != "" {
+		t.Skip("Skipping secret tests in remote mode - these commands require local database access")
+	}
+
 	ctx := setupTest(t)
 	cfg := testutil.GetConfig()
 
@@ -66,7 +75,13 @@ func TestSecretCommands(t *testing.T) {
 }
 
 // TestSecretImport tests importing secrets from .env format.
+// NOTE: Secret commands require local database access.
 func TestSecretImport(t *testing.T) {
+	// Skip if in remote mode - secret commands require local database access
+	if os.Getenv("VCDEPLOY_MASTER") != "" || os.Getenv("E2E_MASTER_HTTP_URL") != "" {
+		t.Skip("Skipping secret tests in remote mode - these commands require local database access")
+	}
+
 	ctx := setupTest(t)
 	cfg := testutil.GetConfig()
 
