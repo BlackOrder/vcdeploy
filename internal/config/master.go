@@ -18,6 +18,7 @@ type MasterConfig struct {
 	Security      SecurityConfig      `yaml:"security"`
 	Backup        BackupConfig        `yaml:"backup"`
 	Logs          LogsConfig          `yaml:"logs"`
+	Storage       StorageConfig       `yaml:"storage"`
 	Tracing       TracingConfig       `yaml:"tracing"`
 	Alerting      AlertingConfig      `yaml:"alerting"`
 	Webhooks      WebhooksConfig      `yaml:"webhooks"`
@@ -243,6 +244,15 @@ type AppearanceConfig struct {
 	Theme string `yaml:"theme"`
 }
 
+// StorageConfig defines storage settings.
+type StorageConfig struct {
+	// UseMemoryCache enables the in-memory cache layer with batched SQLite persistence.
+	// When enabled, all reads are served from memory and writes are batched,
+	// eliminating SQLITE_BUSY errors from concurrent access.
+	// Default: true
+	UseMemoryCache bool `yaml:"use_memory_cache"`
+}
+
 // DefaultMasterConfig returns a MasterConfig with default values.
 func DefaultMasterConfig() *MasterConfig {
 	return &MasterConfig{
@@ -303,6 +313,9 @@ func DefaultMasterConfig() *MasterConfig {
 			Rotation: LogRotationConfig{
 				Schedule: "0 3 * * *",
 			},
+		},
+		Storage: StorageConfig{
+			UseMemoryCache: true,
 		},
 		Webhooks: WebhooksConfig{
 			GitHub:    WebhookProviderConfig{Enabled: true, Path: "/webhook/github"},

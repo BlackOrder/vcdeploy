@@ -313,15 +313,6 @@ func (s *MemoryStore) startWriteWorker(name string, db *sql.DB, writes <-chan Wr
 	}()
 }
 
-// executeWriteOp executes a single write operation within a transaction.
-// This is the callback passed to FlushBatchFunc.
-func (s *MemoryStore) executeWriteOp(tx *sql.Tx, op WriteOp) error {
-	// This will be implemented per-table in the entity-specific files.
-	// For now, return nil as a placeholder.
-	// Each entity file will register its executor.
-	return nil
-}
-
 // Close signals all write workers to stop, waits for them to drain,
 // and closes all database connections.
 func (s *MemoryStore) Close() error {

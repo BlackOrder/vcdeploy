@@ -1287,15 +1287,17 @@ func (s *MasterServer) validateAPIKey(ctx context.Context, key string) (*storage
 		return nil, 0, fmt.Errorf("API key expired or revoked")
 	}
 
-	// Update last used timestamp synchronously with a short timeout
-	// Using a goroutine with SQLite can cause database locking issues
-	// that interfere with subsequent requests
-	updateCtx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-	if err := s.apiKeyService.UpdateUsage(updateCtx, apiKey.ID); err != nil {
-		// Don't fail the request if usage update fails - it's not critical
-		s.logger.Debug("Failed to update API key usage", zap.Error(err))
-	}
+	// Update last used timestamp asynchronously
+	// With MemoryStore, this is non-blocking as updates go to memory immediately
+	// and are batched to SQLite in the background
+	go func() {
+		updateCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := s.apiKeyService.UpdateUsage(updateCtx, apiKey.ID); err != nil {
+			// Don't fail the request if usage update fails - it's not critical
+			s.logger.Debug("Failed to update API key usage", zap.Error(err))
+		}
+	}()
 
 	return apiKey, apiKey.UserID, nil
 }
