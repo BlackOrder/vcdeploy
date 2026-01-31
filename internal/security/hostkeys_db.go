@@ -12,17 +12,17 @@ import (
 
 // DBHostKeyStore adapts storage.DB to the HostKeyStore interface.
 type DBHostKeyStore struct {
-	db *storage.DB
+	store storage.Store
 }
 
 // NewDBHostKeyStore creates a new database-backed host key store.
-func NewDBHostKeyStore(db *storage.DB) *DBHostKeyStore {
-	return &DBHostKeyStore{db: db}
+func NewDBHostKeyStore(store storage.Store) *DBHostKeyStore {
+	return &DBHostKeyStore{store: store}
 }
 
 // GetHostKey retrieves a stored host key for the given host, port, and key type.
 func (s *DBHostKeyStore) GetHostKey(ctx context.Context, hostname string, port int, keyType string) (*StoredHostKey, error) {
-	key, err := s.db.GetSSHHostKey(ctx, hostname, port, keyType)
+	key, err := s.store.GetSSHHostKey(ctx, hostname, port, keyType)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
 			return nil, ErrHostKeyUnknown
@@ -48,7 +48,7 @@ func (s *DBHostKeyStore) GetHostKey(ctx context.Context, hostname string, port i
 
 // GetHostKeys retrieves all stored host keys for a given host and port.
 func (s *DBHostKeyStore) GetHostKeys(ctx context.Context, hostname string, port int) ([]*StoredHostKey, error) {
-	keys, err := s.db.GetSSHHostKeysByHost(ctx, hostname, port)
+	keys, err := s.store.GetSSHHostKeysByHost(ctx, hostname, port)
 	if err != nil {
 		return nil, fmt.Errorf("database error: %w", err)
 	}
@@ -76,7 +76,7 @@ func (s *DBHostKeyStore) GetHostKeys(ctx context.Context, hostname string, port 
 
 // ListAllKeys retrieves all stored host keys across all hosts.
 func (s *DBHostKeyStore) ListAllKeys(ctx context.Context) ([]*StoredHostKey, error) {
-	keys, err := s.db.ListSSHHostKeys(ctx)
+	keys, err := s.store.ListSSHHostKeys(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("database error: %w", err)
 	}
@@ -114,13 +114,13 @@ func (s *DBHostKeyStore) StoreHostKey(ctx context.Context, key *StoredHostKey) e
 		AddedBy:     key.AddedBy,
 	}
 
-	return s.db.CreateSSHHostKey(ctx, dbKey)
+	return s.store.CreateSSHHostKey(ctx, dbKey)
 }
 
 // TrustHostKey marks a host key as trusted.
 func (s *DBHostKeyStore) TrustHostKey(ctx context.Context, hostname string, port int, keyType string, trustedBy string) error {
 	// First get the key to find its ID
-	key, err := s.db.GetSSHHostKey(ctx, hostname, port, keyType)
+	key, err := s.store.GetSSHHostKey(ctx, hostname, port, keyType)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
 			return ErrHostKeyUnknown
@@ -128,13 +128,13 @@ func (s *DBHostKeyStore) TrustHostKey(ctx context.Context, hostname string, port
 		return fmt.Errorf("database error: %w", err)
 	}
 
-	return s.db.UpdateSSHHostKeyTrust(ctx, key.ID, true, trustedBy)
+	return s.store.UpdateSSHHostKeyTrust(ctx, key.ID, true, trustedBy)
 }
 
 // DeleteHostKey removes a host key.
 func (s *DBHostKeyStore) DeleteHostKey(ctx context.Context, hostname string, port int, keyType string) error {
 	// First get the key to find its ID
-	key, err := s.db.GetSSHHostKey(ctx, hostname, port, keyType)
+	key, err := s.store.GetSSHHostKey(ctx, hostname, port, keyType)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
 			return ErrHostKeyUnknown
@@ -142,7 +142,7 @@ func (s *DBHostKeyStore) DeleteHostKey(ctx context.Context, hostname string, por
 		return fmt.Errorf("database error: %w", err)
 	}
 
-	return s.db.DeleteSSHHostKey(ctx, key.ID)
+	return s.store.DeleteSSHHostKey(ctx, key.ID)
 }
 
 // Verify DBHostKeyStore implements HostKeyStore

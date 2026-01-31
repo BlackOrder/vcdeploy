@@ -24,23 +24,23 @@ var ErrSettingRequired = errors.New("required setting is missing or empty")
 
 // Service handles settings management.
 type Service struct {
-	db  *storage.DB
-	kms *security.KMS
+	store storage.Store
+	kms   *security.KMS
 }
 
 // New creates a new settings Service.
-func New(db *storage.DB, kms *security.KMS) *Service {
-	return &Service{db: db, kms: kms}
+func New(store storage.Store, kms *security.KMS) *Service {
+	return &Service{store: store, kms: kms}
 }
 
 // IsInitialized checks if the system has been initialized.
 func (s *Service) IsInitialized(ctx context.Context) (bool, error) {
-	return s.db.HasSettings(ctx)
+	return s.store.HasSettings(ctx)
 }
 
 // Get retrieves a setting value as a string.
 func (s *Service) Get(ctx context.Context, category, key string) (string, error) {
-	setting, err := s.db.GetSetting(ctx, category, key)
+	setting, err := s.store.GetSetting(ctx, category, key)
 	if errors.Is(err, storage.ErrNotFound) {
 		return "", nil
 	}
@@ -175,22 +175,22 @@ func (s *Service) Set(ctx context.Context, category, key, value string, encrypte
 		storeValue = encryptedVal
 	}
 
-	return s.db.SetSetting(ctx, category, key, storeValue, "string", encrypted)
+	return s.store.SetSetting(ctx, category, key, storeValue, "string", encrypted)
 }
 
 // SetInt stores an integer setting.
 func (s *Service) SetInt(ctx context.Context, category, key string, value int) error {
-	return s.db.SetSetting(ctx, category, key, strconv.Itoa(value), "int", false)
+	return s.store.SetSetting(ctx, category, key, strconv.Itoa(value), "int", false)
 }
 
 // SetBool stores a boolean setting.
 func (s *Service) SetBool(ctx context.Context, category, key string, value bool) error {
-	return s.db.SetSetting(ctx, category, key, strconv.FormatBool(value), "bool", false)
+	return s.store.SetSetting(ctx, category, key, strconv.FormatBool(value), "bool", false)
 }
 
 // SetDuration stores a duration setting.
 func (s *Service) SetDuration(ctx context.Context, category, key string, value time.Duration) error {
-	return s.db.SetSetting(ctx, category, key, value.String(), "duration", false)
+	return s.store.SetSetting(ctx, category, key, value.String(), "duration", false)
 }
 
 // SetRaw stores a setting with explicit value type.
@@ -206,17 +206,17 @@ func (s *Service) SetRaw(ctx context.Context, category, key, value, valueType st
 		storeValue = encryptedVal
 	}
 
-	return s.db.SetSetting(ctx, category, key, storeValue, valueType, encrypted)
+	return s.store.SetSetting(ctx, category, key, storeValue, valueType, encrypted)
 }
 
 // Delete removes a setting.
 func (s *Service) Delete(ctx context.Context, category, key string) error {
-	return s.db.DeleteSetting(ctx, category, key)
+	return s.store.DeleteSetting(ctx, category, key)
 }
 
 // ListByCategory returns all settings in a category.
 func (s *Service) ListByCategory(ctx context.Context, category string) ([]services.SettingMetadata, error) {
-	settings, err := s.db.ListSettingsByCategory(ctx, category)
+	settings, err := s.store.ListSettingsByCategory(ctx, category)
 	if err != nil {
 		return nil, fmt.Errorf("listing settings: %w", err)
 	}
@@ -238,7 +238,7 @@ func (s *Service) ListByCategory(ctx context.Context, category string) ([]servic
 
 // ListAll returns all settings across all categories.
 func (s *Service) ListAll(ctx context.Context) ([]services.SettingMetadata, error) {
-	settings, err := s.db.ListAllSettings(ctx)
+	settings, err := s.store.ListAllSettings(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("listing settings: %w", err)
 	}

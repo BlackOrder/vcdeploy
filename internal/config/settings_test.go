@@ -59,7 +59,7 @@ func TestNewSettingsService(t *testing.T) {
 	if svc == nil {
 		t.Fatal("expected non-nil service")
 	}
-	if svc.db != db {
+	if svc.store != db {
 		t.Error("db not set correctly")
 	}
 	if svc.kms != kms {

@@ -15,17 +15,17 @@ var _ services.AgentServicer = (*Service)(nil)
 
 // Service handles agent management.
 type Service struct {
-	db *storage.DB
+	store storage.Store
 }
 
 // New creates a new agents Service.
-func New(db *storage.DB) *Service {
-	return &Service{db: db}
+func New(store storage.Store) *Service {
+	return &Service{store: store}
 }
 
 // Upsert creates or updates an agent.
 func (s *Service) Upsert(ctx context.Context, agent *storage.Agent) error {
-	if err := s.db.UpsertAgent(ctx, agent); err != nil {
+	if err := s.store.UpsertAgent(ctx, agent); err != nil {
 		return fmt.Errorf("upserting agent: %w", err)
 	}
 	return nil
@@ -33,7 +33,7 @@ func (s *Service) Upsert(ctx context.Context, agent *storage.Agent) error {
 
 // GetByID retrieves an agent by ID.
 func (s *Service) GetByID(ctx context.Context, id string) (*storage.Agent, error) {
-	agent, err := s.db.GetAgent(ctx, id)
+	agent, err := s.store.GetAgent(ctx, id)
 	if err != nil {
 		return nil, err // Returns ErrNotFound if not found
 	}
@@ -42,7 +42,7 @@ func (s *Service) GetByID(ctx context.Context, id string) (*storage.Agent, error
 
 // List returns all agents.
 func (s *Service) List(ctx context.Context) ([]*storage.Agent, error) {
-	agents, err := s.db.ListAgents(ctx)
+	agents, err := s.store.ListAgents(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("listing agents: %w", err)
 	}
@@ -51,7 +51,7 @@ func (s *Service) List(ctx context.Context) ([]*storage.Agent, error) {
 
 // Delete removes an agent by ID.
 func (s *Service) Delete(ctx context.Context, id string) error {
-	if err := s.db.DeleteAgent(ctx, id); err != nil {
+	if err := s.store.DeleteAgent(ctx, id); err != nil {
 		return fmt.Errorf("deleting agent: %w", err)
 	}
 	return nil
@@ -59,7 +59,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 
 // MarkStale marks agents that haven't been seen since the cutoff as disconnected.
 func (s *Service) MarkStale(ctx context.Context, cutoff time.Time) (int64, error) {
-	count, err := s.db.MarkStaleAgents(ctx, cutoff)
+	count, err := s.store.MarkStaleAgents(ctx, cutoff)
 	if err != nil {
 		return 0, fmt.Errorf("marking stale agents: %w", err)
 	}
@@ -68,7 +68,7 @@ func (s *Service) MarkStale(ctx context.Context, cutoff time.Time) (int64, error
 
 // Count returns the total number of agents.
 func (s *Service) Count(ctx context.Context) (int64, error) {
-	count, err := s.db.CountAgents(ctx)
+	count, err := s.store.CountAgents(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("counting agents: %w", err)
 	}
@@ -77,7 +77,7 @@ func (s *Service) Count(ctx context.Context) (int64, error) {
 
 // CountByStatus returns agent counts grouped by status.
 func (s *Service) CountByStatus(ctx context.Context) (map[string]int64, error) {
-	counts, err := s.db.CountAgentsByStatus(ctx)
+	counts, err := s.store.CountAgentsByStatus(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("counting agents by status: %w", err)
 	}
@@ -86,7 +86,7 @@ func (s *Service) CountByStatus(ctx context.Context) (map[string]int64, error) {
 
 // UpdateStatus updates an agent's status and last seen time.
 func (s *Service) UpdateStatus(ctx context.Context, id, status string) error {
-	agent, err := s.db.GetAgent(ctx, id)
+	agent, err := s.store.GetAgent(ctx, id)
 	if err != nil {
 		return fmt.Errorf("getting agent: %w", err)
 	}
@@ -94,7 +94,7 @@ func (s *Service) UpdateStatus(ctx context.Context, id, status string) error {
 	agent.Status = status
 	agent.LastSeenAt = time.Now()
 
-	if err := s.db.UpsertAgent(ctx, agent); err != nil {
+	if err := s.store.UpsertAgent(ctx, agent); err != nil {
 		return fmt.Errorf("updating agent: %w", err)
 	}
 

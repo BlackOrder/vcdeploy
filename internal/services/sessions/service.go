@@ -17,12 +17,12 @@ var _ services.SessionServicer = (*Service)(nil)
 
 // Service handles session management.
 type Service struct {
-	db *storage.DB
+	store storage.Store
 }
 
 // New creates a new sessions Service.
-func New(db *storage.DB) *Service {
-	return &Service{db: db}
+func New(store storage.Store) *Service {
+	return &Service{store: store}
 }
 
 // Create creates a new session for a user.
@@ -42,7 +42,7 @@ func (s *Service) Create(ctx context.Context, userID int64, ipAddress, userAgent
 		ExpiresAt: time.Now().Add(duration),
 	}
 
-	if err := s.db.CreateSession(ctx, session); err != nil {
+	if err := s.store.CreateSession(ctx, session); err != nil {
 		return nil, fmt.Errorf("creating session: %w", err)
 	}
 
@@ -51,7 +51,7 @@ func (s *Service) Create(ctx context.Context, userID int64, ipAddress, userAgent
 
 // GetByToken retrieves a session by its token.
 func (s *Service) GetByToken(ctx context.Context, token string) (*storage.Session, error) {
-	session, err := s.db.GetSessionByToken(ctx, token)
+	session, err := s.store.GetSessionByToken(ctx, token)
 	if err != nil {
 		return nil, err // Returns ErrNotFound if not found
 	}
@@ -60,22 +60,22 @@ func (s *Service) GetByToken(ctx context.Context, token string) (*storage.Sessio
 
 // Delete removes a session by token.
 func (s *Service) Delete(ctx context.Context, token string) error {
-	return s.db.DeleteSession(ctx, token)
+	return s.store.DeleteSession(ctx, token)
 }
 
 // DeleteAllForUser removes all sessions for a user.
 func (s *Service) DeleteAllForUser(ctx context.Context, userID int64) error {
-	return s.db.DeleteUserSessions(ctx, userID)
+	return s.store.DeleteUserSessions(ctx, userID)
 }
 
 // DeleteExpired removes all expired sessions.
 func (s *Service) DeleteExpired(ctx context.Context) (int64, error) {
-	return s.db.DeleteExpiredSessions(ctx)
+	return s.store.DeleteExpiredSessions(ctx)
 }
 
 // ListForUser returns all active sessions for a user.
 func (s *Service) ListForUser(ctx context.Context, userID int64) ([]*storage.Session, error) {
-	return s.db.ListUserSessions(ctx, userID)
+	return s.store.ListUserSessions(ctx, userID)
 }
 
 // generateToken creates a cryptographically secure session token.

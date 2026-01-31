@@ -803,7 +803,7 @@ func TestNew(t *testing.T) {
 	if svc == nil {
 		t.Fatal("New() returned nil")
 	}
-	if svc.db != db {
+	if svc.store != db {
 		t.Error("New() did not set db correctly")
 	}
 	if svc.kms != kms {

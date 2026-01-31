@@ -19,12 +19,12 @@ var _ services.UserServicer = (*Service)(nil)
 
 // Service handles user management.
 type Service struct {
-	db *storage.DB
+	store storage.Store
 }
 
 // New creates a new users Service.
-func New(db *storage.DB) *Service {
-	return &Service{db: db}
+func New(store storage.Store) *Service {
+	return &Service{store: store}
 }
 
 // Create creates a new user with validated password.
@@ -54,7 +54,7 @@ func (s *Service) Create(ctx context.Context, username, password, email, role st
 		UpdatedAt:    time.Now(),
 	}
 
-	if err := s.db.CreateUser(ctx, user); err != nil {
+	if err := s.store.CreateUser(ctx, user); err != nil {
 		return nil, fmt.Errorf("creating user: %w", err)
 	}
 
@@ -63,7 +63,7 @@ func (s *Service) Create(ctx context.Context, username, password, email, role st
 
 // GetByID retrieves a user by ID.
 func (s *Service) GetByID(ctx context.Context, id int64) (*storage.User, error) {
-	user, err := s.db.GetUserByID(ctx, id)
+	user, err := s.store.GetUserByID(ctx, id)
 	if errors.Is(err, storage.ErrNotFound) {
 		return nil, services.NotFound("users.GetByID", "user", strconv.FormatInt(id, 10))
 	}
@@ -75,7 +75,7 @@ func (s *Service) GetByID(ctx context.Context, id int64) (*storage.User, error) 
 
 // GetByUsername retrieves a user by username.
 func (s *Service) GetByUsername(ctx context.Context, username string) (*storage.User, error) {
-	user, err := s.db.GetUserByUsername(ctx, username)
+	user, err := s.store.GetUserByUsername(ctx, username)
 	if errors.Is(err, storage.ErrNotFound) {
 		return nil, services.NotFound("users.GetByUsername", "user", username)
 	}
@@ -87,7 +87,7 @@ func (s *Service) GetByUsername(ctx context.Context, username string) (*storage.
 
 // List returns all users.
 func (s *Service) List(ctx context.Context) ([]*storage.User, error) {
-	users, err := s.db.ListUsers(ctx)
+	users, err := s.store.ListUsers(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("listing users: %w", err)
 	}
@@ -96,7 +96,7 @@ func (s *Service) List(ctx context.Context) ([]*storage.User, error) {
 
 // Update updates a user's information.
 func (s *Service) Update(ctx context.Context, user *storage.User) error {
-	if err := s.db.UpdateUserByID(ctx, user); err != nil {
+	if err := s.store.UpdateUserByID(ctx, user); err != nil {
 		return fmt.Errorf("updating user: %w", err)
 	}
 	return nil
@@ -104,7 +104,7 @@ func (s *Service) Update(ctx context.Context, user *storage.User) error {
 
 // Delete removes a user by ID.
 func (s *Service) Delete(ctx context.Context, id int64) error {
-	if err := s.db.DeleteUser(ctx, id); err != nil {
+	if err := s.store.DeleteUser(ctx, id); err != nil {
 		return fmt.Errorf("deleting user: %w", err)
 	}
 	return nil
@@ -113,7 +113,7 @@ func (s *Service) Delete(ctx context.Context, id int64) error {
 // VerifyPassword verifies a username/password combination.
 // Returns the user if valid, services.ErrNotFound if user not found, or ErrInvalidPassword if password wrong.
 func (s *Service) VerifyPassword(ctx context.Context, username, password string) (*storage.User, error) {
-	user, err := s.db.GetUserByUsername(ctx, username)
+	user, err := s.store.GetUserByUsername(ctx, username)
 	if errors.Is(err, storage.ErrNotFound) {
 		return nil, services.NotFound("users.VerifyPassword", "user", username)
 	}
@@ -136,7 +136,7 @@ func (s *Service) UpdatePassword(ctx context.Context, userID int64, newPassword 
 	}
 
 	// Get user
-	user, err := s.db.GetUserByID(ctx, userID)
+	user, err := s.store.GetUserByID(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("getting user: %w", err)
 	}
@@ -150,7 +150,7 @@ func (s *Service) UpdatePassword(ctx context.Context, userID int64, newPassword 
 	user.PasswordHash = hash
 	user.MustChangePassword = false
 
-	if err := s.db.UpdateUserByID(ctx, user); err != nil {
+	if err := s.store.UpdateUserByID(ctx, user); err != nil {
 		return fmt.Errorf("updating user: %w", err)
 	}
 
@@ -159,7 +159,7 @@ func (s *Service) UpdatePassword(ctx context.Context, userID int64, newPassword 
 
 // SetTOTP configures TOTP for a user.
 func (s *Service) SetTOTP(ctx context.Context, userID int64, secret string, enabled bool) error {
-	user, err := s.db.GetUserByID(ctx, userID)
+	user, err := s.store.GetUserByID(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("getting user: %w", err)
 	}
@@ -167,7 +167,7 @@ func (s *Service) SetTOTP(ctx context.Context, userID int64, secret string, enab
 	user.TOTPSecret = secret
 	user.TOTPEnabled = enabled
 
-	if err := s.db.UpdateUserByID(ctx, user); err != nil {
+	if err := s.store.UpdateUserByID(ctx, user); err != nil {
 		return fmt.Errorf("updating user TOTP: %w", err)
 	}
 
@@ -176,7 +176,7 @@ func (s *Service) SetTOTP(ctx context.Context, userID int64, secret string, enab
 
 // Count returns the total number of users.
 func (s *Service) Count(ctx context.Context) (int64, error) {
-	count, err := s.db.CountUsers(ctx)
+	count, err := s.store.CountUsers(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("counting users: %w", err)
 	}
@@ -185,7 +185,7 @@ func (s *Service) Count(ctx context.Context) (int64, error) {
 
 // DeleteWithCleanup deletes a user and all associated data (sessions, API keys) in a transaction.
 func (s *Service) DeleteWithCleanup(ctx context.Context, userID int64) error {
-	return s.db.RunInTransaction(ctx, func(tx *sql.Tx) error {
+	return s.store.RunInTransaction(ctx, func(tx *sql.Tx) error {
 		// Delete all user's sessions
 		if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ?`, userID); err != nil {
 			return fmt.Errorf("deleting user sessions: %w", err)

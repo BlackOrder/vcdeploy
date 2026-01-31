@@ -16,12 +16,12 @@ var _ services.ProjectServicer = (*Service)(nil)
 
 // Service handles project management.
 type Service struct {
-	db *storage.DB
+	store storage.Store
 }
 
 // New creates a new projects Service.
-func New(db *storage.DB) *Service {
-	return &Service{db: db}
+func New(store storage.Store) *Service {
+	return &Service{store: store}
 }
 
 // Create creates a new project.
@@ -47,7 +47,7 @@ func (s *Service) Create(ctx context.Context, name, repository, branch, deployPa
 		CreatedAt:  time.Now(),
 	}
 
-	if err := s.db.CreateProject(project); err != nil {
+	if err := s.store.CreateProject(project); err != nil {
 		return nil, fmt.Errorf("creating project: %w", err)
 	}
 
@@ -56,7 +56,7 @@ func (s *Service) Create(ctx context.Context, name, repository, branch, deployPa
 
 // GetByName retrieves a project by name.
 func (s *Service) GetByName(ctx context.Context, name string) (*storage.Project, error) {
-	project, err := s.db.GetProjectByName(ctx, name)
+	project, err := s.store.GetProjectByName(ctx, name)
 	if err != nil {
 		return nil, err // Returns ErrNotFound if not found
 	}
@@ -65,12 +65,12 @@ func (s *Service) GetByName(ctx context.Context, name string) (*storage.Project,
 
 // List returns all projects.
 func (s *Service) List(ctx context.Context) ([]*storage.Project, error) {
-	return s.db.ListProjects()
+	return s.store.ListProjects()
 }
 
 // Update updates a project.
 func (s *Service) Update(ctx context.Context, project *storage.Project) error {
-	if err := s.db.UpdateProjectByName(ctx, project); err != nil {
+	if err := s.store.UpdateProjectByName(ctx, project); err != nil {
 		return fmt.Errorf("updating project: %w", err)
 	}
 	return nil
@@ -78,7 +78,7 @@ func (s *Service) Update(ctx context.Context, project *storage.Project) error {
 
 // Delete removes a project by name.
 func (s *Service) Delete(ctx context.Context, name string) error {
-	if err := s.db.DeleteProject(name); err != nil {
+	if err := s.store.DeleteProject(name); err != nil {
 		return fmt.Errorf("deleting project: %w", err)
 	}
 	return nil
@@ -87,12 +87,12 @@ func (s *Service) Delete(ctx context.Context, name string) error {
 // DeleteWithCleanup deletes a project and all associated data (webhooks, secrets, deployments) in a transaction.
 func (s *Service) DeleteWithCleanup(ctx context.Context, name string) error {
 	// First get the project to find its ID
-	project, err := s.db.GetProjectByName(ctx, name)
+	project, err := s.store.GetProjectByName(ctx, name)
 	if err != nil {
 		return fmt.Errorf("getting project: %w", err)
 	}
 
-	return s.db.RunInTransaction(ctx, func(tx *sql.Tx) error {
+	return s.store.RunInTransaction(ctx, func(tx *sql.Tx) error {
 		// Delete project webhooks
 		if _, err := tx.ExecContext(ctx, `DELETE FROM project_webhooks WHERE project_id = ?`, project.ID); err != nil {
 			return fmt.Errorf("deleting project webhooks: %w", err)
