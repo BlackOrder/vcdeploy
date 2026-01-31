@@ -90,10 +90,10 @@ All error responses follow this format:
 | Agents | `/api/v1/agents`, `/api/v1/agents/{id}` | Yes |
 | Secrets | `/api/v1/secrets` | Yes |
 | Project Types | `/api/v1/project-types`, `/api/v1/project-types/{id}` | Yes |
-| API Keys | `/api/v1/apikeys`, `/api/v1/apikeys/{id}` | Admin |
+| API Keys | `/api/v1/api-keys`, `/api/v1/api-keys/{id}` | Admin |
 | Audit | `/api/v1/audit` | Admin |
-| Host Keys | `/api/v1/hostkeys`, `/api/v1/hostkeys/{id}` | Yes/Admin |
-| Jump Servers | `/api/v1/jumpservers`, `/api/v1/jumpservers/{id}` | Yes/Admin |
+| Host Keys | `/api/v1/host-keys`, `/api/v1/host-keys/{id}` | Yes/Admin |
+| Jump Servers | `/api/v1/jump-servers`, `/api/v1/jump-servers/{id}` | Yes/Admin |
 | Blocked IPs | `/api/v1/blocked`, `/api/v1/blocked/{ip}` | Admin |
 | Provision | `/api/v1/provision`, `/api/v1/provision/{id}` | Admin |
 | Agent Binaries | `/api/v1/binaries`, `/api/v1/binaries/latest` | Yes |
@@ -636,7 +636,7 @@ GET|PUT|DELETE /api/v1/project-types/{id}
 ### List API Keys
 
 ```
-GET /api/v1/apikeys
+GET /api/v1/api-keys
 ```
 
 **Admin only.** Returns all API keys (tokens are masked).
@@ -644,7 +644,7 @@ GET /api/v1/apikeys
 ### Create API Key
 
 ```
-POST /api/v1/apikeys
+POST /api/v1/api-keys
 ```
 
 **Admin only.**
@@ -672,7 +672,7 @@ POST /api/v1/apikeys
 ### Delete API Key
 
 ```
-DELETE /api/v1/apikeys/{id}
+DELETE /api/v1/api-keys/{id}
 ```
 
 **Admin only.**
@@ -706,7 +706,7 @@ GET /api/v1/audit
 ### List Host Keys
 
 ```
-GET /api/v1/hostkeys
+GET /api/v1/host-keys
 ```
 
 Returns known SSH host keys.
@@ -714,7 +714,7 @@ Returns known SSH host keys.
 ### Create Host Key
 
 ```
-POST /api/v1/hostkeys
+POST /api/v1/host-keys
 ```
 
 **Admin only.**
@@ -734,7 +734,7 @@ POST /api/v1/hostkeys
 ### Update Host Key Trust
 
 ```
-PUT /api/v1/hostkeys/{id}
+PUT /api/v1/host-keys/{id}
 ```
 
 **Admin only.**
@@ -749,7 +749,7 @@ PUT /api/v1/hostkeys/{id}
 ### Delete Host Key
 
 ```
-DELETE /api/v1/hostkeys/{id}
+DELETE /api/v1/host-keys/{id}
 ```
 
 **Admin only.**
@@ -761,7 +761,7 @@ DELETE /api/v1/hostkeys/{id}
 ### List Jump Servers
 
 ```
-GET /api/v1/jumpservers
+GET /api/v1/jump-servers
 ```
 
 Returns configured SSH jump/bastion servers.
@@ -769,7 +769,7 @@ Returns configured SSH jump/bastion servers.
 ### Create Jump Server
 
 ```
-POST /api/v1/jumpservers
+POST /api/v1/jump-servers
 ```
 
 **Admin only.**
@@ -788,7 +788,7 @@ POST /api/v1/jumpservers
 ### Get/Update/Delete Jump Server
 
 ```
-GET|PUT|DELETE /api/v1/jumpservers/{id}
+GET|PUT|DELETE /api/v1/jump-servers/{id}
 ```
 
 ---
