@@ -1634,6 +1634,12 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// Validate scopes before creating the key
+		if err := services.ValidateAPIKeyScopes(req.Scopes); err != nil {
+			s.jsonError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
 		// Default to wildcard scope if not specified
 		scopes := req.Scopes
 		if len(scopes) == 0 {
