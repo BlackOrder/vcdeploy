@@ -1,0 +1,13 @@
+<!-- filepath: /opt/code/vcdeploy/logo.svg -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 60" width="240" height="60">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366F1"/>
+      <stop offset="100%" style="stop-color:#A855F7"/>
+    </linearGradient>
+  </defs>
+  <!-- Checkmark as "v" -->
+  <path d="M8 30 L18 42 L38 18" stroke="url(#grad)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <!-- "cdeploy" text -->
+  <text x="42" y="42" font-family="Arial, sans-serif" font-size="32" font-weight="bold" fill="url(#grad)">cdeploy</text>
+</svg>

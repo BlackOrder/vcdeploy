@@ -1,8 +1,15 @@
-# vcdeploy
+<p align="center">
+  <img src="assets/logo.svg" alt="vcdeploy" width="240">
+</p>
 
-> A modern deployment orchestration platform for Unix systems
+<h1 align="center">vcdeploy</h1>
 
-[![CI](https://github.com/blackorder/vcdeploy/actions/workflows/ci.yml/badge.svg)](https://github.com/blackorder/vcdeploy/actions/workflows/ci.yml)
+<p align="center">
+  <strong>A modern deployment orchestration platform for Unix systems</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/blackorder/vcdeploy/actions/workflows/ci.yml"><img src="https://github.com/blackorder/vcdeploy/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 [![Go Report Card](https://goreportcard.com/badge/github.com/blackorder/vcdeploy)](https://goreportcard.com/report/github.com/blackorder/vcdeploy)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 

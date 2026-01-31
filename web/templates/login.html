@@ -3,9 +3,9 @@
 {{define "content"}}
 <div class="min-h-screen flex items-center justify-center -mt-16">
     <div class="max-w-md w-full space-y-8">
-        <div>
-            <h1 class="text-center text-4xl font-bold text-accent-500">vcdeploy</h1>
-            <h2 class="mt-6 text-center text-2xl font-bold text-dark-text">Sign in to your account</h2>
+        <div class="flex flex-col items-center">
+            <img src="/static/images/logo.svg" alt="vcdeploy" class="h-12 mb-4">
+            <h2 class="text-center text-2xl font-bold text-dark-text">Sign in to your account</h2>
         </div>
         
         {{if .Error}}
