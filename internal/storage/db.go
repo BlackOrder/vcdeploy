@@ -1029,6 +1029,38 @@ func (db *DB) CreateAPIKey(ctx context.Context, key *APIKey) error {
 	return nil
 }
 
+// GetAPIKeyByID retrieves an API key by its ID.
+func (db *DB) GetAPIKeyByID(ctx context.Context, keyID int64) (*APIKey, error) {
+	var key APIKey
+	var expiresAt, lastUsedAt sql.NullTime
+	var scopes, keyPrefix sql.NullString
+
+	err := db.conn.QueryRowContext(ctx, `
+		SELECT id, user_id, name, key_hash, key_prefix, scopes, expires_at, last_used_at, created_at
+		FROM api_keys WHERE id = ?
+	`, keyID).Scan(
+		&key.ID, &key.UserID, &key.Name, &key.KeyHash,
+		&keyPrefix, &scopes, &expiresAt, &lastUsedAt, &key.CreatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get API key: %w", err)
+	}
+
+	key.KeyPrefix = keyPrefix.String
+	key.Scopes = scopes.String
+	if expiresAt.Valid {
+		key.ExpiresAt = &expiresAt.Time
+	}
+	if lastUsedAt.Valid {
+		key.LastUsedAt = &lastUsedAt.Time
+	}
+
+	return &key, nil
+}
+
 // GetAPIKeyByHash retrieves an API key by its hash.
 func (db *DB) GetAPIKeyByHash(ctx context.Context, keyHash string) (*APIKey, error) {
 	var key APIKey

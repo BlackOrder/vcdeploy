@@ -68,6 +68,7 @@ type SessionStore interface {
 // APIKeyStore defines API key-related operations.
 type APIKeyStore interface {
 	CreateAPIKey(ctx context.Context, key *APIKey) error
+	GetAPIKeyByID(ctx context.Context, keyID int64) (*APIKey, error)
 	GetAPIKeyByHash(ctx context.Context, keyHash string) (*APIKey, error)
 	UpdateAPIKeyUsage(ctx context.Context, keyID int64) error
 	DeleteAPIKey(ctx context.Context, keyID int64) error
