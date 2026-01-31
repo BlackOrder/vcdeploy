@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sync"
 	"testing"
 	"time"
 )
@@ -25,15 +26,66 @@ type TestConfig struct {
 	APIToken      string
 }
 
+var (
+	cachedConfig *TestConfig
+	configOnce   sync.Once
+)
+
 func getTestConfig() *TestConfig {
-	return &TestConfig{
-		MasterHTTPURL: getEnvOrDefault("E2E_MASTER_HTTP_URL", "http://localhost:18080"),
-		MasterGRPCURL: getEnvOrDefault("E2E_MASTER_GRPC_URL", "localhost:19090"),
-		TargetSSHHost: getEnvOrDefault("E2E_TARGET_SSH_HOST", "localhost"),
-		TargetSSHPort: getEnvOrDefault("E2E_TARGET_SSH_PORT", "12222"),
-		GitServerURL:  getEnvOrDefault("E2E_GIT_SERVER_URL", "http://localhost:13000"),
-		APIToken:      getEnvOrDefault("E2E_API_TOKEN", "test-api-token"),
+	configOnce.Do(func() {
+		cachedConfig = &TestConfig{
+			MasterHTTPURL: getEnvOrDefault("E2E_MASTER_HTTP_URL", "http://localhost:18080"),
+			MasterGRPCURL: getEnvOrDefault("E2E_MASTER_GRPC_URL", "localhost:19090"),
+			TargetSSHHost: getEnvOrDefault("E2E_TARGET_SSH_HOST", "localhost"),
+			TargetSSHPort: getEnvOrDefault("E2E_TARGET_SSH_PORT", "12222"),
+			GitServerURL:  getEnvOrDefault("E2E_GIT_SERVER_URL", "http://localhost:13000"),
+			APIToken:      os.Getenv("E2E_API_TOKEN"),
+		}
+
+		// If no API token provided, try to login and get one
+		if cachedConfig.APIToken == "" {
+			token, err := loginAndGetToken(cachedConfig.MasterHTTPURL)
+			if err == nil && token != "" {
+				cachedConfig.APIToken = token
+			} else {
+				// Fallback to placeholder (tests will fail with 401)
+				cachedConfig.APIToken = "test-api-token"
+			}
+		}
+	})
+	return cachedConfig
+}
+
+// loginAndGetToken logs in with admin credentials and returns a session token.
+func loginAndGetToken(masterURL string) (string, error) {
+	username := getEnvOrDefault("E2E_ADMIN_USER", "admin")
+	password := getEnvOrDefault("E2E_ADMIN_PASS", "Admin@Password123!")
+
+	loginReq := map[string]string{
+		"username": username,
+		"password": password,
 	}
+	body, _ := json.Marshal(loginReq)
+
+	resp, err := http.Post(masterURL+"/api/v1/auth/login", "application/json", bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("login request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("login failed with status %d", resp.StatusCode)
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("failed to decode login response: %w", err)
+	}
+
+	if token, ok := result["token"].(string); ok {
+		return token, nil
+	}
+	return "", fmt.Errorf("no token in login response")
 }
 
 // newAuthenticatedRequest creates an HTTP request with authentication header.
