@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.Title}} - vcdeploy</title>
+    <link rel="icon" type="image/svg+xml" href="/static/images/icon.svg">
     <script src="https://unpkg.com/htmx.org@1.9.10"{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}></script>
     <script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/json-enc.js"{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}></script>
     <script src="https://cdn.tailwindcss.com"{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}></script>
@@ -137,7 +138,7 @@
             <div class="flex items-center justify-between h-16">
                 <div class="flex items-center">
                     <div class="flex-shrink-0">
-                        <span class="text-xl font-bold text-accent-500">vcdeploy</span>
+                        <a href="/dashboard"><img src="/static/images/logo.svg" alt="vcdeploy" class="h-8"></a>
                     </div>
                     <div class="hidden md:block ml-10">
                         <div class="flex items-baseline space-x-4">

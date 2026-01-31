@@ -1,6 +1,13 @@
-# vcdeploy
+<p align="center">
+  <img src="assets/logo.svg" alt="vcdeploy" width="240">
+</p>
 
-[![CI](https://github.com/BlackOrder/vcdeploy/actions/workflows/ci.yml/badge.svg)](https://github.com/BlackOrder/vcdeploy/actions/workflows/ci.yml)
+<p align="center">
+  <strong>Modern Deployment Orchestration Platform</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/BlackOrder/vcdeploy/actions/workflows/ci.yml"><img src="https://github.com/BlackOrder/vcdeploy/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 [![Security](https://github.com/BlackOrder/vcdeploy/actions/workflows/security.yml/badge.svg)](https://github.com/BlackOrder/vcdeploy/actions/workflows/security.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/BlackOrder/vcdeploy)](https://goreportcard.com/report/github.com/BlackOrder/vcdeploy)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
