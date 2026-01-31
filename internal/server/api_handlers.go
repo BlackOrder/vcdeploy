@@ -150,6 +150,12 @@ func (s *MasterServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 			req.Role = "user"
 		}
 
+		// Validate role
+		if err := services.ValidateRole(req.Role); err != nil {
+			s.jsonError(w, http.StatusBadRequest, "role must be admin, user, or viewer")
+			return
+		}
+
 		// Create user through service (handles password validation and hashing)
 		user, err := s.userService.Create(ctx, req.Username, req.Password, req.Email, req.Role)
 		if err != nil {

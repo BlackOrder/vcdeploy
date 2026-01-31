@@ -4,7 +4,6 @@ package e2e
 
 import (
 	"fmt"
-	"io"
 	"net/http"
 	"testing"
 	"time"
@@ -169,13 +168,8 @@ func TestUsersAPI(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		// Currently the API doesn't validate roles strictly
-		// It accepts any role value (no validation)
-		// Accept 200/201 (created anyway) or 400 (if validation is added later)
-		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusBadRequest {
-			body, _ := io.ReadAll(resp.Body)
-			t.Errorf("expected 200, 201 or 400, got %d: %s", resp.StatusCode, string(body))
-		}
+		// API validates roles - must be admin, user, or viewer
+		ctx.Assertions.StatusBadRequest(resp)
 	})
 
 	t.Run("create user with weak password", func(t *testing.T) {

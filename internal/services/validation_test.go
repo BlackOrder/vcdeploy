@@ -94,10 +94,12 @@ func TestValidateRole(t *testing.T) {
 	}{
 		{"admin", "admin", false},
 		{"user", "user", false},
-		{"readonly", "readonly", false},
+		{"viewer", "viewer", false},
 		{"admin uppercase", "ADMIN", false},
 		{"admin mixed", "Admin", false},
+		{"viewer uppercase", "VIEWER", false},
 		{"invalid", "superuser", true},
+		{"invalid readonly", "readonly", true},
 		{"empty", "", true},
 	}
 
