@@ -623,9 +623,10 @@ func TestAPISecrets(t *testing.T) {
 
 	t.Run("create secret", func(t *testing.T) {
 		secret := map[string]interface{}{
-			"name":  "e2e-test-secret",
-			"value": "super-secret-value",
-			"scope": "global",
+			"project": "e2e-test-project",
+			"key":     "E2E_TEST_SECRET",
+			"value":   "super-secret-value",
+			"scope":   "default",
 		}
 
 		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/secrets", secret, cfg.APIToken)

@@ -171,9 +171,19 @@ func (s *MemoryStore) executeAPIKeyOp(tx *sql.Tx, op WriteOp) error {
 		return nil
 
 	case WriteOpDelete:
-		id, ok := op.Data.(int64)
-		if !ok {
-			return fmt.Errorf("invalid data type for api_key delete")
+		// Support both direct int64 and map[string]int64{"id": ...} formats
+		var id int64
+		switch v := op.Data.(type) {
+		case int64:
+			id = v
+		case map[string]int64:
+			var ok bool
+			id, ok = v["id"]
+			if !ok {
+				return fmt.Errorf("invalid data type for api_key delete: missing id in map")
+			}
+		default:
+			return fmt.Errorf("invalid data type for api_key delete: got %T", op.Data)
 		}
 		_, err := tx.Exec(`DELETE FROM api_keys WHERE id = ?`, id)
 		return err
