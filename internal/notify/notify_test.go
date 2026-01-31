@@ -414,9 +414,6 @@ func TestEmailConfig(t *testing.T) {
 
 	cfg := EmailConfig{
 		SMTPHost:    "smtp.example.com",
-		SMTPPort:    587,
-		FromAddress: "notify@example.com",
-		FromName:    "VCDeploy",
 		ToAddresses: []string{"team@example.com", "ops@example.com"},
 	}
 
@@ -636,9 +633,8 @@ func TestWebhookConfig(t *testing.T) {
 	t.Parallel()
 
 	cfg := WebhookConfig{
-		Method:  "POST",
-		Secret:  "webhook-secret",
-		Headers: map[string]string{"X-Custom": "value"},
+		Method: "POST",
+		Secret: "webhook-secret",
 	}
 
 	if cfg.Secret != "webhook-secret" {

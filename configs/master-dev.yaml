@@ -66,6 +66,8 @@ notifications:
 
 api:
   enabled: true
+  rate_limit:
+    enabled: false  # Disable rate limiting for dev/testing
 
 appearance:
   theme: dark
