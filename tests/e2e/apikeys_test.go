@@ -154,7 +154,7 @@ func TestAPIKeysAPI(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		ctx.Assertions.NoServerError(resp)
+		ctx.Assertions.StatusOK(resp)
 	})
 
 	t.Run("create API key with invalid scopes", func(t *testing.T) {

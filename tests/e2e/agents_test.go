@@ -143,7 +143,7 @@ func TestAgentUpdates(t *testing.T) {
 		}
 		defer policyResp.Body.Close()
 
-		ctx.Assertions.NoServerError(policyResp)
+		ctx.Assertions.StatusOK(policyResp)
 	})
 }
 
@@ -172,6 +172,8 @@ func TestAgentBinaries(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
+		// May return 200 (with binary info) or 404 (no binaries available)
+		// NoServerError is appropriate since both are valid responses
 		ctx.Assertions.NoServerError(resp)
 	})
 }

@@ -174,7 +174,7 @@ func TestSecretsAPI(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		ctx.Assertions.NoServerError(resp)
+		ctx.Assertions.StatusOK(resp)
 	})
 
 	t.Cleanup(func() {
