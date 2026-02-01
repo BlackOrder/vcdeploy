@@ -58,6 +58,7 @@ API requests are rate limited. When exceeded, endpoints return `429 Too Many Req
 | 401 | Unauthorized - authentication required |
 | 403 | Forbidden - insufficient permissions |
 | 404 | Not Found |
+| 409 | Conflict - resource already exists |
 | 429 | Too Many Requests - rate limited |
 | 500 | Internal Server Error |
 
