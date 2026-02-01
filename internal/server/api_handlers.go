@@ -148,6 +148,12 @@ func (s *MasterServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 			s.jsonError(w, http.StatusBadRequest, "username and password required")
 			return
 		}
+		if req.Email != "" {
+			if err := services.ValidateEmail(req.Email); err != nil {
+				s.jsonError(w, http.StatusBadRequest, "invalid email format")
+				return
+			}
+		}
 		if req.Role == "" {
 			req.Role = "user"
 		}
@@ -1144,6 +1150,12 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 			agent.Labels = req.Labels
 		}
 		if req.Status != "" {
+			// Validate agent status
+			validStatuses := map[string]bool{"online": true, "offline": true, "maintenance": true, "connected": true, "disconnected": true}
+			if !validStatuses[req.Status] {
+				s.jsonError(w, http.StatusBadRequest, "status must be one of: online, offline, maintenance, connected, disconnected")
+				return
+			}
 			agent.Status = req.Status
 		}
 
