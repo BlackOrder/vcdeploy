@@ -77,6 +77,38 @@ func (s *MemoryStore) ListProjects() ([]*Project, error) {
 	return projects, nil
 }
 
+// ListProjectsPaginated returns projects with pagination support.
+func (s *MemoryStore) ListProjectsPaginated(ctx context.Context, limit, offset int) ([]*Project, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Convert map to slice
+	all := make([]*Project, 0, len(s.projects))
+	for _, project := range s.projects {
+		copied := *project
+		all = append(all, &copied)
+	}
+
+	// Apply pagination
+	if offset >= len(all) {
+		return []*Project{}, nil
+	}
+	end := offset + limit
+	if end > len(all) {
+		end = len(all)
+	}
+
+	return all[offset:end], nil
+}
+
+// CountProjects returns the total number of projects.
+func (s *MemoryStore) CountProjects(ctx context.Context) (int64, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return int64(len(s.projects)), nil
+}
+
 // UpdateProjectByID updates a project by ID in memory and queues persistence.
 func (s *MemoryStore) UpdateProjectByID(ctx context.Context, p *Project) error {
 	s.mu.Lock()

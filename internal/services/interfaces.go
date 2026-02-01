@@ -126,6 +126,8 @@ type ProjectServicer interface {
 	GetByID(ctx context.Context, id int64) (*storage.Project, error)
 	GetByName(ctx context.Context, name string) (*storage.Project, error)
 	List(ctx context.Context) ([]*storage.Project, error)
+	ListPaginated(ctx context.Context, p Pagination) (*ListResult[*storage.Project], error)
+	Count(ctx context.Context) (int64, error)
 	UpdateByID(ctx context.Context, project *storage.Project) error
 	Update(ctx context.Context, project *storage.Project) error
 	DeleteByID(ctx context.Context, id int64) error
@@ -170,6 +172,7 @@ type AgentServicer interface {
 	Upsert(ctx context.Context, agent *storage.Agent) error
 	GetByID(ctx context.Context, id string) (*storage.Agent, error)
 	List(ctx context.Context) ([]*storage.Agent, error)
+	ListPaginated(ctx context.Context, p Pagination) (*ListResult[*storage.Agent], error)
 	Count(ctx context.Context) (int64, error)
 	CountByStatus(ctx context.Context) (map[string]int64, error)
 	Delete(ctx context.Context, id string) error

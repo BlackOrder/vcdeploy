@@ -266,6 +266,51 @@ func (db *DB) ListAgents(ctx context.Context) ([]*Agent, error) {
 	return agents, rows.Err()
 }
 
+// ListAgentsPaginated returns agents with pagination support.
+func (db *DB) ListAgentsPaginated(ctx context.Context, limit, offset int) ([]*Agent, error) {
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, hostname, labels, capabilities, status, last_seen_at, registered_at,
+			COALESCE(version, ''), COALESCE(os, ''), COALESCE(arch, ''),
+			COALESCE(update_policy, 'immediate'), COALESCE(update_window_start, ''), COALESCE(update_window_end, ''),
+			last_update_at, COALESCE(last_update_error, '')
+		FROM agents ORDER BY hostname LIMIT ? OFFSET ?
+	`, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("querying agents: %w", err)
+	}
+	defer rows.Close()
+
+	var agents []*Agent
+	for rows.Next() {
+		var agent Agent
+		var labels, capabilities sql.NullString
+		var lastSeen, lastUpdateAt sql.NullTime
+		var version, os, arch, updatePolicy, windowStart, windowEnd, lastUpdateError sql.NullString
+
+		if err := rows.Scan(&agent.ID, &agent.Hostname, &labels, &capabilities,
+			&agent.Status, &lastSeen, &agent.RegisteredAt,
+			&version, &os, &arch, &updatePolicy, &windowStart, &windowEnd, &lastUpdateAt, &lastUpdateError); err != nil {
+			return nil, fmt.Errorf("scanning agent: %w", err)
+		}
+
+		agent.Labels = jsonToMap(labels.String)
+		agent.LastSeenAt = lastSeen.Time
+		agent.Version = version.String
+		agent.OS = os.String
+		agent.Arch = arch.String
+		agent.UpdatePolicy = updatePolicy.String
+		agent.UpdateWindowStart = windowStart.String
+		agent.UpdateWindowEnd = windowEnd.String
+		if lastUpdateAt.Valid {
+			agent.LastUpdateAt = &lastUpdateAt.Time
+		}
+		agent.LastUpdateError = lastUpdateError.String
+		agents = append(agents, &agent)
+	}
+
+	return agents, rows.Err()
+}
+
 // CountAgents returns the total number of agents.
 func (db *DB) CountAgents(ctx context.Context) (int64, error) {
 	var count int64
@@ -770,6 +815,45 @@ func (db *DB) ListProjects() ([]*Project, error) {
 		projects = append(projects, &p)
 	}
 	return projects, rows.Err()
+}
+
+// ListProjectsPaginated returns projects with pagination support.
+func (db *DB) ListProjectsPaginated(ctx context.Context, limit, offset int) ([]*Project, error) {
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, name, repository, branch, deploy_path, type, created_at, last_deploy_at, last_deploy_status
+		FROM projects ORDER BY name LIMIT ? OFFSET ?
+	`, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("query projects: %w", err)
+	}
+	defer rows.Close()
+
+	var projects []*Project
+	for rows.Next() {
+		var p Project
+		var lastDeploy sql.NullTime
+		var lastDeployStatus sql.NullString
+
+		if err := rows.Scan(&p.ID, &p.Name, &p.Repository, &p.Branch, &p.DeployPath, &p.Type, &p.CreatedAt, &lastDeploy, &lastDeployStatus); err != nil {
+			return nil, fmt.Errorf("scan project: %w", err)
+		}
+		if lastDeploy.Valid {
+			p.LastDeployAt = &lastDeploy.Time
+		}
+		p.LastDeployStatus = lastDeployStatus.String
+		projects = append(projects, &p)
+	}
+	return projects, rows.Err()
+}
+
+// CountProjects returns the total number of projects.
+func (db *DB) CountProjects(ctx context.Context) (int64, error) {
+	var count int64
+	err := db.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM projects`).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("counting projects: %w", err)
+	}
+	return count, nil
 }
 
 // DeleteProject deletes a project.

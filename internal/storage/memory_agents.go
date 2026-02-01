@@ -108,6 +108,37 @@ func (s *MemoryStore) ListAgents(ctx context.Context) ([]*Agent, error) {
 	return agents, nil
 }
 
+// ListAgentsPaginated returns agents with pagination support.
+func (s *MemoryStore) ListAgentsPaginated(ctx context.Context, limit, offset int) ([]*Agent, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Convert map to slice
+	all := make([]*Agent, 0, len(s.agents))
+	for _, a := range s.agents {
+		// Copy-on-read
+		cp := *a
+		if a.Labels != nil {
+			cp.Labels = make(map[string]string, len(a.Labels))
+			for k, v := range a.Labels {
+				cp.Labels[k] = v
+			}
+		}
+		all = append(all, &cp)
+	}
+
+	// Apply pagination
+	if offset >= len(all) {
+		return []*Agent{}, nil
+	}
+	end := offset + limit
+	if end > len(all) {
+		end = len(all)
+	}
+
+	return all[offset:end], nil
+}
+
 // CountAgents returns the total number of agents.
 func (s *MemoryStore) CountAgents(ctx context.Context) (int64, error) {
 	s.mu.RLock()
