@@ -28,7 +28,12 @@ func New(store storage.Store) *Service {
 }
 
 // Create creates a new user with validated password.
-func (s *Service) Create(ctx context.Context, username, password, email, role string) (*storage.User, error) {
+func (s *Service) Create(ctx context.Context, username, password, email, role string, opts ...services.CreateUserOption) (*storage.User, error) {
+	// Apply options
+	var options services.CreateUserOptions
+	for _, opt := range opts {
+		opt(&options)
+	}
 	// Validate password complexity
 	if err := security.ValidatePassword(password); err != nil {
 		return nil, fmt.Errorf("password validation failed: %w", err)
@@ -50,6 +55,8 @@ func (s *Service) Create(ctx context.Context, username, password, email, role st
 		PasswordHash: hash,
 		Email:        email,
 		Role:         role,
+		TOTPEnabled:  options.TOTPEnabled,
+		TOTPSecret:   options.TOTPSecret,
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}

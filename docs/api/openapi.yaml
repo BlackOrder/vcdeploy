@@ -745,6 +745,13 @@ components:
           type: string
           enum: [admin, user, viewer]
           default: user
+        totp_enabled:
+          type: boolean
+          default: false
+          description: Enable TOTP 2FA for this user
+        totp_secret:
+          type: string
+          description: TOTP secret (required if totp_enabled is true)
 
     Project:
       type: object

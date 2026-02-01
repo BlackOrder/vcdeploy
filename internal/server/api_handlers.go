@@ -131,10 +131,12 @@ func (s *MasterServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 		}
 
 		var req struct {
-			Username string `json:"username"`
-			Email    string `json:"email"`
-			Password string `json:"password"`
-			Role     string `json:"role"`
+			Username    string `json:"username"`
+			Email       string `json:"email"`
+			Password    string `json:"password"`
+			Role        string `json:"role"`
+			TOTPEnabled bool   `json:"totp_enabled"`
+			TOTPSecret  string `json:"totp_secret"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
 			s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
@@ -156,8 +158,14 @@ func (s *MasterServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// Build create options
+		var createOpts []services.CreateUserOption
+		if req.TOTPEnabled && req.TOTPSecret != "" {
+			createOpts = append(createOpts, services.WithTOTP(req.TOTPSecret))
+		}
+
 		// Create user through service (handles password validation and hashing)
-		user, err := s.userService.Create(ctx, req.Username, req.Password, req.Email, req.Role)
+		user, err := s.userService.Create(ctx, req.Username, req.Password, req.Email, req.Role, createOpts...)
 		if err != nil {
 			s.logger.Error("Failed to create user", zap.Error(err))
 			// Check if it's a password validation error (should return 400)

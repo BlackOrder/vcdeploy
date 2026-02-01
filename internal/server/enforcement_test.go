@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/BlackOrder/vcdeploy/internal/config"
+	"github.com/BlackOrder/vcdeploy/internal/services"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"go.uber.org/zap"
 )
@@ -22,7 +23,7 @@ func newMockUserService() *mockUserService {
 	}
 }
 
-func (m *mockUserService) Create(ctx context.Context, username, password, email, role string) (*storage.User, error) {
+func (m *mockUserService) Create(ctx context.Context, username, password, email, role string, opts ...services.CreateUserOption) (*storage.User, error) {
 	return nil, nil
 }
 

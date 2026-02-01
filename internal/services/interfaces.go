@@ -65,9 +65,26 @@ type SettingMetadata struct {
 	Description string
 }
 
+// CreateUserOptions holds optional parameters for user creation.
+type CreateUserOptions struct {
+	TOTPEnabled bool
+	TOTPSecret  string
+}
+
+// CreateUserOption is a functional option for user creation.
+type CreateUserOption func(*CreateUserOptions)
+
+// WithTOTP enables TOTP for the new user with the provided secret.
+func WithTOTP(secret string) CreateUserOption {
+	return func(opts *CreateUserOptions) {
+		opts.TOTPEnabled = true
+		opts.TOTPSecret = secret
+	}
+}
+
 // UserServicer defines the interface for user management.
 type UserServicer interface {
-	Create(ctx context.Context, username, password, email, role string) (*storage.User, error)
+	Create(ctx context.Context, username, password, email, role string, opts ...CreateUserOption) (*storage.User, error)
 	GetByID(ctx context.Context, id int64) (*storage.User, error)
 	GetByUsername(ctx context.Context, username string) (*storage.User, error)
 	List(ctx context.Context) ([]*storage.User, error)
