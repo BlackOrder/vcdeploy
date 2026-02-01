@@ -76,6 +76,25 @@ var defaultAllowedBinaries = map[string]bool{
 	"tar":   true,
 	"unzip": true,
 
+	// Shell utilities (for hooks and logging)
+	"echo":  true,
+	"cat":   true,
+	"grep":  true,
+	"head":  true,
+	"tail":  true,
+	"wc":    true,
+	"date":  true,
+	"sleep": true,
+	"test":  true,
+	"true":  true,
+	"false": true,
+	"exit":  true, // For deployment scripts
+	"pwd":   true, // Print working directory
+
+	// Shell interpreters (needed for complex hooks)
+	"sh":   true,
+	"bash": true,
+
 	// System services (for reload hooks)
 	"systemctl": true,
 	"service":   true,

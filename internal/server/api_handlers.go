@@ -967,6 +967,19 @@ func (s *MasterServer) handleProjectDeployInternal(w http.ResponseWriter, r *htt
 		req.Target = "production"
 	}
 
+	// Validate target exists as a registered agent (skip for default "production" target)
+	if req.Target != "production" && s.agentService != nil {
+		if _, err := s.agentService.GetByID(ctx, req.Target); err != nil {
+			if services.IsNotFound(err) {
+				s.jsonError(w, http.StatusBadRequest, fmt.Sprintf("target agent %q not found", req.Target))
+				return
+			}
+			s.logger.Error("Failed to validate target agent", zap.Error(err))
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+			return
+		}
+	}
+
 	// Get username from context
 	username := "api"
 	if userID, ok := GetUserIDFromContext(r.Context()); ok {

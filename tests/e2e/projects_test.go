@@ -73,7 +73,7 @@ func TestProjectsAPI(t *testing.T) {
 			}
 			t.Log("project already exists, using existing")
 		} else {
-			ctx.Assertions.StatusCreatedOrOK(resp)
+			ctx.Assertions.StatusCreated(resp)
 
 			var result map[string]interface{}
 			if err := testutil.DecodeJSON(resp, &result); err != nil {
@@ -180,9 +180,8 @@ func TestProjectsAPI(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		// Currently the API doesn't require repository/branch/deploy_path
-		// It accepts minimal projects with just a name
-		ctx.Assertions.StatusCreatedOrConflict(resp)
+		// API requires repository - should return 400 Bad Request
+		ctx.Assertions.StatusBadRequest(resp)
 	})
 
 	t.Run("create project with invalid repository URL", func(t *testing.T) {
@@ -199,8 +198,8 @@ func TestProjectsAPI(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		// Currently the API doesn't validate repository URL format
-		ctx.Assertions.StatusCreatedOrConflict(resp)
+		// API validates repository URL format - should return 400 Bad Request
+		ctx.Assertions.StatusBadRequest(resp)
 	})
 
 	t.Run("delete project", func(t *testing.T) {

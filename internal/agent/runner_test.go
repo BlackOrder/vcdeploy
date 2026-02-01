@@ -15,7 +15,8 @@ func newTestRunner(t *testing.T) *LocalRunner {
 	t.Helper()
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	// Disable validation in tests - tests use shell commands not in deployment allowlist
+	// Skip validation for tests that use shell features (redirects, pipes, etc.)
+	// These are not allowed in production but are needed to test stderr/stdout handling.
 	runner.SkipValidation = true
 	return runner
 }

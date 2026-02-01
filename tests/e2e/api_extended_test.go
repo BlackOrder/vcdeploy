@@ -52,7 +52,7 @@ func TestAPIHostKeys(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		expectStatusCreatedOrOK(t, resp)
+		expectStatusCreated(t, resp)
 	})
 
 	t.Run("verify host key", func(t *testing.T) {
@@ -107,7 +107,7 @@ func TestAPIJumpServers(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		expectStatusCreatedOrOK(t, resp)
+		expectStatusCreated(t, resp)
 	})
 
 	t.Run("test jump server connection", func(t *testing.T) {
@@ -156,7 +156,7 @@ func TestAPIBlockedIPs(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		expectStatusCreatedOrOK(t, resp)
+		expectStatusCreated(t, resp)
 	})
 
 	t.Run("remove blocked IP", func(t *testing.T) {
@@ -204,7 +204,7 @@ func TestAPIProvisionJobs(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		expectStatusCreatedOrOK(t, resp)
+		expectStatusCreated(t, resp)
 	})
 
 	t.Run("get provision job status", func(t *testing.T) {
@@ -481,7 +481,7 @@ func TestAPIUsers(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		expectStatusCreatedOrOK(t, resp)
+		expectStatusCreated(t, resp)
 	})
 
 	t.Run("get user", func(t *testing.T) {
@@ -547,7 +547,7 @@ func TestAPIKeys(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		expectStatusCreatedOrOK(t, resp)
+		expectStatusCreated(t, resp)
 	})
 
 	t.Run("revoke API key", func(t *testing.T) {
@@ -635,7 +635,7 @@ func TestAPISecrets(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		expectStatusCreatedOrOK(t, resp)
+		expectStatusCreated(t, resp)
 	})
 
 	t.Run("get secret metadata", func(t *testing.T) {
@@ -686,7 +686,7 @@ func TestAPIProjectTypes(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		expectStatusCreatedOrOK(t, resp)
+		expectStatusCreated(t, resp)
 	})
 }
 
@@ -722,12 +722,12 @@ func expectStatusOK(t *testing.T, resp *http.Response) {
 	}
 }
 
-func expectStatusCreatedOrOK(t *testing.T, resp *http.Response) {
+func expectStatusCreated(t *testing.T, resp *http.Response) {
 	t.Helper()
-	// Accept 200, 201, or 409 (for create operations that may already exist)
-	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusConflict {
+	// For create operations, expect 201 Created or 409 Conflict (if already exists)
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusConflict {
 		body, _ := io.ReadAll(resp.Body)
-		t.Errorf("expected status 200 or 201, got %d: %s", resp.StatusCode, string(body))
+		t.Errorf("expected status 201 or 409, got %d: %s", resp.StatusCode, string(body))
 	}
 }
 
