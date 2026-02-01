@@ -221,6 +221,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict - user already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /api/v1/projects:
     get:
@@ -257,6 +263,12 @@ paths:
                 $ref: '#/components/schemas/Project'
         '400':
           description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict - project already exists
           content:
             application/json:
               schema:
