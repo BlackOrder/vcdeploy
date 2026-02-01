@@ -408,15 +408,15 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 		} else {
 			// Project info
 			project := map[string]interface{}{
-				"id":          1,
-				"name":        "webapp",
-				"repository":  "https://github.com/example/webapp",
-				"branch":      "main",
-				"deploy_path": "/var/www/app",
-				"type":        "nodejs",
-				"enabled":     true,
-				"created_at":  "2024-01-01T00:00:00Z",
-				"updated_at":  "2024-01-01T00:00:00Z",
+				"id":         1,
+				"name":       "webapp",
+				"repository": "https://github.com/example/webapp",
+				"branch":     "main",
+				"deployPath": "/var/www/app",
+				"type":       "nodejs",
+				"enabled":    true,
+				"createdAt":  "2024-01-01T00:00:00Z",
+				"updatedAt":  "2024-01-01T00:00:00Z",
 			}
 			_ = json.NewEncoder(w).Encode(project)
 		}

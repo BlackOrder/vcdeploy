@@ -62,8 +62,8 @@ func TestHandleHostKeys_Create(t *testing.T) {
 	body := bytes.NewBufferString(`{
 		"hostname": "newhost.example.com",
 		"port": 22,
-		"key_type": "ssh-ed25519",
-		"public_key": "AAAAC3...",
+		"keyType": "ssh-ed25519",
+		"publicKey": "AAAAC3...",
 		"fingerprint": "SHA256:abc123",
 		"trusted": false
 	}`)
@@ -108,8 +108,8 @@ func TestHandleHostKeys_CreateMissingHostname(t *testing.T) {
 
 	body := bytes.NewBufferString(`{
 		"port": 22,
-		"key_type": "ssh-ed25519",
-		"public_key": "AAAAC3..."
+		"keyType": "ssh-ed25519",
+		"publicKey": "AAAAC3..."
 	}`)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/host-keys", body)
@@ -133,7 +133,7 @@ func TestHandleHostKeys_CreateMissingKeyType(t *testing.T) {
 	body := bytes.NewBufferString(`{
 		"hostname": "test.example.com",
 		"port": 22,
-		"public_key": "AAAAC3..."
+		"publicKey": "AAAAC3..."
 	}`)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/host-keys", body)
@@ -157,7 +157,7 @@ func TestHandleHostKeys_CreateMissingPublicKey(t *testing.T) {
 	body := bytes.NewBufferString(`{
 		"hostname": "test.example.com",
 		"port": 22,
-		"key_type": "ssh-ed25519"
+		"keyType": "ssh-ed25519"
 	}`)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/host-keys", body)
@@ -663,7 +663,7 @@ func TestHandleBlockedIPs_Block(t *testing.T) {
 	adminUserID := createTestAdminUser(t, server)
 
 	body := bytes.NewBufferString(`{
-		"ip_address": "10.0.0.1",
+		"ipAddress": "10.0.0.1",
 		"reason": "automated test block",
 		"duration": "1h"
 	}`)
@@ -806,9 +806,9 @@ func TestHandleProvisionJobs_Create(t *testing.T) {
 	adminUserID := createTestAdminUser(t, server)
 
 	body := bytes.NewBufferString(`{
-		"target_host": "newtarget.example.com",
-		"target_port": 22,
-		"target_user": "admin"
+		"targetHost": "newtarget.example.com",
+		"targetPort": 22,
+		"targetUser": "admin"
 	}`)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/provision", body)
