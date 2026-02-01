@@ -78,7 +78,12 @@ func (s *MasterServer) handleAgentBinaries(w http.ResponseWriter, r *http.Reques
 		defer file.Close()
 
 		// Create binaries directory if it doesn't exist
-		sysCfg := config.MustGetSystemConfig()
+		sysCfg, err := config.GetSystemConfig()
+		if err != nil {
+			s.logger.Error("Failed to load system config", zap.Error(err))
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
 		binDir := filepath.Join(sysCfg.Paths.DataDir, "binaries")
 		if err := os.MkdirAll(binDir, 0o755); err != nil {
 			s.logger.Error("Failed to create binaries directory", zap.Error(err))

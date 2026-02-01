@@ -229,7 +229,10 @@ func (r *SSHRunner) buildHostKeyCallback() (ssh.HostKeyCallback, error) {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
 			// Fallback to system config path if home dir unavailable
-			sysCfg := config.MustGetSystemConfig()
+			sysCfg, cfgErr := config.GetSystemConfig()
+			if cfgErr != nil {
+				return nil, fmt.Errorf("failed to get system config for known_hosts path: %w", cfgErr)
+			}
 			knownHostsPath = filepath.Join(sysCfg.Paths.DataDir, "known_hosts")
 		} else {
 			knownHostsPath = filepath.Join(homeDir, ".ssh", "known_hosts")

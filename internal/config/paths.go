@@ -112,8 +112,10 @@ func GetSystemConfig() (*SystemConfig, error) {
 }
 
 // MustGetSystemConfig returns the system config or panics on error.
-// This should only be used during application startup where recovery is not possible.
-// Prefer GetSystemConfig() with proper error handling in most cases.
+// Deprecated: Use GetSystemConfig() with proper error handling in server code.
+// This function is acceptable for CLI startup (before Execute()) where recovery
+// is not possible, but should NOT be used in HTTP handlers or business logic.
+// Panics in production request paths are unacceptable.
 func MustGetSystemConfig() *SystemConfig {
 	cfg, err := GetSystemConfig()
 	if err != nil {
