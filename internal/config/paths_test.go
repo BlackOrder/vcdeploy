@@ -112,15 +112,15 @@ func TestEnsureDirectories(t *testing.T) {
 	}
 }
 
-func TestMustGetSystemConfig(t *testing.T) {
+func TestGetSystemConfigOrDefaults(t *testing.T) {
 	// Reset before test
 	ResetSystemConfig()
 	defer ResetSystemConfig()
 
-	// Should not panic with defaults
-	cfg := MustGetSystemConfig()
+	// Should always return valid config, never nil
+	cfg := GetSystemConfigOrDefaults()
 	if cfg == nil {
-		t.Error("MustGetSystemConfig() returned nil")
+		t.Error("GetSystemConfigOrDefaults() returned nil")
 	}
 }
 

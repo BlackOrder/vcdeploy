@@ -107,60 +107,6 @@ func (s *MemoryStore) CountDeploymentsByStatus(ctx context.Context) (map[string]
 	return counts, nil
 }
 
-// InsertDeployment inserts a deployment from CLI (legacy).
-func (s *MemoryStore) InsertDeployment(d *DeploymentCLI) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if _, exists := s.deployments[d.ID]; exists {
-		return ErrDuplicate
-	}
-
-	record := &DeploymentRecord{
-		ID:          d.ID,
-		Project:     d.ProjectName,
-		ProjectID:   &d.ProjectID,
-		Target:      d.Target,
-		Status:      d.Status,
-		StartedAt:   d.StartedAt,
-		CompletedAt: d.FinishedAt,
-		TriggeredBy: d.TriggeredBy,
-	}
-
-	s.deployments[d.ID] = record
-	s.queueWrite(s.deploymentsWrites, NewWriteOp(WriteOpInsert, "deployments", record))
-	return nil
-}
-
-// SaveDeployment updates or creates a deployment from CLI (legacy).
-func (s *MemoryStore) SaveDeployment(d *DeploymentCLI) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	existing, exists := s.deployments[d.ID]
-	if exists {
-		existing.Status = d.Status
-		existing.CompletedAt = d.FinishedAt
-		s.queueWrite(s.deploymentsWrites, NewWriteOp(WriteOpUpdate, "deployments", existing))
-		return nil
-	}
-
-	record := &DeploymentRecord{
-		ID:          d.ID,
-		Project:     d.ProjectName,
-		ProjectID:   &d.ProjectID,
-		Target:      d.Target,
-		Status:      d.Status,
-		StartedAt:   d.StartedAt,
-		CompletedAt: d.FinishedAt,
-		TriggeredBy: d.TriggeredBy,
-	}
-
-	s.deployments[d.ID] = record
-	s.queueWrite(s.deploymentsWrites, NewWriteOp(WriteOpInsert, "deployments", record))
-	return nil
-}
-
 // --- DeploymentLog methods ---
 
 // CreateDeploymentLog creates a new deployment log entry.

@@ -125,7 +125,7 @@ func (m *EnforcementMiddleware) RequireAPIEnabled(next http.Handler) http.Handle
 				zap.String("path", r.URL.Path),
 				zap.String("method", r.Method),
 			)
-			http.Error(w, "API is disabled", http.StatusServiceUnavailable)
+			WriteJSONError(w, http.StatusServiceUnavailable, "API is disabled")
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -140,7 +140,7 @@ func (m *EnforcementMiddleware) RequireAPIEnabledFunc(next http.HandlerFunc) htt
 				zap.String("path", r.URL.Path),
 				zap.String("method", r.Method),
 			)
-			http.Error(w, "API is disabled", http.StatusServiceUnavailable)
+			WriteJSONError(w, http.StatusServiceUnavailable, "API is disabled")
 			return
 		}
 		next(w, r)
@@ -169,7 +169,7 @@ func (m *EnforcementMiddleware) Require2FAForAdmin(next http.Handler) http.Handl
 		user, err := m.userService.GetByID(r.Context(), userID)
 		if err != nil {
 			m.logger.Error("Failed to get user for 2FA check", zap.Int64("userID", userID), zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			WriteJSONError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
@@ -179,7 +179,7 @@ func (m *EnforcementMiddleware) Require2FAForAdmin(next http.Handler) http.Handl
 				zap.String("username", user.Username),
 				zap.String("path", r.URL.Path),
 			)
-			http.Error(w, "2FA is required for admin users", http.StatusForbidden)
+			WriteJSONError(w, http.StatusForbidden, "2FA is required for admin users")
 			return
 		}
 
@@ -208,7 +208,7 @@ func (m *EnforcementMiddleware) Require2FAForAdminFunc(next http.HandlerFunc) ht
 		user, err := m.userService.GetByID(r.Context(), userID)
 		if err != nil {
 			m.logger.Error("Failed to get user for 2FA check", zap.Int64("userID", userID), zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			WriteJSONError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
@@ -218,7 +218,7 @@ func (m *EnforcementMiddleware) Require2FAForAdminFunc(next http.HandlerFunc) ht
 				zap.String("username", user.Username),
 				zap.String("path", r.URL.Path),
 			)
-			http.Error(w, "2FA is required for admin users", http.StatusForbidden)
+			WriteJSONError(w, http.StatusForbidden, "2FA is required for admin users")
 			return
 		}
 
@@ -233,14 +233,14 @@ func (m *EnforcementMiddleware) RequireRole(role string) func(http.HandlerFunc) 
 		return func(w http.ResponseWriter, r *http.Request) {
 			userID, ok := GetUserIDFromContext(r.Context())
 			if !ok {
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				WriteJSONError(w, http.StatusUnauthorized, "Unauthorized")
 				return
 			}
 
 			user, err := m.userService.GetByID(r.Context(), userID)
 			if err != nil {
 				m.logger.Error("Failed to get user for role check", zap.Int64("userID", userID), zap.Error(err))
-				http.Error(w, "Internal server error", http.StatusInternalServerError)
+				WriteJSONError(w, http.StatusInternalServerError, "Internal server error")
 				return
 			}
 
@@ -251,7 +251,7 @@ func (m *EnforcementMiddleware) RequireRole(role string) func(http.HandlerFunc) 
 					zap.String("actual", user.Role),
 					zap.String("path", r.URL.Path),
 				)
-				http.Error(w, "Forbidden: insufficient permissions", http.StatusForbidden)
+				WriteJSONError(w, http.StatusForbidden, "Forbidden: insufficient permissions")
 				return
 			}
 
@@ -270,14 +270,14 @@ func (m *EnforcementMiddleware) RequireMinRole(minRole string) func(http.Handler
 		return func(w http.ResponseWriter, r *http.Request) {
 			userID, ok := GetUserIDFromContext(r.Context())
 			if !ok {
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				WriteJSONError(w, http.StatusUnauthorized, "Unauthorized")
 				return
 			}
 
 			user, err := m.userService.GetByID(r.Context(), userID)
 			if err != nil {
 				m.logger.Error("Failed to get user for role check", zap.Int64("userID", userID), zap.Error(err))
-				http.Error(w, "Internal server error", http.StatusInternalServerError)
+				WriteJSONError(w, http.StatusInternalServerError, "Internal server error")
 				return
 			}
 
@@ -289,7 +289,7 @@ func (m *EnforcementMiddleware) RequireMinRole(minRole string) func(http.Handler
 					zap.String("actual", user.Role),
 					zap.String("path", r.URL.Path),
 				)
-				http.Error(w, "Forbidden: insufficient permissions", http.StatusForbidden)
+				WriteJSONError(w, http.StatusForbidden, "Forbidden: insufficient permissions")
 				return
 			}
 
@@ -320,7 +320,7 @@ func (m *EnforcementMiddleware) RequireScope(scope APIScope) func(http.HandlerFu
 					zap.String("required", string(scope)),
 					zap.String("path", r.URL.Path),
 				)
-				http.Error(w, "Forbidden: API key lacks required scope", http.StatusForbidden)
+				WriteJSONError(w, http.StatusForbidden, "Forbidden: API key lacks required scope")
 				return
 			}
 

@@ -20,6 +20,19 @@ import (
 	"go.uber.org/zap"
 )
 
+// WriteJSONError writes a JSON error response to the ResponseWriter.
+// This is a standalone helper for use by middleware that don't have access to *MasterServer.
+// For handlers with MasterServer access, use s.jsonError() instead which includes logging.
+func WriteJSONError(w http.ResponseWriter, status int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	// Best-effort encoding - if this fails, there's nothing more we can do
+	_ = json.NewEncoder(w).Encode(ErrorResponse{
+		Error:   true,
+		Message: message,
+	})
+}
+
 // --- Stats API ---
 
 // handleStats returns dashboard statistics.
@@ -230,7 +243,7 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		// Admin-only: viewing other user details
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -255,7 +268,7 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPut:
 		// Admin-only: updating users
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -309,7 +322,7 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		// Admin-only: deleting users
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -343,7 +356,7 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPatch:
 		// Admin-only: partial updates (e.g., password change)
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -429,7 +442,7 @@ func (s *MasterServer) handleSettingsCategory(w http.ResponseWriter, r *http.Req
 	case http.MethodGet:
 		// Read access: viewer role + read scope
 		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -454,7 +467,7 @@ func (s *MasterServer) handleSettingsCategory(w http.ResponseWriter, r *http.Req
 	case http.MethodPut:
 		// Admin-only: changing settings
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -522,7 +535,7 @@ func (s *MasterServer) handleSettingsExport(w http.ResponseWriter, r *http.Reque
 
 	// Admin-only: exporting settings
 	if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-		http.Error(w, msg, status)
+		s.jsonError(w, status, msg)
 		return
 	}
 
@@ -567,7 +580,7 @@ func (s *MasterServer) handleSettingsImport(w http.ResponseWriter, r *http.Reque
 
 	// Admin-only: importing settings
 	if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-		http.Error(w, msg, status)
+		s.jsonError(w, status, msg)
 		return
 	}
 
@@ -619,7 +632,7 @@ func (s *MasterServer) handleProjectsAPI(w http.ResponseWriter, r *http.Request)
 	case http.MethodGet:
 		// Read access: viewer role + read scope
 		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -640,7 +653,7 @@ func (s *MasterServer) handleProjectsAPI(w http.ResponseWriter, r *http.Request)
 	case http.MethodPost:
 		// Write access: user role + write scope
 		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -732,7 +745,7 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 	case http.MethodGet:
 		// Read access: viewer role + read scope
 		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -746,7 +759,7 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 	case http.MethodPut:
 		// Write access: user role + write scope
 		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -797,7 +810,7 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 	case http.MethodDelete:
 		// Write access: user role + write scope
 		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -862,7 +875,7 @@ func (s *MasterServer) handleProjectWebhooksInternal(ctx context.Context, w http
 	case http.MethodGet:
 		// Read access: viewer role + read scope
 		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -882,7 +895,7 @@ func (s *MasterServer) handleProjectWebhooksInternal(ctx context.Context, w http
 	case http.MethodPost:
 		// Write access: user role + write scope
 		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -1064,7 +1077,7 @@ func (s *MasterServer) handleAgentsAPI(w http.ResponseWriter, r *http.Request) {
 
 	// Read access: viewer role + read scope
 	if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-		http.Error(w, msg, status)
+		s.jsonError(w, status, msg)
 		return
 	}
 
@@ -1137,7 +1150,7 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		// Read access: viewer role + read scope
 		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -1160,7 +1173,7 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPut:
 		// Write access: user role + write scope
 		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -1204,7 +1217,7 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		// Admin-only: deleting agents
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -1286,7 +1299,7 @@ func (s *MasterServer) handleDeploymentsAPI(w http.ResponseWriter, r *http.Reque
 	case http.MethodGet:
 		// Read access: viewer role + read scope
 		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -1304,7 +1317,7 @@ func (s *MasterServer) handleDeploymentsAPI(w http.ResponseWriter, r *http.Reque
 	case http.MethodPost:
 		// Write access: user role + write scope
 		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -1713,7 +1726,7 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		// Read access: viewer role + read scope (users can view their own keys)
 		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -1740,7 +1753,7 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		// Write access: user role + write scope
 		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 

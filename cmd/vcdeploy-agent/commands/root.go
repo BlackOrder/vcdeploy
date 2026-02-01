@@ -46,7 +46,7 @@ func Execute() error {
 
 func init() {
 	// Global flags
-	sysCfg := config.MustGetSystemConfig()
+	sysCfg := config.GetSystemConfigOrDefaults()
 	rootCmd.PersistentFlags().String("config", sysCfg.AgentConfigPath(), "config file")
 
 	// Add subcommands
@@ -148,7 +148,10 @@ func runStart(cmd *cobra.Command, args []string) error {
 	}
 
 	// Write PID file for status checks and process management
-	sysCfg := config.MustGetSystemConfig()
+	sysCfg, err := config.GetSystemConfig()
+	if err != nil {
+		return fmt.Errorf("loading system config: %w", err)
+	}
 	pidFile := sysCfg.AgentPIDPath()
 
 	// Ensure PID directory exists
@@ -214,7 +217,10 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check if agent process is running via PID file
-	sysCfg := config.MustGetSystemConfig()
+	sysCfg, err := config.GetSystemConfig()
+	if err != nil {
+		return fmt.Errorf("loading system config: %w", err)
+	}
 	pidFile := sysCfg.AgentPIDPath()
 	isRunning, pid := checkAgentProcess(pidFile)
 
@@ -320,7 +326,10 @@ func runRegister(cmd *cobra.Command, args []string) error {
 	}
 
 	// Save certificates
-	sysCfg := config.MustGetSystemConfig()
+	sysCfg, err := config.GetSystemConfig()
+	if err != nil {
+		return fmt.Errorf("loading system config: %w", err)
+	}
 	agentCertsDir := sysCfg.CertsDir() + "/agent"
 	certPath := agentCertsDir + "/cert.pem"
 	caPath := agentCertsDir + "/ca.pem"

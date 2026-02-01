@@ -341,16 +341,32 @@ var (
 )
 
 // getDBPath returns the database path from system config.
-func getDBPath() string {
-	sysCfg := config.MustGetSystemConfig()
-	return sysCfg.DatabasePath()
+func getDBPath() (string, error) {
+	sysCfg, err := config.GetSystemConfig()
+	if err != nil {
+		return "", fmt.Errorf("load system config: %w", err)
+	}
+	return sysCfg.DatabasePath(), nil
+}
+
+// initServices initializes CLI services with proper error handling.
+// This is a convenience wrapper around InitCLIServices that handles the config loading.
+func initServices() (*CLIServices, func(), error) {
+	dbPath, err := getDBPath()
+	if err != nil {
+		return nil, nil, err
+	}
+	return InitCLIServices(dbPath)
 }
 
 // initConfig loads configuration from file
 func initConfig(cmd *cobra.Command) error {
 	cfgPath, _ := cmd.Flags().GetString("config")
 	if cfgPath == "" {
-		sysCfg := config.MustGetSystemConfig()
+		sysCfg, err := config.GetSystemConfig()
+		if err != nil {
+			return fmt.Errorf("load system config: %w", err)
+		}
 		cfgPath = sysCfg.MasterConfigPath()
 	}
 
@@ -443,7 +459,10 @@ func runMasterStart(cmd *cobra.Command, args []string) error {
 	}
 
 	// Initialize storage - use memory-cached store if enabled (default)
-	sysCfg := config.MustGetSystemConfig()
+	sysCfg, err := config.GetSystemConfig()
+	if err != nil {
+		return fmt.Errorf("load system config: %w", err)
+	}
 	dbPath := sysCfg.DatabasePath()
 
 	var store storage.Store
@@ -556,7 +575,10 @@ func runMasterStop(cmd *cobra.Command, args []string) error {
 
 // tryPidFileStop attempts to stop the master using its PID file.
 func tryPidFileStop() error {
-	sysCfg := config.MustGetSystemConfig()
+	sysCfg, err := config.GetSystemConfig()
+	if err != nil {
+		return fmt.Errorf("load system config: %w", err)
+	}
 	pidFile := sysCfg.MasterPIDPath()
 
 	data, err := os.ReadFile(pidFile)
@@ -674,7 +696,10 @@ func runMasterStatus(cmd *cobra.Command, args []string) error {
 
 // checkMasterPid reads the PID file and checks if process exists.
 func checkMasterPid() int {
-	sysCfg := config.MustGetSystemConfig()
+	sysCfg, err := config.GetSystemConfig()
+	if err != nil {
+		return 0
+	}
 	pidFile := sysCfg.MasterPIDPath()
 	data, err := os.ReadFile(pidFile)
 	if err != nil {
@@ -739,7 +764,10 @@ func runMasterRotateKey(cmd *cobra.Command, args []string) error {
 	fmt.Println("\nRotating master key...")
 
 	// Open database
-	sysCfg := config.MustGetSystemConfig()
+	sysCfg, err := config.GetSystemConfig()
+	if err != nil {
+		return fmt.Errorf("load system config: %w", err)
+	}
 	dbPath := sysCfg.DatabasePath()
 	db, err := storage.Open(dbPath)
 	if err != nil {
@@ -780,7 +808,10 @@ func runBackupCreate(cmd *cobra.Command, args []string) error {
 
 	backupPath := globalConfig.Backup.Database.Path
 	if backupPath == "" {
-		sysCfg := config.MustGetSystemConfig()
+		sysCfg, err := config.GetSystemConfig()
+		if err != nil {
+			return fmt.Errorf("load system config: %w", err)
+		}
 		backupPath = sysCfg.BackupsDir()
 	}
 
@@ -795,8 +826,11 @@ func runBackupCreate(cmd *cobra.Command, args []string) error {
 	}
 
 	// Open database and create backup
-	sysCfg := config.MustGetSystemConfig()
-	dbPath := sysCfg.DatabasePath()
+	sysCfgDB, err := config.GetSystemConfig()
+	if err != nil {
+		return fmt.Errorf("load system config: %w", err)
+	}
+	dbPath := sysCfgDB.DatabasePath()
 	db, err := storage.Open(dbPath)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
@@ -818,7 +852,10 @@ func runBackupList(cmd *cobra.Command, args []string) error {
 
 	backupPath := globalConfig.Backup.Database.Path
 	if backupPath == "" {
-		sysCfg := config.MustGetSystemConfig()
+		sysCfg, err := config.GetSystemConfig()
+		if err != nil {
+			return fmt.Errorf("load system config: %w", err)
+		}
 		backupPath = sysCfg.BackupsDir()
 	}
 
@@ -862,7 +899,10 @@ func runBackupRestore(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get the database path
-	dbPath := getDBPath()
+	dbPath, err := getDBPath()
+	if err != nil {
+		return err
+	}
 
 	fmt.Printf("WARNING: This will replace the current database with %s\n", backupFile)
 	fmt.Printf("Database location: %s\n", dbPath)
@@ -915,7 +955,7 @@ func runProjectList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	svc, cleanup, err := InitCLIServices(getDBPath())
+	svc, cleanup, err := initServices()
 	if err != nil {
 		return err
 	}
@@ -963,7 +1003,7 @@ func runProjectAdd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	svc, cleanup, err := InitCLIServices(getDBPath())
+	svc, cleanup, err := initServices()
 	if err != nil {
 		return err
 	}
@@ -1010,7 +1050,7 @@ func runProjectEdit(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	svc, cleanup, err := InitCLIServices(getDBPath())
+	svc, cleanup, err := initServices()
 	if err != nil {
 		return err
 	}
@@ -1132,7 +1172,7 @@ func runProjectDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	svc, cleanup, err := InitCLIServices(getDBPath())
+	svc, cleanup, err := initServices()
 	if err != nil {
 		return err
 	}
@@ -1153,7 +1193,7 @@ func runProjectValidate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	svc, cleanup, err := InitCLIServices(getDBPath())
+	svc, cleanup, err := initServices()
 	if err != nil {
 		return err
 	}
@@ -1239,7 +1279,7 @@ func runProjectDeploy(cmd *cobra.Command, args []string) error {
 		if err := initConfig(cmd); err != nil {
 			return err
 		}
-		svc, cleanup, err := InitCLIServices(getDBPath())
+		svc, cleanup, err := initServices()
 		if err != nil {
 			return err
 		}
@@ -1479,7 +1519,7 @@ func runTypeList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	svc, cleanup, err := InitCLIServices(getDBPath())
+	svc, cleanup, err := initServices()
 	if err != nil {
 		return err
 	}
@@ -1514,7 +1554,7 @@ func runTypeCreate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	svc, cleanup, err := InitCLIServices(getDBPath())
+	svc, cleanup, err := initServices()
 	if err != nil {
 		return err
 	}
@@ -1547,7 +1587,7 @@ func runTypeEdit(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	svc, cleanup, err := InitCLIServices(getDBPath())
+	svc, cleanup, err := initServices()
 	if err != nil {
 		return err
 	}
@@ -1639,7 +1679,7 @@ func runTypeDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	svc, cleanup, err := InitCLIServices(getDBPath())
+	svc, cleanup, err := initServices()
 	if err != nil {
 		return err
 	}
@@ -1662,7 +1702,7 @@ func runSecretSet(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	svc, cleanup, err := InitCLIServices(getDBPath())
+	svc, cleanup, err := initServices()
 	if err != nil {
 		return err
 	}
@@ -1716,7 +1756,7 @@ func runSecretList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	svc, cleanup, err := InitCLIServices(getDBPath())
+	svc, cleanup, err := initServices()
 	if err != nil {
 		return err
 	}
@@ -1763,7 +1803,7 @@ func runSecretDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	svc, cleanup, err := InitCLIServices(getDBPath())
+	svc, cleanup, err := initServices()
 	if err != nil {
 		return err
 	}
@@ -1792,7 +1832,7 @@ func runSecretImport(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	svc, cleanup, err := InitCLIServices(getDBPath())
+	svc, cleanup, err := initServices()
 	if err != nil {
 		return err
 	}
@@ -1883,7 +1923,10 @@ func runSecretBackup(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dbPath := getDBPath()
+	dbPath, err := getDBPath()
+	if err != nil {
+		return err
+	}
 	db, err := storage.Open(dbPath)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
@@ -1990,7 +2033,10 @@ func runSecretRestore(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dbPath := getDBPath()
+	dbPath, err := getDBPath()
+	if err != nil {
+		return err
+	}
 	db, err := storage.Open(dbPath)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)

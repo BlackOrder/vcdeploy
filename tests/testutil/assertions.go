@@ -125,6 +125,19 @@ func (a *Assertions) NoServerError(resp *http.Response) {
 	}
 }
 
+// StatusOneOf asserts that the response status is one of the expected statuses.
+// Use this instead of NoServerError for more specific assertions.
+func (a *Assertions) StatusOneOf(resp *http.Response, expected ...int) {
+	a.t.Helper()
+	for _, e := range expected {
+		if resp.StatusCode == e {
+			return
+		}
+	}
+	body, _ := io.ReadAll(resp.Body)
+	a.t.Errorf("expected status one of %v, got %d: %s", expected, resp.StatusCode, string(body))
+}
+
 // HasField asserts that a map has the given field.
 func (a *Assertions) HasField(m map[string]interface{}, field string) {
 	a.t.Helper()

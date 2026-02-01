@@ -141,7 +141,7 @@ func TestSettingsExportImport(t *testing.T) {
 		}
 		defer resp.Body.Close()
 		// May return 400 (validation error) or 200 (accepts partial data) depending on validation
-		// NoServerError is appropriate here since both 2xx and 4xx are valid responses
-		ctx.Assertions.NoServerError(resp)
+		// StatusOneOf is more specific - we expect either success or validation error
+		ctx.Assertions.StatusOneOf(resp, 200, 400)
 	})
 }

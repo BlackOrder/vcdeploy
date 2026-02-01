@@ -178,7 +178,10 @@ func promptPassword() (string, error) {
 // runAdminLocal handles admin setup via direct database access.
 func runAdminLocal(username, password, email string) error {
 	// Initialize config to get database path
-	sysCfg := config.MustGetSystemConfig()
+	sysCfg, err := config.GetSystemConfig()
+	if err != nil {
+		return fmt.Errorf("load system config: %w", err)
+	}
 	dbPath := sysCfg.DatabasePath()
 
 	// Check if server might be running by trying to connect to the configured port

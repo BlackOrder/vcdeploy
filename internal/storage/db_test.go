@@ -960,60 +960,6 @@ func TestDeleteProjectType(t *testing.T) {
 	}
 }
 
-// --- Extended Deployment Tests ---
-
-func TestInsertDeployment(t *testing.T) {
-	db, cleanup := setupTestDB(t)
-	defer cleanup()
-
-	d := &DeploymentCLI{
-		ProjectName: "testproj",
-		Target:      "production",
-		Status:      "running",
-		TriggeredBy: "admin",
-		StartedAt:   time.Now(),
-	}
-
-	err := db.InsertDeployment(d)
-	if err != nil {
-		t.Fatalf("InsertDeployment() error = %v", err)
-	}
-
-	if d.ID == "" {
-		t.Error("InsertDeployment() did not set deployment ID")
-	}
-}
-
-func TestSaveDeployment(t *testing.T) {
-	db, cleanup := setupTestDB(t)
-	defer cleanup()
-
-	// Create deployment
-	d := &DeploymentCLI{
-		ID:          "test-deploy-1",
-		ProjectName: "testproj",
-		Target:      "production",
-		Status:      "running",
-		TriggeredBy: "admin",
-		StartedAt:   time.Now(),
-	}
-
-	err := db.InsertDeployment(d)
-	if err != nil {
-		t.Fatalf("InsertDeployment() error = %v", err)
-	}
-
-	// Update deployment
-	now := time.Now()
-	d.Status = "completed"
-	d.FinishedAt = &now
-
-	err = db.SaveDeployment(d)
-	if err != nil {
-		t.Fatalf("SaveDeployment() error = %v", err)
-	}
-}
-
 // --- Backup Tests ---
 
 func TestBackup(t *testing.T) {
@@ -2497,15 +2443,16 @@ func TestListDeploymentsRecent(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Create a deployment using InsertDeployment
-	deployment := &DeploymentCLI{
-		ID:          "deploy-recent",
-		ProjectName: "test-project",
-		Target:      "production",
-		Status:      "completed",
+	// Create a deployment using CreateDeployment
+	deployment := &DeploymentRecord{
+		ID:        "deploy-recent",
+		Project:   "test-project",
+		Target:    "production",
+		Status:    "completed",
+		StartedAt: time.Now(),
 	}
-	if err := db.InsertDeployment(deployment); err != nil {
-		t.Fatalf("InsertDeployment() error = %v", err)
+	if err := db.CreateDeployment(ctx, deployment); err != nil {
+		t.Fatalf("CreateDeployment() error = %v", err)
 	}
 
 	// List recent deployments

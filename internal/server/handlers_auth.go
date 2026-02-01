@@ -122,7 +122,7 @@ func (s *MasterServer) handleSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 }
 
 // handleIndex redirects the root path to the dashboard.
@@ -367,14 +367,16 @@ func (s *MasterServer) handleLogout(w http.ResponseWriter, r *http.Request) {
 
 		// Get user ID for audit log (if session exists) before deleting
 		if session, err := s.sessionService.GetByToken(ctx, cookie.Value); err == nil {
-			_ = s.auditService.Log(ctx, &storage.AuditEntry{
+			if auditErr := s.auditService.Log(ctx, &storage.AuditEntry{
 				Source:    "web",
 				User:      fmt.Sprintf("user:%d", session.UserID),
 				Action:    "logout",
 				Resource:  "session",
 				Result:    "success",
 				Timestamp: time.Now(),
-			})
+			}); auditErr != nil {
+				s.logger.Error("Failed to log audit entry for logout", zap.Error(auditErr), zap.Int64("userID", session.UserID))
+			}
 		}
 
 		if err := s.sessionService.Delete(ctx, cookie.Value); err != nil {

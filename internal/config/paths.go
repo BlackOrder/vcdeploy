@@ -2,7 +2,6 @@
 package config
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -111,15 +110,21 @@ func GetSystemConfig() (*SystemConfig, error) {
 	return systemConfig, systemConfigErr
 }
 
-// MustGetSystemConfig returns the system config or panics on error.
-// Deprecated: Use GetSystemConfig() with proper error handling in server code.
-// This function is acceptable for CLI startup (before Execute()) where recovery
-// is not possible, but should NOT be used in HTTP handlers or business logic.
-// Panics in production request paths are unacceptable.
-func MustGetSystemConfig() *SystemConfig {
+// GetSystemConfigOrDefaults returns the system config, falling back to defaults on error.
+// This is safe to use in init() functions where error handling is not possible.
+// For code that can handle errors (command handlers, business logic), use GetSystemConfig() directly.
+func GetSystemConfigOrDefaults() *SystemConfig {
 	cfg, err := GetSystemConfig()
 	if err != nil {
-		panic(fmt.Sprintf("failed to load system config: %v", err))
+		// Return a fresh config with defaults - don't mutate the singleton
+		return &SystemConfig{
+			Paths: SystemPaths{
+				ConfigDir: DefaultConfigDir,
+				DataDir:   DefaultDataDir,
+				RunDir:    DefaultRunDir,
+				LogDir:    DefaultLogDir,
+			},
+		}
 	}
 	return cfg
 }

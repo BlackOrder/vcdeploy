@@ -106,8 +106,8 @@ func TestGitHubWebhook(t *testing.T) {
 		defer resp.Body.Close()
 
 		// Webhook may return 200 (accepted), 400 (invalid payload), or other 4xx based on config
-		// NoServerError is appropriate since we're testing the endpoint works, not deployment success
-		ctx.Assertions.NoServerError(resp)
+		// StatusOneOf is more specific - we expect success or client errors, not server errors
+		ctx.Assertions.StatusOneOf(resp, 200, 202, 400, 401, 403, 404)
 	})
 
 	t.Run("GitHub ping event", func(t *testing.T) {
@@ -130,8 +130,8 @@ func TestGitHubWebhook(t *testing.T) {
 		defer resp.Body.Close()
 
 		// Ping events may return 200 (acknowledged) or 4xx (no project/config)
-		// NoServerError is appropriate for webhook endpoint availability testing
-		ctx.Assertions.NoServerError(resp)
+		// StatusOneOf is more specific for webhook endpoint testing
+		ctx.Assertions.StatusOneOf(resp, 200, 400, 404)
 	})
 
 	t.Run("invalid signature", func(t *testing.T) {
@@ -212,8 +212,8 @@ func TestGitLabWebhook(t *testing.T) {
 		defer resp.Body.Close()
 
 		// Webhook may return 200 (accepted) or 4xx (auth/validation issues)
-		// NoServerError is appropriate for webhook endpoint availability testing
-		ctx.Assertions.NoServerError(resp)
+		// StatusOneOf is more specific for webhook endpoint testing
+		ctx.Assertions.StatusOneOf(resp, 200, 202, 400, 401, 403, 404)
 	})
 
 	t.Cleanup(func() {
@@ -270,8 +270,8 @@ func TestBitbucketWebhook(t *testing.T) {
 		defer resp.Body.Close()
 
 		// Webhook may return 200 (accepted) or 4xx (auth/validation issues)
-		// NoServerError is appropriate for webhook endpoint availability testing
-		ctx.Assertions.NoServerError(resp)
+		// StatusOneOf is more specific for webhook endpoint testing
+		ctx.Assertions.StatusOneOf(resp, 200, 202, 400, 401, 403, 404)
 	})
 
 	t.Cleanup(func() {

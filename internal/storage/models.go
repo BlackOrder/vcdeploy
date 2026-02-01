@@ -95,18 +95,6 @@ type DeploymentLog struct {
 	CreatedAt    time.Time
 }
 
-// DeploymentCLI is a simplified deployment struct for CLI use.
-type DeploymentCLI struct {
-	ID          string
-	ProjectID   int64
-	ProjectName string
-	Target      string
-	Status      string
-	TriggeredBy string
-	StartedAt   time.Time
-	FinishedAt  *time.Time
-}
-
 // ScheduledDeployment represents a deployment scheduled for future execution.
 type ScheduledDeployment struct {
 	ID          string

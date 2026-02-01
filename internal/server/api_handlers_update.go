@@ -34,14 +34,14 @@ func (s *MasterServer) handleAgentBinaries(w http.ResponseWriter, r *http.Reques
 	case http.MethodGet:
 		// Read access: viewer role + read scope
 		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
 		binaries, err := s.store.ListAgentBinaries(ctx)
 		if err != nil {
 			s.logger.Error("Failed to list agent binaries", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 		s.jsonResponse(w, binaries)
@@ -49,13 +49,13 @@ func (s *MasterServer) handleAgentBinaries(w http.ResponseWriter, r *http.Reques
 	case http.MethodPost:
 		// Admin-only: uploading binaries
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
 		// Handle multipart form upload
 		if err := r.ParseMultipartForm(100 << 20); err != nil { // 100MB max
-			http.Error(w, "Failed to parse form: "+err.Error(), http.StatusBadRequest)
+			s.jsonError(w, http.StatusBadRequest, "Failed to parse form: "+err.Error())
 			return
 		}
 
@@ -65,14 +65,14 @@ func (s *MasterServer) handleAgentBinaries(w http.ResponseWriter, r *http.Reques
 		setAsCurrent := r.FormValue("set_current") == "true"
 
 		if version == "" || osType == "" || arch == "" {
-			http.Error(w, "version, os, and arch are required", http.StatusBadRequest)
+			s.jsonError(w, http.StatusBadRequest, "version, os, and arch are required")
 			return
 		}
 
 		// Get the uploaded file
 		file, header, err := r.FormFile("binary")
 		if err != nil {
-			http.Error(w, "binary file is required: "+err.Error(), http.StatusBadRequest)
+			s.jsonError(w, http.StatusBadRequest, "binary file is required: "+err.Error())
 			return
 		}
 		defer file.Close()
@@ -81,13 +81,13 @@ func (s *MasterServer) handleAgentBinaries(w http.ResponseWriter, r *http.Reques
 		sysCfg, err := config.GetSystemConfig()
 		if err != nil {
 			s.logger.Error("Failed to load system config", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 		binDir := filepath.Join(sysCfg.Paths.DataDir, "binaries")
 		if err := os.MkdirAll(binDir, 0o755); err != nil {
 			s.logger.Error("Failed to create binaries directory", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
@@ -99,7 +99,7 @@ func (s *MasterServer) handleAgentBinaries(w http.ResponseWriter, r *http.Reques
 		dest, err := os.Create(destPath)
 		if err != nil {
 			s.logger.Error("Failed to create binary file", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
@@ -111,7 +111,7 @@ func (s *MasterServer) handleAgentBinaries(w http.ResponseWriter, r *http.Reques
 		if err != nil {
 			os.Remove(destPath)
 			s.logger.Error("Failed to save binary file", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
@@ -137,7 +137,7 @@ func (s *MasterServer) handleAgentBinaries(w http.ResponseWriter, r *http.Reques
 		if err := s.store.CreateAgentBinary(ctx, binary); err != nil {
 			os.Remove(destPath)
 			s.logger.Error("Failed to create binary record", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
@@ -163,7 +163,7 @@ func (s *MasterServer) handleAgentBinaries(w http.ResponseWriter, r *http.Reques
 		s.jsonResponse(w, binary)
 
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
 }
 
@@ -175,13 +175,13 @@ func (s *MasterServer) handleAgentBinary(w http.ResponseWriter, r *http.Request)
 	idStr := parts[0]
 
 	if idStr == "" {
-		http.Error(w, "Binary ID required", http.StatusBadRequest)
+		s.jsonError(w, http.StatusBadRequest, "Binary ID required")
 		return
 	}
 
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid binary ID", http.StatusBadRequest)
+		s.jsonError(w, http.StatusBadRequest, "Invalid binary ID")
 		return
 	}
 
@@ -204,18 +204,18 @@ func (s *MasterServer) handleAgentBinary(w http.ResponseWriter, r *http.Request)
 	case http.MethodGet:
 		// Read access: viewer role + read scope
 		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
 		binary, err := s.store.GetAgentBinary(ctx, id)
 		if err != nil {
 			if services.IsNotFound(err) {
-				http.Error(w, "Binary not found", http.StatusNotFound)
+				s.jsonError(w, http.StatusNotFound, "Binary not found")
 				return
 			}
 			s.logger.Error("Failed to get binary", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 		s.jsonResponse(w, binary)
@@ -223,7 +223,7 @@ func (s *MasterServer) handleAgentBinary(w http.ResponseWriter, r *http.Request)
 	case http.MethodDelete:
 		// Admin-only: deleting binaries
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -231,11 +231,11 @@ func (s *MasterServer) handleAgentBinary(w http.ResponseWriter, r *http.Request)
 		binary, err := s.store.GetAgentBinary(ctx, id)
 		if err != nil {
 			if services.IsNotFound(err) {
-				http.Error(w, "Binary not found", http.StatusNotFound)
+				s.jsonError(w, http.StatusNotFound, "Binary not found")
 				return
 			}
 			s.logger.Error("Failed to get binary", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
@@ -249,7 +249,7 @@ func (s *MasterServer) handleAgentBinary(w http.ResponseWriter, r *http.Request)
 		// Delete database record
 		if err := s.store.DeleteAgentBinary(ctx, id); err != nil {
 			s.logger.Error("Failed to delete binary record", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
@@ -259,14 +259,14 @@ func (s *MasterServer) handleAgentBinary(w http.ResponseWriter, r *http.Request)
 		s.jsonResponse(w, map[string]string{"status": "deleted"})
 
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
 }
 
 // handleAgentBinaryDownload handles GET /api/v1/binaries/{id}/download
 func (s *MasterServer) handleAgentBinaryDownload(w http.ResponseWriter, r *http.Request, id int64) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
@@ -275,18 +275,18 @@ func (s *MasterServer) handleAgentBinaryDownload(w http.ResponseWriter, r *http.
 
 	// Read access is sufficient for download
 	if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-		http.Error(w, msg, status)
+		s.jsonError(w, status, msg)
 		return
 	}
 
 	binary, err := s.store.GetAgentBinary(ctx, id)
 	if err != nil {
 		if services.IsNotFound(err) {
-			http.Error(w, "Binary not found", http.StatusNotFound)
+			s.jsonError(w, http.StatusNotFound, "Binary not found")
 			return
 		}
 		s.logger.Error("Failed to get binary", zap.Error(err))
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -294,7 +294,7 @@ func (s *MasterServer) handleAgentBinaryDownload(w http.ResponseWriter, r *http.
 	file, err := os.Open(binary.Path)
 	if err != nil {
 		s.logger.Error("Failed to open binary file", zap.Error(err))
-		http.Error(w, "Binary file not found", http.StatusNotFound)
+		s.jsonError(w, http.StatusNotFound, "Binary file not found")
 		return
 	}
 	defer file.Close()
@@ -312,7 +312,7 @@ func (s *MasterServer) handleAgentBinaryDownload(w http.ResponseWriter, r *http.
 // handleSetCurrentBinary handles POST /api/v1/binaries/{id}/current
 func (s *MasterServer) handleSetCurrentBinary(w http.ResponseWriter, r *http.Request, id int64) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
@@ -321,7 +321,7 @@ func (s *MasterServer) handleSetCurrentBinary(w http.ResponseWriter, r *http.Req
 
 	// Admin-only
 	if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-		http.Error(w, msg, status)
+		s.jsonError(w, status, msg)
 		return
 	}
 
@@ -329,18 +329,18 @@ func (s *MasterServer) handleSetCurrentBinary(w http.ResponseWriter, r *http.Req
 	binary, err := s.store.GetAgentBinary(ctx, id)
 	if err != nil {
 		if services.IsNotFound(err) {
-			http.Error(w, "Binary not found", http.StatusNotFound)
+			s.jsonError(w, http.StatusNotFound, "Binary not found")
 			return
 		}
 		s.logger.Error("Failed to get binary", zap.Error(err))
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
 	// Set as current
 	if err := s.store.SetCurrentAgentBinary(ctx, id); err != nil {
 		s.logger.Error("Failed to set current binary", zap.Error(err))
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -353,7 +353,7 @@ func (s *MasterServer) handleSetCurrentBinary(w http.ResponseWriter, r *http.Req
 // handleAgentBinaryLatest handles GET /api/v1/binaries/latest?os=xxx&arch=xxx
 func (s *MasterServer) handleAgentBinaryLatest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
@@ -362,7 +362,7 @@ func (s *MasterServer) handleAgentBinaryLatest(w http.ResponseWriter, r *http.Re
 
 	// Read access for checking latest version
 	if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-		http.Error(w, msg, status)
+		s.jsonError(w, status, msg)
 		return
 	}
 
@@ -370,18 +370,18 @@ func (s *MasterServer) handleAgentBinaryLatest(w http.ResponseWriter, r *http.Re
 	arch := r.URL.Query().Get("arch")
 
 	if osType == "" || arch == "" {
-		http.Error(w, "os and arch query parameters are required", http.StatusBadRequest)
+		s.jsonError(w, http.StatusBadRequest, "os and arch query parameters are required")
 		return
 	}
 
 	binary, err := s.store.GetCurrentAgentBinary(ctx, osType, arch)
 	if err != nil {
 		if services.IsNotFound(err) {
-			http.Error(w, "No current binary found for this platform", http.StatusNotFound)
+			s.jsonError(w, http.StatusNotFound, "No current binary found for this platform")
 			return
 		}
 		s.logger.Error("Failed to get current binary", zap.Error(err))
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -399,18 +399,18 @@ func (s *MasterServer) handleAgentUpdateConfig(w http.ResponseWriter, r *http.Re
 	case http.MethodGet:
 		// Read access
 		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
 		agent, err := s.agentService.GetByID(ctx, agentID)
 		if err != nil {
 			s.logger.Error("Failed to get agent", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 		if agent == nil {
-			http.Error(w, "Agent not found", http.StatusNotFound)
+			s.jsonError(w, http.StatusNotFound, "Agent not found")
 			return
 		}
 
@@ -427,7 +427,7 @@ func (s *MasterServer) handleAgentUpdateConfig(w http.ResponseWriter, r *http.Re
 	case http.MethodPut:
 		// Write access
 		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -438,7 +438,7 @@ func (s *MasterServer) handleAgentUpdateConfig(w http.ResponseWriter, r *http.Re
 		}
 
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
-			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
 			return
 		}
 
@@ -448,7 +448,7 @@ func (s *MasterServer) handleAgentUpdateConfig(w http.ResponseWriter, r *http.Re
 			case storage.AgentUpdatePolicyImmediate, storage.AgentUpdatePolicyScheduled, storage.AgentUpdatePolicyManual:
 				// Valid
 			default:
-				http.Error(w, "Invalid updatePolicy. Must be 'immediate', 'scheduled', or 'manual'", http.StatusBadRequest)
+				s.jsonError(w, http.StatusBadRequest, "Invalid updatePolicy. Must be 'immediate', 'scheduled', or 'manual'")
 				return
 			}
 		}
@@ -456,13 +456,13 @@ func (s *MasterServer) handleAgentUpdateConfig(w http.ResponseWriter, r *http.Re
 		// Validate time windows if policy is scheduled
 		if req.UpdatePolicy == storage.AgentUpdatePolicyScheduled {
 			if req.UpdateWindowStart == "" || req.UpdateWindowEnd == "" {
-				http.Error(w, "update_window_start and update_window_end are required for scheduled policy", http.StatusBadRequest)
+				s.jsonError(w, http.StatusBadRequest, "update_window_start and update_window_end are required for scheduled policy")
 				return
 			}
 			// Simple HH:MM validation
 			for _, t := range []string{req.UpdateWindowStart, req.UpdateWindowEnd} {
 				if len(t) != 5 || t[2] != ':' {
-					http.Error(w, "Time windows must be in HH:MM format", http.StatusBadRequest)
+					s.jsonError(w, http.StatusBadRequest, "Time windows must be in HH:MM format")
 					return
 				}
 			}
@@ -470,7 +470,7 @@ func (s *MasterServer) handleAgentUpdateConfig(w http.ResponseWriter, r *http.Re
 
 		if err := s.store.UpdateAgentUpdatePolicy(ctx, agentID, req.UpdatePolicy, req.UpdateWindowStart, req.UpdateWindowEnd); err != nil {
 			s.logger.Error("Failed to update agent update policy", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
@@ -479,14 +479,14 @@ func (s *MasterServer) handleAgentUpdateConfig(w http.ResponseWriter, r *http.Re
 		s.jsonResponse(w, map[string]string{"status": "updated"})
 
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
 }
 
 // handleAgentUpdateHistory handles GET /api/v1/agents/{id}/update-history
 func (s *MasterServer) handleAgentUpdateHistory(w http.ResponseWriter, r *http.Request, agentID string) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
@@ -495,7 +495,7 @@ func (s *MasterServer) handleAgentUpdateHistory(w http.ResponseWriter, r *http.R
 
 	// Read access
 	if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-		http.Error(w, msg, status)
+		s.jsonError(w, status, msg)
 		return
 	}
 
@@ -505,7 +505,7 @@ func (s *MasterServer) handleAgentUpdateHistory(w http.ResponseWriter, r *http.R
 	history, total, err := s.store.ListAgentUpdateHistory(ctx, agentID, p.Limit, p.Offset)
 	if err != nil {
 		s.logger.Error("Failed to get agent update history", zap.Error(err))
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -520,7 +520,7 @@ func (s *MasterServer) handleAgentUpdateHistory(w http.ResponseWriter, r *http.R
 // handleTriggerAgentUpdate handles POST /api/v1/agents/{id}/update
 func (s *MasterServer) handleTriggerAgentUpdate(w http.ResponseWriter, r *http.Request, agentID string) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
@@ -529,7 +529,7 @@ func (s *MasterServer) handleTriggerAgentUpdate(w http.ResponseWriter, r *http.R
 
 	// Admin-only: triggering updates
 	if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-		http.Error(w, msg, status)
+		s.jsonError(w, status, msg)
 		return
 	}
 
@@ -547,21 +547,21 @@ func (s *MasterServer) handleTriggerAgentUpdate(w http.ResponseWriter, r *http.R
 	agent, err := s.agentService.GetByID(ctx, agentID)
 	if err != nil {
 		if services.IsNotFound(err) {
-			http.Error(w, "Agent not found", http.StatusNotFound)
+			s.jsonError(w, http.StatusNotFound, "Agent not found")
 			return
 		}
 		s.logger.Error("Failed to get agent", zap.Error(err))
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 	if agent == nil {
-		http.Error(w, "Agent not found", http.StatusNotFound)
+		s.jsonError(w, http.StatusNotFound, "Agent not found")
 		return
 	}
 
 	// Check agent has OS/arch info
 	if agent.OS == "" || agent.Arch == "" {
-		http.Error(w, "Agent has not reported its OS/arch yet", http.StatusBadRequest)
+		s.jsonError(w, http.StatusBadRequest, "Agent has not reported its OS/arch yet")
 		return
 	}
 
@@ -569,11 +569,11 @@ func (s *MasterServer) handleTriggerAgentUpdate(w http.ResponseWriter, r *http.R
 	binary, err := s.store.GetCurrentAgentBinary(ctx, agent.OS, agent.Arch)
 	if err != nil {
 		if services.IsNotFound(err) {
-			http.Error(w, "No current binary available for agent's platform", http.StatusNotFound)
+			s.jsonError(w, http.StatusNotFound, "No current binary available for agent's platform")
 			return
 		}
 		s.logger.Error("Failed to get current binary", zap.Error(err))
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -648,7 +648,7 @@ func (s *MasterServer) handleTriggerAgentUpdate(w http.ResponseWriter, r *http.R
 // handleAgentsNeedingUpdate handles GET /api/v1/agents/updates/pending
 func (s *MasterServer) handleAgentsNeedingUpdate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
@@ -657,14 +657,14 @@ func (s *MasterServer) handleAgentsNeedingUpdate(w http.ResponseWriter, r *http.
 
 	// Read access
 	if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-		http.Error(w, msg, status)
+		s.jsonError(w, status, msg)
 		return
 	}
 
 	agents, err := s.store.ListAgentsNeedingUpdate(ctx)
 	if err != nil {
 		s.logger.Error("Failed to list agents needing update", zap.Error(err))
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -692,7 +692,7 @@ func (s *MasterServer) handleAgentsNeedingUpdate(w http.ResponseWriter, r *http.
 // handleAllAgentUpdateHistory handles GET /api/v1/agents/updates/history
 func (s *MasterServer) handleAllAgentUpdateHistory(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
@@ -701,7 +701,7 @@ func (s *MasterServer) handleAllAgentUpdateHistory(w http.ResponseWriter, r *htt
 
 	// Read access
 	if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-		http.Error(w, msg, status)
+		s.jsonError(w, status, msg)
 		return
 	}
 
@@ -711,7 +711,7 @@ func (s *MasterServer) handleAllAgentUpdateHistory(w http.ResponseWriter, r *htt
 	history, total, err := s.store.ListAllAgentUpdateHistory(ctx, p.Limit, p.Offset)
 	if err != nil {
 		s.logger.Error("Failed to get all agent update history", zap.Error(err))
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 

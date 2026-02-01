@@ -204,16 +204,6 @@ func (v *CommandValidator) ValidateHooks(hooks []string) error {
 	return nil
 }
 
-// MustValidate panics if the command is not valid.
-// Deprecated: Use Validate() instead and handle errors properly.
-// This function should ONLY be used in tests where panics are expected.
-// Using this in production code WILL cause application crashes.
-func (v *CommandValidator) MustValidate(cmd string) {
-	if err := v.Validate(cmd); err != nil {
-		panic(fmt.Sprintf("command validation failed: %v", err))
-	}
-}
-
 // extractBinary extracts the binary name from a command string.
 // Handles prefixes like "cd /path &&" and environment variables.
 func extractBinary(cmd string) string {

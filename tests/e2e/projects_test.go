@@ -276,8 +276,8 @@ func TestProjectDeployments(t *testing.T) {
 		defer resp.Body.Close()
 
 		// Deployment may fail due to no agents (4xx) but should not have server errors (5xx)
-		// NoServerError is appropriate here since we're testing the endpoint works, not the deployment itself
-		ctx.Assertions.NoServerError(resp)
+		// StatusOneOf is more specific - we expect either 200/202 (success) or 400/404 (no agents/project)
+		ctx.Assertions.StatusOneOf(resp, 200, 202, 400, 404)
 	})
 
 	t.Cleanup(func() {
