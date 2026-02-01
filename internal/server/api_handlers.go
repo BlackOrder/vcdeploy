@@ -839,7 +839,7 @@ func (s *MasterServer) handleProjectWebhooks(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	s.handleProjectWebhooksInternal(w, r, ctx, project)
+	s.handleProjectWebhooksInternal(ctx, w, r, project)
 }
 
 // handleProjectWebhooksByID handles webhook configuration for a project by ID.
@@ -853,11 +853,11 @@ func (s *MasterServer) handleProjectWebhooksByID(w http.ResponseWriter, r *http.
 		return
 	}
 
-	s.handleProjectWebhooksInternal(w, r, ctx, project)
+	s.handleProjectWebhooksInternal(ctx, w, r, project)
 }
 
 // handleProjectWebhooksInternal is the shared implementation for webhook handling.
-func (s *MasterServer) handleProjectWebhooksInternal(w http.ResponseWriter, r *http.Request, ctx context.Context, project *storage.Project) {
+func (s *MasterServer) handleProjectWebhooksInternal(ctx context.Context, w http.ResponseWriter, r *http.Request, project *storage.Project) {
 	switch r.Method {
 	case http.MethodGet:
 		// Read access: viewer role + read scope
@@ -939,7 +939,7 @@ func (s *MasterServer) handleProjectDeploy(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	s.handleProjectDeployInternal(w, r, ctx, project)
+	s.handleProjectDeployInternal(ctx, w, r, project)
 }
 
 // handleProjectDeployByID triggers a deployment for a project by ID.
@@ -958,11 +958,11 @@ func (s *MasterServer) handleProjectDeployByID(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	s.handleProjectDeployInternal(w, r, ctx, project)
+	s.handleProjectDeployInternal(ctx, w, r, project)
 }
 
 // handleProjectDeployInternal is the shared implementation for deployment triggering.
-func (s *MasterServer) handleProjectDeployInternal(w http.ResponseWriter, r *http.Request, ctx context.Context, project *storage.Project) {
+func (s *MasterServer) handleProjectDeployInternal(ctx context.Context, w http.ResponseWriter, r *http.Request, project *storage.Project) {
 	var req struct {
 		Branch      string `json:"branch"`
 		Target      string `json:"target"`
@@ -1872,7 +1872,7 @@ func (s *MasterServer) handleAPIKey(w http.ResponseWriter, r *http.Request) {
 func (s *MasterServer) jsonError(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-// H14 FIX: Use the ErrorResponse type instead of inline map
+	// H14 FIX: Use the ErrorResponse type instead of inline map
 	if err := json.NewEncoder(w).Encode(ErrorResponse{
 		Error:   true,
 		Message: message,
