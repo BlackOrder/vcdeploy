@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 // --- Project tests ---
@@ -159,6 +160,53 @@ func TestMemoryStore_DeleteProject_CascadesSecrets(t *testing.T) {
 	_, err := s.GetSecret(ctx, "withsecret", "env", "API_KEY")
 	if err != ErrNotFound {
 		t.Error("Secret still exists after project delete")
+	}
+}
+
+func TestMemoryStore_DeleteProject_CascadesDeployments(t *testing.T) {
+	s := NewMemoryStore(nil)
+	defer s.Close()
+	ctx := context.Background()
+
+	s.CreateProject(&Project{Name: "withdeployment"})
+
+	// Create a deployment for this project
+	dep := &DeploymentRecord{
+		ID:      "dep-123",
+		Project: "withdeployment",
+		Status:  "completed",
+	}
+	s.CreateDeployment(ctx, dep)
+
+	// Add a deployment log
+	s.CreateDeploymentLog(ctx, &DeploymentLog{
+		ID:           1,
+		DeploymentID: "dep-123",
+		Message:      "Build started",
+	})
+
+	// Create scheduled deployment
+	s.CreateScheduledDeployment(ctx, "sched-123", "withdeployment", "production", "main", time.Now().Add(time.Hour), "user@test.com")
+
+	// Delete project should cascade
+	s.DeleteProject("withdeployment")
+
+	// Verify deployment is deleted
+	_, err := s.GetDeployment(ctx, "dep-123")
+	if err != ErrNotFound {
+		t.Error("Deployment still exists after project delete")
+	}
+
+	// Verify deployment logs are deleted
+	logs, _ := s.ListDeploymentLogs(ctx, "dep-123")
+	if len(logs) != 0 {
+		t.Error("Deployment logs still exist after project delete")
+	}
+
+	// Verify scheduled deployment is deleted (would error if we try to cancel it)
+	err = s.CancelScheduledDeployment(ctx, "sched-123")
+	if err != ErrNotFound {
+		t.Error("Scheduled deployment still exists after project delete")
 	}
 }
 
