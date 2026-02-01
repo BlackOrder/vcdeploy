@@ -75,7 +75,7 @@ func TestUsersAPI(t *testing.T) {
 			return
 		}
 
-		ctx.Assertions.StatusCreatedOrOK(resp)
+		ctx.Assertions.StatusCreated(resp)
 
 		var result map[string]interface{}
 		if err := testutil.DecodeJSON(resp, &result); err != nil {

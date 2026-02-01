@@ -57,7 +57,7 @@ func TestSecretsAPI(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		ctx.Assertions.StatusCreatedOrOK(resp)
+		ctx.Assertions.StatusCreated(resp)
 
 		var result map[string]interface{}
 		if err := testutil.DecodeJSON(resp, &result); err != nil {
@@ -82,7 +82,7 @@ func TestSecretsAPI(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		ctx.Assertions.StatusCreatedOrOK(resp)
+		ctx.Assertions.StatusCreated(resp)
 	})
 
 	t.Run("get secret metadata", func(t *testing.T) {
@@ -226,7 +226,7 @@ func TestSecretsProjectScope(t *testing.T) {
 			t.Fatalf("request failed: %v", err)
 		}
 		resp1.Body.Close()
-		ctx.Assertions.StatusCreatedOrOK(resp1)
+		ctx.Assertions.StatusCreated(resp1)
 
 		// Create same key in project 2 - should succeed
 		secret2 := map[string]interface{}{
@@ -240,7 +240,7 @@ func TestSecretsProjectScope(t *testing.T) {
 			t.Fatalf("request failed: %v", err)
 		}
 		resp2.Body.Close()
-		ctx.Assertions.StatusCreatedOrOK(resp2)
+		ctx.Assertions.StatusCreated(resp2)
 	})
 
 	t.Cleanup(func() {

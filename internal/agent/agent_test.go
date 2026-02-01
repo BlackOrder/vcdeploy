@@ -16,6 +16,15 @@ import (
 	"go.uber.org/zap"
 )
 
+// newShellTestRunner creates a runner with validation disabled for tests
+// that need shell features like redirects (>&2), pipes (|), or command chaining (&&).
+// Use sparingly - most tests should use standard runner with validation enabled.
+func newShellTestRunner() *LocalRunner {
+	runner := NewLocalRunner(zap.NewNop())
+	runner.SkipValidation = true
+	return runner
+}
+
 func TestNewLocalRunner(t *testing.T) {
 	t.Parallel()
 
@@ -24,7 +33,6 @@ func TestNewLocalRunner(t *testing.T) {
 	if runner == nil {
 		t.Fatal("NewLocalRunner() returned nil")
 	}
-	runner.SkipValidation = true
 
 	if runner.logger == nil {
 		t.Error("NewLocalRunner() did not set logger")
@@ -36,7 +44,6 @@ func TestLocalRunnerRunSimple(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 	ctx := context.Background()
 
 	result, err := runner.Run(ctx, "echo hello", deploy.RunOptions{})
@@ -58,7 +65,6 @@ func TestLocalRunnerRunExitError(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 	ctx := context.Background()
 
 	result, err := runner.Run(ctx, "exit 42", deploy.RunOptions{})
@@ -76,7 +82,6 @@ func TestLocalRunnerRunWithEnv(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 	ctx := context.Background()
 
 	opts := deploy.RunOptions{
@@ -98,7 +103,6 @@ func TestLocalRunnerRunWithWorkDir(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 	ctx := context.Background()
 
 	tmpDir := t.TempDir()
@@ -121,7 +125,6 @@ func TestLocalRunnerRunWithTimeout(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 	ctx := context.Background()
 
 	opts := deploy.RunOptions{
@@ -143,7 +146,6 @@ func TestLocalRunnerRunWithOutput(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 	ctx := context.Background()
 
 	var stdout, stderr bytes.Buffer
@@ -163,7 +165,6 @@ func TestLocalRunnerRunWithOutputError(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 	ctx := context.Background()
 
 	var stdout, stderr bytes.Buffer
@@ -179,7 +180,6 @@ func TestLocalRunnerBuildCommand(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 
 	got := runner.buildCommand("echo hello", deploy.RunOptions{})
 	if got != "echo hello" {
@@ -197,7 +197,6 @@ func TestLocalRunnerBuildEnv(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 
 	env := map[string]string{
 		"VAR1": "value1",
@@ -228,7 +227,6 @@ func TestLocalRunnerImplementsInterface(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 
 	var _ deploy.CommandRunner = runner
 }
@@ -454,7 +452,6 @@ func TestLocalRunnerRunContextCancellation(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
@@ -472,7 +469,6 @@ func TestLocalRunnerRunWithMultipleEnvVars(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 	ctx := context.Background()
 
 	opts := deploy.RunOptions{
@@ -496,9 +492,8 @@ func TestLocalRunnerRunWithMultipleEnvVars(t *testing.T) {
 func TestLocalRunnerStderr(t *testing.T) {
 	t.Parallel()
 
-	logger := zap.NewNop()
-	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
+	// Uses shell redirect (>&2) which is blocked by security policy
+	runner := newShellTestRunner()
 	ctx := context.Background()
 
 	result, err := runner.Run(ctx, "echo error >&2", deploy.RunOptions{})
@@ -517,7 +512,6 @@ func TestLocalRunnerCommandDuration(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 	ctx := context.Background()
 
 	result, err := runner.Run(ctx, "sleep 0.1", deploy.RunOptions{})
@@ -533,7 +527,6 @@ func TestLocalRunnerCommandDuration(t *testing.T) {
 func BenchmarkLocalRunnerSimpleCommand(b *testing.B) {
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 	ctx := context.Background()
 
 	b.ResetTimer()
@@ -648,7 +641,6 @@ func TestLocalRunnerSetUserGroupRoot(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 
 	// We can't actually run as root in tests, but we can test the lookup logic
 	cmd := exec.Command("true")
@@ -681,7 +673,6 @@ func TestLocalRunnerSetUserGroupNumeric(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 
 	cmd := exec.Command("true")
 	err := runner.setUserGroup(cmd, "1000", "1000")
@@ -705,7 +696,6 @@ func TestLocalRunnerSetUserGroupFailClosed(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 
 	cmd := exec.Command("true")
 	err := runner.setUserGroup(cmd, "nonexistent_user_12345", "")
@@ -721,7 +711,6 @@ func TestLocalRunnerSetUserGroupFailOpen(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 	runner.FailOpenOnUserLookup = true
 
 	cmd := exec.Command("true")
@@ -743,7 +732,6 @@ func TestLocalRunnerSetUserGroupWithPrimaryGroup(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 
 	cmd := exec.Command("true")
 	// Use root with empty group to trigger primary group lookup
@@ -774,7 +762,6 @@ func TestLocalRunnerRunWithUser(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 	ctx := context.Background()
 
 	opts := deploy.RunOptions{
@@ -796,9 +783,8 @@ func TestLocalRunnerRunWithUser(t *testing.T) {
 func TestLocalRunnerRunWithOutputStreaming(t *testing.T) {
 	t.Parallel()
 
-	logger := zap.NewNop()
-	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
+	// Uses shell chaining (&&) and redirect (>&2) which are blocked by security policy
+	runner := newShellTestRunner()
 	ctx := context.Background()
 
 	var stdout, stderr bytes.Buffer
@@ -823,7 +809,6 @@ func TestLocalRunnerRunWithOutputTimeout(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 	ctx := context.Background()
 
 	var stdout, stderr bytes.Buffer
@@ -842,9 +827,8 @@ func TestLocalRunnerRunWithOutputTimeout(t *testing.T) {
 func TestLocalRunnerRunInvalidCommand(t *testing.T) {
 	t.Parallel()
 
-	logger := zap.NewNop()
-	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
+	// Use shell runner to test actual command execution (validation would block unknown commands)
+	runner := newShellTestRunner()
 	ctx := context.Background()
 
 	// Command that doesn't exist
@@ -863,9 +847,8 @@ func TestLocalRunnerRunInvalidCommand(t *testing.T) {
 func TestLocalRunnerRunWithOutputInvalidCommand(t *testing.T) {
 	t.Parallel()
 
-	logger := zap.NewNop()
-	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
+	// Use shell runner to test actual command execution (validation would block unknown commands)
+	runner := newShellTestRunner()
 	ctx := context.Background()
 
 	var stdout, stderr bytes.Buffer
@@ -1809,7 +1792,6 @@ func TestLocalRunnerRunWithUserFailOpen(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 	runner.FailOpenOnUserLookup = true
 
 	ctx := context.Background()
@@ -1834,7 +1816,6 @@ func TestLocalRunnerRunWithOutputWithUserFailOpen(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 	runner.FailOpenOnUserLookup = true
 
 	ctx := context.Background()
@@ -1861,7 +1842,6 @@ func TestLocalRunnerRunWithUserFailClosed(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 	// FailOpenOnUserLookup is false by default
 
 	ctx := context.Background()
@@ -1882,7 +1862,6 @@ func TestLocalRunnerRunWithOutputWithUserFailClosed(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 	// FailOpenOnUserLookup is false by default
 
 	ctx := context.Background()
@@ -1905,7 +1884,6 @@ func TestLocalRunnerSetUserGroupFailOpenGroup(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 	runner.FailOpenOnUserLookup = true
 
 	cmd := exec.Command("true")
@@ -1923,7 +1901,6 @@ func TestLocalRunnerSetUserGroupFailOpenPrimaryGroup(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 	runner.FailOpenOnUserLookup = true
 
 	cmd := exec.Command("true")
@@ -1998,7 +1975,6 @@ func TestLocalRunnerBuildCommandSubSecondTimeout(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 
 	cmd := runner.buildCommand("echo test", deploy.RunOptions{
 		Timeout: 500 * time.Millisecond, // 0 seconds when converted to int
@@ -2016,7 +1992,6 @@ func TestLocalRunnerRunWithOutputWithEnv(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 	ctx := context.Background()
 
 	var stdout, stderr bytes.Buffer
@@ -2042,7 +2017,6 @@ func TestLocalRunnerRunWithOutputWithWorkDir(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 	ctx := context.Background()
 
 	var stdout, stderr bytes.Buffer
@@ -2227,7 +2201,6 @@ func TestBuildEnvPreservesSystemEnv(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 
 	env := map[string]string{
 		"CUSTOM_VAR": "custom_value",
@@ -2255,7 +2228,6 @@ func TestLocalRunnerBuildEnvEmpty(t *testing.T) {
 
 	logger := zap.NewNop()
 	runner := NewLocalRunner(logger)
-	runner.SkipValidation = true
 
 	result := runner.buildEnv(map[string]string{})
 

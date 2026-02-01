@@ -1360,6 +1360,42 @@ func TestHandleProjectDeploy_Success(t *testing.T) {
 	}
 }
 
+func TestHandleProjectDeploy_InvalidTarget(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	// Create a project first
+	project := &storage.Project{
+		Name:       "deploy-target-project",
+		Repository: "https://github.com/test/repo",
+		Branch:     "main",
+		DeployPath: "/var/www/test",
+		Type:       "static",
+	}
+	_ = server.store.CreateProject(project)
+
+	// Try to deploy to a non-existent agent target
+	body := strings.NewReader(`{"branch":"main","target":"non-existent-agent"}`)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/v1/projects/deploy-target-project/deploy", body)
+	req.Header.Set("X-API-Key", apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	req = requestWithUserContext(req, userID)
+	server.handleProjectDeploy(w, req, "deploy-target-project")
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d for invalid target, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
+	}
+
+	// Verify the error message mentions the target
+	if !strings.Contains(w.Body.String(), "non-existent-agent") {
+		t.Errorf("expected error message to contain target name, got: %s", w.Body.String())
+	}
+}
+
 func TestHandleProjectDeploy_NotFound(t *testing.T) {
 	t.Parallel()
 

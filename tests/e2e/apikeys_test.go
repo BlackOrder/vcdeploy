@@ -42,7 +42,7 @@ func TestAPIKeysAPI(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		ctx.Assertions.StatusCreatedOrOK(resp)
+		ctx.Assertions.StatusCreated(resp)
 
 		var result map[string]interface{}
 		if err := testutil.DecodeJSON(resp, &result); err != nil {
