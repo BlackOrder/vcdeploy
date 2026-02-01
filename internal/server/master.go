@@ -286,7 +286,10 @@ func (a *webhookSecretStoreAdapter) IsSecretRequired(projectID string) bool {
 
 // NewMasterServer creates a new master server instance.
 func NewMasterServer(cfg *config.MasterConfig, store storage.Store, logger *zap.Logger) (*MasterServer, error) {
-	sysCfg := config.MustGetSystemConfig()
+	sysCfg, err := config.GetSystemConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load system config: %w", err)
+	}
 	s := &MasterServer{
 		config:       cfg,
 		store:        store,
@@ -621,7 +624,10 @@ func (s *MasterServer) Start(ctx context.Context) error {
 func (s *MasterServer) startHTTP() error {
 	mux := http.NewServeMux()
 
-	sysCfg := config.MustGetSystemConfig()
+	sysCfg, err := config.GetSystemConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load system config: %w", err)
+	}
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir(sysCfg.StaticDir()))))
 
 	// Health check
@@ -1119,7 +1125,11 @@ func generateRequestID() string {
 	// Format: timestamp_random (e.g., "1706529600123456_a1b2c3d4")
 	timestamp := time.Now().UnixMicro()
 	random := make([]byte, 4)
-	_, _ = rand.Read(random)
+	if _, err := rand.Read(random); err != nil {
+		// C3 FIX: Fallback to timestamp-only ID if crypto/rand fails
+		// This is extremely unlikely but we must handle it to avoid predictable IDs
+		return fmt.Sprintf("%d_%d", timestamp, time.Now().UnixNano()%100000000)
+	}
 	return fmt.Sprintf("%d_%x", timestamp, random)
 }
 
