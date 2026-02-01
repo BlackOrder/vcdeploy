@@ -678,6 +678,133 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/v1/api-keys:
+    get:
+      tags: [Auth]
+      summary: List API keys
+      description: Returns a list of API keys for the authenticated user.
+      operationId: listAPIKeys
+      responses:
+        '200':
+          description: List of API keys
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/APIKey'
+    post:
+      tags: [Auth]
+      summary: Create API key
+      description: Create a new API key.
+      operationId: createAPIKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/APIKeyCreate'
+      responses:
+        '201':
+          description: API key created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIKeyWithSecret'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/api-keys/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+        description: API key ID
+    get:
+      tags: [Auth]
+      summary: Get API key
+      description: Get details of a specific API key.
+      operationId: getAPIKey
+      responses:
+        '200':
+          description: API key details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIKey'
+        '404':
+          description: API key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Auth]
+      summary: Revoke API key
+      description: Revoke (delete) an API key.
+      operationId: revokeAPIKey
+      responses:
+        '204':
+          description: API key revoked
+        '404':
+          description: API key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/project-types:
+    get:
+      tags: [Projects]
+      summary: List project types
+      description: Returns a list of available project types.
+      operationId: listProjectTypes
+      responses:
+        '200':
+          description: List of project types
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProjectType'
+    post:
+      tags: [Projects]
+      summary: Create project type
+      description: Create a new project type (admin only).
+      operationId: createProjectType
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectTypeCreate'
+      responses:
+        '201':
+          description: Project type created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectType'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -737,7 +864,7 @@ components:
         role:
           type: string
           enum: [admin, user, viewer]
-        created_at:
+        createdAt:
           type: string
           format: date-time
 
@@ -757,7 +884,7 @@ components:
           type: string
           enum: [admin, user, viewer]
           default: user
-        totp_enabled:
+        totpEnabled:
           type: boolean
           default: false
           description: Enable TOTP 2FA for this user
@@ -774,41 +901,41 @@ components:
           type: string
         description:
           type: string
-        repo_url:
+        repository:
           type: string
         branch:
           type: string
-        deploy_path:
+        deployPath:
           type: string
-        project_type_id:
+        projectTypeId:
           type: string
         agents:
           type: array
           items:
             type: string
-        created_at:
+        createdAt:
           type: string
           format: date-time
-        updated_at:
+        updatedAt:
           type: string
           format: date-time
 
     ProjectCreate:
       type: object
-      required: [name, repo_url]
+      required: [name, repository]
       properties:
         name:
           type: string
         description:
           type: string
-        repo_url:
+        repository:
           type: string
         branch:
           type: string
           default: main
-        deploy_path:
+        deployPath:
           type: string
-        project_type_id:
+        projectTypeId:
           type: string
         agents:
           type: array
@@ -822,13 +949,13 @@ components:
           type: string
         description:
           type: string
-        repo_url:
+        repository:
           type: string
         branch:
           type: string
-        deploy_path:
+        deployPath:
           type: string
-        project_type_id:
+        projectTypeId:
           type: string
         agents:
           type: array
@@ -840,9 +967,9 @@ components:
       properties:
         id:
           type: string
-        project_id:
+        projectId:
           type: string
-        project_name:
+        projectName:
           type: string
         status:
           type: string
@@ -851,22 +978,22 @@ components:
           type: string
         commit:
           type: string
-        triggered_by:
+        triggeredBy:
           type: string
-        started_at:
-          type: string
-          format: date-time
-        finished_at:
+        startedAt:
           type: string
           format: date-time
-        error_message:
+        finishedAt:
+          type: string
+          format: date-time
+        errorMessage:
           type: string
 
     DeploymentCreate:
       type: object
-      required: [project_id]
+      required: [projectId]
       properties:
-        project_id:
+        projectId:
           type: string
         version:
           type: string
@@ -881,7 +1008,7 @@ components:
       properties:
         id:
           type: integer
-        deployment_id:
+        deploymentId:
           type: string
         timestamp:
           type: string
@@ -910,10 +1037,10 @@ components:
           type: string
         arch:
           type: string
-        last_seen_at:
+        lastSeenAt:
           type: string
           format: date-time
-        registered_at:
+        registeredAt:
           type: string
           format: date-time
         labels:
@@ -923,11 +1050,11 @@ components:
         stats:
           type: object
           properties:
-            cpu_percent:
+            cpuPercent:
               type: number
-            memory_percent:
+            memoryPercent:
               type: number
-            disk_percent:
+            diskPercent:
               type: number
 
     Secret:
@@ -940,10 +1067,10 @@ components:
         scope:
           type: string
           enum: [global, project, environment]
-        created_at:
+        createdAt:
           type: string
           format: date-time
-        updated_at:
+        updatedAt:
           type: string
           format: date-time
 
@@ -962,6 +1089,93 @@ components:
           type: string
           enum: [global, project, environment]
           default: global
+
+    APIKey:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        prefix:
+          type: string
+          description: First characters of the key for identification
+        scopes:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: string
+          format: date-time
+
+    APIKeyCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+          default: ["*"]
+        expiresInDays:
+          type: integer
+          description: Number of days until expiry (0 = never)
+          default: 0
+
+    APIKeyWithSecret:
+      allOf:
+        - $ref: '#/components/schemas/APIKey'
+        - type: object
+          properties:
+            key:
+              type: string
+              description: The full API key (only shown once at creation)
+
+    ProjectType:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        buildCommand:
+          type: string
+        deployCommand:
+          type: string
+        healthCheckPath:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    ProjectTypeCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        buildCommand:
+          type: string
+        deployCommand:
+          type: string
+        healthCheckPath:
+          type: string
 
 security:
   - bearerAuth: []
