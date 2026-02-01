@@ -275,8 +275,20 @@ POST /api/v1/users
   "username": "newuser",
   "email": "user@example.com",
   "password": "secure-password",
-  "role": "user"
+  "role": "user",
+  "totp_enabled": false,
+  "totp_secret": ""
 }
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `username` | string | Yes | Unique username |
+| `email` | string | No | User's email address |
+| `password` | string | Yes | Password (must meet complexity requirements) |
+| `role` | string | No | One of: `admin`, `user`, `viewer`. Default: `user` |
+| `totp_enabled` | boolean | No | Enable TOTP 2FA for this user. Default: `false` |
+| `totp_secret` | string | No | TOTP secret (required if `totp_enabled` is `true`) |
 ```
 
 ### Get User

@@ -107,9 +107,9 @@ func (db *DB) RunInTransaction(ctx context.Context, fn func(tx *sql.Tx) error) e
 // CreateUser creates a new user.
 func (db *DB) CreateUser(ctx context.Context, user *User) error {
 	result, err := db.conn.ExecContext(ctx, `
-		INSERT INTO users (username, password_hash, email, role, must_change_password)
-		VALUES (?, ?, ?, ?, ?)
-	`, user.Username, user.PasswordHash, user.Email, user.Role, user.MustChangePassword)
+		INSERT INTO users (username, password_hash, email, role, must_change_password, totp_secret, totp_enabled)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, user.Username, user.PasswordHash, user.Email, user.Role, user.MustChangePassword, user.TOTPSecret, user.TOTPEnabled)
 	if err != nil {
 		return fmt.Errorf("inserting user: %w", err)
 	}
