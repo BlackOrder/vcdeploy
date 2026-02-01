@@ -60,8 +60,8 @@ func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
 			Project   string    `json:"project"`
 			Scope     string    `json:"scope"`
 			Key       string    `json:"key"`
-			CreatedAt time.Time `json:"created_at"`
-			UpdatedAt time.Time `json:"updated_at"`
+			CreatedAt time.Time `json:"createdAt"`
+			UpdatedAt time.Time `json:"updatedAt"`
 		}
 
 		result := make([]secretResponse, 0, len(secretsList))

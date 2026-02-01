@@ -725,7 +725,7 @@ func (s *MasterServer) startHTTP() error {
 	mux.HandleFunc("/secrets", s.withUIAuth(s.handleSecretsUI))
 	mux.HandleFunc("/project-types", s.withUIAuth(s.handleProjectTypesUI))
 	mux.HandleFunc("/audit", s.withUIAuth(s.handleAuditUI))
-	mux.HandleFunc("/apikeys", s.withUIAuth(s.handleAPIKeysUI))
+	mux.HandleFunc("/api-keys", s.withUIAuth(s.handleAPIKeysUI))
 	mux.HandleFunc("/settings", s.withUIAuth(s.handleSettingsUI))
 
 	addr := s.config.Server.Listen

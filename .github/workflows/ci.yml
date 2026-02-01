@@ -424,7 +424,7 @@ jobs:
           fi
           
           # Create an API key using the session token
-          APIKEY_RESPONSE=$(curl -s -X POST http://localhost:9000/api/v1/apikeys \
+          APIKEY_RESPONSE=$(curl -s -X POST http://localhost:9000/api/v1/api-keys \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $SESSION_TOKEN" \
             -d '{"name":"e2e-test-key","description":"E2E test API key","scopes":["*"]}')
@@ -510,7 +510,7 @@ jobs:
           fi
           
           # Create an API key using the session token
-          APIKEY_RESPONSE=$(curl -s -X POST http://localhost:9000/api/v1/apikeys \
+          APIKEY_RESPONSE=$(curl -s -X POST http://localhost:9000/api/v1/api-keys \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $SESSION_TOKEN" \
             -d '{"name":"ci-test-key","description":"CI test API key","scopes":["*"]}')
@@ -694,7 +694,7 @@ jobs:
           fi
           
           # Create an API key using the session token
-          APIKEY_RESPONSE=$(curl -s -X POST http://localhost:9000/api/v1/apikeys \
+          APIKEY_RESPONSE=$(curl -s -X POST http://localhost:9000/api/v1/api-keys \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $SESSION_TOKEN" \
             -d '{"name":"full-e2e-test-key","description":"Full E2E test API key","scopes":["*"]}')

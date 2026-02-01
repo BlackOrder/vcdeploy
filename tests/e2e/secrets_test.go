@@ -19,10 +19,10 @@ func TestSecretsAPI(t *testing.T) {
 
 	// Create a test project first for project-scoped secrets
 	project := map[string]interface{}{
-		"name":        "e2e-secrets-test-project",
-		"repository":  "https://github.com/test/repo.git",
-		"branch":      "main",
-		"deploy_path": "/deploy/secrets-test",
+		"name":       "e2e-secrets-test-project",
+		"repository": "https://github.com/test/repo.git",
+		"branch":     "main",
+		"deployPath": "/deploy/secrets-test",
 	}
 
 	resp, err := ctx.Client.Post("/api/v1/projects", project)
@@ -194,10 +194,10 @@ func TestSecretsProjectScope(t *testing.T) {
 	// Create two projects
 	for i := 1; i <= 2; i++ {
 		project := map[string]interface{}{
-			"name":        fmt.Sprintf("e2e-scope-test-project-%d", i),
-			"repository":  "https://github.com/test/repo.git",
-			"branch":      "main",
-			"deploy_path": fmt.Sprintf("/deploy/scope-test-%d", i),
+			"name":       fmt.Sprintf("e2e-scope-test-project-%d", i),
+			"repository": "https://github.com/test/repo.git",
+			"branch":     "main",
+			"deployPath": fmt.Sprintf("/deploy/scope-test-%d", i),
 		}
 		resp, _ := ctx.Client.Post("/api/v1/projects", project)
 		resp.Body.Close()

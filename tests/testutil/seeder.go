@@ -128,7 +128,7 @@ func (s *Seeder) SeedUser(username, email, password, role string) (map[string]in
 		return nil, nil
 	}
 
-	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusCreated {
 		body, _ := ReadBody(resp)
 		return nil, fmt.Errorf("failed to create user %s: status %d: %s", username, resp.StatusCode, body)
 	}
@@ -144,11 +144,11 @@ func (s *Seeder) SeedUser(username, email, password, role string) (map[string]in
 // If the project already exists (409 Conflict), returns nil project without error for idempotency.
 func (s *Seeder) SeedProject(name, repo, branch, deployPath, projectType string) (map[string]interface{}, error) {
 	project := map[string]interface{}{
-		"name":        name,
-		"repository":  repo,
-		"branch":      branch,
-		"deploy_path": deployPath,
-		"type":        projectType,
+		"name":       name,
+		"repository": repo,
+		"branch":     branch,
+		"deployPath": deployPath,
+		"type":       projectType,
 	}
 
 	resp, err := s.client.Post("/api/v1/projects", project)
@@ -162,7 +162,7 @@ func (s *Seeder) SeedProject(name, repo, branch, deployPath, projectType string)
 		return nil, nil
 	}
 
-	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusCreated {
 		body, _ := ReadBody(resp)
 		return nil, fmt.Errorf("failed to create project %s: status %d: %s", name, resp.StatusCode, body)
 	}
@@ -195,7 +195,7 @@ func (s *Seeder) SeedSecret(project, scope, key, value string) (map[string]inter
 		return nil, nil
 	}
 
-	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusCreated {
 		body, _ := ReadBody(resp)
 		return nil, fmt.Errorf("failed to create secret %s: status %d: %s", key, resp.StatusCode, body)
 	}
@@ -226,7 +226,7 @@ func (s *Seeder) SeedAPIKey(name string, permissions []string) (map[string]inter
 		return nil, nil
 	}
 
-	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusCreated {
 		body, _ := ReadBody(resp)
 		return nil, fmt.Errorf("failed to create API key %s: status %d: %s", name, resp.StatusCode, body)
 	}

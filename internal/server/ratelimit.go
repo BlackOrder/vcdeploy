@@ -71,14 +71,14 @@ type tokenBucket struct {
 // RateLimitStatus represents the rate limit status for an IP.
 type RateLimitStatus struct {
 	IP              string    `json:"ip"`
-	TokensRemaining float64   `json:"tokens_remaining"`
-	RequestsPerSec  float64   `json:"requests_per_sec"`
-	BurstSize       int       `json:"burst_size"`
+	TokensRemaining float64   `json:"tokensRemaining"`
+	RequestsPerSec  float64   `json:"requestsPerSec"`
+	BurstSize       int       `json:"burstSize"`
 	Violations      int       `json:"violations"`
-	IsBlocked       bool      `json:"is_blocked"`
-	BlockedUntil    time.Time `json:"blocked_until,omitempty"`
-	IsWhitelisted   bool      `json:"is_whitelisted"`
-	IsBlacklisted   bool      `json:"is_blacklisted"`
+	IsBlocked       bool      `json:"isBlocked"`
+	BlockedUntil    time.Time `json:"blockedUntil,omitempty"`
+	IsWhitelisted   bool      `json:"isWhitelisted"`
+	IsBlacklisted   bool      `json:"isBlacklisted"`
 }
 
 // DefaultRateLimitConfig returns a sensible default configuration.

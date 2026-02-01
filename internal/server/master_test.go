@@ -1372,7 +1372,7 @@ func TestUIAPIKeysPage(t *testing.T) {
 
 	server := newTestServer(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/apikeys", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api-keys", nil)
 	rec := httptest.NewRecorder()
 
 	server.handleAPIKeysUI(rec, req)

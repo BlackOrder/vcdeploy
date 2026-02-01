@@ -233,7 +233,7 @@ func TestHandleProjectsAPI_Create(t *testing.T) {
 		"name": "test-project",
 		"repository": "https://github.com/test/repo.git",
 		"branch": "main",
-		"deploy_path": "/var/www/test",
+		"deployPath": "/var/www/test",
 		"type": "php"
 	}`)
 
@@ -764,7 +764,7 @@ func TestHandleProjectAPI_Update(t *testing.T) {
 	_ = server.store.CreateProject(project)
 
 	// Update the project by ID
-	updateBody := bytes.NewBufferString(`{"branch": "develop", "deploy_path": "/var/www/new"}`)
+	updateBody := bytes.NewBufferString(`{"branch": "develop", "deployPath": "/var/www/new"}`)
 	req := httptest.NewRequest("PUT", fmt.Sprintf("/api/v1/projects/%d", project.ID), updateBody)
 	req.Header.Set("X-API-Key", apiKey)
 	req.Header.Set("Content-Type", "application/json")
@@ -1450,7 +1450,7 @@ func TestHandleProjectDeploy_ScheduledDeployment(t *testing.T) {
 	_ = server.store.CreateProject(project)
 
 	scheduledTime := time.Now().Add(1 * time.Hour).Format(time.RFC3339)
-	body := strings.NewReader(fmt.Sprintf(`{"branch":"main","target":"production","scheduled_at":"%s"}`, scheduledTime))
+	body := strings.NewReader(fmt.Sprintf(`{"branch":"main","target":"production","scheduledAt":"%s"}`, scheduledTime))
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/api/v1/projects/scheduled-project/deploy", body)
 	req.Header.Set("X-API-Key", apiKey)

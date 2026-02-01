@@ -39,11 +39,11 @@ func TestProjectsAPI(t *testing.T) {
 
 	t.Run("create project", func(t *testing.T) {
 		project := map[string]interface{}{
-			"name":        createdProjectName,
-			"repository":  "https://github.com/test/repo.git",
-			"branch":      "main",
-			"deploy_path": "/deploy/e2e-test",
-			"type":        "nodejs",
+			"name":       createdProjectName,
+			"repository": "https://github.com/test/repo.git",
+			"branch":     "main",
+			"deployPath": "/deploy/e2e-test",
+			"type":       "nodejs",
 		}
 
 		resp, err := ctx.Client.Post("/api/v1/projects", project)
@@ -150,10 +150,10 @@ func TestProjectsAPI(t *testing.T) {
 		}
 
 		project := map[string]interface{}{
-			"name":        "e2e-test-project", // Same name
-			"repository":  "https://github.com/test/other.git",
-			"branch":      "main",
-			"deploy_path": "/deploy/other",
+			"name":       "e2e-test-project", // Same name
+			"repository": "https://github.com/test/other.git",
+			"branch":     "main",
+			"deployPath": "/deploy/other",
 		}
 
 		resp, err := ctx.Client.Post("/api/v1/projects", project)
@@ -171,7 +171,7 @@ func TestProjectsAPI(t *testing.T) {
 	t.Run("create project with missing required fields", func(t *testing.T) {
 		project := map[string]interface{}{
 			"name": "incomplete-project-" + fmt.Sprint(time.Now().Unix()),
-			// Missing repository, branch, deploy_path
+			// Missing repository, branch, deployPath
 		}
 
 		resp, err := ctx.Client.Post("/api/v1/projects", project)
@@ -186,10 +186,10 @@ func TestProjectsAPI(t *testing.T) {
 
 	t.Run("create project with invalid repository URL", func(t *testing.T) {
 		project := map[string]interface{}{
-			"name":        "invalid-repo-project-" + fmt.Sprint(time.Now().Unix()),
-			"repository":  "not-a-valid-url",
-			"branch":      "main",
-			"deploy_path": "/deploy/invalid",
+			"name":       "invalid-repo-project-" + fmt.Sprint(time.Now().Unix()),
+			"repository": "not-a-valid-url",
+			"branch":     "main",
+			"deployPath": "/deploy/invalid",
 		}
 
 		resp, err := ctx.Client.Post("/api/v1/projects", project)
@@ -232,11 +232,11 @@ func TestProjectDeployments(t *testing.T) {
 	// Create a test project first
 	projectName := "e2e-deploy-test-project"
 	project := map[string]interface{}{
-		"name":        projectName,
-		"repository":  "https://github.com/test/repo.git",
-		"branch":      "main",
-		"deploy_path": "/deploy/deploy-test",
-		"type":        "static",
+		"name":       projectName,
+		"repository": "https://github.com/test/repo.git",
+		"branch":     "main",
+		"deployPath": "/deploy/deploy-test",
+		"type":       "static",
 	}
 
 	resp, err := ctx.Client.Post("/api/v1/projects", project)
@@ -297,10 +297,10 @@ func TestProjectHealthCheck(t *testing.T) {
 	// Create a test project first
 	projectName := "e2e-health-test-project"
 	project := map[string]interface{}{
-		"name":        projectName,
-		"repository":  "https://github.com/test/repo.git",
-		"branch":      "main",
-		"deploy_path": "/deploy/health-test",
+		"name":       projectName,
+		"repository": "https://github.com/test/repo.git",
+		"branch":     "main",
+		"deployPath": "/deploy/health-test",
 	}
 
 	resp, err := ctx.Client.Post("/api/v1/projects", project)

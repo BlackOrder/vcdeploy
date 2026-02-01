@@ -132,9 +132,9 @@ func TestAgentUpdates(t *testing.T) {
 
 		agentID := agents[0]["id"].(string)
 		policy := map[string]interface{}{
-			"update_policy":       "scheduled",
-			"update_window_start": "02:00",
-			"update_window_end":   "04:00",
+			"updatePolicy":      "scheduled",
+			"updateWindowStart": "02:00",
+			"updateWindowEnd":   "04:00",
 		}
 
 		policyResp, err := ctx.Client.Put("/api/v1/agents/"+agentID+"/update-policy", policy)

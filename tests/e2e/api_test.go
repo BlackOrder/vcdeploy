@@ -179,10 +179,10 @@ func TestAPIProjects(t *testing.T) {
 
 	t.Run("create project", func(t *testing.T) {
 		project := map[string]interface{}{
-			"name":        "e2e-test-project",
-			"repository":  "https://github.com/example/test.git",
-			"branch":      "main",
-			"deploy_path": "/deploy/test",
+			"name":       "e2e-test-project",
+			"repository": "https://github.com/example/test.git",
+			"branch":     "main",
+			"deployPath": "/deploy/test",
 		}
 
 		body, err := json.Marshal(project)

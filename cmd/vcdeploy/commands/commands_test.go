@@ -820,7 +820,7 @@ func mockAPIServer(t *testing.T) *httptest.Server {
 	})
 
 	// API key endpoints
-	mux.HandleFunc("/api/v1/apikeys", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/api-keys", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			keys := []map[string]interface{}{
@@ -838,7 +838,7 @@ func mockAPIServer(t *testing.T) *httptest.Server {
 		}
 	})
 
-	mux.HandleFunc("/api/v1/apikeys/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/api-keys/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodDelete {
 			w.WriteHeader(http.StatusOK)
 		}
@@ -1096,7 +1096,7 @@ func TestE2E_APIKeyListCommand(t *testing.T) {
 			token, _ := cmd.Flags().GetString("token")
 
 			client := &http.Client{Timeout: 10 * time.Second}
-			req, err := http.NewRequest("GET", masterURL+"/api/v1/apikeys", http.NoBody)
+			req, err := http.NewRequest("GET", masterURL+"/api/v1/api-keys", http.NoBody)
 			if err != nil {
 				return err
 			}
@@ -1149,7 +1149,7 @@ func TestE2E_APIKeyCreateCommand(t *testing.T) {
 			client := &http.Client{Timeout: 10 * time.Second}
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			req, err := http.NewRequestWithContext(ctx, "POST", masterURL+"/api/v1/apikeys", bytes.NewReader(data))
+			req, err := http.NewRequestWithContext(ctx, "POST", masterURL+"/api/v1/api-keys", bytes.NewReader(data))
 			if err != nil {
 				return err
 			}

@@ -133,7 +133,7 @@ func TestHandleHealthCheckConfig(t *testing.T) {
 
 		update := struct {
 			Name           *string `json:"name"`
-			TimeoutSeconds *int    `json:"timeout_seconds"`
+			TimeoutSeconds *int    `json:"timeoutSeconds"`
 		}{
 			Name:           &name,
 			TimeoutSeconds: &timeout,
@@ -310,9 +310,9 @@ func TestHandleProjectHealthConfig(t *testing.T) {
 		autoRollback := true
 		rollbackOnHealth := true
 		update := struct {
-			HealthCheckID        *int64 `json:"health_check_id"`
-			AutoRollbackEnabled  *bool  `json:"auto_rollback_enabled"`
-			RollbackOnHealthFail *bool  `json:"rollback_on_health_fail"`
+			HealthCheckID        *int64 `json:"healthCheckId"`
+			AutoRollbackEnabled  *bool  `json:"autoRollbackEnabled"`
+			RollbackOnHealthFail *bool  `json:"rollbackOnHealthFail"`
 		}{
 			HealthCheckID:        &healthConfig.ID,
 			AutoRollbackEnabled:  &autoRollback,
