@@ -1,4 +1,46 @@
 // Package services provides service layer interfaces and implementations for vcdeploy.
+//
+// # Overview
+//
+// The services package defines the core business logic interfaces for vcdeploy.
+// All interfaces follow these conventions:
+//   - Accept context.Context as first parameter for cancellation and deadlines
+//   - Return domain-specific errors from the errors.go file
+//   - Are stateless - all state is managed by the underlying storage layer
+//
+// # Service Interfaces
+//
+// Core services:
+//   - UserServicer: User account management and authentication
+//   - SessionServicer: User session lifecycle management
+//   - APIKeyServicer: API key creation and validation
+//   - ProjectServicer: Project configuration management
+//   - DeploymentServicer: Deployment execution and logging
+//   - AgentServicer: Deployment agent registration and status
+//
+// Supporting services:
+//   - SecretServicer: Encrypted secret storage (AES-256-GCM)
+//   - SettingsServicer: Application configuration
+//   - AuditServicer: Audit logging for compliance
+//   - HostKeyServicer: SSH host key management
+//   - ProjectTypeServicer: Project type templates
+//   - RateLimitServicer: Rate limiting and IP blocking
+//   - ProvisionServicer: Agent provisioning jobs
+//   - WebhookServicer: Project webhook management
+//
+// # Pagination
+//
+// List methods that support pagination use the Pagination type from types.go
+// and return ListResult[T] which includes total count and pagination metadata.
+//
+// # Error Handling
+//
+// All services return errors defined in errors.go. Use errors.Is() or errors.As()
+// to check for specific error types:
+//
+//	if errors.Is(err, services.ErrNotFound) { ... }
+//	var inputErr *services.InputError
+//	if errors.As(err, &inputErr) { ... }
 package services
 
 import (
