@@ -178,6 +178,29 @@ func (s *MemoryStore) DeleteProjectByID(ctx context.Context, id int64) error {
 		}
 	}
 
+	// Cascade delete deployments for this project
+	for depID, dep := range s.deployments {
+		if dep.Project == project.Name || (dep.ProjectID != nil && *dep.ProjectID == id) {
+			delete(s.deployments, depID)
+			// Also delete associated logs
+			delete(s.deploymentLogs, depID)
+		}
+	}
+
+	// Cascade delete scheduled deployments for this project
+	for schedID, sched := range s.scheduledDeploys {
+		if sched.Project == project.Name {
+			delete(s.scheduledDeploys, schedID)
+		}
+	}
+
+	// Cascade delete secrets for this project
+	for key, secret := range s.secrets {
+		if secret.Project == project.Name {
+			delete(s.secrets, key)
+		}
+	}
+
 	// Queue persistence
 	s.queueWrite(s.projectsWrites, NewWriteOp(WriteOpDelete, "projects", id))
 
@@ -208,6 +231,22 @@ func (s *MemoryStore) DeleteProject(name string) error {
 	for key, secret := range s.secrets {
 		if secret.Project == name {
 			delete(s.secrets, key)
+		}
+	}
+
+	// Cascade delete deployments for this project
+	for depID, dep := range s.deployments {
+		if dep.Project == name || (dep.ProjectID != nil && *dep.ProjectID == project.ID) {
+			delete(s.deployments, depID)
+			// Also delete associated logs
+			delete(s.deploymentLogs, depID)
+		}
+	}
+
+	// Cascade delete scheduled deployments for this project
+	for schedID, sched := range s.scheduledDeploys {
+		if sched.Project == name {
+			delete(s.scheduledDeploys, schedID)
 		}
 	}
 
