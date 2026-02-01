@@ -43,7 +43,7 @@ func (s *MasterServer) handleProjectTypes(w http.ResponseWriter, r *http.Request
 		var req struct {
 			Name        string `json:"name"`
 			Description string `json:"description"`
-			BuildCmd    string `json:"build_cmd"`
+			BuildCmd    string `json:"buildCmd"`
 		}
 
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -104,7 +104,7 @@ func (s *MasterServer) handleProjectType(w http.ResponseWriter, r *http.Request)
 	case http.MethodPut:
 		var req struct {
 			Description string `json:"description"`
-			BuildCmd    string `json:"build_cmd"`
+			BuildCmd    string `json:"buildCmd"`
 		}
 
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

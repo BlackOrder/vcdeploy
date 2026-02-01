@@ -367,11 +367,11 @@ func (rl *RateLimiter) ListBlockedIPs(ctx context.Context) ([]BlockedIP, error) 
 // BlockedIP represents a blocked IP address.
 type BlockedIP struct {
 	ID          int64     `json:"id"`
-	IPAddress   string    `json:"ip_address"`
-	BlockedAt   time.Time `json:"blocked_at"`
-	ExpiresAt   time.Time `json:"expires_at"`
+	IPAddress   string    `json:"ipAddress"`
+	BlockedAt   time.Time `json:"blockedAt"`
+	ExpiresAt   time.Time `json:"expiresAt"`
 	Reason      string    `json:"reason"`
-	ManualBlock bool      `json:"manual_block"`
+	ManualBlock bool      `json:"manualBlock"`
 }
 
 // Stop stops the rate limiter's background goroutines.
