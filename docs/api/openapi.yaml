@@ -174,23 +174,38 @@ paths:
     get:
       tags: [Users]
       summary: List users
-      description: Returns a list of all users (admin only).
+      description: Returns a paginated list of all users (admin only).
       operationId: listUsers
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
       responses:
         '200':
-          description: List of users
+          description: Paginated list of users
           content:
             application/json:
               schema:
-                type: array
+                $ref: '#/components/schemas/UserListResponse'
+              example:
                 items:
-                  $ref: '#/components/schemas/User'
+                  - id: 1
+                    username: "admin"
+                    email: "admin@example.com"
+                    role: "admin"
+                    createdAt: "2024-01-15T10:30:00Z"
+                total: 1
+                page: 1
+                pageSize: 20
+                hasMore: false
         '403':
           description: Forbidden - admin access required
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+              example:
+                error: true
+                message: "admin access required"
     post:
       tags: [Users]
       summary: Create user
@@ -232,17 +247,30 @@ paths:
     get:
       tags: [Projects]
       summary: List projects
-      description: Returns a list of all projects.
+      description: Returns a paginated list of all projects.
       operationId: listProjects
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
       responses:
         '200':
-          description: List of projects
+          description: Paginated list of projects
           content:
             application/json:
               schema:
-                type: array
+                $ref: '#/components/schemas/ProjectListResponse'
+              example:
                 items:
-                  $ref: '#/components/schemas/Project'
+                  - id: "proj-123"
+                    name: "my-app"
+                    repository: "https://github.com/user/app"
+                    branch: "main"
+                    deployPath: "/var/www/app"
+                    createdAt: "2024-01-15T10:30:00Z"
+                total: 1
+                page: 1
+                pageSize: 20
+                hasMore: false
     post:
       tags: [Projects]
       summary: Create project
@@ -504,17 +532,29 @@ paths:
     get:
       tags: [Agents]
       summary: List agents
-      description: Returns a list of all registered agents.
+      description: Returns a paginated list of all registered agents.
       operationId: listAgents
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
       responses:
         '200':
-          description: List of agents
+          description: Paginated list of agents
           content:
             application/json:
               schema:
-                type: array
+                $ref: '#/components/schemas/AgentListResponse'
+              example:
                 items:
-                  $ref: '#/components/schemas/Agent'
+                  - id: "agent-001"
+                    name: "prod-agent-1"
+                    host: "192.168.1.100"
+                    status: "connected"
+                    lastSeen: "2024-01-15T10:30:00Z"
+                total: 1
+                page: 1
+                pageSize: 20
+                hasMore: false
 
   /api/v1/agents/{agentId}:
     parameters:
@@ -1775,16 +1815,125 @@ components:
       in: header
       name: X-API-Key
 
+  # H8 FIX: Reusable pagination parameters
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      description: Page number (1-indexed)
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+      example: 1
+    PageSizeParam:
+      name: pageSize
+      in: query
+      description: Number of items per page
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+      example: 20
+
   schemas:
+    # H7 FIX: Error schema now matches actual ErrorResponse type in responses.go
     Error:
       type: object
+      description: Standard error response for all API endpoints
+      required:
+        - error
+        - message
       properties:
         error:
-          type: string
+          type: boolean
+          description: Always true for error responses
+          example: true
         message:
           type: string
-        request_id:
-          type: string
+          description: Human-readable error message
+          example: "Invalid request parameters"
+
+    # H8 FIX: Add pagination metadata schema
+    PaginationMeta:
+      type: object
+      description: Pagination metadata for list responses
+      properties:
+        total:
+          type: integer
+          format: int64
+          description: Total number of items across all pages
+          example: 100
+        page:
+          type: integer
+          description: Current page number (1-indexed)
+          example: 1
+        pageSize:
+          type: integer
+          description: Number of items per page
+          example: 20
+        hasMore:
+          type: boolean
+          description: Whether there are more pages available
+          example: true
+
+    # H8 FIX: Paginated user list response
+    UserListResponse:
+      type: object
+      description: Paginated list of users
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        hasMore:
+          type: boolean
+
+    # H8 FIX: Paginated project list response
+    ProjectListResponse:
+      type: object
+      description: Paginated list of projects
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Project'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        hasMore:
+          type: boolean
+
+    # H8 FIX: Paginated agent list response
+    AgentListResponse:
+      type: object
+      description: Paginated list of agents
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Agent'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        hasMore:
+          type: boolean
 
     HealthStatus:
       type: object

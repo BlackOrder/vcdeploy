@@ -262,6 +262,64 @@ vcdeploy secret restore file.vcbackup
 vcdeploy admin --username admin --email admin@example.com
 ```
 
+## API Reference
+
+The REST API is available at `http://localhost:9000/api/v1/` (or your configured server address).
+
+### Authentication
+
+Authenticate using one of these methods:
+- **Session cookie**: Login via `/api/v1/auth/login`
+- **Bearer token**: Include `Authorization: Bearer <token>` header
+- **API key**: Include `X-API-Key: <key>` header
+
+### Key Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/healthz` | Liveness probe |
+| `GET` | `/readyz` | Readiness probe |
+| `GET` | `/api/v1/health` | Detailed health status |
+| `POST` | `/api/v1/auth/login` | User authentication |
+| `GET` | `/api/v1/users` | List users (paginated) |
+| `POST` | `/api/v1/users` | Create user |
+| `GET` | `/api/v1/projects` | List projects (paginated) |
+| `POST` | `/api/v1/projects` | Create project |
+| `GET` | `/api/v1/agents` | List agents (paginated) |
+| `GET` | `/api/v1/deployments` | List deployments |
+| `POST` | `/api/v1/deployments` | Create deployment |
+| `GET` | `/api/v1/secrets` | List secrets (metadata only) |
+| `POST` | `/api/v1/webhooks/{provider}` | Webhook endpoint |
+
+### Pagination
+
+List endpoints support pagination with query parameters:
+- `page`: Page number (1-indexed, default: 1)
+- `pageSize`: Items per page (default: 20, max: 100)
+
+Response format:
+```json
+{
+  "items": [...],
+  "total": 100,
+  "page": 1,
+  "pageSize": 20,
+  "hasMore": true
+}
+```
+
+### Error Responses
+
+All errors return a consistent format:
+```json
+{
+  "error": true,
+  "message": "Description of what went wrong"
+}
+```
+
+For complete API documentation, see [docs/api/openapi.yaml](docs/api/openapi.yaml) or run the server and access the OpenAPI spec at `/api/v1/openapi.yaml`.
+
 ## Environment Variables
 
 ### Admin Credentials
