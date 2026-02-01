@@ -40,8 +40,8 @@ func TestAPIHostKeys(t *testing.T) {
 		hostKey := map[string]interface{}{
 			"hostname":    "test-server.example.com",
 			"port":        22,
-			"key_type":    "ssh-ed25519",
-			"public_key":  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestPublicKeyForE2ETests==",
+			"keyType":     "ssh-ed25519",
+			"publicKey":   "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestPublicKeyForE2ETests==",
 			"fingerprint": "SHA256:testfingerprint123456789",
 			"trusted":     true,
 		}

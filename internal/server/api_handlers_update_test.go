@@ -154,13 +154,13 @@ func TestHandleAgentUpdateConfig(t *testing.T) {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
 
-		if config["update_policy"] != "immediate" {
-			t.Errorf("Expected update_policy 'immediate', got %v", config["update_policy"])
+		if config["updatePolicy"] != "immediate" {
+			t.Errorf("Expected updatePolicy 'immediate', got %v", config["updatePolicy"])
 		}
 	})
 
 	t.Run("PUT - update config to scheduled", func(t *testing.T) {
-		body := bytes.NewBufferString(`{"update_policy":"scheduled","update_window_start":"02:00","update_window_end":"04:00"}`)
+		body := bytes.NewBufferString(`{"updatePolicy":"scheduled","updateWindowStart":"02:00","updateWindowEnd":"04:00"}`)
 		req := requestWithAdminContext(httptest.NewRequest("PUT", "/api/v1/agents/test-agent-1/update-config", body), userID)
 		req.Header.Set("Content-Type", "application/json")
 		rr := httptest.NewRecorder()
@@ -177,12 +177,12 @@ func TestHandleAgentUpdateConfig(t *testing.T) {
 		}
 
 		if updatedAgent.UpdatePolicy != "scheduled" {
-			t.Errorf("Expected update_policy 'scheduled', got %s", updatedAgent.UpdatePolicy)
+			t.Errorf("Expected updatePolicy 'scheduled', got %s", updatedAgent.UpdatePolicy)
 		}
 	})
 
 	t.Run("PUT - invalid policy", func(t *testing.T) {
-		body := bytes.NewBufferString(`{"update_policy":"invalid"}`)
+		body := bytes.NewBufferString(`{"updatePolicy":"invalid"}`)
 		req := requestWithAdminContext(httptest.NewRequest("PUT", "/api/v1/agents/test-agent-1/update-config", body), userID)
 		req.Header.Set("Content-Type", "application/json")
 		rr := httptest.NewRecorder()
@@ -194,7 +194,7 @@ func TestHandleAgentUpdateConfig(t *testing.T) {
 	})
 
 	t.Run("PUT - scheduled without window", func(t *testing.T) {
-		body := bytes.NewBufferString(`{"update_policy":"scheduled"}`)
+		body := bytes.NewBufferString(`{"updatePolicy":"scheduled"}`)
 		req := requestWithAdminContext(httptest.NewRequest("PUT", "/api/v1/agents/test-agent-1/update-config", body), userID)
 		req.Header.Set("Content-Type", "application/json")
 		rr := httptest.NewRecorder()

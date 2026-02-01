@@ -330,15 +330,15 @@ func TestProjectHealthCheck(t *testing.T) {
 
 	t.Run("configure health check", func(t *testing.T) {
 		healthConfig := map[string]interface{}{
-			"enabled":                true,
-			"url":                    "http://localhost:8080/health",
-			"method":                 "GET",
-			"timeout_seconds":        30,
-			"retries":                3,
-			"retry_delay_seconds":    5,
-			"expected_status":        200,
-			"auto_rollback_enabled":  true,
-			"auto_rollback_releases": 1,
+			"enabled":              true,
+			"url":                  "http://localhost:8080/health",
+			"method":               "GET",
+			"timeoutSeconds":       30,
+			"retries":              3,
+			"retryDelaySeconds":    5,
+			"expectedStatus":       200,
+			"autoRollbackEnabled":  true,
+			"autoRollbackReleases": 1,
 		}
 
 		resp, err := ctx.Client.Put(fmt.Sprintf("/api/v1/projects/%v/health-config", projectID), healthConfig)

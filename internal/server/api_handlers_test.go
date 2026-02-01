@@ -1480,7 +1480,7 @@ func TestHandleProjectDeploy_InvalidScheduledTime(t *testing.T) {
 	}
 	_ = server.store.CreateProject(project)
 
-	body := strings.NewReader(`{"branch":"main","target":"production","scheduled_at":"invalid-time"}`)
+	body := strings.NewReader(`{"branch":"main","target":"production","scheduledAt":"invalid-time"}`)
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/api/v1/projects/invalid-schedule-project/deploy", body)
 	req.Header.Set("X-API-Key", apiKey)
@@ -2171,7 +2171,7 @@ func TestHandleAPIKeys_CreateWithExpiry(t *testing.T) {
 	ctx := context.Background()
 	session, _ := server.store.GetSessionByToken(ctx, sessionToken)
 
-	body := strings.NewReader(`{"name":"expiring-key","expires_in_days":30}`)
+	body := strings.NewReader(`{"name":"expiring-key","expiresInDays":30}`)
 	req := httptest.NewRequest("POST", "/api/v1/api-keys", body)
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithUserContext(req, session.UserID)
@@ -2566,7 +2566,7 @@ func TestHandleProjectsAPI_CreateMissingRepository(t *testing.T) {
 	server, apiKey, _, userID := newTestServerWithAuth(t)
 	defer server.store.Close()
 
-	body := strings.NewReader(`{"name":"test-project","deploy_path":"/var/www/test"}`)
+	body := strings.NewReader(`{"name":"test-project","deployPath":"/var/www/test"}`)
 	req := httptest.NewRequest("POST", "/api/v1/projects", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", apiKey)
@@ -2607,7 +2607,7 @@ func TestHandleProjectsAPI_CreateInvalidName(t *testing.T) {
 	defer server.store.Close()
 
 	// Name starting with number (invalid per ValidateProjectName)
-	body := strings.NewReader(`{"name":"123-invalid","repository":"https://github.com/test/repo","deploy_path":"/var/www/test"}`)
+	body := strings.NewReader(`{"name":"123-invalid","repository":"https://github.com/test/repo","deployPath":"/var/www/test"}`)
 	req := httptest.NewRequest("POST", "/api/v1/projects", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", apiKey)
@@ -2627,7 +2627,7 @@ func TestHandleProjectsAPI_CreateDefaultBranch(t *testing.T) {
 	server, apiKey, _, userID := newTestServerWithAuth(t)
 	defer server.store.Close()
 
-	body := strings.NewReader(`{"name":"default-branch-project","repository":"https://github.com/test/repo","deploy_path":"/var/www/default"}`)
+	body := strings.NewReader(`{"name":"default-branch-project","repository":"https://github.com/test/repo","deployPath":"/var/www/default"}`)
 	req := httptest.NewRequest("POST", "/api/v1/projects", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", apiKey)
