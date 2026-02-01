@@ -75,7 +75,7 @@ func newTestServer(t *testing.T) *MasterServer {
 	})
 
 	// Set up KMS for tests
-	kms, err := security.NewKMS(db.Conn(), nil)
+	kms, err := security.NewKMS(context.Background(), db.Conn(), nil)
 	if err != nil {
 		t.Fatalf("failed to create KMS: %v", err)
 	}

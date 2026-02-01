@@ -302,7 +302,7 @@ func NewMasterServer(cfg *config.MasterConfig, store storage.Store, logger *zap.
 	// Initialize KMS for encryption services (requires database connection)
 	conn := store.Conn()
 	if conn != nil {
-		kms, kmsErr := security.NewKMS(conn, logger)
+		kms, kmsErr := security.NewKMS(context.Background(), conn, logger)
 		if kmsErr != nil {
 			logger.Warn("Failed to create KMS, some features will be unavailable", zap.Error(kmsErr))
 		} else {

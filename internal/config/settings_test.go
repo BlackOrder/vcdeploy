@@ -32,7 +32,7 @@ func setupTestSettingsDB(t *testing.T) (storage.Store, *security.KMS, func()) {
 	}
 
 	// Initialize KMS
-	kms, err := security.NewKMS(db.Conn(), nil)
+	kms, err := security.NewKMS(context.Background(), db.Conn(), nil)
 	if err != nil {
 		db.Close()
 		t.Fatalf("init KMS: %v", err)

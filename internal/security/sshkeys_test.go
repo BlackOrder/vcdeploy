@@ -71,7 +71,7 @@ func setupTestSSHDB(t *testing.T) (*sql.DB, *KMS) {
 	}
 
 	// Create KMS
-	kms, err := NewKMS(db, nil)
+	kms, err := NewKMS(context.Background(), db, nil)
 	if err != nil {
 		t.Fatalf("NewKMS: %v", err)
 	}

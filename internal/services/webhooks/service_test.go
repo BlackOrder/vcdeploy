@@ -22,7 +22,7 @@ func setupTestWithKMS(t *testing.T) (*Service, storage.Store, func()) {
 
 	db, cleanup := testutil.NewTestStore(t)
 
-	kms, err := security.NewKMS(db.Conn(), nil)
+	kms, err := security.NewKMS(context.Background(), db.Conn(), nil)
 	if err != nil {
 		t.Fatalf("Failed to create KMS: %v", err)
 	}

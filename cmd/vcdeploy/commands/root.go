@@ -775,14 +775,15 @@ func runMasterRotateKey(cmd *cobra.Command, args []string) error {
 	}
 	defer db.Close()
 
+	ctx := context.Background()
+
 	// Initialize KMS
-	kms, err := security.NewKMS(db.Conn(), globalLogger)
+	kms, err := security.NewKMS(ctx, db.Conn(), globalLogger)
 	if err != nil {
 		return fmt.Errorf("initialize KMS: %w", err)
 	}
 
 	// Rotate the encryption key
-	ctx := context.Background()
 	newKey, err := kms.RotateKey(ctx)
 	if err != nil {
 		return fmt.Errorf("rotate key: %w", err)
@@ -2045,13 +2046,14 @@ func runSecretRestore(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("\nRestoring secrets from %s...\n", backupFile)
 
+	ctx := context.Background()
+
 	// Initialize KMS for encryption
-	kms, err := security.NewKMS(db.Conn(), globalLogger)
+	kms, err := security.NewKMS(ctx, db.Conn(), globalLogger)
 	if err != nil {
 		return fmt.Errorf("initialize KMS: %w", err)
 	}
 	secretsService := security.NewSecretService(db, kms)
-	ctx := context.Background()
 
 	// Import each secret
 	restored := 0

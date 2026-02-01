@@ -56,8 +56,9 @@ func setupTestKMSDB(t *testing.T) *sql.DB {
 func TestNewKMS(t *testing.T) {
 	db := setupTestKMSDB(t)
 	defer db.Close()
+	ctx := context.Background()
 
-	kms, err := NewKMS(db, nil)
+	kms, err := NewKMS(ctx, db, nil)
 	if err != nil {
 		t.Fatalf("NewKMS() error: %v", err)
 	}
@@ -70,13 +71,12 @@ func TestNewKMS(t *testing.T) {
 func TestKMSInitialize(t *testing.T) {
 	db := setupTestKMSDB(t)
 	defer db.Close()
+	ctx := context.Background()
 
-	kms, err := NewKMS(db, nil)
+	kms, err := NewKMS(ctx, db, nil)
 	if err != nil {
 		t.Fatalf("NewKMS() error: %v", err)
 	}
-
-	ctx := context.Background()
 
 	// Initialize should create a key
 	if err := kms.Initialize(ctx); err != nil {
@@ -102,7 +102,7 @@ func TestKMSEncryptDecrypt(t *testing.T) {
 	db := setupTestKMSDB(t)
 	defer db.Close()
 
-	kms, err := NewKMS(db, nil)
+	kms, err := NewKMS(context.Background(), db, nil)
 	if err != nil {
 		t.Fatalf("NewKMS() error: %v", err)
 	}
@@ -140,7 +140,7 @@ func TestKMSEncryptDecryptString(t *testing.T) {
 	db := setupTestKMSDB(t)
 	defer db.Close()
 
-	kms, err := NewKMS(db, nil)
+	kms, err := NewKMS(context.Background(), db, nil)
 	if err != nil {
 		t.Fatalf("NewKMS() error: %v", err)
 	}
@@ -171,7 +171,7 @@ func TestKMSKeyRotation(t *testing.T) {
 	db := setupTestKMSDB(t)
 	defer db.Close()
 
-	kms, err := NewKMS(db, nil)
+	kms, err := NewKMS(context.Background(), db, nil)
 	if err != nil {
 		t.Fatalf("NewKMS() error: %v", err)
 	}
@@ -230,7 +230,7 @@ func TestKMSReEncrypt(t *testing.T) {
 	db := setupTestKMSDB(t)
 	defer db.Close()
 
-	kms, err := NewKMS(db, nil)
+	kms, err := NewKMS(context.Background(), db, nil)
 	if err != nil {
 		t.Fatalf("NewKMS() error: %v", err)
 	}
@@ -282,7 +282,7 @@ func TestKMSKeyDeletionScheduling(t *testing.T) {
 	db := setupTestKMSDB(t)
 	defer db.Close()
 
-	kms, err := NewKMS(db, nil)
+	kms, err := NewKMS(context.Background(), db, nil)
 	if err != nil {
 		t.Fatalf("NewKMS() error: %v", err)
 	}
@@ -323,7 +323,7 @@ func TestKMSCancelKeyDeletion(t *testing.T) {
 	db := setupTestKMSDB(t)
 	defer db.Close()
 
-	kms, err := NewKMS(db, nil)
+	kms, err := NewKMS(context.Background(), db, nil)
 	if err != nil {
 		t.Fatalf("NewKMS() error: %v", err)
 	}
@@ -363,7 +363,7 @@ func TestKMSDeleteKeyNow(t *testing.T) {
 	db := setupTestKMSDB(t)
 	defer db.Close()
 
-	kms, err := NewKMS(db, nil)
+	kms, err := NewKMS(context.Background(), db, nil)
 	if err != nil {
 		t.Fatalf("NewKMS() error: %v", err)
 	}
@@ -408,7 +408,7 @@ func TestKMSListKeys(t *testing.T) {
 	db := setupTestKMSDB(t)
 	defer db.Close()
 
-	kms, err := NewKMS(db, nil)
+	kms, err := NewKMS(context.Background(), db, nil)
 	if err != nil {
 		t.Fatalf("NewKMS() error: %v", err)
 	}
@@ -445,7 +445,7 @@ func TestKMSProcessScheduledDeletions(t *testing.T) {
 	db := setupTestKMSDB(t)
 	defer db.Close()
 
-	kms, err := NewKMS(db, nil)
+	kms, err := NewKMS(context.Background(), db, nil)
 	if err != nil {
 		t.Fatalf("NewKMS() error: %v", err)
 	}
@@ -490,7 +490,7 @@ func TestKMSDecryptInvalidFormat(t *testing.T) {
 	db := setupTestKMSDB(t)
 	defer db.Close()
 
-	kms, err := NewKMS(db, nil)
+	kms, err := NewKMS(context.Background(), db, nil)
 	if err != nil {
 		t.Fatalf("NewKMS() error: %v", err)
 	}
@@ -517,7 +517,7 @@ func TestKMSEncryptWithoutKey(t *testing.T) {
 	db := setupTestKMSDB(t)
 	defer db.Close()
 
-	kms, err := NewKMS(db, nil)
+	kms, err := NewKMS(context.Background(), db, nil)
 	if err != nil {
 		t.Fatalf("NewKMS() error: %v", err)
 	}
@@ -555,7 +555,7 @@ func TestKMSConcurrentEncryption(t *testing.T) {
 	db := setupTestKMSDB(t)
 	defer db.Close()
 
-	kms, err := NewKMS(db, nil)
+	kms, err := NewKMS(context.Background(), db, nil)
 	if err != nil {
 		t.Fatalf("NewKMS() error: %v", err)
 	}
@@ -591,7 +591,7 @@ func TestKMSDoubleInitialize(t *testing.T) {
 	db := setupTestKMSDB(t)
 	defer db.Close()
 
-	kms, err := NewKMS(db, nil)
+	kms, err := NewKMS(context.Background(), db, nil)
 	if err != nil {
 		t.Fatalf("NewKMS() error: %v", err)
 	}
@@ -641,7 +641,7 @@ func TestKMSPersistence(t *testing.T) {
 		t.Fatalf("db1.Exec(): %v", err)
 	}
 
-	kms1, err := NewKMS(db1, nil)
+	kms1, err := NewKMS(context.Background(), db1, nil)
 	if err != nil {
 		t.Fatalf("NewKMS() for kms1: %v", err)
 	}
@@ -666,7 +666,7 @@ func TestKMSPersistence(t *testing.T) {
 	}
 	defer db2.Close()
 
-	kms2, err := NewKMS(db2, nil)
+	kms2, err := NewKMS(context.Background(), db2, nil)
 	if err != nil {
 		t.Fatalf("NewKMS() after reopen error: %v", err)
 	}

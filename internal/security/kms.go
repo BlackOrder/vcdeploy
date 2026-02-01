@@ -71,7 +71,7 @@ func DefaultKMSConfig() KMSConfig {
 }
 
 // NewKMS creates a new KMS service backed by the database.
-func NewKMS(db *sql.DB, logger *zap.Logger) (*KMS, error) {
+func NewKMS(ctx context.Context, db *sql.DB, logger *zap.Logger) (*KMS, error) {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
@@ -83,7 +83,7 @@ func NewKMS(db *sql.DB, logger *zap.Logger) (*KMS, error) {
 	}
 
 	// Load current active key
-	if err := kms.loadCurrentKey(); err != nil {
+	if err := kms.loadCurrentKey(ctx); err != nil {
 		return nil, err
 	}
 
@@ -102,7 +102,7 @@ func (k *KMS) Initialize(ctx context.Context) error {
 	}
 
 	// Generate initial key
-	key, err := k.generateKey()
+	key, err := k.generateKey(ctx)
 	if err != nil {
 		return fmt.Errorf("generate initial key: %w", err)
 	}
@@ -241,7 +241,7 @@ func (k *KMS) RotateKey(ctx context.Context) (*EncryptionKey, error) {
 	defer k.currentMu.Unlock()
 
 	// Generate new key
-	newKey, err := k.generateKey()
+	newKey, err := k.generateKey(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("generate new key: %w", err)
 	}
@@ -478,8 +478,8 @@ func (k *KMS) ReEncrypt(ctx context.Context, versioned string) (string, error) {
 
 // --- Internal methods ---
 
-func (k *KMS) loadCurrentKey() error {
-	row := k.db.QueryRow(`
+func (k *KMS) loadCurrentKey(ctx context.Context) error {
+	row := k.db.QueryRowContext(ctx, `
 		SELECT id, version, key_material_encrypted, algorithm, status, created_at, activated_at
 		FROM encryption_keys
 		WHERE status = ?
@@ -505,7 +505,7 @@ func (k *KMS) loadCurrentKey() error {
 	return nil
 }
 
-func (k *KMS) generateKey() (*EncryptionKey, error) {
+func (k *KMS) generateKey(ctx context.Context) (*EncryptionKey, error) {
 	// Generate random key ID
 	idBytes := make([]byte, 16)
 	if _, err := rand.Read(idBytes); err != nil {
@@ -521,7 +521,7 @@ func (k *KMS) generateKey() (*EncryptionKey, error) {
 
 	// Get next version
 	var maxVersion sql.NullInt64
-	_ = k.db.QueryRow(`SELECT MAX(version) FROM encryption_keys`).Scan(&maxVersion)
+	_ = k.db.QueryRowContext(ctx, `SELECT MAX(version) FROM encryption_keys`).Scan(&maxVersion)
 	version := 1
 	if maxVersion.Valid {
 		version = int(maxVersion.Int64) + 1

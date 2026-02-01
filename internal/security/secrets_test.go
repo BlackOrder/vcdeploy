@@ -58,7 +58,7 @@ func setupTestSecretService(t *testing.T) (*SecretService, func()) {
 		t.Fatalf("create tables: %v", err)
 	}
 
-	kms, err := NewKMS(kmsDB, nil)
+	kms, err := NewKMS(context.Background(), kmsDB, nil)
 	if err != nil {
 		kmsDB.Close()
 		db.Close()
