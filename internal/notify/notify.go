@@ -23,10 +23,10 @@ import (
 // Event represents a deployment event for notifications
 type Event struct {
 	Type        string    `json:"type"`
-	ProjectID   string    `json:"project_id"`
-	ProjectName string    `json:"project_name"`
+	ProjectID   string    `json:"projectId"`
+	ProjectName string    `json:"projectName"`
 	Environment string    `json:"environment"`
-	DeployID    string    `json:"deploy_id"`
+	DeployID    string    `json:"deployId"`
 	Version     string    `json:"version"`
 	Status      string    `json:"status"`
 	User        string    `json:"user"`

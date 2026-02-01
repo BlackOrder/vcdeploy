@@ -1465,7 +1465,7 @@ func runProjectRollback(cmd *cobra.Command, args []string) error {
 	// Parse response
 	var rollbackResp struct {
 		Message string `json:"message"`
-		ID      string `json:"rollback_id"`
+		ID      string `json:"rollbackId"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&rollbackResp); err == nil && rollbackResp.ID != "" {
 		fmt.Printf("   Rollback ID: %s\n", rollbackResp.ID)
@@ -2105,8 +2105,8 @@ func runProjectHealthCheck(cmd *cobra.Command, args []string) error {
 
 	var config struct {
 		URL            string `json:"url"`
-		ExpectedStatus int    `json:"expected_status"`
-		TimeoutSeconds int    `json:"timeout_seconds"`
+		ExpectedStatus int    `json:"expectedStatus"`
+		TimeoutSeconds int    `json:"timeoutSeconds"`
 		Enabled        bool   `json:"enabled"`
 	}
 	if err := json.NewDecoder(configResp.Body).Decode(&config); err != nil {
