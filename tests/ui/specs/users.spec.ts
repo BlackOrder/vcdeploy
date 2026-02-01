@@ -271,7 +271,7 @@ test.describe('User Roles', () => {
     
     if (filterVisible) {
       await usersPage.filterByRole('admin');
-      await page.waitForTimeout(500);
+      await page.waitForLoadState('networkidle');
       
       const userCount = await usersPage.getUserCount();
       expect(userCount).toBeGreaterThanOrEqual(1);
@@ -292,7 +292,7 @@ test.describe('User Search', () => {
     
     if (searchVisible) {
       await usersPage.search('admin');
-      await page.waitForTimeout(500);
+      await page.waitForLoadState('networkidle');
       
       const hasAdmin = await usersPage.hasUser('admin');
       expect(hasAdmin).toBeTruthy();
@@ -307,7 +307,7 @@ test.describe('User Search', () => {
     
     if (searchVisible) {
       await usersPage.search('nonexistent-user-xyz-123');
-      await page.waitForTimeout(500);
+      await page.waitForLoadState('networkidle');
       
       const userCount = await usersPage.getUserCount();
       // Should either show 0 results or empty state

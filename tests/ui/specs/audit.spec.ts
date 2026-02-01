@@ -107,7 +107,7 @@ test.describe('Audit Log Filtering', () => {
     
     if (isVisible) {
       await actionFilter.selectOption({ index: 1 });
-      await page.waitForTimeout(500);
+      await page.waitForLoadState('networkidle');
       
       // Should filter results
       await expect(page.locator('body')).not.toBeEmpty();
@@ -124,7 +124,7 @@ test.describe('Audit Log Filtering', () => {
       } else {
         await userFilter.fill('admin');
       }
-      await page.waitForTimeout(500);
+      await page.waitForLoadState('networkidle');
     }
   });
 
@@ -142,7 +142,7 @@ test.describe('Audit Log Filtering', () => {
     
     if (isVisible) {
       await searchInput.fill('login');
-      await page.waitForTimeout(500);
+      await page.waitForLoadState('networkidle');
       
       // Should filter results
       await expect(page.locator('body')).not.toBeEmpty();
@@ -232,10 +232,10 @@ test.describe('Audit Log Entry Details', () => {
     
     if (count > 0) {
       await logEntries.first().click();
-      await page.waitForTimeout(500);
       
       // Look for expanded details
       const details = page.locator('.details, .expanded, .audit-details');
+      await details.first().waitFor({ state: 'visible', timeout: 2000 }).catch(() => {});
       const detailsCount = await details.count();
       // Expandable details are optional UI pattern
       expect(detailsCount).toBeGreaterThanOrEqual(0); // Explicitly acceptable: details may show inline

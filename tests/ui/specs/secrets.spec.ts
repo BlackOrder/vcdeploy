@@ -227,7 +227,7 @@ test.describe('Secret Search', () => {
     
     if (isVisible) {
       await searchInput.fill('test');
-      await page.waitForTimeout(500);
+      await page.waitForLoadState('networkidle');
       
       // Search should filter results
       const secrets = page.locator('.secret-card, .secret-row, table tbody tr');
