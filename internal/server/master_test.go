@@ -848,8 +848,9 @@ func TestHandleProjectTypesPost(t *testing.T) {
 
 	server.handleProjectTypes(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Errorf("status = %d, want %d, body: %s", rec.Code, http.StatusOK, rec.Body.String())
+	// H4 FIX: POST endpoints now return 201 Created for new resources
+	if rec.Code != http.StatusCreated {
+		t.Errorf("status = %d, want %d, body: %s", rec.Code, http.StatusCreated, rec.Body.String())
 	}
 
 	// Verify it was created

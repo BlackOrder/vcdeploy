@@ -91,18 +91,25 @@ func TestHandleUsers_List(t *testing.T) {
 		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
 	}
 
-	var users []map[string]interface{}
-	if err := json.NewDecoder(w.Body).Decode(&users); err != nil {
+	// H6 FIX: List endpoints now return paginated response
+	var response struct {
+		Items    []map[string]interface{} `json:"items"`
+		Total    int64                    `json:"total"`
+		Page     int                      `json:"page"`
+		PageSize int                      `json:"pageSize"`
+		HasMore  bool                     `json:"hasMore"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
 	// Should have at least the test user
-	if len(users) < 1 {
+	if len(response.Items) < 1 {
 		t.Error("expected at least one user in response")
 	}
 
 	// Verify no password hashes are exposed
-	for _, user := range users {
+	for _, user := range response.Items {
 		if _, ok := user["passwordHash"]; ok {
 			t.Error("password hash should not be exposed in response")
 		}
@@ -217,8 +224,15 @@ func TestHandleProjectsAPI_List(t *testing.T) {
 		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
 	}
 
-	var projects []map[string]interface{}
-	if err := json.NewDecoder(w.Body).Decode(&projects); err != nil {
+	// H6 FIX: List endpoints now return paginated response
+	var response struct {
+		Items    []map[string]interface{} `json:"items"`
+		Total    int64                    `json:"total"`
+		Page     int                      `json:"page"`
+		PageSize int                      `json:"pageSize"`
+		HasMore  bool                     `json:"hasMore"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 }
@@ -277,8 +291,15 @@ func TestHandleAgentsAPI_List(t *testing.T) {
 		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
 	}
 
-	var agents []map[string]interface{}
-	if err := json.NewDecoder(w.Body).Decode(&agents); err != nil {
+	// H6 FIX: List endpoints now return paginated response
+	var response struct {
+		Items    []map[string]interface{} `json:"items"`
+		Total    int64                    `json:"total"`
+		Page     int                      `json:"page"`
+		PageSize int                      `json:"pageSize"`
+		HasMore  bool                     `json:"hasMore"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 }

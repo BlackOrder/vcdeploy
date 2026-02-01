@@ -42,6 +42,14 @@ func (m *mockUserService) List(ctx context.Context) ([]*storage.User, error) {
 	return nil, nil
 }
 
+func (m *mockUserService) ListPaginated(ctx context.Context, p services.Pagination) (*services.ListResult[*storage.User], error) {
+	return &services.ListResult[*storage.User]{
+		Items:      nil,
+		TotalCount: 0,
+		Pagination: p,
+	}, nil
+}
+
 func (m *mockUserService) Count(ctx context.Context) (int64, error) {
 	return 0, nil
 }
