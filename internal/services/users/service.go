@@ -101,6 +101,23 @@ func (s *Service) List(ctx context.Context) ([]*storage.User, error) {
 	return users, nil
 }
 
+// ListPaginated returns users with pagination support (H6).
+func (s *Service) ListPaginated(ctx context.Context, p services.Pagination) (*services.ListResult[*storage.User], error) {
+	users, err := s.store.ListUsersPaginated(ctx, p.Limit, p.Offset)
+	if err != nil {
+		return nil, fmt.Errorf("listing users: %w", err)
+	}
+	count, err := s.store.CountUsers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("counting users: %w", err)
+	}
+	return &services.ListResult[*storage.User]{
+		Items:      users,
+		TotalCount: count,
+		Pagination: p,
+	}, nil
+}
+
 // Update updates a user's information.
 func (s *Service) Update(ctx context.Context, user *storage.User) error {
 	if err := s.store.UpdateUserByID(ctx, user); err != nil {

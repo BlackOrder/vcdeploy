@@ -10,9 +10,11 @@ type StatusResponse struct {
 	Status string `json:"status"`
 }
 
-// ErrorResponse is used for error responses.
+// ErrorResponse is the standard error response format for all API endpoints.
+// H14 FIX: Updated to match actual usage pattern and now used by jsonError.
 type ErrorResponse struct {
-	Error string `json:"error"`
+	Error   bool   `json:"error"`
+	Message string `json:"message"`
 }
 
 // --- User Responses ---

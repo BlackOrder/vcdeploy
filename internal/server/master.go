@@ -1358,7 +1358,19 @@ func (s *MasterServer) handleAgents(w http.ResponseWriter, _ *http.Request) {
 	s.jsonResponse(w, agents)
 }
 
-func (s *MasterServer) jsonResponse(w http.ResponseWriter, data interface{}) {
+// writeJSON encodes data as JSON and writes to the response.
+// H12 FIX: Properly handles encoder errors instead of ignoring them.
+func (s *MasterServer) writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(data)
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		s.logger.Error("Failed to encode JSON response",
+			zap.Error(err),
+			zap.Any("data", data),
+		)
+	}
+}
+
+func (s *MasterServer) jsonResponse(w http.ResponseWriter, data interface{}) {
+	s.writeJSON(w, http.StatusOK, data)
 }

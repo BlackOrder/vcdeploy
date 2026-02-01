@@ -23,7 +23,7 @@ func (s *MasterServer) handleHealthCheckConfigs(w http.ResponseWriter, r *http.R
 	case http.MethodPost:
 		s.handleCreateHealthCheckConfig(w, r)
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
 }
 
@@ -34,7 +34,7 @@ func (s *MasterServer) handleHealthCheckConfig(w http.ResponseWriter, r *http.Re
 	idStr := strings.Split(path, "/")[0]
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid health check config ID", http.StatusBadRequest)
+		s.jsonError(w, http.StatusBadRequest, "Invalid health check config ID")
 		return
 	}
 
@@ -44,7 +44,7 @@ func (s *MasterServer) handleHealthCheckConfig(w http.ResponseWriter, r *http.Re
 			s.handleTestHealthCheck(w, r, id)
 			return
 		}
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
@@ -56,7 +56,7 @@ func (s *MasterServer) handleHealthCheckConfig(w http.ResponseWriter, r *http.Re
 	case http.MethodDelete:
 		s.handleDeleteHealthCheckConfig(w, r, id)
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
 }
 
@@ -67,12 +67,11 @@ func (s *MasterServer) handleListHealthCheckConfigs(w http.ResponseWriter, r *ht
 	configs, err := s.store.ListHealthCheckConfigs(ctx)
 	if err != nil {
 		s.logger.Error("Failed to list health check configs", zap.Error(err))
-		http.Error(w, "Failed to list health check configs", http.StatusInternalServerError)
+		s.jsonError(w, http.StatusInternalServerError, "Failed to list health check configs")
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(configs)
+	s.jsonResponse(w, configs)
 }
 
 // handleCreateHealthCheckConfig creates a new health check configuration.
@@ -81,17 +80,17 @@ func (s *MasterServer) handleCreateHealthCheckConfig(w http.ResponseWriter, r *h
 
 	var config storage.HealthCheckConfig
 	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		s.jsonError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
 	// Validate required fields
 	if config.Name == "" {
-		http.Error(w, "Name is required", http.StatusBadRequest)
+		s.jsonError(w, http.StatusBadRequest, "Name is required")
 		return
 	}
 	if config.URL == "" {
-		http.Error(w, "URL is required", http.StatusBadRequest)
+		s.jsonError(w, http.StatusBadRequest, "URL is required")
 		return
 	}
 
@@ -115,19 +114,18 @@ func (s *MasterServer) handleCreateHealthCheckConfig(w http.ResponseWriter, r *h
 
 	// Can't create another global config
 	if config.IsGlobal {
-		http.Error(w, "Cannot create another global config; update the existing one", http.StatusBadRequest)
+		s.jsonError(w, http.StatusBadRequest, "Cannot create another global config; update the existing one")
 		return
 	}
 
 	if err := s.store.CreateHealthCheckConfig(ctx, &config); err != nil {
 		s.logger.Error("Failed to create health check config", zap.Error(err))
-		http.Error(w, "Failed to create health check config", http.StatusInternalServerError)
+		s.jsonError(w, http.StatusInternalServerError, "Failed to create health check config")
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(config)
+	s.jsonResponse(w, config)
 }
 
 // handleGetHealthCheckConfig retrieves a health check configuration.
@@ -136,17 +134,16 @@ func (s *MasterServer) handleGetHealthCheckConfig(w http.ResponseWriter, r *http
 
 	config, err := s.store.GetHealthCheckConfig(ctx, id)
 	if services.IsNotFound(err) {
-		http.Error(w, "Health check config not found", http.StatusNotFound)
+		s.jsonError(w, http.StatusNotFound, "Health check config not found")
 		return
 	}
 	if err != nil {
 		s.logger.Error("Failed to get health check config", zap.Error(err))
-		http.Error(w, "Failed to get health check config", http.StatusInternalServerError)
+		s.jsonError(w, http.StatusInternalServerError, "Failed to get health check config")
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(config)
+	s.jsonResponse(w, config)
 }
 
 // handleUpdateHealthCheckConfig updates a health check configuration.
@@ -156,12 +153,12 @@ func (s *MasterServer) handleUpdateHealthCheckConfig(w http.ResponseWriter, r *h
 	// Get existing config
 	existing, err := s.store.GetHealthCheckConfig(ctx, id)
 	if services.IsNotFound(err) {
-		http.Error(w, "Health check config not found", http.StatusNotFound)
+		s.jsonError(w, http.StatusNotFound, "Health check config not found")
 		return
 	}
 	if err != nil {
 		s.logger.Error("Failed to get health check config", zap.Error(err))
-		http.Error(w, "Failed to get health check config", http.StatusInternalServerError)
+		s.jsonError(w, http.StatusInternalServerError, "Failed to get health check config")
 		return
 	}
 
@@ -180,7 +177,7 @@ func (s *MasterServer) handleUpdateHealthCheckConfig(w http.ResponseWriter, r *h
 		Enabled           *bool   `json:"enabled"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		s.jsonError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
@@ -221,12 +218,11 @@ func (s *MasterServer) handleUpdateHealthCheckConfig(w http.ResponseWriter, r *h
 
 	if err := s.store.UpdateHealthCheckConfig(ctx, existing); err != nil {
 		s.logger.Error("Failed to update health check config", zap.Error(err))
-		http.Error(w, "Failed to update health check config", http.StatusInternalServerError)
+		s.jsonError(w, http.StatusInternalServerError, "Failed to update health check config")
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(existing)
+	s.jsonResponse(w, existing)
 }
 
 // handleDeleteHealthCheckConfig deletes a health check configuration.
@@ -235,19 +231,20 @@ func (s *MasterServer) handleDeleteHealthCheckConfig(w http.ResponseWriter, r *h
 
 	if err := s.store.DeleteHealthCheckConfig(ctx, id); err != nil {
 		if err.Error() == "cannot delete global health check config" {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			s.jsonError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		if services.IsNotFound(err) {
-			http.Error(w, "Health check config not found", http.StatusNotFound)
+			s.jsonError(w, http.StatusNotFound, "Health check config not found")
 			return
 		}
 		s.logger.Error("Failed to delete health check config", zap.Error(err))
-		http.Error(w, "Failed to delete health check config", http.StatusInternalServerError)
+		s.jsonError(w, http.StatusInternalServerError, "Failed to delete health check config")
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	// H3 FIX: Standardize DELETE to return 200 with JSON body for consistency
+	s.jsonResponse(w, StatusResponse{Status: "deleted"})
 }
 
 // handleGlobalHealthCheck handles /api/v1/health-checks/global
@@ -256,17 +253,16 @@ func (s *MasterServer) handleGlobalHealthCheck(w http.ResponseWriter, r *http.Re
 
 	config, err := s.store.GetGlobalHealthCheckConfig(ctx)
 	if services.IsNotFound(err) {
-		http.Error(w, "Global health check config not found", http.StatusNotFound)
+		s.jsonError(w, http.StatusNotFound, "Global health check config not found")
 		return
 	}
 	if err != nil {
 		s.logger.Error("Failed to get global health check config", zap.Error(err))
-		http.Error(w, "Failed to get global health check config", http.StatusInternalServerError)
+		s.jsonError(w, http.StatusInternalServerError, "Failed to get global health check config")
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(config)
+	s.jsonResponse(w, config)
 }
 
 // handleProjectHealthConfig handles /api/v1/projects/{id}/health-config
@@ -278,17 +274,16 @@ func (s *MasterServer) handleProjectHealthConfig(w http.ResponseWriter, r *http.
 		// Get health check config for project (uses global if none set)
 		config, err := s.store.GetHealthCheckConfigForProject(ctx, projectID)
 		if services.IsNotFound(err) {
-			http.Error(w, "No health check config found", http.StatusNotFound)
+			s.jsonError(w, http.StatusNotFound, "No health check config found")
 			return
 		}
 		if err != nil {
 			s.logger.Error("Failed to get project health config", zap.Error(err))
-			http.Error(w, "Failed to get project health config", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Failed to get project health config")
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(config)
+		s.jsonResponse(w, config)
 
 	case http.MethodPut:
 		var req struct {
@@ -297,7 +292,7 @@ func (s *MasterServer) handleProjectHealthConfig(w http.ResponseWriter, r *http.
 			RollbackOnHealthFail *bool  `json:"rollbackOnHealthFail"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "Invalid request body", http.StatusBadRequest)
+			s.jsonError(w, http.StatusBadRequest, "Invalid request body")
 			return
 		}
 
@@ -305,12 +300,12 @@ func (s *MasterServer) handleProjectHealthConfig(w http.ResponseWriter, r *http.
 		if req.HealthCheckID != nil && *req.HealthCheckID > 0 {
 			_, err := s.store.GetHealthCheckConfig(ctx, *req.HealthCheckID)
 			if services.IsNotFound(err) {
-				http.Error(w, "Health check config not found", http.StatusBadRequest)
+				s.jsonError(w, http.StatusBadRequest, "Health check config not found")
 				return
 			}
 			if err != nil {
 				s.logger.Error("Failed to validate health check config", zap.Error(err))
-				http.Error(w, "Failed to validate health check config", http.StatusInternalServerError)
+				s.jsonError(w, http.StatusInternalServerError, "Failed to validate health check config")
 				return
 			}
 		}
@@ -327,19 +322,18 @@ func (s *MasterServer) handleProjectHealthConfig(w http.ResponseWriter, r *http.
 
 		if err := s.store.UpdateProjectHealthCheck(ctx, projectID, req.HealthCheckID, autoRollback, rollbackOnHealthFail); err != nil {
 			s.logger.Error("Failed to update project health config", zap.Error(err))
-			http.Error(w, "Failed to update project health config", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "Failed to update project health config")
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		s.jsonResponse(w, map[string]interface{}{
 			"health_check_id":         req.HealthCheckID,
 			"auto_rollback_enabled":   autoRollback,
 			"rollback_on_health_fail": rollbackOnHealthFail,
 		})
 
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
 }
 
@@ -354,12 +348,11 @@ func (s *MasterServer) handleRollbackRecords(w http.ResponseWriter, r *http.Requ
 	rollbacks, total, err := s.store.ListDeploymentRollbacks(ctx, projectName, p.Limit, p.Offset)
 	if err != nil {
 		s.logger.Error("Failed to list deployment rollbacks", zap.Error(err))
-		http.Error(w, "Failed to list deployment rollbacks", http.StatusInternalServerError)
+		s.jsonError(w, http.StatusInternalServerError, "Failed to list deployment rollbacks")
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+	s.jsonResponse(w, map[string]interface{}{
 		"items":  rollbacks,
 		"total":  total,
 		"limit":  p.Limit,
@@ -374,7 +367,7 @@ func (s *MasterServer) handleRollbackRecord(w http.ResponseWriter, r *http.Reque
 	idStr := strings.Split(path, "/")[0]
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid rollback ID", http.StatusBadRequest)
+		s.jsonError(w, http.StatusBadRequest, "Invalid rollback ID")
 		return
 	}
 
@@ -382,17 +375,16 @@ func (s *MasterServer) handleRollbackRecord(w http.ResponseWriter, r *http.Reque
 
 	rollback, err := s.store.GetDeploymentRollback(ctx, id)
 	if services.IsNotFound(err) {
-		http.Error(w, "Rollback not found", http.StatusNotFound)
+		s.jsonError(w, http.StatusNotFound, "Rollback not found")
 		return
 	}
 	if err != nil {
 		s.logger.Error("Failed to get deployment rollback", zap.Error(err))
-		http.Error(w, "Failed to get deployment rollback", http.StatusInternalServerError)
+		s.jsonError(w, http.StatusInternalServerError, "Failed to get deployment rollback")
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(rollback)
+	s.jsonResponse(w, rollback)
 }
 
 // handleTestHealthCheck handles POST /api/v1/health-checks/{id}/test
@@ -402,12 +394,12 @@ func (s *MasterServer) handleTestHealthCheck(w http.ResponseWriter, r *http.Requ
 
 	config, err := s.store.GetHealthCheckConfig(ctx, id)
 	if services.IsNotFound(err) {
-		http.Error(w, "Health check config not found", http.StatusNotFound)
+		s.jsonError(w, http.StatusNotFound, "Health check config not found")
 		return
 	}
 	if err != nil {
 		s.logger.Error("Failed to get health check config", zap.Error(err))
-		http.Error(w, "Failed to get health check config", http.StatusInternalServerError)
+		s.jsonError(w, http.StatusInternalServerError, "Failed to get health check config")
 		return
 	}
 
@@ -422,8 +414,7 @@ func (s *MasterServer) handleTestHealthCheck(w http.ResponseWriter, r *http.Requ
 	// Perform the health check directly from the master (for testing purposes)
 	result := s.performHealthCheck(ctx, config)
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(result)
+	s.jsonResponse(w, result)
 }
 
 // performHealthCheck performs a health check from the master server (for testing).

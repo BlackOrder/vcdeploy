@@ -13,7 +13,7 @@ import (
 // Returns true if access is granted, false if denied (error already written to w).
 func (s *MasterServer) requireReadAccess(ctx context.Context, w http.ResponseWriter) bool {
 	if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-		http.Error(w, msg, status)
+		s.jsonError(w, status, msg)
 		return false
 	}
 	return true
@@ -23,7 +23,7 @@ func (s *MasterServer) requireReadAccess(ctx context.Context, w http.ResponseWri
 // Returns true if access is granted, false if denied (error already written to w).
 func (s *MasterServer) requireWriteAccess(ctx context.Context, w http.ResponseWriter) bool {
 	if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
-		http.Error(w, msg, status)
+		s.jsonError(w, status, msg)
 		return false
 	}
 	return true
@@ -33,7 +33,7 @@ func (s *MasterServer) requireWriteAccess(ctx context.Context, w http.ResponseWr
 // Returns true if access is granted, false if denied (error already written to w).
 func (s *MasterServer) requireAdminAccess(ctx context.Context, w http.ResponseWriter) bool {
 	if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-		http.Error(w, msg, status)
+		s.jsonError(w, status, msg)
 		return false
 	}
 	return true

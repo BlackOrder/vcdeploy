@@ -88,6 +88,8 @@ type UserServicer interface {
 	GetByID(ctx context.Context, id int64) (*storage.User, error)
 	GetByUsername(ctx context.Context, username string) (*storage.User, error)
 	List(ctx context.Context) ([]*storage.User, error)
+	// H6: ListPaginated returns users with pagination support.
+	ListPaginated(ctx context.Context, p Pagination) (*ListResult[*storage.User], error)
 	Count(ctx context.Context) (int64, error)
 	Update(ctx context.Context, user *storage.User) error
 	Delete(ctx context.Context, id int64) error

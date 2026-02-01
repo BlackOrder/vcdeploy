@@ -19,7 +19,7 @@ func (s *MasterServer) handleProjectTypes(w http.ResponseWriter, r *http.Request
 	case http.MethodGet:
 		// Read access: viewer role + read scope
 		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -34,7 +34,7 @@ func (s *MasterServer) handleProjectTypes(w http.ResponseWriter, r *http.Request
 	case http.MethodPost:
 		// Write access: user role + write scope
 		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -64,10 +64,11 @@ func (s *MasterServer) handleProjectTypes(w http.ResponseWriter, r *http.Request
 		}
 
 		s.logAudit(r, "create", "project_type", fmt.Sprintf("name=%s", req.Name), "success")
-		s.jsonResponse(w, pt)
+		// H4 FIX: POST should return 201 Created, not 200
+		s.writeJSON(w, http.StatusCreated, pt)
 
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
 }
 
@@ -89,7 +90,7 @@ func (s *MasterServer) handleProjectType(w http.ResponseWriter, r *http.Request)
 	case http.MethodGet:
 		// Read access: viewer role + read scope
 		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -114,7 +115,7 @@ func (s *MasterServer) handleProjectType(w http.ResponseWriter, r *http.Request)
 
 		// Write access: user role + write scope
 		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -136,7 +137,7 @@ func (s *MasterServer) handleProjectType(w http.ResponseWriter, r *http.Request)
 	case http.MethodDelete:
 		// Write access: user role + write scope
 		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -150,6 +151,6 @@ func (s *MasterServer) handleProjectType(w http.ResponseWriter, r *http.Request)
 		s.jsonResponse(w, map[string]string{"status": "deleted"})
 
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
 }

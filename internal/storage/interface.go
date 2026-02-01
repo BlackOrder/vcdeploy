@@ -50,6 +50,8 @@ type UserStore interface {
 	GetUserByUsername(ctx context.Context, username string) (*User, error)
 	GetUserByID(ctx context.Context, id int64) (*User, error)
 	ListUsers(ctx context.Context) ([]*User, error)
+	// H6: ListUsersPaginated returns users with pagination support.
+	ListUsersPaginated(ctx context.Context, limit, offset int) ([]*User, error)
 	CountUsers(ctx context.Context) (int64, error)
 	UpdateUserByID(ctx context.Context, user *User) error
 	DeleteUser(ctx context.Context, id int64) error
