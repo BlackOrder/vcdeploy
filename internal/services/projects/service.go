@@ -77,6 +77,32 @@ func (s *Service) List(ctx context.Context) ([]*storage.Project, error) {
 	return s.store.ListProjects()
 }
 
+// ListPaginated returns projects with pagination support.
+func (s *Service) ListPaginated(ctx context.Context, p services.Pagination) (*services.ListResult[*storage.Project], error) {
+	projects, err := s.store.ListProjectsPaginated(ctx, p.Limit, p.Offset)
+	if err != nil {
+		return nil, fmt.Errorf("listing projects: %w", err)
+	}
+	count, err := s.store.CountProjects(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("counting projects: %w", err)
+	}
+	return &services.ListResult[*storage.Project]{
+		Items:      projects,
+		TotalCount: count,
+		Pagination: p,
+	}, nil
+}
+
+// Count returns the total number of projects.
+func (s *Service) Count(ctx context.Context) (int64, error) {
+	count, err := s.store.CountProjects(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("counting projects: %w", err)
+	}
+	return count, nil
+}
+
 // UpdateByID updates a project by ID.
 func (s *Service) UpdateByID(ctx context.Context, project *storage.Project) error {
 	if err := s.store.UpdateProjectByID(ctx, project); err != nil {

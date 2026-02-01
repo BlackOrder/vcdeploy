@@ -623,13 +623,19 @@ func (s *MasterServer) handleProjectsAPI(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
-		projects, err := s.projectService.List(ctx)
+		p := parsePagination(r)
+		result, err := s.projectService.ListPaginated(ctx, p)
 		if err != nil {
 			s.logger.Error("Failed to list projects", zap.Error(err))
 			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
-		s.jsonResponse(w, projects)
+		s.jsonResponse(w, map[string]interface{}{
+			"items":      result.Items,
+			"totalCount": result.TotalCount,
+			"limit":      result.Pagination.Limit,
+			"offset":     result.Pagination.Offset,
+		})
 
 	case http.MethodPost:
 		// Write access: user role + write scope
@@ -1062,13 +1068,19 @@ func (s *MasterServer) handleAgentsAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	agents, err := s.agentService.List(ctx)
+	p := parsePagination(r)
+	result, err := s.agentService.ListPaginated(ctx, p)
 	if err != nil {
 		s.logger.Error("Failed to list agents", zap.Error(err))
 		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
-	s.jsonResponse(w, agents)
+	s.jsonResponse(w, map[string]interface{}{
+		"items":      result.Items,
+		"totalCount": result.TotalCount,
+		"limit":      result.Pagination.Limit,
+		"offset":     result.Pagination.Offset,
+	})
 }
 
 // handleAgentAPI handles individual agent operations.

@@ -82,6 +82,7 @@ type AgentStore interface {
 	UpsertAgent(ctx context.Context, agent *Agent) error
 	GetAgent(ctx context.Context, id string) (*Agent, error)
 	ListAgents(ctx context.Context) ([]*Agent, error)
+	ListAgentsPaginated(ctx context.Context, limit, offset int) ([]*Agent, error)
 	CountAgents(ctx context.Context) (int64, error)
 	CountAgentsByStatus(ctx context.Context) (map[string]int64, error)
 	DeleteAgent(ctx context.Context, id string) error
@@ -175,6 +176,8 @@ type ProjectStore interface {
 	GetProjectByID(ctx context.Context, id int64) (*Project, error)
 	GetProjectByName(ctx context.Context, name string) (*Project, error)
 	ListProjects() ([]*Project, error)
+	ListProjectsPaginated(ctx context.Context, limit, offset int) ([]*Project, error)
+	CountProjects(ctx context.Context) (int64, error)
 	UpdateProjectByID(ctx context.Context, p *Project) error
 	UpdateProjectByName(ctx context.Context, p *Project) error
 	UpdateProjectHealthCheck(ctx context.Context, projectID int64, healthCheckID *int64, autoRollback, rollbackOnHealthFail bool) error
