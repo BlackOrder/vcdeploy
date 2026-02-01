@@ -2,6 +2,7 @@
 package commands
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -108,7 +109,7 @@ func InitCLIServices(dbPath string) (*CLIServices, func(), error) {
 	logger := zap.NewNop()
 
 	// Initialize KMS for encrypted operations (secrets, settings)
-	kms, err := security.NewKMS(db.Conn(), logger)
+	kms, err := security.NewKMS(context.Background(), db.Conn(), logger)
 	if err != nil {
 		db.Close()
 		return nil, nil, fmt.Errorf("initialize KMS: %w", err)

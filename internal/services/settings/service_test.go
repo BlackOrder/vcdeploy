@@ -17,7 +17,7 @@ func newTestService(t *testing.T) (*Service, storage.Store) {
 	t.Cleanup(cleanup)
 
 	// Create KMS using the underlying sql.DB connection
-	kms, err := security.NewKMS(db.Conn(), nil)
+	kms, err := security.NewKMS(context.Background(), db.Conn(), nil)
 	if err != nil {
 		t.Fatalf("Failed to create KMS: %v", err)
 	}

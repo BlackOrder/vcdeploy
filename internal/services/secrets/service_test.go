@@ -16,7 +16,7 @@ func newTestService(t *testing.T) (*Service, storage.Store) {
 	db, cleanup := testutil.NewTestStore(t)
 	t.Cleanup(cleanup)
 
-	kms, err := security.NewKMS(db.Conn(), nil)
+	kms, err := security.NewKMS(context.Background(), db.Conn(), nil)
 	if err != nil {
 		t.Fatalf("Failed to create KMS: %v", err)
 	}
@@ -789,7 +789,7 @@ func TestNew(t *testing.T) {
 	db, cleanup := testutil.NewTestStore(t)
 	defer cleanup()
 
-	kms, err := security.NewKMS(db.Conn(), nil)
+	kms, err := security.NewKMS(context.Background(), db.Conn(), nil)
 	if err != nil {
 		t.Fatalf("Failed to create KMS: %v", err)
 	}

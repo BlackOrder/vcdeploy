@@ -79,7 +79,7 @@ func setupTestCADB(t *testing.T) (*sql.DB, *KMS) {
 	}
 
 	// Create KMS
-	kms, err := NewKMS(db, nil)
+	kms, err := NewKMS(context.Background(), db, nil)
 	if err != nil {
 		t.Fatalf("NewKMS: %v", err)
 	}
@@ -490,8 +490,8 @@ func TestCAManagerPersistence(t *testing.T) {
 		);
 	`)
 
-	kms1, _ := NewKMS(db1, nil)
 	ctx := context.Background()
+	kms1, _ := NewKMS(ctx, db1, nil)
 	_ = kms1.Initialize(ctx)
 
 	mgr1, _ := NewCAManager(db1, kms1, nil)
@@ -508,7 +508,7 @@ func TestCAManagerPersistence(t *testing.T) {
 	db2, _ := sql.Open("sqlite", dbPath+"?_journal_mode=WAL")
 	defer db2.Close()
 
-	kms2, _ := NewKMS(db2, nil)
+	kms2, _ := NewKMS(ctx, db2, nil)
 	mgr2, err := NewCAManager(db2, kms2, nil)
 	if err != nil {
 		t.Fatalf("NewCAManager() after reopen error: %v", err)
