@@ -78,6 +78,30 @@ func (s *MemoryStore) ListUsers(ctx context.Context) ([]*User, error) {
 	return users, nil
 }
 
+// ListUsersPaginated returns users with pagination support (H6).
+func (s *MemoryStore) ListUsersPaginated(ctx context.Context, limit, offset int) ([]*User, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Convert map to slice
+	all := make([]*User, 0, len(s.users))
+	for _, user := range s.users {
+		copied := *user
+		all = append(all, &copied)
+	}
+
+	// Apply pagination
+	if offset >= len(all) {
+		return []*User{}, nil
+	}
+	end := offset + limit
+	if end > len(all) {
+		end = len(all)
+	}
+
+	return all[offset:end], nil
+}
+
 // CountUsers returns the total number of users.
 func (s *MemoryStore) CountUsers(ctx context.Context) (int64, error) {
 	s.mu.RLock()

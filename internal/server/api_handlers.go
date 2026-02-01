@@ -99,11 +99,13 @@ func (s *MasterServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		// Admin-only: listing all users
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
-		users, err := s.userService.List(ctx)
+		// H6: Add pagination support for users endpoint
+		p := parsePagination(r)
+		result, err := s.userService.ListPaginated(ctx, p)
 		if err != nil {
 			s.logger.Error("Failed to list users", zap.Error(err))
 			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
@@ -111,9 +113,9 @@ func (s *MasterServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Sanitize - remove password hashes
-		result := make([]map[string]interface{}, 0, len(users))
-		for _, u := range users {
-			result = append(result, map[string]interface{}{
+		users := make([]map[string]interface{}, 0, len(result.Items))
+		for _, u := range result.Items {
+			users = append(users, map[string]interface{}{
 				"id":        u.ID,
 				"username":  u.Username,
 				"email":     u.Email,
@@ -121,12 +123,18 @@ func (s *MasterServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 				"createdAt": u.CreatedAt,
 			})
 		}
-		s.jsonResponse(w, result)
+		// Return paginated response with metadata
+		s.jsonResponse(w, map[string]interface{}{
+			"items":      users,
+			"totalCount": result.TotalCount,
+			"limit":      result.Pagination.Limit,
+			"offset":     result.Pagination.Offset,
+		})
 
 	case http.MethodPost:
 		// Admin-only: creating users
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -1848,11 +1856,19 @@ func (s *MasterServer) handleAPIKey(w http.ResponseWriter, r *http.Request) {
 // --- Helper methods ---
 
 // jsonError sends a JSON error response.
+// H12 FIX: Properly handles encoder errors instead of ignoring them.
 func (s *MasterServer) jsonError(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"error":   true,
-		"message": message,
-	})
+// H14 FIX: Use the ErrorResponse type instead of inline map
+	if err := json.NewEncoder(w).Encode(ErrorResponse{
+		Error:   true,
+		Message: message,
+	}); err != nil {
+		s.logger.Error("Failed to encode JSON error response",
+			zap.Error(err),
+			zap.String("message", message),
+			zap.Int("status", status),
+		)
+	}
 }

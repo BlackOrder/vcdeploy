@@ -1483,6 +1483,35 @@ func (db *DB) ListUsers(ctx context.Context) ([]*User, error) {
 	return users, rows.Err()
 }
 
+// ListUsersPaginated returns users with pagination support (H6).
+func (db *DB) ListUsersPaginated(ctx context.Context, limit, offset int) ([]*User, error) {
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, username, password_hash, email, role, totp_secret, totp_enabled, 
+		       must_change_password, created_at, updated_at
+		FROM users ORDER BY username LIMIT ? OFFSET ?
+	`, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("querying users: %w", err)
+	}
+	defer rows.Close()
+
+	var users []*User
+	for rows.Next() {
+		var user User
+		var totpSecret sql.NullString
+		if err := rows.Scan(
+			&user.ID, &user.Username, &user.PasswordHash, &user.Email, &user.Role,
+			&totpSecret, &user.TOTPEnabled, &user.MustChangePassword,
+			&user.CreatedAt, &user.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scanning user: %w", err)
+		}
+		user.TOTPSecret = totpSecret.String
+		users = append(users, &user)
+	}
+	return users, rows.Err()
+}
+
 // CountUsers returns the total number of users.
 func (db *DB) CountUsers(ctx context.Context) (int64, error) {
 	var count int64

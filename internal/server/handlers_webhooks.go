@@ -8,7 +8,7 @@ import (
 // handleGitHubWebhook handles incoming GitHub webhook requests.
 func (s *MasterServer) handleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
@@ -21,7 +21,7 @@ func (s *MasterServer) handleGitHubWebhook(w http.ResponseWriter, r *http.Reques
 	// Fallback: basic validation only
 	signature := r.Header.Get("X-Hub-Signature-256")
 	if signature == "" {
-		http.Error(w, "Missing signature", http.StatusUnauthorized)
+		s.jsonError(w, http.StatusUnauthorized, "Missing signature")
 		return
 	}
 	s.logger.Warn("Received GitHub webhook but no processor configured - webhook will not trigger deployment")
@@ -31,7 +31,7 @@ func (s *MasterServer) handleGitHubWebhook(w http.ResponseWriter, r *http.Reques
 // handleGitLabWebhook handles incoming GitLab webhook requests.
 func (s *MasterServer) handleGitLabWebhook(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
@@ -44,7 +44,7 @@ func (s *MasterServer) handleGitLabWebhook(w http.ResponseWriter, r *http.Reques
 	// Fallback: basic validation only
 	token := r.Header.Get("X-Gitlab-Token")
 	if token == "" {
-		http.Error(w, "Missing token", http.StatusUnauthorized)
+		s.jsonError(w, http.StatusUnauthorized, "Missing token")
 		return
 	}
 	s.logger.Warn("Received GitLab webhook but no processor configured - webhook will not trigger deployment")
@@ -54,7 +54,7 @@ func (s *MasterServer) handleGitLabWebhook(w http.ResponseWriter, r *http.Reques
 // handleBitbucketWebhook handles incoming Bitbucket webhook requests.
 func (s *MasterServer) handleBitbucketWebhook(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
