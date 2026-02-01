@@ -173,7 +173,7 @@ func TestAgentBinaries(t *testing.T) {
 		defer resp.Body.Close()
 
 		// May return 200 (with binary info) or 404 (no binaries available)
-		// NoServerError is appropriate since both are valid responses
-		ctx.Assertions.NoServerError(resp)
+		// StatusOneOf is more specific than NoServerError
+		ctx.Assertions.StatusOneOf(resp, 200, 404)
 	})
 }

@@ -189,19 +189,50 @@ func (s *MasterServer) handleUpdateHealthCheckConfig(w http.ResponseWriter, r *h
 		existing.URL = *updates.URL
 	}
 	if updates.Method != nil {
-		existing.Method = *updates.Method
+		// M8 FIX: Validate HTTP method
+		method := strings.ToUpper(*updates.Method)
+		validMethods := map[string]bool{"GET": true, "POST": true, "PUT": true, "HEAD": true, "OPTIONS": true}
+		if !validMethods[method] {
+			s.jsonError(w, http.StatusBadRequest, "Invalid method: must be GET, POST, PUT, HEAD, or OPTIONS")
+			return
+		}
+		existing.Method = method
 	}
 	if updates.ExpectedStatus != nil {
-		existing.ExpectedStatus = *updates.ExpectedStatus
+		// M8 FIX: Validate HTTP status code range
+		status := *updates.ExpectedStatus
+		if status < 100 || status >= 600 {
+			s.jsonError(w, http.StatusBadRequest, "Invalid expectedStatus: must be between 100 and 599")
+			return
+		}
+		existing.ExpectedStatus = status
 	}
 	if updates.TimeoutSeconds != nil {
-		existing.TimeoutSeconds = *updates.TimeoutSeconds
+		// M8 FIX: Validate timeout range
+		timeout := *updates.TimeoutSeconds
+		if timeout < 1 || timeout > 300 {
+			s.jsonError(w, http.StatusBadRequest, "Invalid timeoutSeconds: must be between 1 and 300")
+			return
+		}
+		existing.TimeoutSeconds = timeout
 	}
 	if updates.Retries != nil {
-		existing.Retries = *updates.Retries
+		// M8 FIX: Validate retries range
+		retries := *updates.Retries
+		if retries < 0 || retries > 10 {
+			s.jsonError(w, http.StatusBadRequest, "Invalid retries: must be between 0 and 10")
+			return
+		}
+		existing.Retries = retries
 	}
 	if updates.RetryDelaySeconds != nil {
-		existing.RetryDelaySeconds = *updates.RetryDelaySeconds
+		// M8 FIX: Validate retry delay range
+		delay := *updates.RetryDelaySeconds
+		if delay < 0 || delay > 60 {
+			s.jsonError(w, http.StatusBadRequest, "Invalid retryDelaySeconds: must be between 0 and 60")
+			return
+		}
+		existing.RetryDelaySeconds = delay
 	}
 	if updates.Headers != nil {
 		existing.Headers = *updates.Headers

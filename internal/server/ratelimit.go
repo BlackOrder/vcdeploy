@@ -161,10 +161,10 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 					retryAfter = 0
 				}
 				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
-				http.Error(w, "IP address blocked", http.StatusForbidden)
+				WriteJSONError(w, http.StatusForbidden, "IP address blocked")
 			} else {
 				w.Header().Set("Retry-After", "1")
-				http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
+				WriteJSONError(w, http.StatusTooManyRequests, "Rate limit exceeded")
 			}
 			return
 		}

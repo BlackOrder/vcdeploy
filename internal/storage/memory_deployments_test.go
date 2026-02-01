@@ -134,44 +134,6 @@ func TestMemoryStore_CountDeploymentsByStatus(t *testing.T) {
 	}
 }
 
-func TestMemoryStore_InsertDeployment(t *testing.T) {
-	s := NewMemoryStore(nil)
-	defer s.Close()
-
-	d := &DeploymentCLI{
-		ID:          "cli-deploy-1",
-		ProjectID:   1,
-		ProjectName: "myproject",
-		Target:      "production",
-		Status:      "running",
-		StartedAt:   time.Now(),
-	}
-	err := s.InsertDeployment(d)
-	if err != nil {
-		t.Fatalf("InsertDeployment() error = %v", err)
-	}
-
-	found, _ := s.GetDeployment(context.Background(), "cli-deploy-1")
-	if found.Project != "myproject" {
-		t.Errorf("Project = %s, want myproject", found.Project)
-	}
-}
-
-func TestMemoryStore_SaveDeployment_Update(t *testing.T) {
-	s := NewMemoryStore(nil)
-	defer s.Close()
-
-	s.InsertDeployment(&DeploymentCLI{ID: "save-test", ProjectName: "proj", Status: "running"})
-
-	now := time.Now()
-	s.SaveDeployment(&DeploymentCLI{ID: "save-test", Status: "completed", FinishedAt: &now})
-
-	found, _ := s.GetDeployment(context.Background(), "save-test")
-	if found.Status != "completed" {
-		t.Errorf("Status = %s, want completed", found.Status)
-	}
-}
-
 // --- DeploymentLog tests ---
 
 func TestMemoryStore_CreateDeploymentLog(t *testing.T) {

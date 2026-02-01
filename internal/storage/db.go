@@ -993,34 +993,6 @@ func (db *DB) DeleteProjectType(name string) error {
 	return nil
 }
 
-// --- Extended Deployment operations for CLI ---
-
-// InsertDeployment creates a deployment record (CLI version - alternate method)
-func (db *DB) InsertDeployment(d *DeploymentCLI) error {
-	if d.ID == "" {
-		d.ID = fmt.Sprintf("deploy-%d", time.Now().UnixNano())
-	}
-	_, err := db.conn.Exec(`
-		INSERT INTO deployments (id, project, target, branch, status, triggered_by, started_at)
-		VALUES (?, ?, ?, '', ?, ?, ?)
-	`, d.ID, d.ProjectName, d.Target, d.Status, d.TriggeredBy, d.StartedAt)
-	if err != nil {
-		return fmt.Errorf("inserting deployment: %w", err)
-	}
-	return nil
-}
-
-// SaveDeployment updates a deployment record (CLI version - alternate method)
-func (db *DB) SaveDeployment(d *DeploymentCLI) error {
-	_, err := db.conn.Exec(`
-		UPDATE deployments SET status = ?, completed_at = ? WHERE id = ?
-	`, d.Status, d.FinishedAt, d.ID)
-	if err != nil {
-		return fmt.Errorf("saving deployment: %w", err)
-	}
-	return nil
-}
-
 // ExportAllSecrets exports all secrets (for backup)
 func (db *DB) ExportAllSecrets() (map[string]map[string]string, error) {
 	rows, err := db.conn.Query(`SELECT project, key, value_encrypted FROM secrets`)

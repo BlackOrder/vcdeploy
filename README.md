@@ -345,6 +345,15 @@ On startup, vcdeploy checks for admin credentials via environment variables. Thi
 | `VCDEPLOY_CONFIG_DIR` | Configuration directory | `/etc/vcdeploy` |
 | `VCDEPLOY_RUN_DIR` | Runtime directory (PID files) | `/var/run/vcdeploy` |
 | `VCDEPLOY_LOG_DIR` | Log directory | `/var/log/vcdeploy` |
+| `VCDEPLOY_SYSTEM_CONFIG` | Path to system config file (overrides default search paths) | - |
+
+### Security
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VCDEPLOY_MASTER_KEY` | Master encryption key for secrets (32-byte hex string). If not set, a key is auto-generated and stored in `$VCDEPLOY_DATA_DIR/.master-key` | Auto-generated |
+
+> **Security Note:** In production, set `VCDEPLOY_MASTER_KEY` explicitly via environment or secrets management (e.g., Kubernetes Secrets, HashiCorp Vault). Never commit the key to version control.
 
 ### CLI Access
 

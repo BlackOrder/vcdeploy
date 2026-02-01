@@ -133,7 +133,10 @@ func (c *AppContext) Errorln(args ...interface{}) {
 // LoadConfig loads the configuration from ConfigPath.
 func (c *AppContext) LoadConfig() error {
 	if c.ConfigPath == "" {
-		sysCfg := config.MustGetSystemConfig()
+		sysCfg, err := config.GetSystemConfig()
+		if err != nil {
+			return fmt.Errorf("load system config: %w", err)
+		}
 		c.ConfigPath = sysCfg.MasterConfigPath()
 	}
 
@@ -185,7 +188,10 @@ func (c *AppContext) OpenStorage() error {
 	}
 
 	// Use default database path if not configured
-	sysCfg := config.MustGetSystemConfig()
+	sysCfg, err := config.GetSystemConfig()
+	if err != nil {
+		return fmt.Errorf("load system config: %w", err)
+	}
 	dbPath := sysCfg.DatabasePath()
 	if c.Config.Backup.Database.Path != "" {
 		dbPath = c.Config.Backup.Database.Path

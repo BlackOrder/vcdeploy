@@ -183,23 +183,22 @@ func TestCommandValidator_ValidateHooks(t *testing.T) {
 	}
 }
 
-func TestCommandValidator_MustValidate_Valid(t *testing.T) {
+func TestCommandValidator_Validate_Valid(t *testing.T) {
 	v := NewCommandValidator()
 
-	// Should not panic
-	v.MustValidate("git pull")
+	// Valid commands should not return error
+	if err := v.Validate("git pull"); err != nil {
+		t.Errorf("Validate(valid command) returned error: %v", err)
+	}
 }
 
-func TestCommandValidator_MustValidate_Invalid(t *testing.T) {
+func TestCommandValidator_Validate_Invalid(t *testing.T) {
 	v := NewCommandValidator()
 
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("MustValidate should panic on invalid command")
-		}
-	}()
-
-	v.MustValidate("perl -e 'exec(\"rm -rf /\")'")
+	// Invalid commands should return error
+	if err := v.Validate("perl -e 'exec(\"rm -rf /\")'"); err == nil {
+		t.Error("Validate should return error on invalid command")
+	}
 }
 
 func TestExtractBinary(t *testing.T) {

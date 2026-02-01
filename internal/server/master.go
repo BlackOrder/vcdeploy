@@ -1216,7 +1216,7 @@ func (s *MasterServer) withAuth(handler http.HandlerFunc) http.HandlerFunc {
 			}
 			s.logger.Debug("Session token validation failed", zap.Error(err))
 
-			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			s.jsonError(w, http.StatusUnauthorized, "Invalid token")
 			return
 		}
 
@@ -1232,7 +1232,7 @@ func (s *MasterServer) withAuth(handler http.HandlerFunc) http.HandlerFunc {
 			s.logger.Debug("Session validation failed", zap.Error(err))
 		}
 
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		s.jsonError(w, http.StatusUnauthorized, "Unauthorized")
 	}
 }
 

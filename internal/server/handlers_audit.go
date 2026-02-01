@@ -13,7 +13,7 @@ import (
 // handleAuditLogs handles GET for /api/v1/audit.
 func (s *MasterServer) handleAuditLogs(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
@@ -21,7 +21,7 @@ func (s *MasterServer) handleAuditLogs(w http.ResponseWriter, r *http.Request) {
 
 	// Admin-only: viewing audit logs
 	if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-		http.Error(w, msg, status)
+		s.jsonError(w, status, msg)
 		return
 	}
 
@@ -34,7 +34,7 @@ func (s *MasterServer) handleAuditLogs(w http.ResponseWriter, r *http.Request) {
 	entries, err := s.auditService.List(ctx, p.Limit, p.Offset)
 	if err != nil {
 		s.logger.Error("Failed to list audit logs", zap.Error(err))
-		http.Error(w, "Internal error", http.StatusInternalServerError)
+		s.jsonError(w, http.StatusInternalServerError, "Internal error")
 		return
 	}
 

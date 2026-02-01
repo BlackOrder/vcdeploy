@@ -120,10 +120,6 @@ type DeploymentStore interface {
 	UpdateDeployment(ctx context.Context, d *DeploymentRecord) error
 	ListDeploymentsRecent(ctx context.Context, limit int) ([]*DeploymentRecord, error)
 	CountDeploymentsByStatus(ctx context.Context) (map[string]int64, error)
-
-	// Legacy CLI methods
-	InsertDeployment(d *DeploymentCLI) error
-	SaveDeployment(d *DeploymentCLI) error
 }
 
 // DeploymentLogStore defines deployment log operations.

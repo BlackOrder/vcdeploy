@@ -69,6 +69,22 @@ paths:
                 type: string
                 example: ok
 
+  /livez:
+    get:
+      tags: [Health]
+      summary: Liveness probe (alias)
+      description: Alias for /healthz. Returns 200 if the process is alive. Used for Kubernetes liveness probes.
+      operationId: getLivenessAlias
+      security: []
+      responses:
+        '200':
+          description: Process is alive
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: ok
+
   /readyz:
     get:
       tags: [Health]
@@ -682,14 +698,20 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /api/v1/webhooks/github:
+  /webhook/github/{project}:
     post:
       tags: [Webhooks]
       summary: GitHub webhook
-      description: Receive webhook events from GitHub.
+      description: Receive webhook events from GitHub for a specific project.
       operationId: handleGitHubWebhook
       security: []
       parameters:
+        - name: project
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project name
         - name: X-Hub-Signature-256
           in: header
           required: true
@@ -702,6 +724,84 @@ paths:
           schema:
             type: string
           description: Event type (push, pull_request, etc.)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Webhook processed
+        '400':
+          description: Invalid webhook
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /webhook/gitlab/{project}:
+    post:
+      tags: [Webhooks]
+      summary: GitLab webhook
+      description: Receive webhook events from GitLab for a specific project.
+      operationId: handleGitLabWebhook
+      security: []
+      parameters:
+        - name: project
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project name
+        - name: X-Gitlab-Token
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Secret token for verification
+        - name: X-Gitlab-Event
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Event type (Push Hook, Merge Request Hook, etc.)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Webhook processed
+        '400':
+          description: Invalid webhook
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /webhook/bitbucket/{project}:
+    post:
+      tags: [Webhooks]
+      summary: Bitbucket webhook
+      description: Receive webhook events from Bitbucket for a specific project.
+      operationId: handleBitbucketWebhook
+      security: []
+      parameters:
+        - name: project
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project name
+        - name: X-Event-Key
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Event type (repo:push, pullrequest:created, etc.)
       requestBody:
         required: true
         content:
