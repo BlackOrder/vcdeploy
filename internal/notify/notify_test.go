@@ -709,8 +709,8 @@ func TestWebhookNotifierSend(t *testing.T) {
 		t.Fatalf("WebhookNotifier.Send() error = %v", err)
 	}
 
-	if receivedPayload["project_id"] != "webhook-test" {
-		t.Errorf("Received payload.project_id = %v, want webhook-test", receivedPayload["project_id"])
+	if receivedPayload["projectId"] != "webhook-test" {
+		t.Errorf("Received payload.projectId = %v, want webhook-test", receivedPayload["projectId"])
 	}
 }
 
@@ -896,7 +896,7 @@ func BenchmarkEventMarshal(b *testing.B) {
 }
 
 func BenchmarkComputeHMACSHA256(b *testing.B) {
-	message := []byte(`{"type":"deployment","project_id":"bench","status":"success"}`)
+	message := []byte(`{"type":"deployment","projectId":"bench","status":"success"}`)
 	key := []byte("benchmark-secret-key")
 
 	b.ResetTimer()
