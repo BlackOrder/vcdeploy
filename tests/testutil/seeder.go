@@ -6,6 +6,17 @@ import (
 	"net/http"
 )
 
+// SeedResult contains all created test entity IDs from SeedAll.
+type SeedResult struct {
+	AdminUserID    interface{}
+	ViewerUserID   interface{}
+	OperatorUserID interface{}
+	ProjectID      interface{}
+	SecretID       interface{}
+	APIKeyID       interface{}
+	APIKey         string // The actual API key value
+}
+
 // Seeder provides test data seeding capabilities.
 type Seeder struct {
 	client *HTTPClient
@@ -16,7 +27,88 @@ func NewSeeder(client *HTTPClient) *Seeder {
 	return &Seeder{client: client}
 }
 
+// SeedAll creates a complete test environment with all common entities.
+// Returns a SeedResult with all created entity IDs or an error.
+func (s *Seeder) SeedAll() (*SeedResult, error) {
+	result := &SeedResult{}
+
+	// Create admin user
+	adminUser, err := s.SeedUser(TestData.AdminUser, TestData.AdminUser+"@test.com", TestData.AdminPass, "admin")
+	if err != nil {
+		// Check if already exists
+		if adminUser == nil {
+			return nil, fmt.Errorf("failed to seed admin user: %w", err)
+		}
+	}
+	if adminUser != nil {
+		result.AdminUserID = adminUser["id"]
+	}
+
+	// Create viewer user
+	viewerUser, err := s.SeedUser(TestData.ViewerUser, TestData.ViewerUser+"@test.com", TestData.ViewerPass, "viewer")
+	if err != nil {
+		if viewerUser == nil {
+			return nil, fmt.Errorf("failed to seed viewer user: %w", err)
+		}
+	}
+	if viewerUser != nil {
+		result.ViewerUserID = viewerUser["id"]
+	}
+
+	// Create operator user
+	operatorUser, err := s.SeedUser(TestData.OperatorUser, TestData.OperatorUser+"@test.com", TestData.OperatorPass, "operator")
+	if err != nil {
+		if operatorUser == nil {
+			return nil, fmt.Errorf("failed to seed operator user: %w", err)
+		}
+	}
+	if operatorUser != nil {
+		result.OperatorUserID = operatorUser["id"]
+	}
+
+	// Create test project
+	project, err := s.SeedProject(TestData.TestProject1, TestData.TestRepo, TestData.TestBranch, TestData.TestPath, "generic")
+	if err != nil {
+		if project == nil {
+			return nil, fmt.Errorf("failed to seed project: %w", err)
+		}
+	}
+	if project != nil {
+		result.ProjectID = project["id"]
+	}
+
+	// Create test secret (requires project)
+	if result.ProjectID != nil {
+		secret, err := s.SeedSecret(TestData.TestProject1, "env", TestData.TestSecretKey, TestData.TestSecretValue)
+		if err != nil {
+			if secret == nil {
+				return nil, fmt.Errorf("failed to seed secret: %w", err)
+			}
+		}
+		if secret != nil {
+			result.SecretID = secret["id"]
+		}
+	}
+
+	// Create API key
+	apiKey, err := s.SeedAPIKey("test-seeder-key", []string{"read", "write", "admin"})
+	if err != nil {
+		if apiKey == nil {
+			return nil, fmt.Errorf("failed to seed API key: %w", err)
+		}
+	}
+	if apiKey != nil {
+		result.APIKeyID = apiKey["id"]
+		if key, ok := apiKey["key"].(string); ok {
+			result.APIKey = key
+		}
+	}
+
+	return result, nil
+}
+
 // SeedUser creates a test user and returns the user data.
+// If the user already exists (409 Conflict), returns nil user without error for idempotency.
 func (s *Seeder) SeedUser(username, email, password, role string) (map[string]interface{}, error) {
 	user := map[string]interface{}{
 		"username": username,
@@ -31,6 +123,11 @@ func (s *Seeder) SeedUser(username, email, password, role string) (map[string]in
 	}
 	defer resp.Body.Close()
 
+	// Handle duplicate gracefully for idempotent seeding
+	if resp.StatusCode == http.StatusConflict {
+		return nil, nil
+	}
+
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		body, _ := ReadBody(resp)
 		return nil, fmt.Errorf("failed to create user %s: status %d: %s", username, resp.StatusCode, body)
@@ -44,6 +141,7 @@ func (s *Seeder) SeedUser(username, email, password, role string) (map[string]in
 }
 
 // SeedProject creates a test project and returns the project data.
+// If the project already exists (409 Conflict), returns nil project without error for idempotency.
 func (s *Seeder) SeedProject(name, repo, branch, deployPath, projectType string) (map[string]interface{}, error) {
 	project := map[string]interface{}{
 		"name":        name,
@@ -59,6 +157,11 @@ func (s *Seeder) SeedProject(name, repo, branch, deployPath, projectType string)
 	}
 	defer resp.Body.Close()
 
+	// Handle duplicate gracefully for idempotent seeding
+	if resp.StatusCode == http.StatusConflict {
+		return nil, nil
+	}
+
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		body, _ := ReadBody(resp)
 		return nil, fmt.Errorf("failed to create project %s: status %d: %s", name, resp.StatusCode, body)
@@ -72,6 +175,7 @@ func (s *Seeder) SeedProject(name, repo, branch, deployPath, projectType string)
 }
 
 // SeedSecret creates a test secret and returns the secret data.
+// If the secret already exists (409 Conflict), returns nil secret without error for idempotency.
 func (s *Seeder) SeedSecret(project, scope, key, value string) (map[string]interface{}, error) {
 	secret := map[string]interface{}{
 		"project": project,
@@ -86,6 +190,11 @@ func (s *Seeder) SeedSecret(project, scope, key, value string) (map[string]inter
 	}
 	defer resp.Body.Close()
 
+	// Handle duplicate gracefully for idempotent seeding
+	if resp.StatusCode == http.StatusConflict {
+		return nil, nil
+	}
+
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		body, _ := ReadBody(resp)
 		return nil, fmt.Errorf("failed to create secret %s: status %d: %s", key, resp.StatusCode, body)
@@ -99,6 +208,7 @@ func (s *Seeder) SeedSecret(project, scope, key, value string) (map[string]inter
 }
 
 // SeedAPIKey creates a test API key and returns the key data.
+// If the API key already exists (409 Conflict), returns nil without error for idempotency.
 func (s *Seeder) SeedAPIKey(name string, permissions []string) (map[string]interface{}, error) {
 	apiKey := map[string]interface{}{
 		"name":        name,
@@ -110,6 +220,11 @@ func (s *Seeder) SeedAPIKey(name string, permissions []string) (map[string]inter
 		return nil, fmt.Errorf("failed to create API key: %w", err)
 	}
 	defer resp.Body.Close()
+
+	// Handle duplicate gracefully for idempotent seeding
+	if resp.StatusCode == http.StatusConflict {
+		return nil, nil
+	}
 
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		body, _ := ReadBody(resp)
