@@ -105,7 +105,8 @@ func TestGitHubWebhook(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		// Should accept or reject based on config, not 404
+		// Webhook may return 200 (accepted), 400 (invalid payload), or other 4xx based on config
+		// NoServerError is appropriate since we're testing the endpoint works, not deployment success
 		ctx.Assertions.NoServerError(resp)
 	})
 
@@ -128,6 +129,8 @@ func TestGitHubWebhook(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
+		// Ping events may return 200 (acknowledged) or 4xx (no project/config)
+		// NoServerError is appropriate for webhook endpoint availability testing
 		ctx.Assertions.NoServerError(resp)
 	})
 
@@ -208,6 +211,8 @@ func TestGitLabWebhook(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
+		// Webhook may return 200 (accepted) or 4xx (auth/validation issues)
+		// NoServerError is appropriate for webhook endpoint availability testing
 		ctx.Assertions.NoServerError(resp)
 	})
 
@@ -264,6 +269,8 @@ func TestBitbucketWebhook(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
+		// Webhook may return 200 (accepted) or 4xx (auth/validation issues)
+		// NoServerError is appropriate for webhook endpoint availability testing
 		ctx.Assertions.NoServerError(resp)
 	})
 

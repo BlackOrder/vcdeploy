@@ -132,7 +132,7 @@ func TestUsersAPI(t *testing.T) {
 			t.Fatalf("request failed: %v", err)
 		}
 		defer resp.Body.Close()
-		ctx.Assertions.NoServerError(resp)
+		ctx.Assertions.StatusOK(resp)
 	})
 
 	t.Run("create user with duplicate username", func(t *testing.T) {

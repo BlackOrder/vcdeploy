@@ -213,7 +213,7 @@ func TestProjectsAPI(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		ctx.Assertions.NoServerError(resp)
+		ctx.Assertions.StatusOK(resp)
 	})
 
 	t.Cleanup(func() {
@@ -275,7 +275,8 @@ func TestProjectDeployments(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		// Deployment may fail due to no agents, but endpoint should respond
+		// Deployment may fail due to no agents (4xx) but should not have server errors (5xx)
+		// NoServerError is appropriate here since we're testing the endpoint works, not the deployment itself
 		ctx.Assertions.NoServerError(resp)
 	})
 
@@ -347,7 +348,7 @@ func TestProjectHealthCheck(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		ctx.Assertions.NoServerError(resp)
+		ctx.Assertions.StatusOK(resp)
 	})
 
 	t.Run("get health check config", func(t *testing.T) {
@@ -357,7 +358,7 @@ func TestProjectHealthCheck(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		ctx.Assertions.NoServerError(resp)
+		ctx.Assertions.StatusOK(resp)
 	})
 
 	t.Cleanup(func() {

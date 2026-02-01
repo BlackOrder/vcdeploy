@@ -140,7 +140,8 @@ func TestSettingsExportImport(t *testing.T) {
 			t.Fatalf("request failed: %v", err)
 		}
 		defer resp.Body.Close()
-		// May return 400 or 200 depending on validation
+		// May return 400 (validation error) or 200 (accepts partial data) depending on validation
+		// NoServerError is appropriate here since both 2xx and 4xx are valid responses
 		ctx.Assertions.NoServerError(resp)
 	})
 }
