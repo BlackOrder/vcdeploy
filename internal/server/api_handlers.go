@@ -181,11 +181,12 @@ func (s *MasterServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 		s.logAudit(r, "create", "user", fmt.Sprintf("Created user: %s", req.Username), "success")
 
 		w.WriteHeader(http.StatusCreated)
-		s.jsonResponse(w, map[string]interface{}{
-			"id":       user.ID,
-			"username": user.Username,
-			"email":    user.Email,
-			"role":     user.Role,
+		s.jsonResponse(w, UserCreateResponse{
+			ID:        user.ID,
+			Username:  user.Username,
+			Email:     user.Email,
+			Role:      user.Role,
+			CreatedAt: user.CreatedAt,
 		})
 
 	default:
@@ -229,12 +230,12 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
-		s.jsonResponse(w, map[string]interface{}{
-			"id":        user.ID,
-			"username":  user.Username,
-			"email":     user.Email,
-			"role":      user.Role,
-			"createdAt": user.CreatedAt,
+		s.jsonResponse(w, UserResponse{
+			ID:        user.ID,
+			Username:  user.Username,
+			Email:     user.Email,
+			Role:      user.Role,
+			CreatedAt: user.CreatedAt,
 		})
 
 	case http.MethodPut:
@@ -289,7 +290,7 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 		}
 
 		s.logAudit(r, "update", "user", fmt.Sprintf("Updated user: %s", user.Username), "success")
-		s.jsonResponse(w, map[string]string{"status": "updated"})
+		s.jsonResponse(w, StatusResponse{Status: "updated"})
 
 	case http.MethodDelete:
 		// Admin-only: deleting users
@@ -323,7 +324,7 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 			"role":     user.Role,
 		}
 		s.logAuditWithSnapshot(r, "delete", "user", fmt.Sprintf("%d", user.ID), userSnapshot, fmt.Sprintf("Deleted user: %s", user.Username), "success")
-		s.jsonResponse(w, map[string]string{"status": "deleted"})
+		s.jsonResponse(w, StatusResponse{Status: "deleted"})
 
 	case http.MethodPatch:
 		// Admin-only: partial updates (e.g., password change)
@@ -387,7 +388,7 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 		}
 
 		s.logAudit(r, "update", "user", fmt.Sprintf("Updated user: %s", user.Username), "success")
-		s.jsonResponse(w, map[string]string{"status": "updated"})
+		s.jsonResponse(w, StatusResponse{Status: "updated"})
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -488,7 +489,7 @@ func (s *MasterServer) handleSettingsCategory(w http.ResponseWriter, r *http.Req
 		}
 
 		s.logAudit(r, "update", "settings", fmt.Sprintf("Updated settings category: %s", category), "success")
-		s.jsonResponse(w, map[string]string{"status": "updated"})
+		s.jsonResponse(w, StatusResponse{Status: "updated"})
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -587,9 +588,9 @@ func (s *MasterServer) handleSettingsImport(w http.ResponseWriter, r *http.Reque
 	}
 
 	s.logAudit(r, "import", "settings", fmt.Sprintf("Imported %d settings", count), "success")
-	s.jsonResponse(w, map[string]interface{}{
-		"status":   "imported",
-		"imported": count,
+	s.jsonResponse(w, SettingsImportResponse{
+		Status:   "imported",
+		Imported: count,
 	})
 }
 
@@ -800,7 +801,7 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 
 		// Log with snapshot of deleted resource
 		s.logAuditWithSnapshot(r, "delete", "project", fmt.Sprintf("%d", project.ID), project, fmt.Sprintf("Deleted project: %s (ID: %d)", project.Name, projectID), "success")
-		s.jsonResponse(w, map[string]string{"status": "deleted"})
+		s.jsonResponse(w, StatusResponse{Status: "deleted"})
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -895,7 +896,7 @@ func (s *MasterServer) handleProjectWebhooksInternal(w http.ResponseWriter, r *h
 
 		s.logAudit(r, "create", "webhook", fmt.Sprintf("Configured %s webhook for project: %s", req.Provider, project.Name), "success")
 		w.WriteHeader(http.StatusCreated)
-		s.jsonResponse(w, map[string]string{"status": "created"})
+		s.jsonResponse(w, StatusResponse{Status: "created"})
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -986,10 +987,10 @@ func (s *MasterServer) handleProjectDeployInternal(w http.ResponseWriter, r *htt
 
 		s.logAudit(r, "schedule", "deployment", fmt.Sprintf("Scheduled deployment for %s at %s", project.Name, scheduledTime), "success")
 		w.WriteHeader(http.StatusAccepted)
-		s.jsonResponse(w, map[string]interface{}{
-			"id":           deploymentID,
-			"status":       "scheduled",
-			"scheduled_at": scheduledTime,
+		s.jsonResponse(w, ScheduledDeploymentResponse{
+			ID:          deploymentID,
+			Status:      "scheduled",
+			ScheduledAt: scheduledTime,
 		})
 		return
 	}
@@ -1192,7 +1193,7 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 			"lastSeenAt": agent.LastSeenAt,
 		}
 		s.logAuditWithSnapshot(r, "delete", "agent", agentID, agentSnapshot, fmt.Sprintf("Deleted agent: %s", agentID), "success")
-		s.jsonResponse(w, map[string]string{"status": "deleted"})
+		s.jsonResponse(w, StatusResponse{Status: "deleted"})
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -1222,10 +1223,10 @@ func (s *MasterServer) handleAgentToken(w http.ResponseWriter, r *http.Request, 
 
 	s.logAudit(r, "create", "agent_token", fmt.Sprintf("Generated token for agent: %s", agentID), "success")
 
-	s.jsonResponse(w, map[string]string{
-		"agent_id": agentID,
-		"token":    token,
-		"expires":  "30m", // Token expires after 30 minutes if not used
+	s.jsonResponse(w, AgentTokenResponse{
+		AgentID: agentID,
+		Token:   token,
+		Expires: "30m", // Token expires after 30 minutes if not used
 	})
 }
 
@@ -1356,7 +1357,7 @@ func (s *MasterServer) handleDeploymentAPI(w http.ResponseWriter, r *http.Reques
 		}
 
 		s.logAudit(r, "cancel", "deployment", fmt.Sprintf("Cancelled deployment: %s", deploymentID), "success")
-		s.jsonResponse(w, map[string]string{"status": "cancelled"})
+		s.jsonResponse(w, StatusResponse{Status: "cancelled"})
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -1426,7 +1427,7 @@ func (s *MasterServer) handleDeploymentCancel(w http.ResponseWriter, r *http.Req
 	}
 
 	s.logAudit(r, "cancel", "deployment", fmt.Sprintf("Cancelled deployment: %s", deploymentID), "success")
-	s.jsonResponse(w, map[string]string{"status": "cancelled"})
+	s.jsonResponse(w, StatusResponse{Status: "cancelled"})
 }
 
 // handleDeploymentRollback triggers a rollback for a deployment.
@@ -1744,12 +1745,13 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 
 		// Return the raw key (only time it's visible)
 		w.WriteHeader(http.StatusCreated)
-		s.jsonResponse(w, map[string]interface{}{
-			"id":        apiKey.ID,
-			"name":      apiKey.Name,
-			"key":       rawKey, // Only returned on creation!
-			"scopes":    scopes,
-			"expiresAt": expiresAt,
+		s.jsonResponse(w, APIKeyCreateResponse{
+			ID:        apiKey.ID,
+			Name:      apiKey.Name,
+			Key:       rawKey, // Only returned on creation!
+			Scopes:    scopes,
+			ExpiresAt: expiresAt,
+			CreatedAt: apiKey.CreatedAt,
 		})
 
 	default:
@@ -1811,7 +1813,7 @@ func (s *MasterServer) handleAPIKey(w http.ResponseWriter, r *http.Request) {
 		}
 
 		s.logAudit(r, "revoke", "apikey", fmt.Sprintf("Revoked API key ID: %d", keyID), "success")
-		s.jsonResponse(w, map[string]string{"status": "revoked"})
+		s.jsonResponse(w, StatusResponse{Status: "revoked"})
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
