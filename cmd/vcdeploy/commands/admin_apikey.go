@@ -52,7 +52,7 @@ func runAPIKeyList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	resp, err := client.get("/api/v1/apikeys")
+	resp, err := client.get("/api/v1/api-keys")
 	if err != nil {
 		return fmt.Errorf("API request failed: %w", err)
 	}
@@ -103,7 +103,7 @@ func runAPIKeyCreate(cmd *cobra.Command, args []string) error {
 		"expires_in_days": expiresIn,
 	})
 
-	resp, err := client.post("/api/v1/apikeys", strings.NewReader(string(data)))
+	resp, err := client.post("/api/v1/api-keys", strings.NewReader(string(data)))
 	if err != nil {
 		return fmt.Errorf("API request failed: %w", err)
 	}
@@ -143,7 +143,7 @@ func runAPIKeyRevoke(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	resp, err := client.delete("/api/v1/apikeys/" + keyID)
+	resp, err := client.delete("/api/v1/api-keys/" + keyID)
 	if err != nil {
 		return fmt.Errorf("API request failed: %w", err)
 	}

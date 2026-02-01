@@ -203,12 +203,12 @@ func TestAuthTOTP(t *testing.T) {
 	// Create a user with TOTP enabled via API
 	t.Run("create user with TOTP", func(t *testing.T) {
 		resp, err := ctx.Client.Post("/api/v1/users", map[string]interface{}{
-			"username":     "totptestuser",
-			"email":        "totptest@example.com",
-			"password":     "TOTPPass@123!",
-			"role":         "user",
-			"totp_enabled": true,
-			"totp_secret":  totpSecret,
+			"username":    "totptestuser",
+			"email":       "totptest@example.com",
+			"password":    "TOTPPass@123!",
+			"role":        "user",
+			"totpEnabled": true,
+			"totpSecret":  totpSecret,
 		})
 		if err != nil {
 			t.Fatalf("create user request failed: %v", err)

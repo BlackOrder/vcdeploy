@@ -49,8 +49,8 @@ func (s *MasterServer) handleHostKeys(w http.ResponseWriter, r *http.Request) {
 		var input struct {
 			Hostname    string `json:"hostname"`
 			Port        int    `json:"port"`
-			KeyType     string `json:"key_type"`
-			PublicKey   string `json:"public_key"`
+			KeyType     string `json:"keyType"`
+			PublicKey   string `json:"publicKey"`
 			Fingerprint string `json:"fingerprint"`
 			Trusted     bool   `json:"trusted"`
 		}
@@ -248,7 +248,7 @@ func (s *MasterServer) handleJumpServers(w http.ResponseWriter, r *http.Request)
 			Host     string `json:"host"`
 			Port     int    `json:"port"`
 			Username string `json:"username"`
-			SSHKeyID *int64 `json:"ssh_key_id,omitempty"`
+			SSHKeyID *int64 `json:"sshKeyId,omitempty"`
 		}
 
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
@@ -344,7 +344,7 @@ func (s *MasterServer) handleJumpServer(w http.ResponseWriter, r *http.Request) 
 			Host     string `json:"host"`
 			Port     int    `json:"port"`
 			Username string `json:"username"`
-			SSHKeyID *int64 `json:"ssh_key_id,omitempty"`
+			SSHKeyID *int64 `json:"sshKeyId,omitempty"`
 		}
 
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
@@ -425,7 +425,7 @@ func (s *MasterServer) handleBlockedIPs(w http.ResponseWriter, r *http.Request) 
 		}
 
 		var input struct {
-			IPAddress string `json:"ip_address"`
+			IPAddress string `json:"ipAddress"`
 			Reason    string `json:"reason"`
 			Duration  string `json:"duration"` // e.g., "24h", "7d"
 		}
@@ -436,7 +436,7 @@ func (s *MasterServer) handleBlockedIPs(w http.ResponseWriter, r *http.Request) 
 		}
 
 		if input.IPAddress == "" {
-			http.Error(w, "ip_address is required", http.StatusBadRequest)
+			http.Error(w, "ipAddress is required", http.StatusBadRequest)
 			return
 		}
 
@@ -570,11 +570,11 @@ func (s *MasterServer) handleProvisionJobs(w http.ResponseWriter, r *http.Reques
 		}
 
 		var input struct {
-			TargetHost    string `json:"target_host"`
-			TargetPort    int    `json:"target_port"`
-			TargetUser    string `json:"target_user"`
-			SSHKeyID      *int64 `json:"ssh_key_id,omitempty"`
-			AgentBinaryID *int64 `json:"agent_binary_id,omitempty"`
+			TargetHost    string `json:"targetHost"`
+			TargetPort    int    `json:"targetPort"`
+			TargetUser    string `json:"targetUser"`
+			SSHKeyID      *int64 `json:"sshKeyId,omitempty"`
+			AgentBinaryID *int64 `json:"agentBinaryId,omitempty"`
 		}
 
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
@@ -583,7 +583,7 @@ func (s *MasterServer) handleProvisionJobs(w http.ResponseWriter, r *http.Reques
 		}
 
 		if input.TargetHost == "" {
-			http.Error(w, "target_host is required", http.StatusBadRequest)
+			http.Error(w, "targetHost is required", http.StatusBadRequest)
 			return
 		}
 		if input.TargetPort == 0 {

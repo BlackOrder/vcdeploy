@@ -450,7 +450,7 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 	})
 
 	// API keys endpoint
-	mux.HandleFunc("/api/v1/apikeys", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/api-keys", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			keys := []map[string]interface{}{
@@ -469,7 +469,7 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 	})
 
 	// API key by ID
-	mux.HandleFunc("/api/v1/apikeys/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/api-keys/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodDelete {
 			w.WriteHeader(http.StatusOK)
 		}

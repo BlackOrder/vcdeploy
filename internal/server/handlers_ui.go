@@ -290,7 +290,7 @@ func (s *MasterServer) handleAuditUI(w http.ResponseWriter, r *http.Request) {
 func (s *MasterServer) handleAPIKeysUI(w http.ResponseWriter, r *http.Request) {
 	s.renderTemplate(w, "apikeys", s.withCommonData(r, map[string]interface{}{
 		"Title":  "API Keys",
-		"Active": "apikeys",
+		"Active": "api-keys",
 	}))
 }
 

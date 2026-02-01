@@ -319,7 +319,7 @@ _create-api-token:
 	if [ -z "$$SESSION" ] || [ "$$SESSION" = "null" ]; then \
 		echo "Failed to login" >&2; exit 1; \
 	fi; \
-	TOKEN=$$(curl -sf -X POST $(TEST_HTTP_URL)/api/v1/apikeys \
+	TOKEN=$$(curl -sf -X POST $(TEST_HTTP_URL)/api/v1/api-keys \
 		-H "Content-Type: application/json" \
 		-H "Cookie: session=$$SESSION" \
 		-d '{"name":"test-key-'$$RANDOM'","description":"Test API key","scopes":["*"]}' | jq -r '.key'); \

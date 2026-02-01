@@ -135,8 +135,8 @@ func (s *MasterServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 			Email       string `json:"email"`
 			Password    string `json:"password"`
 			Role        string `json:"role"`
-			TOTPEnabled bool   `json:"totp_enabled"`
-			TOTPSecret  string `json:"totp_secret"`
+			TOTPEnabled bool   `json:"totpEnabled"`
+			TOTPSecret  string `json:"totpSecret"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
 			s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
@@ -634,7 +634,7 @@ func (s *MasterServer) handleProjectsAPI(w http.ResponseWriter, r *http.Request)
 			Name       string `json:"name"`
 			Repository string `json:"repository"`
 			Branch     string `json:"branch"`
-			DeployPath string `json:"deploy_path"`
+			DeployPath string `json:"deployPath"`
 			Type       string `json:"type"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
@@ -655,7 +655,7 @@ func (s *MasterServer) handleProjectsAPI(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		if req.DeployPath == "" {
-			s.jsonError(w, http.StatusBadRequest, "deploy_path is required")
+			s.jsonError(w, http.StatusBadRequest, "deployPath is required")
 			return
 		}
 		if req.Branch == "" {
@@ -740,7 +740,7 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 			Name       string `json:"name"`
 			Repository string `json:"repository"`
 			Branch     string `json:"branch"`
-			DeployPath string `json:"deploy_path"`
+			DeployPath string `json:"deployPath"`
 			Type       string `json:"type"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
@@ -876,7 +876,7 @@ func (s *MasterServer) handleProjectWebhooksInternal(w http.ResponseWriter, r *h
 			Provider      string `json:"provider"`
 			Secret        string `json:"secret"`
 			Enabled       bool   `json:"enabled"`
-			RequireSecret *bool  `json:"require_secret"` // Pointer to detect if field was provided
+			RequireSecret *bool  `json:"requireSecret"` // Pointer to detect if field was provided
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
 			s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
@@ -952,7 +952,7 @@ func (s *MasterServer) handleProjectDeployInternal(w http.ResponseWriter, r *htt
 	var req struct {
 		Branch      string `json:"branch"`
 		Target      string `json:"target"`
-		ScheduledAt string `json:"scheduled_at,omitempty"`
+		ScheduledAt string `json:"scheduledAt,omitempty"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
 		// Empty body is OK - use defaults
@@ -1292,7 +1292,7 @@ func (s *MasterServer) handleDeploymentsAPI(w http.ResponseWriter, r *http.Reque
 			Project     string `json:"project"`
 			Branch      string `json:"branch"`
 			Target      string `json:"target"`
-			ScheduledAt string `json:"scheduled_at,omitempty"`
+			ScheduledAt string `json:"scheduledAt,omitempty"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
 			s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
@@ -1728,7 +1728,7 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 			Name        string   `json:"name"`
 			Description string   `json:"description"`
 			Scopes      []string `json:"scopes"`
-			ExpiresIn   int      `json:"expires_in_days"` // 0 = no expiry
+			ExpiresIn   int      `json:"expiresInDays"` // 0 = no expiry
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
 			s.jsonError(w, http.StatusBadRequest, "Invalid JSON")

@@ -170,13 +170,13 @@ func (s *MasterServer) handleUpdateHealthCheckConfig(w http.ResponseWriter, r *h
 		Name              *string `json:"name"`
 		URL               *string `json:"url"`
 		Method            *string `json:"method"`
-		ExpectedStatus    *int    `json:"expected_status"`
-		TimeoutSeconds    *int    `json:"timeout_seconds"`
+		ExpectedStatus    *int    `json:"expectedStatus"`
+		TimeoutSeconds    *int    `json:"timeoutSeconds"`
 		Retries           *int    `json:"retries"`
-		RetryDelaySeconds *int    `json:"retry_delay_seconds"`
+		RetryDelaySeconds *int    `json:"retryDelaySeconds"`
 		Headers           *string `json:"headers"`
 		Body              *string `json:"body"`
-		BodyContains      *string `json:"body_contains"`
+		BodyContains      *string `json:"bodyContains"`
 		Enabled           *bool   `json:"enabled"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
@@ -292,9 +292,9 @@ func (s *MasterServer) handleProjectHealthConfig(w http.ResponseWriter, r *http.
 
 	case http.MethodPut:
 		var req struct {
-			HealthCheckID        *int64 `json:"health_check_id"`
-			AutoRollbackEnabled  *bool  `json:"auto_rollback_enabled"`
-			RollbackOnHealthFail *bool  `json:"rollback_on_health_fail"`
+			HealthCheckID        *int64 `json:"healthCheckId"`
+			AutoRollbackEnabled  *bool  `json:"autoRollbackEnabled"`
+			RollbackOnHealthFail *bool  `json:"rollbackOnHealthFail"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "Invalid request body", http.StatusBadRequest)

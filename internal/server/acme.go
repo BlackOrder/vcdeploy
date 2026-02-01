@@ -287,14 +287,14 @@ func (c *ACMEClient) StartRenewalLoop(ctx context.Context) {
 
 // CertificateStatus returns information about the current certificate.
 type CertificateStatus struct {
-	HasCertificate bool      `json:"has_certificate"`
+	HasCertificate bool      `json:"hasCertificate"`
 	Domains        []string  `json:"domains"`
-	NotBefore      time.Time `json:"not_before"`
-	NotAfter       time.Time `json:"not_after"`
+	NotBefore      time.Time `json:"notBefore"`
+	NotAfter       time.Time `json:"notAfter"`
 	Issuer         string    `json:"issuer"`
-	DaysRemaining  int       `json:"days_remaining"`
-	NeedsRenewal   bool      `json:"needs_renewal"`
-	TestMode       bool      `json:"test_mode"`
+	DaysRemaining  int       `json:"daysRemaining"`
+	NeedsRenewal   bool      `json:"needsRenewal"`
+	TestMode       bool      `json:"testMode"`
 }
 
 // GetStatus returns the current certificate status.

@@ -58,11 +58,11 @@ func TestGitHubWebhook(t *testing.T) {
 	ctx.MustLogin(cfg.AdminUsername, cfg.AdminPassword)
 
 	project := map[string]interface{}{
-		"name":           "webhook-test-project",
-		"repository":     "https://github.com/test/webhook-repo.git",
-		"branch":         "main",
-		"deploy_path":    "/deploy/webhook-test",
-		"webhook_secret": "test-webhook-secret",
+		"name":          "webhook-test-project",
+		"repository":    "https://github.com/test/webhook-repo.git",
+		"branch":        "main",
+		"deployPath":    "/deploy/webhook-test",
+		"webhookSecret": "test-webhook-secret",
 	}
 
 	resp, _ := ctx.Client.Post("/api/v1/projects", project)
@@ -171,11 +171,11 @@ func TestGitLabWebhook(t *testing.T) {
 	ctx.MustLogin(cfg.AdminUsername, cfg.AdminPassword)
 
 	project := map[string]interface{}{
-		"name":           "gitlab-webhook-project",
-		"repository":     "https://gitlab.com/test/repo.git",
-		"branch":         "main",
-		"deploy_path":    "/deploy/gitlab-test",
-		"webhook_secret": "gitlab-secret-token",
+		"name":          "gitlab-webhook-project",
+		"repository":    "https://gitlab.com/test/repo.git",
+		"branch":        "main",
+		"deployPath":    "/deploy/gitlab-test",
+		"webhookSecret": "gitlab-secret-token",
 	}
 
 	resp, _ := ctx.Client.Post("/api/v1/projects", project)
@@ -225,10 +225,10 @@ func TestBitbucketWebhook(t *testing.T) {
 	ctx.MustLogin(cfg.AdminUsername, cfg.AdminPassword)
 
 	project := map[string]interface{}{
-		"name":        "bitbucket-webhook-project",
-		"repository":  "https://bitbucket.org/test/repo.git",
-		"branch":      "main",
-		"deploy_path": "/deploy/bitbucket-test",
+		"name":       "bitbucket-webhook-project",
+		"repository": "https://bitbucket.org/test/repo.git",
+		"branch":     "main",
+		"deployPath": "/deploy/bitbucket-test",
 	}
 
 	resp, _ := ctx.Client.Post("/api/v1/projects", project)

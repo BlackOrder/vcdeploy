@@ -410,12 +410,12 @@ func (s *MasterServer) handleAgentUpdateConfig(w http.ResponseWriter, r *http.Re
 		}
 
 		config := map[string]interface{}{
-			"update_policy":       agent.UpdatePolicy,
-			"update_window_start": agent.UpdateWindowStart,
-			"update_window_end":   agent.UpdateWindowEnd,
-			"current_version":     agent.Version,
-			"last_update_at":      agent.LastUpdateAt,
-			"last_update_error":   agent.LastUpdateError,
+			"updatePolicy":      agent.UpdatePolicy,
+			"updateWindowStart": agent.UpdateWindowStart,
+			"updateWindowEnd":   agent.UpdateWindowEnd,
+			"currentVersion":    agent.Version,
+			"lastUpdateAt":      agent.LastUpdateAt,
+			"lastUpdateError":   agent.LastUpdateError,
 		}
 		s.jsonResponse(w, config)
 
@@ -427,9 +427,9 @@ func (s *MasterServer) handleAgentUpdateConfig(w http.ResponseWriter, r *http.Re
 		}
 
 		var req struct {
-			UpdatePolicy      string `json:"update_policy"`
-			UpdateWindowStart string `json:"update_window_start"`
-			UpdateWindowEnd   string `json:"update_window_end"`
+			UpdatePolicy      string `json:"updatePolicy"`
+			UpdateWindowStart string `json:"updateWindowStart"`
+			UpdateWindowEnd   string `json:"updateWindowEnd"`
 		}
 
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
@@ -443,7 +443,7 @@ func (s *MasterServer) handleAgentUpdateConfig(w http.ResponseWriter, r *http.Re
 			case storage.AgentUpdatePolicyImmediate, storage.AgentUpdatePolicyScheduled, storage.AgentUpdatePolicyManual:
 				// Valid
 			default:
-				http.Error(w, "Invalid update_policy. Must be 'immediate', 'scheduled', or 'manual'", http.StatusBadRequest)
+				http.Error(w, "Invalid updatePolicy. Must be 'immediate', 'scheduled', or 'manual'", http.StatusBadRequest)
 				return
 			}
 		}
@@ -666,7 +666,7 @@ func (s *MasterServer) handleAgentsNeedingUpdate(w http.ResponseWriter, r *http.
 	// Enhance with current version info
 	type agentUpdate struct {
 		*storage.Agent
-		TargetVersion string `json:"target_version"`
+		TargetVersion string `json:"targetVersion"`
 	}
 
 	results := make([]agentUpdate, 0, len(agents))
