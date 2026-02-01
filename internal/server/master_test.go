@@ -840,7 +840,7 @@ func TestHandleProjectTypesPost(t *testing.T) {
 	adminUserID := createTestAdminUser(t, server)
 
 	// Create a project type
-	body := bytes.NewBufferString(`{"name":"nodejs","description":"Node.js application","build_cmd":"npm install && npm run build"}`)
+	body := bytes.NewBufferString(`{"name":"nodejs","description":"Node.js application","buildCmd":"npm install && npm run build"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/project-types", body)
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithAdminContext(req, adminUserID)
@@ -963,7 +963,7 @@ func TestHandleProjectTypePut(t *testing.T) {
 	}
 
 	// Update it
-	body := bytes.NewBufferString(`{"description":"Updated description","build_cmd":"npm run build"}`)
+	body := bytes.NewBufferString(`{"description":"Updated description","buildCmd":"npm run build"}`)
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/project-types/update-me", body)
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithAdminContext(req, adminUserID)
@@ -984,7 +984,7 @@ func TestHandleProjectTypePut(t *testing.T) {
 		t.Errorf("description = %q, want %q", updated.Description, "Updated description")
 	}
 	if updated.BuildCmd != "npm run build" {
-		t.Errorf("build_cmd = %q, want %q", updated.BuildCmd, "npm run build")
+		t.Errorf("buildCmd = %q, want %q", updated.BuildCmd, "npm run build")
 	}
 }
 
