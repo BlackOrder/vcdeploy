@@ -78,6 +78,14 @@ func (r *SSHRunner) Connect(ctx context.Context) error {
 		return nil // Already connected
 	}
 
+	// Validate required connection parameters
+	if r.config.Host == "" {
+		return errors.New("ssh: host is required")
+	}
+	if r.config.User == "" {
+		return errors.New("ssh: user is required")
+	}
+
 	clientConfig, err := r.buildClientConfig()
 	if err != nil {
 		return fmt.Errorf("building ssh config: %w", err)
