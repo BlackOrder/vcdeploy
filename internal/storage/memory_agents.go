@@ -251,10 +251,18 @@ func isInUpdateWindow(now time.Time, windowStart, windowEnd string) bool {
 	nowMinutes := now.Hour()*60 + now.Minute()
 
 	var startHour, startMin, endHour, endMin int
-	_, _ = parseTimeComponent(startParts[0], &startHour)
-	_, _ = parseTimeComponent(startParts[1], &startMin)
-	_, _ = parseTimeComponent(endParts[0], &endHour)
-	_, _ = parseTimeComponent(endParts[1], &endMin)
+	if ok, _ := parseTimeComponent(startParts[0], &startHour); !ok {
+		return false // Invalid start hour format
+	}
+	if ok, _ := parseTimeComponent(startParts[1], &startMin); !ok {
+		return false // Invalid start minute format
+	}
+	if ok, _ := parseTimeComponent(endParts[0], &endHour); !ok {
+		return false // Invalid end hour format
+	}
+	if ok, _ := parseTimeComponent(endParts[1], &endMin); !ok {
+		return false // Invalid end minute format
+	}
 
 	startMinutes := startHour*60 + startMin
 	endMinutes := endHour*60 + endMin

@@ -22,7 +22,7 @@ test.describe('Agents List', () => {
     const hasAgents = await agents.count() > 0;
     const hasEmptyState = await emptyState.isVisible({ timeout: 2000 }).catch(() => false);
     
-    expect(hasAgents || hasEmptyState || true).toBeTruthy();
+    expect(hasAgents || hasEmptyState).toBeTruthy();
   });
 
   test('should show agent status indicators', async ({ page }) => {
@@ -86,7 +86,7 @@ test.describe('Agent Status', () => {
     const hasOffline = await offlineStatus.count() > 0;
     
     // Either status type might be present (or neither if no agents)
-    expect(hasOnline || hasOffline || true).toBeTruthy();
+    expect(hasOnline || hasOffline).toBeTruthy();
   });
 
   test('should show last seen time if available', async ({ page }) => {
@@ -160,7 +160,7 @@ test.describe('Agent Connection', () => {
       // Should show how to connect an agent
       const instructions = page.locator(':text("connect"), :text("install"), :text("setup")');
       const hasInstructions = await instructions.count() > 0;
-      expect(hasInstructions || true).toBeTruthy();
+      expect(hasInstructions).toBeTruthy();
     }
   });
 

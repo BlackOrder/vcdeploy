@@ -24,7 +24,7 @@ test.describe('API Keys List', () => {
     const hasApiKeys = await apiKeys.count() > 0;
     const hasEmptyState = await emptyState.isVisible({ timeout: 2000 }).catch(() => false);
     
-    expect(hasApiKeys || hasEmptyState || true).toBeTruthy();
+    expect(hasApiKeys || hasEmptyState).toBeTruthy();
   });
 });
 
@@ -70,7 +70,7 @@ test.describe('Create API Key', () => {
     const tokenDisplay = page.locator('.token, code, pre, .api-key-value');
     const isVisible = await tokenDisplay.isVisible({ timeout: 3000 }).catch(() => false);
     
-    expect(isVisible || true).toBeTruthy();
+    expect(isVisible).toBeTruthy();
   });
 });
 
@@ -105,7 +105,7 @@ test.describe('API Key Security', () => {
     const copyButton = page.locator('button:has-text("Copy"), [data-action="copy"]');
     const isVisible = await copyButton.isVisible({ timeout: 3000 }).catch(() => false);
     
-    expect(isVisible || true).toBeTruthy();
+    expect(isVisible).toBeTruthy();
   });
 });
 
@@ -125,7 +125,7 @@ test.describe('API Key Permissions', () => {
     const hasSelect = await permissionSelect.isVisible({ timeout: 2000 }).catch(() => false);
     const hasCheckboxes = await checkboxes.count() > 0;
     
-    expect(hasSelect || hasCheckboxes || true).toBeTruthy();
+    expect(hasSelect || hasCheckboxes).toBeTruthy();
   });
 
   test('should display key permissions in list', async ({ page }) => {
@@ -159,7 +159,7 @@ test.describe('Delete API Key', () => {
       const confirmDialog = page.locator('.modal, [role="dialog"], .confirm');
       const confirmVisible = await confirmDialog.isVisible({ timeout: 2000 }).catch(() => false);
       
-      expect(confirmVisible || true).toBeTruthy();
+      expect(confirmVisible).toBeTruthy();
     }
   });
 });

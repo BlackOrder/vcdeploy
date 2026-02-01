@@ -27,7 +27,7 @@ test.describe('Secrets List', () => {
     const hasSecrets = await secrets.count() > 0;
     const hasEmptyState = await emptyState.isVisible({ timeout: 2000 }).catch(() => false);
     
-    expect(hasSecrets || hasEmptyState || true).toBeTruthy();
+    expect(hasSecrets || hasEmptyState).toBeTruthy();
   });
 });
 
@@ -161,7 +161,7 @@ test.describe('Delete Secret', () => {
       const confirmDialog = page.locator('.modal, [role="dialog"], .confirm');
       const confirmVisible = await confirmDialog.isVisible({ timeout: 2000 }).catch(() => false);
       
-      expect(confirmVisible || true).toBeTruthy();
+      expect(confirmVisible).toBeTruthy();
     }
   });
 });

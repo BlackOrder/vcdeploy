@@ -8,13 +8,13 @@ import (
 
 // SeedResult contains all created test entity IDs from SeedAll.
 type SeedResult struct {
-	AdminUserID    interface{}
-	ViewerUserID   interface{}
-	OperatorUserID interface{}
-	ProjectID      interface{}
-	SecretID       interface{}
-	APIKeyID       interface{}
-	APIKey         string // The actual API key value
+	AdminUserID   interface{}
+	ViewerUserID  interface{}
+	RegularUserID interface{}
+	ProjectID     interface{}
+	SecretID      interface{}
+	APIKeyID      interface{}
+	APIKey        string // The actual API key value
 }
 
 // Seeder provides test data seeding capabilities.
@@ -55,15 +55,15 @@ func (s *Seeder) SeedAll() (*SeedResult, error) {
 		result.ViewerUserID = viewerUser["id"]
 	}
 
-	// Create operator user
-	operatorUser, err := s.SeedUser(TestData.OperatorUser, TestData.OperatorUser+"@test.com", TestData.OperatorPass, "operator")
+	// Create regular user (with 'user' role)
+	regularUser, err := s.SeedUser(TestData.RegularUser, TestData.RegularUser+"@test.com", TestData.RegularPass, "user")
 	if err != nil {
-		if operatorUser == nil {
-			return nil, fmt.Errorf("failed to seed operator user: %w", err)
+		if regularUser == nil {
+			return nil, fmt.Errorf("failed to seed regular user: %w", err)
 		}
 	}
-	if operatorUser != nil {
-		result.OperatorUserID = operatorUser["id"]
+	if regularUser != nil {
+		result.RegularUserID = regularUser["id"]
 	}
 
 	// Create test project
@@ -291,12 +291,12 @@ func (c *Cleanup) DeleteAPIKey(id interface{}) error {
 // TestData holds common test data values.
 var TestData = struct {
 	// Users
-	AdminUser    string
-	AdminPass    string
-	ViewerUser   string
-	ViewerPass   string
-	OperatorUser string
-	OperatorPass string
+	AdminUser   string
+	AdminPass   string
+	ViewerUser  string
+	ViewerPass  string
+	RegularUser string
+	RegularPass string
 
 	// Projects
 	TestProject1 string
@@ -313,8 +313,8 @@ var TestData = struct {
 	AdminPass:       "TestAdmin123!",
 	ViewerUser:      "test-viewer",
 	ViewerPass:      "TestViewer123!",
-	OperatorUser:    "test-operator",
-	OperatorPass:    "TestOperator123!",
+	RegularUser:     "test-user",
+	RegularPass:     "TestUser123!",
 	TestProject1:    "e2e-test-project-1",
 	TestProject2:    "e2e-test-project-2",
 	TestRepo:        "https://github.com/test/repo.git",

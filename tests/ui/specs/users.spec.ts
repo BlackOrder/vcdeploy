@@ -260,7 +260,7 @@ test.describe('User Roles', () => {
     
     const roleSelect = await userFormPage.roleSelect.isVisible({ timeout: 2000 }).catch(() => false);
     // Role select might not be visible for some implementations
-    expect(roleSelect || true).toBeTruthy();
+    expect(roleSelect).toBeTruthy();
   });
 
   test('should filter users by role if available', async ({ page }) => {
