@@ -35,7 +35,7 @@ test.describe('Projects List', () => {
     const hasProjects = await projectsPage.projectCards.count() > 0;
     const hasEmptyState = await projectsPage.emptyState.isVisible({ timeout: 2000 }).catch(() => false);
     
-    expect(hasProjects || hasEmptyState || true).toBeTruthy(); // Page loaded
+    expect(hasProjects || hasEmptyState).toBeTruthy(); // Page loaded
   });
 
   test('should navigate to create project form', async ({ page }) => {

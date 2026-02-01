@@ -532,8 +532,10 @@ func (s *MasterServer) handleTriggerAgentUpdate(w http.ResponseWriter, r *http.R
 		Force bool `json:"force"`
 	}
 	if r.Body != nil && r.ContentLength > 0 {
-		// Decode is optional - ignore errors for missing/invalid body
-		_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req)
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
+			s.logger.Debug("Failed to decode request body, using defaults", zap.Error(err))
+			// Continue with default values - Force=false
+		}
 	}
 
 	// Get agent

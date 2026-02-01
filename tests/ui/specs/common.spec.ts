@@ -198,7 +198,7 @@ test.describe('Modals and Dialogs', () => {
         
         // Focus should still be within modal
         const focusedElement = await page.evaluate(() => document.activeElement?.closest('.modal, [role="dialog"]'));
-        expect(focusedElement !== null || true).toBeTruthy();
+        expect(focusedElement !== null).toBeTruthy();
       }
     }
   });

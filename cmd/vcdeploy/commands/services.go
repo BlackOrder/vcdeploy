@@ -74,11 +74,9 @@ func (c *AppContext) InitServices() error {
 }
 
 // Services returns the service container.
-// Panics if services haven't been initialized via InitServices.
+// Returns nil if services haven't been initialized via InitServices.
+// Callers should check HasServices() first or handle nil return.
 func (c *AppContext) Services() *Services {
-	if appServices == nil {
-		panic("services not initialized - call InitServices first")
-	}
 	return appServices
 }
 

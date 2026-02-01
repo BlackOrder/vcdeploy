@@ -24,7 +24,7 @@ test.describe('Audit Logs Page', () => {
     const hasLogs = await logEntries.count() > 0;
     const hasEmptyState = await emptyState.isVisible({ timeout: 2000 }).catch(() => false);
     
-    expect(hasLogs || hasEmptyState || true).toBeTruthy();
+    expect(hasLogs || hasEmptyState).toBeTruthy();
   });
 });
 

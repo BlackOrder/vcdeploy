@@ -236,14 +236,14 @@ func (f *DBFixtures) ViewerUser() *storage.User {
 	return user
 }
 
-// OperatorUser returns a user with operator role.
-func (f *DBFixtures) OperatorUser() *storage.User {
+// RegularUser returns a user with regular 'user' role.
+func (f *DBFixtures) RegularUser() *storage.User {
 	f.t.Helper()
 	user := f.DefaultUser()
 	user.ID = 3
-	user.Username = "operator"
-	user.Email = "operator@example.com"
-	user.Role = "operator"
+	user.Username = "regularuser"
+	user.Email = "regularuser@example.com"
+	user.Role = "user"
 	return user
 }
 
@@ -422,7 +422,7 @@ func (f *DBFixtures) SeedTestDB(store storage.Store) error {
 	for _, user := range []*storage.User{
 		f.DefaultUser(),
 		f.ViewerUser(),
-		f.OperatorUser(),
+		f.RegularUser(),
 	} {
 		if err := store.CreateUser(ctx, user); err != nil {
 			return err

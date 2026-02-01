@@ -22,7 +22,7 @@ test.describe('Deployments List', () => {
     const hasDeployments = await deployments.count() > 0;
     const hasEmptyState = await emptyState.isVisible({ timeout: 2000 }).catch(() => false);
     
-    expect(hasDeployments || hasEmptyState || true).toBeTruthy();
+    expect(hasDeployments || hasEmptyState).toBeTruthy();
   });
 });
 
@@ -48,7 +48,7 @@ test.describe('Deployment Status', () => {
     const hasFailure = await failure.count() > 0;
     const hasPending = await pending.count() > 0;
     
-    expect(hasSuccess || hasFailure || hasPending || true).toBeTruthy();
+    expect(hasSuccess || hasFailure || hasPending).toBeTruthy();
   });
 });
 
@@ -206,7 +206,7 @@ test.describe('Real-time Updates', () => {
     const hasRefresh = await refreshButton.isVisible({ timeout: 2000 }).catch(() => false);
     const hasAutoRefresh = await autoRefreshIndicator.isVisible({ timeout: 2000 }).catch(() => false);
     
-    expect(hasRefresh || hasAutoRefresh || true).toBeTruthy();
+    expect(hasRefresh || hasAutoRefresh).toBeTruthy();
   });
 });
 
