@@ -43,7 +43,8 @@ export class ProjectsPage extends BasePage {
    */
   async search(query: string) {
     await this.searchInput.fill(query);
-    await this.page.waitForTimeout(500); // Debounce
+    // M11 FIX: Wait for network idle instead of fixed timeout (debounce)
+    await this.page.waitForLoadState('networkidle');
   }
 
   /**

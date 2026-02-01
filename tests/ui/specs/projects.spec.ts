@@ -286,7 +286,7 @@ test.describe('Project Search and Filter', () => {
     
     if (searchVisible) {
       await projectsPage.search('nonexistent-project-xyz');
-      await page.waitForTimeout(500);
+      await page.waitForLoadState('networkidle');
       
       // Should filter results (could show empty or no matches)
       const projectCount = await projectsPage.getProjectCount();

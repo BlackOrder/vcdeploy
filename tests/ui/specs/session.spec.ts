@@ -156,7 +156,7 @@ test.describe('Logout Behavior', () => {
     await page.goBack();
     
     // Should not show protected content (either redirects or shows login)
-    await page.waitForTimeout(1000);
+    await page.waitForURL('**/login', { timeout: 5000 });
     
     // Either we're on login page or the page requires re-authentication
     const url = page.url();

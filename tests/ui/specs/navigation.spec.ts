@@ -148,7 +148,7 @@ test.describe('Theme/Dark Mode', () => {
       const initialTheme = await page.evaluate(() => document.documentElement.classList.contains('dark'));
       
       await themeToggle.click();
-      await page.waitForTimeout(500);
+      await page.waitForLoadState('domcontentloaded');
       
       // Theme should have changed
       const newTheme = await page.evaluate(() => document.documentElement.classList.contains('dark'));
@@ -179,10 +179,10 @@ test.describe('Search', () => {
     
     if (isVisible) {
       await globalSearch.fill('test');
-      await page.waitForTimeout(500);
       
       // Should show results or no results message
       const results = page.locator('.search-results, .search-dropdown, [role="listbox"]');
+      await results.first().waitFor({ state: 'visible', timeout: 2000 }).catch(() => {});
       const count = await results.count();
       // Search results panel should appear
       expect(count).toBeGreaterThan(0);

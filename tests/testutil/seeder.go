@@ -3,6 +3,7 @@ package testutil
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 )
 
@@ -109,6 +110,7 @@ func (s *Seeder) SeedAll() (*SeedResult, error) {
 
 // SeedUser creates a test user and returns the user data.
 // If the user already exists (409 Conflict), returns nil user without error for idempotency.
+// M12 FIX: Now logs conflict encounters for debugging.
 func (s *Seeder) SeedUser(username, email, password, role string) (map[string]interface{}, error) {
 	user := map[string]interface{}{
 		"username": username,
@@ -125,6 +127,7 @@ func (s *Seeder) SeedUser(username, email, password, role string) (map[string]in
 
 	// Handle duplicate gracefully for idempotent seeding
 	if resp.StatusCode == http.StatusConflict {
+		log.Printf("[seeder] User %q already exists (conflict), skipping creation", username)
 		return nil, nil
 	}
 
@@ -158,7 +161,9 @@ func (s *Seeder) SeedProject(name, repo, branch, deployPath, projectType string)
 	defer resp.Body.Close()
 
 	// Handle duplicate gracefully for idempotent seeding
+	// M12 FIX: Log conflict encounters for debugging
 	if resp.StatusCode == http.StatusConflict {
+		log.Printf("[seeder] Project %q already exists (conflict), skipping creation", name)
 		return nil, nil
 	}
 
@@ -191,7 +196,9 @@ func (s *Seeder) SeedSecret(project, scope, key, value string) (map[string]inter
 	defer resp.Body.Close()
 
 	// Handle duplicate gracefully for idempotent seeding
+	// M12 FIX: Log conflict encounters for debugging
 	if resp.StatusCode == http.StatusConflict {
+		log.Printf("[seeder] Secret %q (project=%s, scope=%s) already exists (conflict), skipping creation", key, project, scope)
 		return nil, nil
 	}
 
@@ -222,7 +229,9 @@ func (s *Seeder) SeedAPIKey(name string, permissions []string) (map[string]inter
 	defer resp.Body.Close()
 
 	// Handle duplicate gracefully for idempotent seeding
+	// M12 FIX: Log conflict encounters for debugging
 	if resp.StatusCode == http.StatusConflict {
+		log.Printf("[seeder] API key %q already exists (conflict), skipping creation", name)
 		return nil, nil
 	}
 
