@@ -16,7 +16,6 @@ import (
 	"go.uber.org/zap"
 )
 
-
 func TestNewLocalRunner(t *testing.T) {
 	t.Parallel()
 
@@ -855,7 +854,7 @@ func TestLocalRunnerRunWithOutputBlockedCommand(t *testing.T) {
 	ctx := context.Background()
 
 	var stdout, stderr bytes.Buffer
-	err := runner.RunWithOutput(ctx, "perl -e 'system(\"whoami\")'" , &stdout, &stderr, deploy.RunOptions{})
+	err := runner.RunWithOutput(ctx, "perl -e 'system(\"whoami\")'", &stdout, &stderr, deploy.RunOptions{})
 
 	// Should fail validation (perl not in allowlist)
 	if err == nil {
