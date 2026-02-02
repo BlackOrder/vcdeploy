@@ -307,6 +307,12 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 				s.jsonError(w, http.StatusBadRequest, err.Error())
 				return
 			}
+			// Invalidate all sessions for this user (security best practice)
+			if err := s.sessionService.DeleteAllForUser(ctx, userID); err != nil {
+				s.logger.Error("Failed to invalidate sessions after password change",
+					zap.Int64("user_id", userID),
+					zap.Error(err))
+			}
 		}
 
 		if err := s.userService.Update(ctx, user); err != nil {
@@ -401,6 +407,12 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 				}
 				s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 				return
+			}
+			// Invalidate all sessions for this user (security best practice)
+			if err := s.sessionService.DeleteAllForUser(ctx, userID); err != nil {
+				s.logger.Error("Failed to invalidate sessions after password change",
+					zap.Int64("user_id", userID),
+					zap.Error(err))
 			}
 			updated = true
 		}

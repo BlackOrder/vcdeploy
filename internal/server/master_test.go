@@ -3250,6 +3250,73 @@ func TestHandleChangePassword_POST_ClearsMustChangeFlag(t *testing.T) {
 	}
 }
 
+func TestHandleChangePassword_POST_InvalidatesSessions(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	ctx := context.Background()
+
+	// Create a test user
+	user, err := server.userService.Create(ctx, "sessioninvalidate", "TestPass@123!", "sessioninvalidate@test.com", "user")
+	if err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	// Create multiple sessions for the user
+	session1, err := server.sessionService.Create(ctx, user.ID, "192.168.1.1", "TestAgent1", 24*time.Hour)
+	if err != nil {
+		t.Fatalf("failed to create session 1: %v", err)
+	}
+	session2, err := server.sessionService.Create(ctx, user.ID, "192.168.1.2", "TestAgent2", 24*time.Hour)
+	if err != nil {
+		t.Fatalf("failed to create session 2: %v", err)
+	}
+
+	// Verify sessions exist
+	sessions, err := server.sessionService.ListForUser(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("failed to list sessions: %v", err)
+	}
+	if len(sessions) != 2 {
+		t.Fatalf("expected 2 sessions, got %d", len(sessions))
+	}
+
+	// Change password
+	form := strings.NewReader("current_password=TestPass@123!&new_password=NewPass@456!&confirm_password=NewPass@456!")
+	req := httptest.NewRequest(http.MethodPost, "/change-password", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	ctx = context.WithValue(req.Context(), contextKeyUserID, user.ID)
+	ctx = WithUserContext(ctx, user)
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	server.handleChangePassword(rec, req)
+
+	// Should redirect to dashboard
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want %d; body = %s", rec.Code, http.StatusSeeOther, rec.Body.String())
+	}
+
+	// Verify all sessions were invalidated
+	sessions, err = server.sessionService.ListForUser(context.Background(), user.ID)
+	if err != nil {
+		t.Fatalf("failed to list sessions after password change: %v", err)
+	}
+	if len(sessions) != 0 {
+		t.Errorf("expected 0 sessions after password change, got %d", len(sessions))
+	}
+
+	// Verify old session tokens are invalid
+	_, err = server.sessionService.GetByToken(context.Background(), session1.Token)
+	if err == nil {
+		t.Error("session 1 should be invalid after password change")
+	}
+	_, err = server.sessionService.GetByToken(context.Background(), session2.Token)
+	if err == nil {
+		t.Error("session 2 should be invalid after password change")
+	}
+}
+
 // --- API Login Tests for MustChangePassword ---
 
 func TestHandleAPILogin_MustChangePassword_Returns403(t *testing.T) {

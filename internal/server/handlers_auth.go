@@ -197,11 +197,50 @@ func (s *MasterServer) handleAPILogin(w http.ResponseWriter, r *http.Request) {
 			s.jsonError(w, http.StatusUnauthorized, "TOTP required")
 			return
 		}
+
+		// First try as regular TOTP code
 		if !verifyTOTP(user.TOTPSecret, req.TOTP) {
-			s.logger.Debug("API login failed: invalid TOTP", zap.String("username", req.Username))
-			s.logAudit(r, "api_login", "session", "invalid TOTP for: "+req.Username, "failure")
-			s.jsonError(w, http.StatusUnauthorized, "Invalid verification code")
-			return
+			// Try as recovery code
+			codes, err := s.store.GetRecoveryCodes(ctx, user.ID)
+			if err != nil {
+				s.logger.Error("Failed to get recovery codes", zap.Error(err))
+				s.jsonError(w, http.StatusInternalServerError, "Internal error")
+				return
+			}
+
+			// Build slice of hashes for verification
+			hashes := make([]string, len(codes))
+			var codeID int64
+			normalizedCode := security.NormalizeRecoveryCode(req.TOTP)
+			for i, code := range codes {
+				if code.UsedAt == nil {
+					hashes[i] = code.CodeHash
+					// Check if this code matches
+					if bcrypt.CompareHashAndPassword([]byte(code.CodeHash), []byte(normalizedCode)) == nil {
+						codeID = code.ID
+					}
+				}
+			}
+
+			if codeID == 0 {
+				s.logger.Debug("API login failed: invalid TOTP", zap.String("username", req.Username))
+				s.logAudit(r, "api_login", "session", "invalid TOTP for: "+req.Username, "failure")
+				s.jsonError(w, http.StatusUnauthorized, "Invalid verification code")
+				return
+			}
+
+			// Mark recovery code as used
+			if err := s.store.UseRecoveryCode(ctx, codeID); err != nil {
+				s.logger.Error("Failed to mark recovery code as used", zap.Error(err))
+			}
+
+			// Count remaining codes
+			remaining, _ := s.store.CountUnusedRecoveryCodes(ctx, user.ID)
+			s.logger.Info("Recovery code used for login",
+				zap.String("username", req.Username),
+				zap.Int("remaining_codes", remaining))
+			s.logAudit(r, "recovery_code_used", "auth",
+				fmt.Sprintf("user: %s, remaining: %d", req.Username, remaining), "success")
 		}
 	}
 
@@ -307,15 +346,52 @@ func (s *MasterServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 				})
 				return
 			}
+
+			// First try as regular TOTP code
 			if !verifyTOTP(user.TOTPSecret, totp) {
-				s.logger.Debug("Login failed: invalid TOTP", zap.String("username", username))
-				s.logAudit(r, "login", "session", "invalid TOTP for: "+username, "failure")
-				s.renderTemplate(w, "login", map[string]interface{}{
-					"Error":     "Invalid verification code",
-					"Username":  username,
-					"NeedsTOTP": true,
-				})
-				return
+				// Try as recovery code
+				codes, err := s.store.GetRecoveryCodes(ctx, user.ID)
+				if err != nil {
+					s.logger.Error("Failed to get recovery codes", zap.Error(err))
+					s.renderTemplate(w, "login", map[string]interface{}{"Error": "Internal error"})
+					return
+				}
+
+				// Check if the code matches any unused recovery code
+				var codeID int64
+				normalizedCode := security.NormalizeRecoveryCode(totp)
+				for _, code := range codes {
+					if code.UsedAt == nil {
+						if bcrypt.CompareHashAndPassword([]byte(code.CodeHash), []byte(normalizedCode)) == nil {
+							codeID = code.ID
+							break
+						}
+					}
+				}
+
+				if codeID == 0 {
+					s.logger.Debug("Login failed: invalid TOTP", zap.String("username", username))
+					s.logAudit(r, "login", "session", "invalid TOTP for: "+username, "failure")
+					s.renderTemplate(w, "login", map[string]interface{}{
+						"Error":     "Invalid verification code",
+						"Username":  username,
+						"NeedsTOTP": true,
+					})
+					return
+				}
+
+				// Mark recovery code as used
+				if err := s.store.UseRecoveryCode(ctx, codeID); err != nil {
+					s.logger.Error("Failed to mark recovery code as used", zap.Error(err))
+				}
+
+				// Count remaining codes and log
+				remaining, _ := s.store.CountUnusedRecoveryCodes(ctx, user.ID)
+				s.logger.Info("Recovery code used for login",
+					zap.String("username", username),
+					zap.Int("remaining_codes", remaining))
+				s.logAudit(r, "recovery_code_used", "auth",
+					fmt.Sprintf("user: %s, remaining: %d", username, remaining), "success")
 			}
 		}
 
@@ -444,6 +520,14 @@ func (s *MasterServer) handleChangePassword(w http.ResponseWriter, r *http.Reque
 				"MustChangePassword": user.MustChangePassword,
 			})
 			return
+		}
+
+		// Invalidate all existing sessions for this user (security best practice)
+		if err := s.sessionService.DeleteAllForUser(ctx, user.ID); err != nil {
+			s.logger.Error("Failed to invalidate sessions after password change",
+				zap.Int64("user_id", user.ID),
+				zap.Error(err))
+			// Continue - password was changed successfully, session cleanup is best-effort
 		}
 
 		// Log password change
