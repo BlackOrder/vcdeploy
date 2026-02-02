@@ -140,14 +140,31 @@ test-integration: ## Run integration tests (mirrors CI 'integration' job)
 test-e2e: build ## Run E2E API tests (mirrors CI 'e2e-api' job)
 	@echo "=== E2E API Tests (mirrors CI 'e2e-api' job) ==="
 	@echo "Server logs will be written to: test-server.log"
-	@$(MAKE) -s _start-test-server
+	@> test-server.log
+	@echo "Cleaning up previous Docker test environment..."
+	@$(COMPOSE) -f docker/docker-compose.test.yml down -v 2>/dev/null || true
+	@docker volume rm docker_test-data docker_test-logs 2>/dev/null || true
+	@echo "Building and starting master via docker compose..."
+	@TEST_ADMIN_PASSWORD=$(TEST_ADMIN_PASS) $(COMPOSE) -f docker/docker-compose.test.yml up -d master --build
+	@echo "Waiting for master to be ready..."
+	@for i in $$(seq 1 30); do \
+		if curl -sf $(TEST_HTTP_URL)/api/v1/health >/dev/null 2>&1; then \
+			echo "Master is ready!"; \
+			break; \
+		fi; \
+		echo "Attempt $$i/30: Waiting..."; \
+		sleep 2; \
+	done
+	@curl -sf $(TEST_HTTP_URL)/api/v1/health >/dev/null || \
+		($(COMPOSE) -f docker/docker-compose.test.yml logs master >> test-server.log 2>&1 && $(COMPOSE) -f docker/docker-compose.test.yml down -v && exit 1)
+	@$(COMPOSE) -f docker/docker-compose.test.yml logs -f master >> test-server.log 2>&1 &
 	@API_TOKEN=$$($(MAKE) -s _create-api-token) && \
 	echo "Running E2E tests..." && \
 	E2E_MASTER_HTTP_URL=$(TEST_HTTP_URL) E2E_API_TOKEN=$$API_TOKEN \
 		E2E_ADMIN_USER=admin E2E_ADMIN_PASS=$(TEST_ADMIN_PASS) \
 		go test -v -tags=e2e -timeout $(TEST_TIMEOUT) ./tests/e2e/... ; \
 	TEST_EXIT=$$?; \
-	$(MAKE) -s _stop-test-server; \
+	$(COMPOSE) -f docker/docker-compose.test.yml down -v; \
 	exit $$TEST_EXIT
 
 # ============================================================================
