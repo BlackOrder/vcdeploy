@@ -299,22 +299,17 @@ func NewMasterServer(cfg *config.MasterConfig, store storage.Store, logger *zap.
 		templatesDir: sysCfg.TemplatesDir(),
 	}
 
-	// Initialize KMS for encryption services (requires database connection)
-	conn := store.Conn()
-	if conn != nil {
-		kms, kmsErr := security.NewKMS(context.Background(), conn, logger)
-		if kmsErr != nil {
-			logger.Warn("Failed to create KMS, some features will be unavailable", zap.Error(kmsErr))
-		} else {
-			// Initialize KMS with a key if none exists
-			if initErr := kms.Initialize(context.Background()); initErr != nil {
-				logger.Warn("Failed to initialize KMS", zap.Error(initErr))
-			} else {
-				s.kms = kms
-			}
-		}
+	// Initialize KMS for encryption services (using the store for persistence)
+	kms, kmsErr := security.NewKMS(context.Background(), store, logger)
+	if kmsErr != nil {
+		logger.Warn("Failed to create KMS, some features will be unavailable", zap.Error(kmsErr))
 	} else {
-		logger.Info("No database connection available, KMS disabled")
+		// Initialize KMS with a key if none exists
+		if initErr := kms.Initialize(context.Background()); initErr != nil {
+			logger.Warn("Failed to initialize KMS", zap.Error(initErr))
+		} else {
+			s.kms = kms
+		}
 	}
 
 	// Initialize service layer (services that don't need KMS)
@@ -335,29 +330,27 @@ func NewMasterServer(cfg *config.MasterConfig, store storage.Store, logger *zap.
 		s.settingsSvc = settings.New(s.store, s.kms)
 		s.webhookService = webhooks.New(s.store, s.kms)
 
-		// Initialize CA manager for agent certificate operations
-		if conn != nil {
-			ca, caErr := security.NewCAManager(conn, s.kms, logger)
-			if caErr != nil {
-				logger.Warn("Failed to create CA manager, agent gRPC will be unavailable", zap.Error(caErr))
+		// Initialize CA manager for agent certificate operations (now uses store)
+		ca, caErr := security.NewCAManager(store, s.kms, logger)
+		if caErr != nil {
+			logger.Warn("Failed to create CA manager, agent gRPC will be unavailable", zap.Error(caErr))
+		} else {
+			// Initialize CA if none exists
+			caConfig := security.DefaultCAConfig()
+			if initErr := ca.Initialize(context.Background(), caConfig); initErr != nil {
+				logger.Warn("Failed to initialize CA", zap.Error(initErr))
 			} else {
-				// Initialize CA if none exists
-				caConfig := security.DefaultCAConfig()
-				if initErr := ca.Initialize(context.Background(), caConfig); initErr != nil {
-					logger.Warn("Failed to initialize CA", zap.Error(initErr))
-				} else {
-					s.caManager = ca
-					// Create the gRPC agent server with the CA manager
-					s.agentServer = NewAgentServer(s.store, ca, s.logger)
-					s.agentServer.SetServices(s.agentService, s.deploymentService)
+				s.caManager = ca
+				// Create the gRPC agent server with the CA manager
+				s.agentServer = NewAgentServer(s.store, ca, s.logger)
+				s.agentServer.SetServices(s.agentService, s.deploymentService)
 
-					// Enable auto-registration in test mode
-					if os.Getenv("VCDEPLOY_TEST_MODE") == "true" {
-						s.agentServer.SetAllowAutoRegister(true)
-					}
-
-					logger.Info("Agent gRPC server initialized")
+				// Enable auto-registration in test mode
+				if os.Getenv("VCDEPLOY_TEST_MODE") == "true" {
+					s.agentServer.SetAllowAutoRegister(true)
 				}
+
+				logger.Info("Agent gRPC server initialized")
 			}
 		}
 	}

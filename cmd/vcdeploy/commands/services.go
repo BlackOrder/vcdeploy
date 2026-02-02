@@ -108,16 +108,15 @@ func InitCLIServices(dbPath string) (*CLIServices, func(), error) {
 
 	logger := zap.NewNop()
 
+	// Use the db as a Store interface (DB implements storage.Store)
+	var store storage.Store = db
+
 	// Initialize KMS for encrypted operations (secrets, settings)
-	kms, err := security.NewKMS(context.Background(), db.Conn(), logger)
+	kms, err := security.NewKMS(context.Background(), store, logger)
 	if err != nil {
 		db.Close()
 		return nil, nil, fmt.Errorf("initialize KMS: %w", err)
 	}
-
-	// Use the db as a Store interface
-	// Use the db as a Store interface
-	var store storage.Store = db
 
 	svc := &CLIServices{
 		Services: &Services{

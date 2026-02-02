@@ -74,8 +74,8 @@ func newTestServer(t *testing.T) *MasterServer {
 		db.Close()       //nolint:errcheck
 	})
 
-	// Set up KMS for tests
-	kms, err := security.NewKMS(context.Background(), db.Conn(), nil)
+	// Set up KMS for tests (db implements storage.Store interface)
+	kms, err := security.NewKMS(context.Background(), db, nil)
 	if err != nil {
 		t.Fatalf("failed to create KMS: %v", err)
 	}
@@ -1888,14 +1888,17 @@ func TestSetCAManager(t *testing.T) {
 
 	server := newTestServer(t)
 
-	// Initially nil
+	// caManager is now initialized by newTestServer (via NewMasterServer when KMS is available)
+	// Verify we can set it to a different value
+	initialCA := server.caManager
+	server.SetCAManager(nil)
+
 	if server.caManager != nil {
-		t.Error("caManager should be nil initially")
+		t.Error("caManager should be nil after setting to nil")
 	}
 
-	// Can't easily test with real CA, but we can verify the method exists
-	// and sets the field (with nil just to verify no panic)
-	server.SetCAManager(nil)
+	// Restore for other tests that might use this server
+	server.SetCAManager(initialCA)
 }
 
 func TestSetKMS(t *testing.T) {

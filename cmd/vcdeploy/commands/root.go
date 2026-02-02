@@ -777,8 +777,8 @@ func runMasterRotateKey(cmd *cobra.Command, args []string) error {
 
 	ctx := context.Background()
 
-	// Initialize KMS
-	kms, err := security.NewKMS(ctx, db.Conn(), globalLogger)
+	// Initialize KMS (db implements storage.Store interface)
+	kms, err := security.NewKMS(ctx, db, globalLogger)
 	if err != nil {
 		return fmt.Errorf("initialize KMS: %w", err)
 	}
@@ -2050,8 +2050,8 @@ func runSecretRestore(cmd *cobra.Command, args []string) error {
 
 	ctx := context.Background()
 
-	// Initialize KMS for encryption
-	kms, err := security.NewKMS(ctx, db.Conn(), globalLogger)
+	// Initialize KMS for encryption (db implements storage.Store interface)
+	kms, err := security.NewKMS(ctx, db, globalLogger)
 	if err != nil {
 		return fmt.Errorf("initialize KMS: %w", err)
 	}
