@@ -25,10 +25,11 @@ func TestDeploymentsAPI(t *testing.T) {
 
 		ctx.Assertions.StatusOK(resp)
 
-		var deployments []map[string]interface{}
-		if err := testutil.DecodeJSON(resp, &deployments); err != nil {
+		result, err := testutil.DecodePaginatedJSON(resp)
+		if err != nil {
 			t.Fatalf("failed to decode response: %v", err)
 		}
+		_ = result // verify items is accessible
 	})
 
 	t.Run("filter deployments by status", func(t *testing.T) {
@@ -54,15 +55,14 @@ func TestDeploymentsAPI(t *testing.T) {
 	t.Run("get deployment details", func(t *testing.T) {
 		// First get list to find a deployment
 		resp, _ := ctx.Client.Get("/api/v1/deployments")
-		var deployments []map[string]interface{}
-		testutil.DecodeJSON(resp, &deployments)
+		result, _ := testutil.DecodePaginatedJSON(resp)
 		resp.Body.Close()
 
-		if len(deployments) == 0 {
+		if len(result.Items) == 0 {
 			t.Skip("no deployments available")
 		}
 
-		deployID := deployments[0]["id"].(string)
+		deployID := result.Items[0]["id"].(string)
 		getResp, err := ctx.Client.Get("/api/v1/deployments/" + deployID)
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
@@ -104,15 +104,14 @@ func TestDeploymentLogs(t *testing.T) {
 	t.Run("get deployment logs", func(t *testing.T) {
 		// First get list to find a deployment
 		resp, _ := ctx.Client.Get("/api/v1/deployments")
-		var deployments []map[string]interface{}
-		testutil.DecodeJSON(resp, &deployments)
+		result, _ := testutil.DecodePaginatedJSON(resp)
 		resp.Body.Close()
 
-		if len(deployments) == 0 {
+		if len(result.Items) == 0 {
 			t.Skip("no deployments available")
 		}
 
-		deployID := deployments[0]["id"].(string)
+		deployID := result.Items[0]["id"].(string)
 		logsResp, err := ctx.Client.Get("/api/v1/deployments/" + deployID + "/logs")
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
