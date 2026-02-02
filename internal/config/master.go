@@ -27,22 +27,61 @@ type MasterConfig struct {
 	Appearance    AppearanceConfig    `yaml:"appearance"`
 }
 
+// TLSMode defines the TLS operation mode.
+type TLSMode string
+
+const (
+	// TLSModeDisabled serves HTTP only (development, behind proxy).
+	TLSModeDisabled TLSMode = "disabled"
+	// TLSModeStatic uses certificate files provided by user.
+	TLSModeStatic TLSMode = "static"
+	// TLSModeACME uses automatic certificate management (Let's Encrypt).
+	TLSModeACME TLSMode = "acme"
+)
+
 // ServerConfig defines HTTP server settings.
 type ServerConfig struct {
-	Listen string    `yaml:"listen"`
-	TLS    TLSConfig `yaml:"tls"`
+	Listen       string    `yaml:"listen"`        // HTTP address (default: ":80")
+	HTTPSAddress string    `yaml:"https_address"` // HTTPS address (default: ":443")
+	TLS          TLSConfig `yaml:"tls"`
 }
 
 // TLSConfig defines TLS settings.
 type TLSConfig struct {
-	Enabled bool   `yaml:"enabled"`
-	Cert    string `yaml:"cert"`
-	Key     string `yaml:"key"`
+	// Mode determines TLS behavior: disabled, static, or acme
+	Mode TLSMode `yaml:"mode"`
+
+	// Static mode: paths to certificate and key files
+	CertFile string `yaml:"cert_file"`
+	KeyFile  string `yaml:"key_file"`
+
+	// ACME mode configuration
+	ACME ACMEConfig `yaml:"acme"`
+
+	// ForceHTTPS redirects HTTP to HTTPS when TLS enabled
+	ForceHTTPS bool `yaml:"force_https"`
+
+	// MinVersion is minimum TLS version ("1.2" or "1.3")
+	MinVersion string `yaml:"min_version"`
+
+	// Legacy fields for backward compatibility during migration
+	Enabled bool   `yaml:"enabled"` // Deprecated: use Mode instead
+	Cert    string `yaml:"cert"`    // Deprecated: use CertFile instead
+	Key     string `yaml:"key"`     // Deprecated: use KeyFile instead
+}
+
+// ACMEConfig defines ACME (Let's Encrypt) configuration.
+type ACMEConfig struct {
+	Email    string   `yaml:"email"`     // Contact email for Let's Encrypt
+	Domains  []string `yaml:"domains"`   // Domains to obtain certs for
+	Staging  bool     `yaml:"staging"`   // Use Let's Encrypt staging (for testing)
+	CacheDir string   `yaml:"cache_dir"` // Directory to cache certificates
 }
 
 // GRPCConfig defines gRPC server settings for agent connections.
 type GRPCConfig struct {
-	Listen string `yaml:"listen"`
+	Listen        string `yaml:"listen"`
+	ReauthAddress string `yaml:"reauth_address"` // Dedicated port for unauthenticated re-authentication
 }
 
 // SSHConfig defines SSH connection settings.

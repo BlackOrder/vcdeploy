@@ -15,6 +15,8 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -165,6 +167,42 @@ func (m *CAManager) GetTrustPool() *x509.CertPool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.trustPool
+}
+
+// GetTrustPoolVersion returns a version string for the trust pool.
+// The version changes when CAs are added or rotated.
+func (m *CAManager) GetTrustPoolVersion(ctx context.Context) string {
+	cas, err := m.store.ListCAs(ctx)
+	if err != nil {
+		return "unknown"
+	}
+
+	// Version is hash of all CA IDs sorted
+	ids := make([]string, 0, len(cas))
+	for _, ca := range cas {
+		ids = append(ids, ca.ID)
+	}
+	sort.Strings(ids)
+
+	h := sha256.New()
+	h.Write([]byte(strings.Join(ids, ":")))
+	return hex.EncodeToString(h.Sum(nil))[:16]
+}
+
+// GetAllCACertificates returns the PEM-encoded certificates for all trusted CAs.
+func (m *CAManager) GetAllCACertificates(ctx context.Context) ([][]byte, error) {
+	cas, err := m.store.ListCAs(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list CAs: %w", err)
+	}
+
+	certs := make([][]byte, 0, len(cas))
+	for _, ca := range cas {
+		if ca.CertificatePEM != "" {
+			certs = append(certs, []byte(ca.CertificatePEM))
+		}
+	}
+	return certs, nil
 }
 
 // GetCurrentCA returns the current active CA.
