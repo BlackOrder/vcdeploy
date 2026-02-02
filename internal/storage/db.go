@@ -154,8 +154,8 @@ func (db *DB) GetUserByUsername(ctx context.Context, username string) (*User, er
 func (db *DB) UpsertAgent(ctx context.Context, agent *Agent) error {
 	_, err := db.conn.ExecContext(ctx, `
 		INSERT INTO agents (id, hostname, labels, capabilities, status, last_seen_at, certificate,
-			version, os, arch, update_policy, update_window_start, update_window_end, last_update_at, last_update_error)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			version, os, arch, update_policy, update_window_start, update_window_end, last_update_at, last_update_error, hmac_secret)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			hostname = excluded.hostname,
 			labels = excluded.labels,
@@ -170,11 +170,13 @@ func (db *DB) UpsertAgent(ctx context.Context, agent *Agent) error {
 			update_window_start = COALESCE(excluded.update_window_start, agents.update_window_start),
 			update_window_end = COALESCE(excluded.update_window_end, agents.update_window_end),
 			last_update_at = COALESCE(excluded.last_update_at, agents.last_update_at),
-			last_update_error = COALESCE(excluded.last_update_error, agents.last_update_error)
+			last_update_error = COALESCE(excluded.last_update_error, agents.last_update_error),
+			hmac_secret = COALESCE(excluded.hmac_secret, agents.hmac_secret)
 	`, agent.ID, agent.Hostname, mapToJSON(agent.Labels), agent.Capabilities,
 		agent.Status, agent.LastSeenAt, agent.Certificate,
 		agent.Version, agent.OS, agent.Arch, agent.UpdatePolicy,
-		agent.UpdateWindowStart, agent.UpdateWindowEnd, agent.LastUpdateAt, agent.LastUpdateError)
+		agent.UpdateWindowStart, agent.UpdateWindowEnd, agent.LastUpdateAt, agent.LastUpdateError,
+		agent.HMACSecret)
 	if err != nil {
 		return fmt.Errorf("upserting agent: %w", err)
 	}
@@ -187,17 +189,19 @@ func (db *DB) GetAgent(ctx context.Context, id string) (*Agent, error) {
 	var labels, capabilities sql.NullString
 	var lastSeen, lastUpdateAt sql.NullTime
 	var version, os, arch, updatePolicy, windowStart, windowEnd, lastUpdateError sql.NullString
+	var hmacSecret []byte
 
 	err := db.conn.QueryRowContext(ctx, `
 		SELECT id, hostname, labels, capabilities, status, last_seen_at, registered_at, certificate,
 			COALESCE(version, ''), COALESCE(os, ''), COALESCE(arch, ''),
 			COALESCE(update_policy, 'immediate'), COALESCE(update_window_start, ''), COALESCE(update_window_end, ''),
-			last_update_at, COALESCE(last_update_error, '')
+			last_update_at, COALESCE(last_update_error, ''), hmac_secret
 		FROM agents WHERE id = ?
 	`, id).Scan(
 		&agent.ID, &agent.Hostname, &labels, &capabilities,
 		&agent.Status, &lastSeen, &agent.RegisteredAt, &agent.Certificate,
 		&version, &os, &arch, &updatePolicy, &windowStart, &windowEnd, &lastUpdateAt, &lastUpdateError,
+		&hmacSecret,
 	)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
@@ -218,6 +222,7 @@ func (db *DB) GetAgent(ctx context.Context, id string) (*Agent, error) {
 		agent.LastUpdateAt = &lastUpdateAt.Time
 	}
 	agent.LastUpdateError = lastUpdateError.String
+	agent.HMACSecret = hmacSecret
 	return &agent, nil
 }
 
@@ -2417,6 +2422,42 @@ func (db *DB) CleanupOldProvisionJobs(ctx context.Context, before time.Time) (in
 	return result.RowsAffected()
 }
 
+// SaveProvisionLog saves a log entry for a provisioning job.
+func (db *DB) SaveProvisionLog(ctx context.Context, jobID, level, message string) error {
+	_, err := db.conn.ExecContext(ctx, `
+		INSERT INTO provision_logs (job_id, timestamp, level, message)
+		VALUES (?, ?, ?, ?)
+	`, jobID, time.Now(), level, message)
+	if err != nil {
+		return fmt.Errorf("saving provision log: %w", err)
+	}
+	return nil
+}
+
+// GetProvisionLogs retrieves all logs for a provisioning job.
+func (db *DB) GetProvisionLogs(ctx context.Context, jobID string) ([]*ProvisionLog, error) {
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, job_id, timestamp, level, message
+		FROM provision_logs
+		WHERE job_id = ?
+		ORDER BY timestamp ASC
+	`, jobID)
+	if err != nil {
+		return nil, fmt.Errorf("getting provision logs: %w", err)
+	}
+	defer rows.Close()
+
+	var logs []*ProvisionLog
+	for rows.Next() {
+		var log ProvisionLog
+		if err := rows.Scan(&log.ID, &log.JobID, &log.Timestamp, &log.Level, &log.Message); err != nil {
+			return nil, fmt.Errorf("scanning provision log: %w", err)
+		}
+		logs = append(logs, &log)
+	}
+	return logs, rows.Err()
+}
+
 // scanProvisionJobs is a helper to scan provision job rows.
 func scanProvisionJobs(rows *sql.Rows) ([]*ProvisionJob, error) {
 	var jobs []*ProvisionJob
@@ -3173,6 +3214,188 @@ func (db *DB) UpdateProjectHealthCheck(ctx context.Context, projectID int64, hea
 	`, healthCheckID, autoRollback, rollbackOnHealthFail, projectID)
 	if err != nil {
 		return fmt.Errorf("updating project health check: %w", err)
+	}
+	return nil
+}
+
+// --- ACME Certificate operations ---
+
+// GetACMECertificate retrieves an ACME certificate by domain.
+func (db *DB) GetACMECertificate(ctx context.Context, domain string) (*ACMECertificate, error) {
+	var cert ACMECertificate
+	var lastRenewal sql.NullTime
+	var issuer sql.NullString
+
+	err := db.conn.QueryRowContext(ctx, `
+		SELECT id, domain, certificate_pem, private_key_encrypted, issuer, 
+			not_before, not_after, last_renewal, auto_renew, created_at, updated_at
+		FROM acme_certificates WHERE domain = ?
+	`, domain).Scan(&cert.ID, &cert.Domain, &cert.CertificatePEM, &cert.PrivateKeyEncrypted,
+		&issuer, &cert.NotBefore, &cert.NotAfter, &lastRenewal, &cert.AutoRenew, &cert.CreatedAt, &cert.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("getting ACME certificate: %w", err)
+	}
+
+	cert.Issuer = issuer.String
+	if lastRenewal.Valid {
+		cert.LastRenewal = &lastRenewal.Time
+	}
+	return &cert, nil
+}
+
+// SaveACMECertificate creates or updates an ACME certificate.
+func (db *DB) SaveACMECertificate(ctx context.Context, cert *ACMECertificate) error {
+	result, err := db.conn.ExecContext(ctx, `
+		INSERT INTO acme_certificates (domain, certificate_pem, private_key_encrypted, issuer, 
+			not_before, not_after, last_renewal, auto_renew, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		ON CONFLICT(domain) DO UPDATE SET 
+			certificate_pem = excluded.certificate_pem,
+			private_key_encrypted = excluded.private_key_encrypted,
+			issuer = excluded.issuer,
+			not_before = excluded.not_before,
+			not_after = excluded.not_after,
+			last_renewal = excluded.last_renewal,
+			auto_renew = excluded.auto_renew,
+			updated_at = CURRENT_TIMESTAMP
+	`, cert.Domain, cert.CertificatePEM, cert.PrivateKeyEncrypted, cert.Issuer,
+		cert.NotBefore, cert.NotAfter, cert.LastRenewal, cert.AutoRenew)
+	if err != nil {
+		return fmt.Errorf("saving ACME certificate: %w", err)
+	}
+
+	if cert.ID == 0 {
+		id, err := result.LastInsertId()
+		if err == nil && id > 0 {
+			cert.ID = id
+		}
+	}
+	return nil
+}
+
+// DeleteACMECertificate removes an ACME certificate by domain.
+func (db *DB) DeleteACMECertificate(ctx context.Context, domain string) error {
+	result, err := db.conn.ExecContext(ctx, `DELETE FROM acme_certificates WHERE domain = ?`, domain)
+	if err != nil {
+		return fmt.Errorf("deleting ACME certificate: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("checking rows affected: %w", err)
+	}
+	if rows == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// ListACMECertificates returns all stored ACME certificates.
+func (db *DB) ListACMECertificates(ctx context.Context) ([]*ACMECertificate, error) {
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, domain, certificate_pem, private_key_encrypted, issuer, 
+			not_before, not_after, last_renewal, auto_renew, created_at, updated_at
+		FROM acme_certificates ORDER BY domain ASC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("listing ACME certificates: %w", err)
+	}
+	defer rows.Close()
+
+	var certs []*ACMECertificate
+	for rows.Next() {
+		var cert ACMECertificate
+		var lastRenewal sql.NullTime
+		var issuer sql.NullString
+
+		if err := rows.Scan(&cert.ID, &cert.Domain, &cert.CertificatePEM, &cert.PrivateKeyEncrypted,
+			&issuer, &cert.NotBefore, &cert.NotAfter, &lastRenewal, &cert.AutoRenew,
+			&cert.CreatedAt, &cert.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scanning ACME certificate: %w", err)
+		}
+		cert.Issuer = issuer.String
+		if lastRenewal.Valid {
+			cert.LastRenewal = &lastRenewal.Time
+		}
+		certs = append(certs, &cert)
+	}
+	return certs, rows.Err()
+}
+
+// --- ACME Account operations ---
+
+// GetACMEAccount retrieves an ACME account by email.
+func (db *DB) GetACMEAccount(ctx context.Context, email string) (*ACMEAccount, error) {
+	var account ACMEAccount
+	var accountURL sql.NullString
+
+	err := db.conn.QueryRowContext(ctx, `
+		SELECT id, email, account_url, private_key_encrypted, directory_url, created_at
+		FROM acme_accounts WHERE email = ?
+	`, email).Scan(&account.ID, &account.Email, &accountURL, &account.PrivateKeyEncrypted,
+		&account.DirectoryURL, &account.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("getting ACME account: %w", err)
+	}
+
+	account.AccountURL = accountURL.String
+	return &account, nil
+}
+
+// SaveACMEAccount creates or updates an ACME account.
+func (db *DB) SaveACMEAccount(ctx context.Context, account *ACMEAccount) error {
+	// Check if account exists by email (email isn't unique constraint, so manually handle)
+	var existingID int64
+	err := db.conn.QueryRowContext(ctx, `SELECT id FROM acme_accounts WHERE email = ?`, account.Email).Scan(&existingID)
+
+	if err == sql.ErrNoRows {
+		// Insert new
+		result, err := db.conn.ExecContext(ctx, `
+			INSERT INTO acme_accounts (email, account_url, private_key_encrypted, directory_url, created_at)
+			VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+		`, account.Email, account.AccountURL, account.PrivateKeyEncrypted, account.DirectoryURL)
+		if err != nil {
+			return fmt.Errorf("inserting ACME account: %w", err)
+		}
+		id, err := result.LastInsertId()
+		if err == nil {
+			account.ID = id
+		}
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("checking existing ACME account: %w", err)
+	}
+
+	// Update existing
+	_, err = db.conn.ExecContext(ctx, `
+		UPDATE acme_accounts SET account_url = ?, private_key_encrypted = ?, directory_url = ?
+		WHERE id = ?
+	`, account.AccountURL, account.PrivateKeyEncrypted, account.DirectoryURL, existingID)
+	if err != nil {
+		return fmt.Errorf("updating ACME account: %w", err)
+	}
+	account.ID = existingID
+	return nil
+}
+
+// DeleteACMEAccount removes an ACME account by email.
+func (db *DB) DeleteACMEAccount(ctx context.Context, email string) error {
+	result, err := db.conn.ExecContext(ctx, `DELETE FROM acme_accounts WHERE email = ?`, email)
+	if err != nil {
+		return fmt.Errorf("deleting ACME account: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("checking rows affected: %w", err)
+	}
+	if rows == 0 {
+		return ErrNotFound
 	}
 	return nil
 }
