@@ -31,7 +31,7 @@ type AgentStore struct {
 
 // CertificateRecord represents a stored certificate.
 type CertificateRecord struct {
-	Type        string    // "agent", "ca"
+	Type        string // "agent", "ca"
 	Certificate []byte
 	PrivateKey  []byte // nil for CA cert
 	NotAfter    time.Time

@@ -32,19 +32,19 @@ var (
 
 // SSHProvisioner handles remote agent installation via SSH.
 type SSHProvisioner struct {
-	ssh          *security.SSHKeyManager
-	provisioner  *Provisioner
-	masterURL    string
-	binaryURL    string // URL to download agent binary from
-	logger       *zap.Logger
-	connTimeout  time.Duration
-	execTimeout  time.Duration
+	ssh         *security.SSHKeyManager
+	provisioner *Provisioner
+	masterURL   string
+	binaryURL   string // URL to download agent binary from
+	logger      *zap.Logger
+	connTimeout time.Duration
+	execTimeout time.Duration
 }
 
 // SSHProvisionerConfig contains configuration for the SSH provisioner.
 type SSHProvisionerConfig struct {
-	MasterURL       string
-	BinaryURL       string // URL template with {os} and {arch} placeholders
+	MasterURL         string
+	BinaryURL         string // URL template with {os} and {arch} placeholders
 	ConnectionTimeout time.Duration
 	ExecutionTimeout  time.Duration
 }

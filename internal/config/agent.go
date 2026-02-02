@@ -24,7 +24,7 @@ type AgentConfig struct {
 type AgentMasterConfig struct {
 	Address   string          `yaml:"address"`
 	Token     string          `yaml:"token"`
-	CACert    string          `yaml:"ca_cert"`  // CA certificate for TLS verification
+	CACert    string          `yaml:"ca_cert"` // CA certificate for TLS verification
 	Reconnect ReconnectConfig `yaml:"reconnect"`
 }
 
@@ -48,7 +48,7 @@ type AgentIdentityConfig struct {
 
 // AgentPathsConfig defines local paths.
 type AgentPathsConfig struct {
-	Data     string `yaml:"data"`     // Data directory for agent database
+	Data     string `yaml:"data"` // Data directory for agent database
 	Repos    string `yaml:"repos"`
 	Releases string `yaml:"releases"`
 }

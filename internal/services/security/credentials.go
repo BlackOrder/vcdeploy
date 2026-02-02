@@ -49,7 +49,7 @@ type CredentialInfo struct {
 // CreateCredentialRequest represents a request to create a credential.
 type CreateCredentialRequest struct {
 	Name       string `json:"name"`
-	Type       string `json:"type"`       // "ssh_key", "https_token", "https_basic"
+	Type       string `json:"type"`        // "ssh_key", "https_token", "https_basic"
 	URLPattern string `json:"url_pattern"` // Regex to match repo URLs
 	Credential string `json:"credential"`  // The actual credential value
 	CreatedBy  string `json:"-"`           // Set by handler from auth context
