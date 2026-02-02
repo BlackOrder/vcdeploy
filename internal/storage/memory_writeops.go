@@ -60,6 +60,8 @@ func (s *MemoryStore) executeWriteOp(tx *sql.Tx, op WriteOp) error {
 		return s.executeACMECertificateOp(tx, op)
 	case "acme_accounts":
 		return s.executeACMEAccountOp(tx, op)
+	case "recovery_codes":
+		return s.executeRecoveryCodeOp(tx, op)
 	default:
 		s.logger.Warn("unknown table for write op",
 			zap.String("table", op.Table),
@@ -911,6 +913,42 @@ func (s *MemoryStore) executeACMEAccountOp(tx *sql.Tx, op WriteOp) error {
 			return fmt.Errorf("invalid data type for acme_account delete")
 		}
 		_, err := tx.Exec(`DELETE FROM acme_accounts WHERE email = ?`, a.Email)
+		return err
+	}
+	return nil
+}
+
+// --- Recovery Code operations ---
+
+func (s *MemoryStore) executeRecoveryCodeOp(tx *sql.Tx, op WriteOp) error {
+	switch op.Type {
+	case WriteOpInsert:
+		c, ok := op.Data.(*RecoveryCode)
+		if !ok {
+			return fmt.Errorf("invalid data type for recovery_code insert")
+		}
+		_, err := tx.Exec(`
+			INSERT INTO recovery_codes (id, user_id, code_hash, used_at, created_at)
+			VALUES (?, ?, ?, ?, ?)
+		`, c.ID, c.UserID, c.CodeHash, c.UsedAt, c.CreatedAt)
+		return err
+
+	case WriteOpUpdate:
+		c, ok := op.Data.(*RecoveryCode)
+		if !ok {
+			return fmt.Errorf("invalid data type for recovery_code update")
+		}
+		_, err := tx.Exec(`
+			UPDATE recovery_codes SET used_at = ? WHERE id = ?
+		`, c.UsedAt, c.ID)
+		return err
+
+	case WriteOpDelete:
+		c, ok := op.Data.(*RecoveryCode)
+		if !ok {
+			return fmt.Errorf("invalid data type for recovery_code delete")
+		}
+		_, err := tx.Exec(`DELETE FROM recovery_codes WHERE id = ?`, c.ID)
 		return err
 	}
 	return nil

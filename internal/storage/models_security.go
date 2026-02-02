@@ -225,3 +225,19 @@ type ACMEAccount struct {
 	DirectoryURL        string    `json:"directory_url"`         // ACME directory (Let's Encrypt prod/staging)
 	CreatedAt           time.Time `json:"created_at"`
 }
+
+// --- Recovery Code Models ---
+
+// RecoveryCode represents a one-time-use 2FA recovery code.
+// Users are given 8 codes when enabling TOTP. Each code can only be used once.
+type RecoveryCode struct {
+	ID        int64      `json:"id"`
+	UserID    int64      `json:"user_id"`
+	CodeHash  string     `json:"-"` // bcrypt hash, never exposed in JSON
+	UsedAt    *time.Time `json:"used_at,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+}
+
+// RecoveryCodeCount is the number of recovery codes generated.
+const RecoveryCodeCount = 8
+

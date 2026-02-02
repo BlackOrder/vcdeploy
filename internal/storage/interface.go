@@ -55,6 +55,7 @@ type Store interface {
 	EncryptionKeyStore
 	SSHKeyStore
 	CertAuditStore
+	RecoveryCodeStore
 }
 
 // UserStore defines user-related operations.
@@ -442,6 +443,20 @@ type CertAuditStore interface {
 	SaveCertAuditEvent(ctx context.Context, event *CertAuditEvent) error
 	// ListCertAuditEvents returns certificate audit events with optional filtering.
 	ListCertAuditEvents(ctx context.Context, filter CertAuditFilter) ([]*CertAuditEvent, error)
+}
+
+// RecoveryCodeStore defines TOTP recovery code operations.
+type RecoveryCodeStore interface {
+	// SaveRecoveryCodes saves a set of recovery codes for a user (replaces any existing).
+	SaveRecoveryCodes(ctx context.Context, userID int64, codes []*RecoveryCode) error
+	// GetRecoveryCodes returns all recovery codes for a user.
+	GetRecoveryCodes(ctx context.Context, userID int64) ([]*RecoveryCode, error)
+	// UseRecoveryCode marks a recovery code as used.
+	UseRecoveryCode(ctx context.Context, codeID int64) error
+	// DeleteRecoveryCodes removes all recovery codes for a user.
+	DeleteRecoveryCodes(ctx context.Context, userID int64) error
+	// CountUnusedRecoveryCodes returns the count of unused codes for a user.
+	CountUnusedRecoveryCodes(ctx context.Context, userID int64) (int, error)
 }
 
 // Ensure DB implements Store at compile time.

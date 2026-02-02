@@ -54,6 +54,8 @@ func (s *MemoryStore) LoadFromDB(ctx context.Context, db *DB) error {
 		// ACME tables
 		{"acme_certificates", s.loadACMECertificates},
 		{"acme_accounts", s.loadACMEAccounts},
+		// Recovery codes
+		{"recovery_codes", s.loadRecoveryCodes},
 	}
 
 	for _, loader := range loaders {
@@ -748,6 +750,32 @@ func (s *MemoryStore) loadACMEAccounts(ctx context.Context, db *DB) error {
 		s.acmeAccounts[account.Email] = &account
 		if account.ID >= s.nextACMEAccountID.Load() {
 			s.nextACMEAccountID.Store(account.ID + 1)
+		}
+	}
+	return rows.Err()
+}
+
+func (s *MemoryStore) loadRecoveryCodes(ctx context.Context, db *DB) error {
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, user_id, code_hash, used_at, created_at
+		FROM recovery_codes ORDER BY user_id, id ASC
+	`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for rows.Next() {
+		var code RecoveryCode
+		if err := rows.Scan(&code.ID, &code.UserID, &code.CodeHash, &code.UsedAt, &code.CreatedAt); err != nil {
+			return err
+		}
+		s.recoveryCodes[code.UserID] = append(s.recoveryCodes[code.UserID], &code)
+		if code.ID >= s.nextRecoveryCodeID.Load() {
+			s.nextRecoveryCodeID.Store(code.ID + 1)
 		}
 	}
 	return rows.Err()

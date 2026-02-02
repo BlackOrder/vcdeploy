@@ -88,6 +88,9 @@ type MemoryStore struct {
 	acmeCertificates map[string]*ACMECertificate // keyed by domain
 	acmeAccounts     map[string]*ACMEAccount     // keyed by email
 
+	// Recovery codes storage
+	recoveryCodes map[int64][]*RecoveryCode // keyed by user ID
+
 	// ID generators (atomic)
 	nextUserID          atomic.Int64
 	nextAPIKeyID        atomic.Int64
@@ -119,6 +122,9 @@ type MemoryStore struct {
 	// ACME ID generators
 	nextACMECertID    atomic.Int64
 	nextACMEAccountID atomic.Int64
+
+	// Recovery code ID generator
+	nextRecoveryCodeID atomic.Int64
 
 	// Shutdown coordination
 	done chan struct{}
@@ -271,6 +277,9 @@ func NewMemoryStore(cfg *MemoryStoreConfig) *MemoryStore {
 		// ACME maps
 		acmeCertificates: make(map[string]*ACMECertificate),
 		acmeAccounts:     make(map[string]*ACMEAccount),
+
+		// Recovery codes map
+		recoveryCodes: make(map[int64][]*RecoveryCode),
 
 		done: make(chan struct{}),
 	}

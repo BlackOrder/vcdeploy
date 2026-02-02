@@ -3399,3 +3399,105 @@ func (db *DB) DeleteACMEAccount(ctx context.Context, email string) error {
 	}
 	return nil
 }
+
+// --- Recovery Code Operations ---
+
+// SaveRecoveryCodes saves a set of recovery codes for a user (replaces any existing).
+func (db *DB) SaveRecoveryCodes(ctx context.Context, userID int64, codes []*RecoveryCode) error {
+	return db.RunInTransaction(ctx, func(tx *sql.Tx) error {
+		// Delete existing codes for this user
+		if _, err := tx.ExecContext(ctx, `DELETE FROM recovery_codes WHERE user_id = ?`, userID); err != nil {
+			return fmt.Errorf("deleting existing codes: %w", err)
+		}
+
+		// Insert new codes
+		stmt, err := tx.PrepareContext(ctx, `
+			INSERT INTO recovery_codes (user_id, code_hash, created_at)
+			VALUES (?, ?, CURRENT_TIMESTAMP)
+		`)
+		if err != nil {
+			return fmt.Errorf("preparing statement: %w", err)
+		}
+		defer stmt.Close()
+
+		for _, code := range codes {
+			result, err := stmt.ExecContext(ctx, userID, code.CodeHash)
+			if err != nil {
+				return fmt.Errorf("inserting recovery code: %w", err)
+			}
+			id, err := result.LastInsertId()
+			if err == nil {
+				code.ID = id
+			}
+		}
+		return nil
+	})
+}
+
+// GetRecoveryCodes returns all recovery codes for a user.
+func (db *DB) GetRecoveryCodes(ctx context.Context, userID int64) ([]*RecoveryCode, error) {
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, user_id, code_hash, used_at, created_at
+		FROM recovery_codes
+		WHERE user_id = ?
+		ORDER BY id
+	`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("querying recovery codes: %w", err)
+	}
+	defer rows.Close()
+
+	var codes []*RecoveryCode
+	for rows.Next() {
+		var code RecoveryCode
+		if err := rows.Scan(&code.ID, &code.UserID, &code.CodeHash, &code.UsedAt, &code.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scanning recovery code: %w", err)
+		}
+		codes = append(codes, &code)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating recovery codes: %w", err)
+	}
+	return codes, nil
+}
+
+// UseRecoveryCode marks a recovery code as used.
+func (db *DB) UseRecoveryCode(ctx context.Context, codeID int64) error {
+	result, err := db.conn.ExecContext(ctx, `
+		UPDATE recovery_codes SET used_at = CURRENT_TIMESTAMP
+		WHERE id = ? AND used_at IS NULL
+	`, codeID)
+	if err != nil {
+		return fmt.Errorf("marking recovery code as used: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("checking rows affected: %w", err)
+	}
+	if rows == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// DeleteRecoveryCodes removes all recovery codes for a user.
+func (db *DB) DeleteRecoveryCodes(ctx context.Context, userID int64) error {
+	_, err := db.conn.ExecContext(ctx, `DELETE FROM recovery_codes WHERE user_id = ?`, userID)
+	if err != nil {
+		return fmt.Errorf("deleting recovery codes: %w", err)
+	}
+	return nil
+}
+
+// CountUnusedRecoveryCodes returns the count of unused codes for a user.
+func (db *DB) CountUnusedRecoveryCodes(ctx context.Context, userID int64) (int, error) {
+	var count int
+	err := db.conn.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM recovery_codes
+		WHERE user_id = ? AND used_at IS NULL
+	`, userID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("counting unused recovery codes: %w", err)
+	}
+	return count, nil
+}

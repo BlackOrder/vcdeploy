@@ -2036,3 +2036,116 @@ func (s *MemoryStore) DeleteACMEAccount(ctx context.Context, email string) error
 
 	return nil
 }
+
+// --- Recovery Code methods ---
+
+// SaveRecoveryCodes saves a set of recovery codes for a user (replaces any existing).
+func (s *MemoryStore) SaveRecoveryCodes(ctx context.Context, userID int64, codes []*RecoveryCode) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now()
+
+	// Delete existing codes for this user first
+	if existing, ok := s.recoveryCodes[userID]; ok {
+		for _, code := range existing {
+			s.queueWrite(s.coreWrites, NewWriteOp(WriteOpDelete, "recovery_codes", code))
+		}
+	}
+
+	// Save new codes
+	newCodes := make([]*RecoveryCode, len(codes))
+	for i, code := range codes {
+		stored := *code
+		stored.ID = s.nextRecoveryCodeID.Add(1)
+		stored.UserID = userID
+		stored.CreatedAt = now
+		newCodes[i] = &stored
+		codes[i].ID = stored.ID
+		s.queueWrite(s.coreWrites, NewWriteOp(WriteOpInsert, "recovery_codes", &stored))
+	}
+
+	s.recoveryCodes[userID] = newCodes
+	return nil
+}
+
+// GetRecoveryCodes returns all recovery codes for a user.
+func (s *MemoryStore) GetRecoveryCodes(ctx context.Context, userID int64) ([]*RecoveryCode, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	codes, ok := s.recoveryCodes[userID]
+	if !ok {
+		return []*RecoveryCode{}, nil
+	}
+
+	// Copy-on-read
+	result := make([]*RecoveryCode, len(codes))
+	for i, c := range codes {
+		cp := *c
+		result[i] = &cp
+	}
+	return result, nil
+}
+
+// UseRecoveryCode marks a recovery code as used.
+func (s *MemoryStore) UseRecoveryCode(ctx context.Context, codeID int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now()
+
+	// Find the code across all users
+	for userID, codes := range s.recoveryCodes {
+		for i, code := range codes {
+			if code.ID == codeID {
+				if code.UsedAt != nil {
+					return fmt.Errorf("recovery code already used")
+				}
+				code.UsedAt = &now
+				s.recoveryCodes[userID][i] = code
+				s.queueWrite(s.coreWrites, NewWriteOp(WriteOpUpdate, "recovery_codes", code))
+				return nil
+			}
+		}
+	}
+
+	return ErrNotFound
+}
+
+// DeleteRecoveryCodes removes all recovery codes for a user.
+func (s *MemoryStore) DeleteRecoveryCodes(ctx context.Context, userID int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	codes, ok := s.recoveryCodes[userID]
+	if !ok {
+		return nil // No codes to delete
+	}
+
+	for _, code := range codes {
+		s.queueWrite(s.coreWrites, NewWriteOp(WriteOpDelete, "recovery_codes", code))
+	}
+
+	delete(s.recoveryCodes, userID)
+	return nil
+}
+
+// CountUnusedRecoveryCodes returns the count of unused codes for a user.
+func (s *MemoryStore) CountUnusedRecoveryCodes(ctx context.Context, userID int64) (int, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	codes, ok := s.recoveryCodes[userID]
+	if !ok {
+		return 0, nil
+	}
+
+	count := 0
+	for _, code := range codes {
+		if code.UsedAt == nil {
+			count++
+		}
+	}
+	return count, nil
+}
