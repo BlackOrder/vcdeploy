@@ -21,28 +21,26 @@ func TestAgentsAPI(t *testing.T) {
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
-		defer resp.Body.Close()
 
 		ctx.Assertions.StatusOK(resp)
 
-		var agents []map[string]interface{}
-		if err := testutil.DecodeJSON(resp, &agents); err != nil {
+		result, err := testutil.DecodePaginatedJSON(resp)
+		if err != nil {
 			t.Fatalf("failed to decode response: %v", err)
 		}
+		_ = result // Use result if needed
 	})
 
 	t.Run("get agent by ID", func(t *testing.T) {
 		// First get list to find an agent
 		resp, _ := ctx.Client.Get("/api/v1/agents")
-		var agents []map[string]interface{}
-		testutil.DecodeJSON(resp, &agents)
-		resp.Body.Close()
+		result, _ := testutil.DecodePaginatedJSON(resp)
 
-		if len(agents) == 0 {
+		if len(result.Items) == 0 {
 			t.Skip("no agents available")
 		}
 
-		agentID := agents[0]["id"]
+		agentID := result.Items[0]["id"]
 		getResp, err := ctx.Client.Get("/api/v1/agents/" + agentID.(string))
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
@@ -65,15 +63,13 @@ func TestAgentsAPI(t *testing.T) {
 	t.Run("update agent labels", func(t *testing.T) {
 		// First get list to find an agent
 		resp, _ := ctx.Client.Get("/api/v1/agents")
-		var agents []map[string]interface{}
-		testutil.DecodeJSON(resp, &agents)
-		resp.Body.Close()
+		result, _ := testutil.DecodePaginatedJSON(resp)
 
-		if len(agents) == 0 {
+		if len(result.Items) == 0 {
 			t.Skip("no agents available")
 		}
 
-		agentID := agents[0]["id"].(string)
+		agentID := result.Items[0]["id"].(string)
 		updates := map[string]interface{}{
 			"labels": map[string]string{
 				"env":  "test",
@@ -122,15 +118,13 @@ func TestAgentUpdates(t *testing.T) {
 	t.Run("configure agent update policy", func(t *testing.T) {
 		// First get list to find an agent
 		resp, _ := ctx.Client.Get("/api/v1/agents")
-		var agents []map[string]interface{}
-		testutil.DecodeJSON(resp, &agents)
-		resp.Body.Close()
+		result, _ := testutil.DecodePaginatedJSON(resp)
 
-		if len(agents) == 0 {
+		if len(result.Items) == 0 {
 			t.Skip("no agents available")
 		}
 
-		agentID := agents[0]["id"].(string)
+		agentID := result.Items[0]["id"].(string)
 		policy := map[string]interface{}{
 			"updatePolicy":      "scheduled",
 			"updateWindowStart": "02:00",
