@@ -31,6 +31,7 @@ type Agent struct {
 	LastSeenAt   time.Time
 	RegisteredAt time.Time
 	Certificate  string
+	HMACSecret   []byte // For HMAC-based re-authentication
 
 	// Version and platform info
 	Version string
@@ -309,6 +310,15 @@ type ProvisionJob struct {
 	RollbackData  string
 	StartedAt     time.Time
 	CompletedAt   *time.Time
+}
+
+// ProvisionLog represents a log entry for a provisioning job.
+type ProvisionLog struct {
+	ID        int64
+	JobID     string
+	Timestamp time.Time
+	Level     string // info, warn, error
+	Message   string
 }
 
 // AgentBinary represents an agent binary release.

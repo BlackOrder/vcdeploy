@@ -67,6 +67,7 @@ type MemoryStore struct {
 	rateLimits map[string]*RateLimitRecord // keyed by "key:bucket"
 
 	provisionJobs map[string]*ProvisionJob
+	provisionLogs map[string][]*ProvisionLog // keyed by job ID
 	sshHostKeys   map[int64]*SSHHostKey
 	jumpServers   map[int64]*SSHJumpServer
 
@@ -82,6 +83,10 @@ type MemoryStore struct {
 	encryptionKeys         map[string]*EncryptionKey
 	sshKeys                map[int64]*SSHKey
 	certAuditEvents        []*CertAuditEvent // append-only slice
+
+	// ACME certificate storage
+	acmeCertificates map[string]*ACMECertificate // keyed by domain
+	acmeAccounts     map[string]*ACMEAccount     // keyed by email
 
 	// ID generators (atomic)
 	nextUserID          atomic.Int64
@@ -110,6 +115,10 @@ type MemoryStore struct {
 	nextRevokedCertID atomic.Int64
 	nextSSHKeyID      atomic.Int64
 	nextCertAuditID   atomic.Int64
+
+	// ACME ID generators
+	nextACMECertID    atomic.Int64
+	nextACMEAccountID atomic.Int64
 
 	// Shutdown coordination
 	done chan struct{}
@@ -242,6 +251,7 @@ func NewMemoryStore(cfg *MemoryStoreConfig) *MemoryStore {
 		rateLimits: make(map[string]*RateLimitRecord),
 
 		provisionJobs: make(map[string]*ProvisionJob),
+		provisionLogs: make(map[string][]*ProvisionLog),
 		sshHostKeys:   make(map[int64]*SSHHostKey),
 		jumpServers:   make(map[int64]*SSHJumpServer),
 
@@ -257,6 +267,10 @@ func NewMemoryStore(cfg *MemoryStoreConfig) *MemoryStore {
 		encryptionKeys:         make(map[string]*EncryptionKey),
 		sshKeys:                make(map[int64]*SSHKey),
 		certAuditEvents:        make([]*CertAuditEvent, 0),
+
+		// ACME maps
+		acmeCertificates: make(map[string]*ACMECertificate),
+		acmeAccounts:     make(map[string]*ACMEAccount),
 
 		done: make(chan struct{}),
 	}

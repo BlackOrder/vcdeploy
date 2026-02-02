@@ -340,6 +340,44 @@ func (s *MemoryStore) ListProvisionJobsByHost(ctx context.Context, host string, 
 	return all[offset:end], total, nil
 }
 
+// --- ProvisionLog methods ---
+
+// SaveProvisionLog saves a log entry for a provisioning job.
+func (s *MemoryStore) SaveProvisionLog(ctx context.Context, jobID, level, message string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	log := &ProvisionLog{
+		ID:        int64(len(s.provisionLogs[jobID]) + 1),
+		JobID:     jobID,
+		Timestamp: time.Now(),
+		Level:     level,
+		Message:   message,
+	}
+
+	s.provisionLogs[jobID] = append(s.provisionLogs[jobID], log)
+	return nil
+}
+
+// GetProvisionLogs retrieves all logs for a provisioning job.
+func (s *MemoryStore) GetProvisionLogs(ctx context.Context, jobID string) ([]*ProvisionLog, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	logs := s.provisionLogs[jobID]
+	if logs == nil {
+		return []*ProvisionLog{}, nil
+	}
+
+	// Copy-on-read
+	result := make([]*ProvisionLog, len(logs))
+	for i, log := range logs {
+		cp := *log
+		result[i] = &cp
+	}
+	return result, nil
+}
+
 // --- HealthCheckConfig methods ---
 
 // CreateHealthCheckConfig creates a new health check configuration.

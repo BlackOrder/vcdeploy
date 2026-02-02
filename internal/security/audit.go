@@ -123,3 +123,41 @@ func (a *CertAuditor) GetRecentEvents(ctx context.Context, since time.Time, limi
 	}
 	return a.store.ListCertAuditEvents(ctx, filter)
 }
+
+// LogACMEObtained logs when an ACME certificate is successfully obtained.
+func (a *CertAuditor) LogACMEObtained(ctx context.Context, domain, serial, issuer string) error {
+	event := &storage.CertAuditEvent{
+		Timestamp:   time.Now(),
+		EventType:   storage.CertAuditEventACMEObtained,
+		Hostname:    domain,
+		Serial:      serial,
+		Reason:      "issuer=" + issuer,
+		RequestedBy: "acme",
+	}
+	return a.store.SaveCertAuditEvent(ctx, event)
+}
+
+// LogACMERenewed logs when an ACME certificate is renewed.
+func (a *CertAuditor) LogACMERenewed(ctx context.Context, domain, serial, issuer string) error {
+	event := &storage.CertAuditEvent{
+		Timestamp:   time.Now(),
+		EventType:   storage.CertAuditEventACMERenewed,
+		Hostname:    domain,
+		Serial:      serial,
+		Reason:      "issuer=" + issuer,
+		RequestedBy: "acme",
+	}
+	return a.store.SaveCertAuditEvent(ctx, event)
+}
+
+// LogACMEFailed logs when an ACME certificate operation fails.
+func (a *CertAuditor) LogACMEFailed(ctx context.Context, domain string, err error) error {
+	event := &storage.CertAuditEvent{
+		Timestamp:   time.Now(),
+		EventType:   storage.CertAuditEventACMEFailed,
+		Hostname:    domain,
+		Reason:      err.Error(),
+		RequestedBy: "acme",
+	}
+	return a.store.SaveCertAuditEvent(ctx, event)
+}
