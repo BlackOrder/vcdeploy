@@ -129,14 +129,14 @@ func runDeploymentList(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("API error: %s", resp.Status)
 	}
 
-	var deployments []map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&deployments); err != nil {
+	var result paginatedResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return fmt.Errorf("decode response: %w", err)
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "ID\tPROJECT\tBRANCH\tSTATUS\tSTARTED")
-	for _, d := range deployments {
+	for _, d := range result.Items {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
 			d["id"], d["project"], d["branch"], d["status"], d["startedAt"])
 	}
@@ -226,19 +226,19 @@ func runDeploymentLogs(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("API error: %s", resp.Status)
 	}
 
-	var logs []map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&logs); err != nil {
+	var result paginatedResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return fmt.Errorf("decode response: %w", err)
 	}
 
-	for _, log := range logs {
+	for _, log := range result.Items {
 		timestamp := log["createdAt"]
 		level := log["level"]
 		message := log["message"]
 		fmt.Printf("[%s] %s: %s\n", timestamp, level, message)
 	}
 
-	if len(logs) == 0 {
+	if len(result.Items) == 0 {
 		fmt.Println("No logs available for this deployment.")
 	}
 	return nil

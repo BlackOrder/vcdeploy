@@ -62,14 +62,14 @@ func runAPIKeyList(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("API error: %s", resp.Status)
 	}
 
-	var keys []map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&keys); err != nil {
+	var result paginatedResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return fmt.Errorf("decode response: %w", err)
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "ID\tNAME\tCREATED\tEXPIRES\tLAST USED")
-	for _, k := range keys {
+	for _, k := range result.Items {
 		expires := "never"
 		if k["expiresAt"] != nil {
 			expires = fmt.Sprintf("%v", k["expiresAt"])
@@ -83,7 +83,7 @@ func runAPIKeyList(cmd *cobra.Command, args []string) error {
 	}
 	w.Flush()
 
-	if len(keys) == 0 {
+	if len(result.Items) == 0 {
 		fmt.Println("No API keys found.")
 	}
 	return nil
