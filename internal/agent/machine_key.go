@@ -7,6 +7,8 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/exec"
+	"regexp"
 	"runtime"
 	"sort"
 
@@ -76,13 +78,34 @@ func getMachineID() ([]byte, error) {
 
 	case "darwin":
 		// macOS: Use IOPlatformUUID from ioreg
-		// This is a simplified approach - in production, use sysctl or ioreg
-		// For now, fall back to hostname + MAC which is available
-		return nil, errors.New("darwin machine-id not implemented")
+		return getMacOSMachineID()
 
 	default:
 		return nil, errors.New("unsupported OS")
 	}
+}
+
+// getMacOSMachineID retrieves the hardware UUID on macOS.
+// It tries ioreg first, then falls back to sysctl.
+func getMacOSMachineID() ([]byte, error) {
+	// Primary: IOPlatformUUID via ioreg
+	cmd := exec.Command("ioreg", "-rd1", "-c", "IOPlatformExpertDevice")
+	output, err := cmd.Output()
+	if err == nil {
+		re := regexp.MustCompile(`"IOPlatformUUID"\s*=\s*"([^"]+)"`)
+		if matches := re.FindSubmatch(output); len(matches) > 1 {
+			return matches[1], nil
+		}
+	}
+
+	// Fallback: sysctl hw.uuid
+	cmd = exec.Command("sysctl", "-n", "hw.uuid")
+	output, err = cmd.Output()
+	if err == nil && len(output) > 0 {
+		return bytes.TrimSpace(output), nil
+	}
+
+	return nil, errors.New("unable to get macOS machine ID: ioreg and sysctl failed")
 }
 
 // getPrimaryMAC returns the MAC address of the first non-loopback interface.

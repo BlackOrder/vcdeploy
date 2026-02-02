@@ -4,6 +4,8 @@ package agent
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
@@ -188,6 +190,11 @@ func (a *Agent) Start(ctx context.Context) error {
 	// Start command listener
 	a.wg.Go(func() {
 		a.commandLoop(ctx)
+	})
+
+	// Start certificate expiry monitor
+	a.wg.Go(func() {
+		a.startCertMonitor(ctx)
 	})
 
 	// Wait for shutdown signal
@@ -377,12 +384,169 @@ func (a *Agent) Register(ctx context.Context, token string) (cert []byte, caCert
 		}
 	}
 
+	// Save HMAC secret for future re-authentication
+	if len(resp.HmacSecret) > 0 {
+		if err := a.store.SaveHMACSecret(ctx, a.config.Master.Address, resp.HmacSecret); err != nil {
+			a.logger.Warn("Failed to save HMAC secret", zap.Error(err))
+		} else {
+			a.logger.Info("Stored HMAC secret for re-authentication")
+		}
+	}
+
 	// Log successful registration
 	a.store.LogAuditEvent(ctx, AuditEventCertIssued, "agent registered successfully", true)
 
 	a.logger.Info("Registration successful")
 
 	return resp.Certificate, resp.CaCertificate, nil
+}
+
+// reauthenticate obtains a new certificate using HMAC authentication.
+// This is used when the agent's certificate has expired or is about to expire.
+// It connects to the dedicated re-auth port which doesn't require client certificates.
+func (a *Agent) reauthenticate(ctx context.Context) error {
+	// Get HMAC secret from store
+	hmacRecord, err := a.store.GetHMACSecret(ctx, a.config.Master.Address)
+	if err != nil {
+		return fmt.Errorf("get HMAC secret: %w", err)
+	}
+
+	// Generate nonce (32 bytes)
+	nonce := make([]byte, 32)
+	if _, err := rand.Read(nonce); err != nil {
+		return fmt.Errorf("generate nonce: %w", err)
+	}
+
+	// Compute HMAC signature: HMAC-SHA256(agent_id + ":" + timestamp + ":" + nonce)
+	timestamp := time.Now().Unix()
+	message := fmt.Sprintf("%s:%d:", a.config.Agent.ID, timestamp)
+	message = message + string(nonce)
+
+	mac := hmac.New(sha256.New, hmacRecord.Secret)
+	mac.Write([]byte(message))
+	signature := mac.Sum(nil)
+
+	// Get CA certificate for TLS
+	caCertRec, err := a.store.GetCertificate(ctx, "ca")
+	if err != nil {
+		return fmt.Errorf("load CA certificate: %w", err)
+	}
+
+	certPool := x509.NewCertPool()
+	if !certPool.AppendCertsFromPEM(caCertRec.Certificate) {
+		return fmt.Errorf("invalid CA certificate")
+	}
+
+	// Server-only TLS (no client certificate)
+	tlsConfig := &tls.Config{
+		RootCAs:    certPool,
+		MinVersion: tls.VersionTLS12,
+		// No Certificates field - we don't have a valid client cert
+	}
+
+	// Connect to re-auth port
+	// Default: same host as master, port 9444
+	host := strings.Split(a.config.Master.Address, ":")[0]
+	reauthAddress := host + ":9444"
+
+	a.logger.Info("Connecting to re-auth server", zap.String("address", reauthAddress))
+
+	conn, err := grpc.DialContext(ctx, reauthAddress,
+		grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
+	if err != nil {
+		return fmt.Errorf("connect to reauth port: %w", err)
+	}
+	defer conn.Close()
+
+	client := pb.NewAgentServiceClient(conn)
+
+	resp, err := client.Reauthenticate(ctx, &pb.ReauthRequest{
+		AgentId:   a.config.Agent.ID,
+		Timestamp: timestamp,
+		Nonce:     nonce,
+		Signature: signature,
+	})
+	if err != nil {
+		return fmt.Errorf("reauthenticate RPC: %w", err)
+	}
+
+	// Parse certificate to get expiry
+	block, _ := pem.Decode(resp.Certificate)
+	if block == nil {
+		return fmt.Errorf("invalid certificate PEM")
+	}
+	parsedCert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return fmt.Errorf("parse certificate: %w", err)
+	}
+
+	// Save new certificate and private key
+	certPEM, keyPEM := splitCertAndKey(resp.Certificate)
+	if err := a.store.SaveCertificate(ctx, "agent", certPEM, keyPEM, parsedCert.NotAfter); err != nil {
+		return fmt.Errorf("save certificate: %w", err)
+	}
+
+	// Update CA certificate if provided
+	if len(resp.CaCertificate) > 0 {
+		notAfter := time.Now().AddDate(10, 0, 0)
+		if caBlock, _ := pem.Decode(resp.CaCertificate); caBlock != nil {
+			if parsed, err := x509.ParseCertificate(caBlock.Bytes); err == nil {
+				notAfter = parsed.NotAfter
+			}
+		}
+		if err := a.store.SaveCertificate(ctx, "ca", resp.CaCertificate, nil, notAfter); err != nil {
+			a.logger.Warn("Failed to update CA certificate", zap.Error(err))
+		}
+	}
+
+	a.store.LogAuditEvent(ctx, AuditEventCertRenewed, "certificate renewed via HMAC re-auth", true)
+	a.logger.Info("Successfully reauthenticated and obtained new certificate",
+		zap.Time("expires", parsedCert.NotAfter))
+
+	return nil
+}
+
+// startCertMonitor monitors certificate expiry and triggers renewal/re-auth as needed.
+func (a *Agent) startCertMonitor(ctx context.Context) {
+	ticker := time.NewTicker(1 * time.Hour)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-a.shutdown:
+			return
+		case <-ticker.C:
+			a.checkCertificateExpiry(ctx)
+		}
+	}
+}
+
+// checkCertificateExpiry checks if the certificate is expired or expiring soon.
+func (a *Agent) checkCertificateExpiry(ctx context.Context) {
+	certRec, err := a.store.GetCertificate(ctx, "agent")
+	if err != nil {
+		a.logger.Error("Failed to load certificate for expiry check", zap.Error(err))
+		return
+	}
+
+	timeUntilExpiry := time.Until(certRec.NotAfter)
+	renewalThreshold := 6 * 30 * 24 * time.Hour // 6 months
+
+	if timeUntilExpiry < 0 {
+		a.logger.Error("Certificate has expired!", zap.Time("expired_at", certRec.NotAfter))
+		if err := a.reauthenticate(ctx); err != nil {
+			a.logger.Error("Failed to reauthenticate after cert expiry", zap.Error(err))
+		}
+	} else if timeUntilExpiry < renewalThreshold {
+		a.logger.Info("Certificate expiring soon, proactively renewing",
+			zap.Duration("time_until_expiry", timeUntilExpiry))
+		// Try normal renewal first, fall back to re-auth
+		if err := a.reauthenticate(ctx); err != nil {
+			a.logger.Warn("Proactive renewal failed", zap.Error(err))
+		}
+	}
 }
 
 func (a *Agent) heartbeatLoop(ctx context.Context) {
