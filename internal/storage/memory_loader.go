@@ -51,6 +51,9 @@ func (s *MemoryStore) LoadFromDB(ctx context.Context, db *DB) error {
 		{"encryption_keys", s.loadEncryptionKeys},
 		{"ssh_keys", s.loadSSHKeys},
 		{"cert_audit_events", s.loadCertAuditEvents},
+		// ACME tables
+		{"acme_certificates", s.loadACMECertificates},
+		{"acme_accounts", s.loadACMEAccounts},
 	}
 
 	for _, loader := range loaders {
@@ -695,4 +698,57 @@ func (s *MemoryStore) loadCertAuditEvents(ctx context.Context, db *DB) error {
 		}
 	}
 	return nil
+}
+
+func (s *MemoryStore) loadACMECertificates(ctx context.Context, db *DB) error {
+	certs, err := db.ListACMECertificates(ctx)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, cert := range certs {
+		stored := *cert
+		s.acmeCertificates[cert.Domain] = &stored
+		if cert.ID >= s.nextACMECertID.Load() {
+			s.nextACMECertID.Store(cert.ID + 1)
+		}
+	}
+	return nil
+}
+
+func (s *MemoryStore) loadACMEAccounts(ctx context.Context, db *DB) error {
+	// ACME accounts are loaded on-demand via email lookup
+	// We query all accounts from DB
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, email, account_url, private_key_encrypted, directory_url, created_at
+		FROM acme_accounts ORDER BY id ASC
+	`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for rows.Next() {
+		var account ACMEAccount
+		var accountURL string
+		if err := rows.Scan(&account.ID, &account.Email, &accountURL,
+			&account.PrivateKeyEncrypted, &account.DirectoryURL, &account.CreatedAt); err != nil {
+			return err
+		}
+		account.AccountURL = accountURL
+		s.acmeAccounts[account.Email] = &account
+		if account.ID >= s.nextACMEAccountID.Load() {
+			s.nextACMEAccountID.Store(account.ID + 1)
+		}
+	}
+	return rows.Err()
 }

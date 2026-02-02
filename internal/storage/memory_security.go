@@ -1896,3 +1896,143 @@ func nullString(s string) sql.NullString {
 	}
 	return sql.NullString{String: s, Valid: true}
 }
+
+// --- ACME Certificate methods ---
+
+// GetACMECertificate retrieves an ACME certificate by domain.
+func (s *MemoryStore) GetACMECertificate(ctx context.Context, domain string) (*ACMECertificate, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	cert, ok := s.acmeCertificates[domain]
+	if !ok {
+		return nil, ErrNotFound
+	}
+
+	// Copy-on-read
+	result := *cert
+	return &result, nil
+}
+
+// SaveACMECertificate creates or updates an ACME certificate.
+func (s *MemoryStore) SaveACMECertificate(ctx context.Context, cert *ACMECertificate) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now()
+	stored := *cert
+
+	existing, exists := s.acmeCertificates[cert.Domain]
+	if !exists {
+		stored.ID = s.nextACMECertID.Add(1)
+		stored.CreatedAt = now
+		stored.UpdatedAt = now
+	} else {
+		stored.ID = existing.ID
+		stored.CreatedAt = existing.CreatedAt
+		stored.UpdatedAt = now
+	}
+
+	s.acmeCertificates[cert.Domain] = &stored
+	cert.ID = stored.ID
+
+	opType := WriteOpInsert
+	if exists {
+		opType = WriteOpUpdate
+	}
+	s.queueWrite(s.coreWrites, NewWriteOp(opType, "acme_certificates", &stored))
+
+	return nil
+}
+
+// DeleteACMECertificate removes an ACME certificate by domain.
+func (s *MemoryStore) DeleteACMECertificate(ctx context.Context, domain string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	cert, ok := s.acmeCertificates[domain]
+	if !ok {
+		return ErrNotFound
+	}
+
+	delete(s.acmeCertificates, domain)
+	s.queueWrite(s.coreWrites, NewWriteOp(WriteOpDelete, "acme_certificates", cert))
+
+	return nil
+}
+
+// ListACMECertificates returns all stored ACME certificates.
+func (s *MemoryStore) ListACMECertificates(ctx context.Context) ([]*ACMECertificate, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	certs := make([]*ACMECertificate, 0, len(s.acmeCertificates))
+	for _, cert := range s.acmeCertificates {
+		cp := *cert
+		certs = append(certs, &cp)
+	}
+
+	return certs, nil
+}
+
+// --- ACME Account methods ---
+
+// GetACMEAccount retrieves an ACME account by email.
+func (s *MemoryStore) GetACMEAccount(ctx context.Context, email string) (*ACMEAccount, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	account, ok := s.acmeAccounts[email]
+	if !ok {
+		return nil, ErrNotFound
+	}
+
+	// Copy-on-read
+	result := *account
+	return &result, nil
+}
+
+// SaveACMEAccount creates or updates an ACME account.
+func (s *MemoryStore) SaveACMEAccount(ctx context.Context, account *ACMEAccount) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now()
+	stored := *account
+
+	existing, exists := s.acmeAccounts[account.Email]
+	if !exists {
+		stored.ID = s.nextACMEAccountID.Add(1)
+		stored.CreatedAt = now
+	} else {
+		stored.ID = existing.ID
+		stored.CreatedAt = existing.CreatedAt
+	}
+
+	s.acmeAccounts[account.Email] = &stored
+	account.ID = stored.ID
+
+	opType := WriteOpInsert
+	if exists {
+		opType = WriteOpUpdate
+	}
+	s.queueWrite(s.coreWrites, NewWriteOp(opType, "acme_accounts", &stored))
+
+	return nil
+}
+
+// DeleteACMEAccount removes an ACME account by email.
+func (s *MemoryStore) DeleteACMEAccount(ctx context.Context, email string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	account, ok := s.acmeAccounts[email]
+	if !ok {
+		return ErrNotFound
+	}
+
+	delete(s.acmeAccounts, email)
+	s.queueWrite(s.coreWrites, NewWriteOp(WriteOpDelete, "acme_accounts", account))
+
+	return nil
+}

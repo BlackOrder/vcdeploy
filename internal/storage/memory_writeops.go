@@ -56,6 +56,10 @@ func (s *MemoryStore) executeWriteOp(tx *sql.Tx, op WriteOp) error {
 		return s.executeJumpServerOp(tx, op)
 	case "health_check_configs":
 		return s.executeHealthCheckConfigOp(tx, op)
+	case "acme_certificates":
+		return s.executeACMECertificateOp(tx, op)
+	case "acme_accounts":
+		return s.executeACMEAccountOp(tx, op)
 	default:
 		s.logger.Warn("unknown table for write op",
 			zap.String("table", op.Table),
@@ -820,6 +824,93 @@ func (s *MemoryStore) executeHealthCheckConfigOp(tx *sql.Tx, op WriteOp) error {
 			return fmt.Errorf("invalid data type for health_check_config delete")
 		}
 		_, err := tx.Exec(`DELETE FROM health_check_configs WHERE id = ?`, id)
+		return err
+	}
+	return nil
+}
+
+// --- ACME Certificate operations ---
+
+func (s *MemoryStore) executeACMECertificateOp(tx *sql.Tx, op WriteOp) error {
+	switch op.Type {
+	case WriteOpInsert:
+		c, ok := op.Data.(*ACMECertificate)
+		if !ok {
+			return fmt.Errorf("invalid data type for acme_certificate insert")
+		}
+		_, err := tx.Exec(`
+			INSERT INTO acme_certificates (id, domain, certificate_pem, private_key_encrypted, issuer, 
+				not_before, not_after, last_renewal, auto_renew, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT(domain) DO UPDATE SET 
+				certificate_pem = excluded.certificate_pem,
+				private_key_encrypted = excluded.private_key_encrypted,
+				issuer = excluded.issuer,
+				not_before = excluded.not_before,
+				not_after = excluded.not_after,
+				last_renewal = excluded.last_renewal,
+				auto_renew = excluded.auto_renew,
+				updated_at = excluded.updated_at
+		`, c.ID, c.Domain, c.CertificatePEM, c.PrivateKeyEncrypted, c.Issuer,
+			c.NotBefore, c.NotAfter, c.LastRenewal, c.AutoRenew, c.CreatedAt, c.UpdatedAt)
+		return err
+
+	case WriteOpUpdate:
+		c, ok := op.Data.(*ACMECertificate)
+		if !ok {
+			return fmt.Errorf("invalid data type for acme_certificate update")
+		}
+		_, err := tx.Exec(`
+			UPDATE acme_certificates SET certificate_pem = ?, private_key_encrypted = ?, issuer = ?,
+				not_before = ?, not_after = ?, last_renewal = ?, auto_renew = ?, updated_at = ?
+			WHERE domain = ?
+		`, c.CertificatePEM, c.PrivateKeyEncrypted, c.Issuer,
+			c.NotBefore, c.NotAfter, c.LastRenewal, c.AutoRenew, c.UpdatedAt, c.Domain)
+		return err
+
+	case WriteOpDelete:
+		c, ok := op.Data.(*ACMECertificate)
+		if !ok {
+			return fmt.Errorf("invalid data type for acme_certificate delete")
+		}
+		_, err := tx.Exec(`DELETE FROM acme_certificates WHERE domain = ?`, c.Domain)
+		return err
+	}
+	return nil
+}
+
+// --- ACME Account operations ---
+
+func (s *MemoryStore) executeACMEAccountOp(tx *sql.Tx, op WriteOp) error {
+	switch op.Type {
+	case WriteOpInsert:
+		a, ok := op.Data.(*ACMEAccount)
+		if !ok {
+			return fmt.Errorf("invalid data type for acme_account insert")
+		}
+		_, err := tx.Exec(`
+			INSERT INTO acme_accounts (id, email, account_url, private_key_encrypted, directory_url, created_at)
+			VALUES (?, ?, ?, ?, ?, ?)
+		`, a.ID, a.Email, a.AccountURL, a.PrivateKeyEncrypted, a.DirectoryURL, a.CreatedAt)
+		return err
+
+	case WriteOpUpdate:
+		a, ok := op.Data.(*ACMEAccount)
+		if !ok {
+			return fmt.Errorf("invalid data type for acme_account update")
+		}
+		_, err := tx.Exec(`
+			UPDATE acme_accounts SET account_url = ?, private_key_encrypted = ?, directory_url = ?
+			WHERE email = ?
+		`, a.AccountURL, a.PrivateKeyEncrypted, a.DirectoryURL, a.Email)
+		return err
+
+	case WriteOpDelete:
+		a, ok := op.Data.(*ACMEAccount)
+		if !ok {
+			return fmt.Errorf("invalid data type for acme_account delete")
+		}
+		_, err := tx.Exec(`DELETE FROM acme_accounts WHERE email = ?`, a.Email)
 		return err
 	}
 	return nil

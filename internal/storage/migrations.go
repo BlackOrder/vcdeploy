@@ -1090,6 +1090,50 @@ var migrations = []Migration{
 			return nil
 		},
 	},
+	{
+		Version:     18,
+		Description: "Add HMAC secret to agents table for re-authentication",
+		Up: func(tx *sql.Tx) error {
+			// Add hmac_secret column to agents table for HMAC-based re-authentication
+			_, err := tx.Exec(`ALTER TABLE agents ADD COLUMN hmac_secret BLOB`)
+			if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+				return fmt.Errorf("adding hmac_secret to agents: %w", err)
+			}
+
+			// Add reauth_address to server configuration (stored in settings)
+			// This is handled by config, not database
+
+			return nil
+		},
+		Down: func(tx *sql.Tx) error {
+			// SQLite doesn't support DROP COLUMN directly
+			// Would need to recreate table, but for greenfield this is fine
+			return nil
+		},
+	},
+	{
+		Version:     19,
+		Description: "Add provision_logs table for provisioning job logs",
+		Up: func(tx *sql.Tx) error {
+			_, err := tx.Exec(`
+				CREATE TABLE IF NOT EXISTS provision_logs (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					job_id TEXT NOT NULL,
+					timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+					level TEXT NOT NULL,
+					message TEXT NOT NULL,
+					FOREIGN KEY (job_id) REFERENCES agent_provision_jobs(id)
+				);
+
+				CREATE INDEX IF NOT EXISTS idx_provision_logs_job_id ON provision_logs(job_id);
+			`)
+			return err
+		},
+		Down: func(tx *sql.Tx) error {
+			_, err := tx.Exec(`DROP TABLE IF EXISTS provision_logs`)
+			return err
+		},
+	},
 }
 
 // MigrateUp runs all pending migrations.

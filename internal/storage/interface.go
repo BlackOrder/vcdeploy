@@ -39,6 +39,8 @@ type Store interface {
 	BlockedIPStore
 	RateLimitStore
 	ProvisionStore
+	ProvisionLogStore
+	ACMEStore
 	HealthCheckStore
 	CleanupStore
 	BackupStore
@@ -266,6 +268,26 @@ type ProvisionStore interface {
 	UpdateProvisionJobStatus(ctx context.Context, id, status, stage, errorMessage string, progress int) error
 	ListPendingProvisionJobs(ctx context.Context) ([]*ProvisionJob, error)
 	ListProvisionJobsByHost(ctx context.Context, host string, limit, offset int) ([]*ProvisionJob, int64, error)
+}
+
+// ProvisionLogStore defines provision log operations.
+type ProvisionLogStore interface {
+	SaveProvisionLog(ctx context.Context, jobID, level, message string) error
+	GetProvisionLogs(ctx context.Context, jobID string) ([]*ProvisionLog, error)
+}
+
+// ACMEStore defines ACME certificate and account storage operations.
+type ACMEStore interface {
+	// Certificate operations
+	GetACMECertificate(ctx context.Context, domain string) (*ACMECertificate, error)
+	SaveACMECertificate(ctx context.Context, cert *ACMECertificate) error
+	DeleteACMECertificate(ctx context.Context, domain string) error
+	ListACMECertificates(ctx context.Context) ([]*ACMECertificate, error)
+
+	// Account operations
+	GetACMEAccount(ctx context.Context, email string) (*ACMEAccount, error)
+	SaveACMEAccount(ctx context.Context, account *ACMEAccount) error
+	DeleteACMEAccount(ctx context.Context, email string) error
 }
 
 // HealthCheckStore defines health check configuration operations.

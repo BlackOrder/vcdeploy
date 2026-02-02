@@ -179,11 +179,14 @@ type CertAuditEvent struct {
 
 // CertAuditEventType constants.
 const (
-	CertAuditEventIssued   = "issued"
-	CertAuditEventRevoked  = "revoked"
-	CertAuditEventRenewed  = "renewed"
-	CertAuditEventRejected = "rejected"
-	CertAuditEventExpired  = "expired"
+	CertAuditEventIssued       = "issued"
+	CertAuditEventRevoked      = "revoked"
+	CertAuditEventRenewed      = "renewed"
+	CertAuditEventRejected     = "rejected"
+	CertAuditEventExpired      = "expired"
+	CertAuditEventACMEObtained = "acme_obtained"
+	CertAuditEventACMERenewed  = "acme_renewed"
+	CertAuditEventACMEFailed   = "acme_failed"
 )
 
 // CertAuditFilter defines filters for querying certificate audit events.
@@ -194,4 +197,31 @@ type CertAuditFilter struct {
 	Until     *time.Time
 	Limit     int
 	Offset    int
+}
+
+// ACMECertificate represents a stored ACME/Let's Encrypt certificate.
+// Matches schema in migration 11: acme_certificates table.
+type ACMECertificate struct {
+	ID                  int64      `json:"id"`
+	Domain              string     `json:"domain"`                // Primary domain (unique)
+	CertificatePEM      string     `json:"certificate_pem"`       // Full certificate chain PEM
+	PrivateKeyEncrypted []byte     `json:"private_key_encrypted"` // Private key (encrypted at rest)
+	Issuer              string     `json:"issuer"`                // e.g., "Let's Encrypt"
+	NotBefore           time.Time  `json:"not_before"`
+	NotAfter            time.Time  `json:"not_after"`
+	LastRenewal         *time.Time `json:"last_renewal,omitempty"` // Last renewal time
+	AutoRenew           bool       `json:"auto_renew"`             // Whether to auto-renew
+	CreatedAt           time.Time  `json:"created_at"`
+	UpdatedAt           time.Time  `json:"updated_at"`
+}
+
+// ACMEAccount represents an ACME account registration.
+// Matches schema in migration 11: acme_accounts table.
+type ACMEAccount struct {
+	ID                  int64     `json:"id"`
+	Email               string    `json:"email"`                 // Contact email
+	AccountURL          string    `json:"account_url,omitempty"` // ACME account URL
+	PrivateKeyEncrypted []byte    `json:"private_key_encrypted"` // Account private key (encrypted)
+	DirectoryURL        string    `json:"directory_url"`         // ACME directory (Let's Encrypt prod/staging)
+	CreatedAt           time.Time `json:"created_at"`
 }
