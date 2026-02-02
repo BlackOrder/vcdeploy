@@ -72,6 +72,17 @@ type MemoryStore struct {
 
 	healthCheckConfigs map[int64]*HealthCheckConfig
 
+	// Security tables (Stage 1 migration)
+	certificateAuthorities map[string]*CertificateAuthority
+	agentCertificates      map[string]*AgentCertificate // keyed by serial number
+	serverCertificates     map[string]*ServerCertificate // keyed by hostname
+	registrationTokens     map[string]*RegistrationToken // keyed by token
+	sourceCredentials      map[int64]*SourceCredential
+	revokedCertificates    map[string]*RevokedCertificate // keyed by serial number
+	encryptionKeys         map[string]*EncryptionKey
+	sshKeys                map[int64]*SSHKey
+	certAuditEvents        []*CertAuditEvent // append-only slice
+
 	// ID generators (atomic)
 	nextUserID          atomic.Int64
 	nextAPIKeyID        atomic.Int64
@@ -90,6 +101,15 @@ type MemoryStore struct {
 	nextJumpServerID    atomic.Int64
 	nextHealthCheckID   atomic.Int64
 	nextSettingID       atomic.Int64
+
+	// Security ID generators
+	nextAgentCertID    atomic.Int64
+	nextServerCertID   atomic.Int64
+	nextRegTokenID     atomic.Int64
+	nextSourceCredID   atomic.Int64
+	nextRevokedCertID  atomic.Int64
+	nextSSHKeyID       atomic.Int64
+	nextCertAuditID    atomic.Int64
 
 	// Shutdown coordination
 	done chan struct{}
@@ -226,6 +246,17 @@ func NewMemoryStore(cfg *MemoryStoreConfig) *MemoryStore {
 		jumpServers:   make(map[int64]*SSHJumpServer),
 
 		healthCheckConfigs: make(map[int64]*HealthCheckConfig),
+
+		// Security maps
+		certificateAuthorities: make(map[string]*CertificateAuthority),
+		agentCertificates:      make(map[string]*AgentCertificate),
+		serverCertificates:     make(map[string]*ServerCertificate),
+		registrationTokens:     make(map[string]*RegistrationToken),
+		sourceCredentials:      make(map[int64]*SourceCredential),
+		revokedCertificates:    make(map[string]*RevokedCertificate),
+		encryptionKeys:         make(map[string]*EncryptionKey),
+		sshKeys:                make(map[int64]*SSHKey),
+		certAuditEvents:        make([]*CertAuditEvent, 0),
 
 		done: make(chan struct{}),
 	}

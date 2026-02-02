@@ -41,6 +41,16 @@ func (s *MemoryStore) LoadFromDB(ctx context.Context, db *DB) error {
 		{"ssh_host_keys", s.loadSSHHostKeys},
 		{"jump_servers", s.loadJumpServers},
 		{"health_check_configs", s.loadHealthCheckConfigs},
+		// Security tables
+		{"certificate_authorities", s.loadCertificateAuthorities},
+		{"agent_certificates", s.loadAgentCertificates},
+		{"server_certificates", s.loadServerCertificates},
+		{"registration_tokens", s.loadRegistrationTokens},
+		{"source_credentials", s.loadSourceCredentials},
+		{"revoked_certificates", s.loadRevokedCertificates},
+		{"encryption_keys", s.loadEncryptionKeys},
+		{"ssh_keys", s.loadSSHKeys},
+		{"cert_audit_events", s.loadCertAuditEvents},
 	}
 
 	for _, loader := range loaders {
@@ -482,6 +492,206 @@ func (s *MemoryStore) loadHealthCheckConfigs(ctx context.Context, db *DB) error 
 		s.healthCheckConfigs[cfg.ID] = &stored
 		if cfg.ID >= s.nextHealthCheckID.Load() {
 			s.nextHealthCheckID.Store(cfg.ID + 1)
+		}
+	}
+	return nil
+}
+
+// --- Security table loaders ---
+
+func (s *MemoryStore) loadCertificateAuthorities(ctx context.Context, db *DB) error {
+	cas, err := db.ListCAs(ctx)
+	if err != nil {
+		// Table might not exist yet during migration
+		if errors.Is(err, ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, ca := range cas {
+		stored := *ca
+		s.certificateAuthorities[ca.ID] = &stored
+	}
+	return nil
+}
+
+func (s *MemoryStore) loadAgentCertificates(ctx context.Context, db *DB) error {
+	certs, err := db.ListAgentCerts(ctx)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, cert := range certs {
+		stored := *cert
+		s.agentCertificates[cert.SerialNumber] = &stored
+		if cert.ID >= s.nextAgentCertID.Load() {
+			s.nextAgentCertID.Store(cert.ID + 1)
+		}
+	}
+	return nil
+}
+
+func (s *MemoryStore) loadServerCertificates(ctx context.Context, db *DB) error {
+	certs, err := db.ListServerCerts(ctx)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, cert := range certs {
+		stored := *cert
+		s.serverCertificates[cert.Hostname] = &stored
+		if cert.ID >= s.nextServerCertID.Load() {
+			s.nextServerCertID.Store(cert.ID + 1)
+		}
+	}
+	return nil
+}
+
+func (s *MemoryStore) loadRegistrationTokens(ctx context.Context, db *DB) error {
+	tokens, err := db.ListRegistrationTokens(ctx)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, token := range tokens {
+		stored := *token
+		s.registrationTokens[token.Token] = &stored
+		if token.ID >= s.nextRegTokenID.Load() {
+			s.nextRegTokenID.Store(token.ID + 1)
+		}
+	}
+	return nil
+}
+
+func (s *MemoryStore) loadSourceCredentials(ctx context.Context, db *DB) error {
+	creds, err := db.ListSourceCredentials(ctx)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, cred := range creds {
+		stored := *cred
+		s.sourceCredentials[cred.ID] = &stored
+		if cred.ID >= s.nextSourceCredID.Load() {
+			s.nextSourceCredID.Store(cred.ID + 1)
+		}
+	}
+	return nil
+}
+
+func (s *MemoryStore) loadRevokedCertificates(ctx context.Context, db *DB) error {
+	certs, err := db.ListRevokedCerts(ctx)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, cert := range certs {
+		stored := *cert
+		s.revokedCertificates[cert.SerialNumber] = &stored
+		if cert.ID >= s.nextRevokedCertID.Load() {
+			s.nextRevokedCertID.Store(cert.ID + 1)
+		}
+	}
+	return nil
+}
+
+func (s *MemoryStore) loadEncryptionKeys(ctx context.Context, db *DB) error {
+	keys, err := db.ListEncryptionKeys(ctx)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, key := range keys {
+		stored := *key
+		s.encryptionKeys[key.ID] = &stored
+	}
+	return nil
+}
+
+func (s *MemoryStore) loadSSHKeys(ctx context.Context, db *DB) error {
+	keys, err := db.ListSSHKeys(ctx)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, key := range keys {
+		stored := *key
+		s.sshKeys[key.ID] = &stored
+		if key.ID >= s.nextSSHKeyID.Load() {
+			s.nextSSHKeyID.Store(key.ID + 1)
+		}
+	}
+	return nil
+}
+
+func (s *MemoryStore) loadCertAuditEvents(ctx context.Context, db *DB) error {
+	// Load limited audit history (last 30 days)
+	filter := CertAuditFilter{
+		Limit: 10000, // Cap at 10k events in memory
+	}
+
+	events, err := db.ListCertAuditEvents(ctx, filter)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, event := range events {
+		stored := *event
+		s.certAuditEvents = append(s.certAuditEvents, &stored)
+		if event.ID >= s.nextCertAuditID.Load() {
+			s.nextCertAuditID.Store(event.ID + 1)
 		}
 	}
 	return nil
