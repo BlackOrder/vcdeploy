@@ -62,6 +62,16 @@ clean: ## Remove build artifacts and stop any running servers
 	-@pkill -f "vcdeploy master" 2>/dev/null || true
 	-@$(COMPOSE) -f docker/docker-compose.test.yml down -v 2>/dev/null || true
 
+.PHONY: test-cleanup
+test-cleanup: ## Clean up test Docker environment (use after interrupted tests)
+	@echo "Cleaning up test environment..."
+	-@pkill -f "vcdeploy master" 2>/dev/null || true
+	-@pkill -f "docker.*logs" 2>/dev/null || true
+	-@$(COMPOSE) -f docker/docker-compose.test.yml down -v 2>/dev/null || true
+	-@docker volume rm docker_test-data docker_test-logs docker_agent-test-data docker_agent-test-logs docker_ssh-target-data 2>/dev/null || true
+	-@rm -rf data/
+	@echo "Test environment cleaned up."
+
 # ============================================================================
 # Development Server (for manual testing)
 # ============================================================================
@@ -137,13 +147,12 @@ test-integration: ## Run integration tests (mirrors CI 'integration' job)
 # ============================================================================
 
 .PHONY: test-e2e
-test-e2e: build ## Run E2E API tests (mirrors CI 'e2e-api' job)
-	@echo "=== E2E API Tests (mirrors CI 'e2e-api' job) ==="
+test-e2e: build ## Run E2E API tests (fast mode, skips SSH-dependent tests)
+	@echo "=== E2E API Tests (fast mode) ==="
+	@echo "Note: SSH/deploy tests will be skipped. Use 'make test-e2e-full' for complete tests."
 	@echo "Server logs will be written to: test-server.log"
+	@$(MAKE) -s test-cleanup 2>/dev/null || true
 	@> test-server.log
-	@echo "Cleaning up previous Docker test environment..."
-	@$(COMPOSE) -f docker/docker-compose.test.yml down -v 2>/dev/null || true
-	@docker volume rm docker_test-data docker_test-logs 2>/dev/null || true
 	@echo "Building and starting master via docker compose..."
 	@TEST_ADMIN_PASSWORD=$(TEST_ADMIN_PASS) $(COMPOSE) -f docker/docker-compose.test.yml up -d master --build
 	@echo "Waiting for master to be ready..."
@@ -156,15 +165,55 @@ test-e2e: build ## Run E2E API tests (mirrors CI 'e2e-api' job)
 		sleep 2; \
 	done
 	@curl -sf $(TEST_HTTP_URL)/api/v1/health >/dev/null || \
-		($(COMPOSE) -f docker/docker-compose.test.yml logs master >> test-server.log 2>&1 && $(COMPOSE) -f docker/docker-compose.test.yml down -v && exit 1)
+		($(COMPOSE) -f docker/docker-compose.test.yml logs master >> test-server.log 2>&1 && $(MAKE) -s test-cleanup && exit 1)
 	@$(COMPOSE) -f docker/docker-compose.test.yml logs -f master >> test-server.log 2>&1 &
 	@API_TOKEN=$$($(MAKE) -s _create-api-token) && \
-	echo "Running E2E tests..." && \
+	echo "Running E2E tests (fast mode)..." && \
 	E2E_MASTER_HTTP_URL=$(TEST_HTTP_URL) E2E_API_TOKEN=$$API_TOKEN \
 		E2E_ADMIN_USER=admin E2E_ADMIN_PASS=$(TEST_ADMIN_PASS) \
+		E2E_SKIP_SSH_TESTS=1 \
 		go test -v -tags=e2e -timeout $(TEST_TIMEOUT) ./tests/e2e/... ; \
 	TEST_EXIT=$$?; \
-	$(COMPOSE) -f docker/docker-compose.test.yml down -v; \
+	$(MAKE) -s test-cleanup; \
+	exit $$TEST_EXIT
+
+.PHONY: test-e2e-full
+test-e2e-full: build ## Run E2E API tests with SSH target (complete tests)
+	@echo "=== E2E API Tests (full mode with SSH target) ==="
+	@echo "Server logs will be written to: test-server.log"
+	@$(MAKE) -s test-cleanup 2>/dev/null || true
+	@> test-server.log
+	@echo "Building and starting master + ssh-target via docker compose..."
+	@TEST_ADMIN_PASSWORD=$(TEST_ADMIN_PASS) $(COMPOSE) -f docker/docker-compose.test.yml up -d master ssh-target --build
+	@echo "Waiting for master to be ready..."
+	@for i in $$(seq 1 30); do \
+		if curl -sf $(TEST_HTTP_URL)/api/v1/health >/dev/null 2>&1; then \
+			echo "Master is ready!"; \
+			break; \
+		fi; \
+		echo "Attempt $$i/30: Waiting..."; \
+		sleep 2; \
+	done
+	@curl -sf $(TEST_HTTP_URL)/api/v1/health >/dev/null || \
+		($(COMPOSE) -f docker/docker-compose.test.yml logs master >> test-server.log 2>&1 && $(MAKE) -s test-cleanup && exit 1)
+	@echo "Waiting for SSH target to be ready..."
+	@for i in $$(seq 1 30); do \
+		if nc -z localhost 2223 2>/dev/null; then \
+			echo "SSH target is ready!"; \
+			break; \
+		fi; \
+		echo "Attempt $$i/30: Waiting for SSH..."; \
+		sleep 2; \
+	done
+	@$(COMPOSE) -f docker/docker-compose.test.yml logs -f master ssh-target >> test-server.log 2>&1 &
+	@API_TOKEN=$$($(MAKE) -s _create-api-token) && \
+	echo "Running E2E tests (full mode)..." && \
+	E2E_MASTER_HTTP_URL=$(TEST_HTTP_URL) E2E_API_TOKEN=$$API_TOKEN \
+		E2E_ADMIN_USER=admin E2E_ADMIN_PASS=$(TEST_ADMIN_PASS) \
+		E2E_TARGET_SSH_HOST=localhost E2E_TARGET_SSH_PORT=2223 \
+		go test -v -tags=e2e -timeout $(TEST_TIMEOUT) ./tests/e2e/... ; \
+	TEST_EXIT=$$?; \
+	$(MAKE) -s test-cleanup; \
 	exit $$TEST_EXIT
 
 # ============================================================================
@@ -175,10 +224,8 @@ test-e2e: build ## Run E2E API tests (mirrors CI 'e2e-api' job)
 test-cli: build ## Run CLI tests (mirrors CI 'cli-tests' job)
 	@echo "=== CLI Tests (mirrors CI 'cli-tests' job) ==="
 	@echo "Server logs will be written to: test-server.log"
+	@$(MAKE) -s test-cleanup 2>/dev/null || true
 	@> test-server.log
-	@echo "Cleaning up previous Docker test environment..."
-	@$(COMPOSE) -f docker/docker-compose.test.yml down -v 2>/dev/null || true
-	@docker volume rm docker_test-data docker_test-logs 2>/dev/null || true
 	@echo "Building and starting master via docker compose..."
 	@TEST_ADMIN_PASSWORD=$(TEST_ADMIN_PASS) $(COMPOSE) -f docker/docker-compose.test.yml up -d master --build
 	@echo "Waiting for master to be ready..."
@@ -191,7 +238,7 @@ test-cli: build ## Run CLI tests (mirrors CI 'cli-tests' job)
 		sleep 2; \
 	done
 	@curl -sf $(TEST_HTTP_URL)/api/v1/health >/dev/null || \
-		($(COMPOSE) -f docker/docker-compose.test.yml logs master >> test-server.log 2>&1 && $(COMPOSE) -f docker/docker-compose.test.yml down -v && exit 1)
+		($(COMPOSE) -f docker/docker-compose.test.yml logs master >> test-server.log 2>&1 && $(MAKE) -s test-cleanup && exit 1)
 	@$(COMPOSE) -f docker/docker-compose.test.yml logs -f master >> test-server.log 2>&1 &
 	@API_TOKEN=$$($(MAKE) -s _create-api-token) && \
 	echo "Running CLI tests..." && \
@@ -200,7 +247,7 @@ test-cli: build ## Run CLI tests (mirrors CI 'cli-tests' job)
 		E2E_ADMIN_PASS=$(TEST_ADMIN_PASS) SKIP_AGENT_TESTS=1 \
 		go test -v -tags=cli -timeout $(TEST_TIMEOUT) -p=1 ./tests/cli/... ; \
 	TEST_EXIT=$$?; \
-	$(COMPOSE) -f docker/docker-compose.test.yml down -v; \
+	$(MAKE) -s test-cleanup; \
 	exit $$TEST_EXIT
 
 # ============================================================================
