@@ -218,14 +218,14 @@ func runAuditList(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("API error: %s - %s", resp.Status, body)
 	}
 
-	var entries []map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
+	var result paginatedResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return fmt.Errorf("decode error: %w", err)
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "TIMESTAMP\tUSER\tACTION\tRESOURCE\tRESULT")
-	for _, e := range entries {
+	for _, e := range result.Items {
 		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n",
 			e["timestamp"], e["user"], e["action"], e["resource"], e["result"])
 	}

@@ -1458,15 +1458,17 @@ func runProjectRollback(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("authentication required. Provide --token or set VCDEPLOY_TOKEN")
 	}
 
-	var deployments []struct {
-		ID     string `json:"id"`
-		Status string `json:"status"`
+	var deploymentsResp struct {
+		Items []struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+		} `json:"items"`
 	}
-	if err := json.NewDecoder(listResp.Body).Decode(&deployments); err != nil || len(deployments) == 0 {
+	if err := json.NewDecoder(listResp.Body).Decode(&deploymentsResp); err != nil || len(deploymentsResp.Items) == 0 {
 		return fmt.Errorf("no deployments found for project %s", projectName)
 	}
 
-	deploymentID := deployments[0].ID
+	deploymentID := deploymentsResp.Items[0].ID
 
 	// Call rollback API
 	reqBody := map[string]interface{}{}
