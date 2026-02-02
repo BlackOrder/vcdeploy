@@ -49,6 +49,7 @@ type AgentIdentityConfig struct {
 
 // AgentPathsConfig defines local paths.
 type AgentPathsConfig struct {
+	Data     string `yaml:"data"`     // Data directory for agent database
 	Repos    string `yaml:"repos"`
 	Releases string `yaml:"releases"`
 }
@@ -88,6 +89,7 @@ func DefaultAgentConfig() *AgentConfig {
 			Labels: make(map[string]string),
 		},
 		Paths: AgentPathsConfig{
+			Data:     "/var/lib/vcdeploy/agent/",
 			Repos:    "/var/lib/vcdeploy/repos/",
 			Releases: "/var/www/",
 		},

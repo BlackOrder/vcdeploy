@@ -16,6 +16,28 @@ import (
 	"go.uber.org/zap"
 )
 
+// testAgentConfig creates a test agent configuration with a temporary data directory.
+func testAgentConfig(t *testing.T) *config.AgentConfig {
+	t.Helper()
+	tmpDir := t.TempDir()
+	return &config.AgentConfig{
+		Agent: config.AgentIdentityConfig{
+			ID: "test-agent",
+		},
+		Master: config.AgentMasterConfig{
+			Address: "localhost:9090",
+		},
+		Paths: config.AgentPathsConfig{
+			Data:     tmpDir,
+			Repos:    tmpDir + "/repos",
+			Releases: tmpDir + "/releases",
+		},
+		Execution: config.ExecutionConfig{
+			Timeout: 10 * time.Minute,
+		},
+	}
+}
+
 func TestNewLocalRunner(t *testing.T) {
 	t.Parallel()
 
@@ -226,15 +248,7 @@ func TestNewAgent(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
-
-	cfg := &config.AgentConfig{
-		Agent: config.AgentIdentityConfig{
-			ID: "test-agent",
-		},
-		Master: config.AgentMasterConfig{
-			Address: "localhost:9090",
-		},
-	}
+	cfg := testAgentConfig(t)
 
 	agent, err := NewAgent(cfg, logger)
 	if err != nil {
@@ -256,27 +270,26 @@ func TestNewAgent(t *testing.T) {
 	if agent.runner == nil {
 		t.Error("NewAgent() did not create runner")
 	}
+
+	if agent.store == nil {
+		t.Error("NewAgent() did not create store")
+	}
 }
 
 func TestAgentStartAlreadyRunning(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
+	cfg := testAgentConfig(t)
 
-	cfg := &config.AgentConfig{
-		Agent: config.AgentIdentityConfig{
-			ID: "test-agent",
-		},
-		Master: config.AgentMasterConfig{
-			Address: "localhost:9090",
-		},
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent() error = %v", err)
 	}
-
-	agent, _ := NewAgent(cfg, logger)
 	agent.running = true
 
 	ctx := context.Background()
-	err := agent.Start(ctx)
+	err = agent.Start(ctx)
 
 	if err == nil {
 		t.Error("Start() expected error when already running")
@@ -302,11 +315,11 @@ func TestAgentStatus(t *testing.T) {
 			t.Parallel()
 
 			logger := zap.NewNop()
-			cfg := &config.AgentConfig{
-				Agent:  config.AgentIdentityConfig{ID: "test"},
-				Master: config.AgentMasterConfig{Address: "localhost:9090"},
+			cfg := testAgentConfig(t)
+			agent, err := NewAgent(cfg, logger)
+			if err != nil {
+				t.Fatalf("NewAgent: %v", err)
 			}
-			agent, _ := NewAgent(cfg, logger)
 			agent.running = tt.running
 			if tt.conn {
 				// Mock connection existence (we don't actually connect)
@@ -330,19 +343,18 @@ func TestAgentShutdown(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
+	cfg := testAgentConfig(t)
 
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test-agent"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-
-	agent, _ := NewAgent(cfg, logger)
 	agent.running = true
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := agent.Shutdown(ctx)
+	err = agent.Shutdown(ctx)
 
 	if err != nil {
 		t.Errorf("Shutdown() error = %v", err)
@@ -357,13 +369,12 @@ func TestAgentShutdownTimeout(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
+	cfg := testAgentConfig(t)
 
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test-agent"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-
-	agent, _ := NewAgent(cfg, logger)
 	agent.running = true
 
 	// Add a task to the wait group that won't complete
@@ -372,7 +383,7 @@ func TestAgentShutdownTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 
-	err := agent.Shutdown(ctx)
+	err = agent.Shutdown(ctx)
 
 	if err != context.DeadlineExceeded {
 		t.Errorf("Shutdown() error = %v, want context.DeadlineExceeded", err)
@@ -386,13 +397,12 @@ func TestAgentExecuteDeploy(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
+	cfg := testAgentConfig(t)
 
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test-agent"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-
-	agent, _ := NewAgent(cfg, logger)
 
 	cmd := &deploy.DeployCommand{
 		DeploymentID: "test-deploy",
@@ -415,13 +425,12 @@ func TestAgentExecuteRollback(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
+	cfg := testAgentConfig(t)
 
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test-agent"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-
-	agent, _ := NewAgent(cfg, logger)
 
 	cmd := &deploy.RollbackCommand{
 		DeploymentID: "test-rollback",
@@ -867,11 +876,11 @@ func TestAgentStatusWithConnection(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	cfg := testAgentConfig(t)
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-	agent, _ := NewAgent(cfg, logger)
 	agent.running = false
 
 	status := agent.Status()
@@ -885,11 +894,11 @@ func TestAgentActiveDeploymentsTracker(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	cfg := testAgentConfig(t)
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-	agent, _ := NewAgent(cfg, logger)
 
 	// Test empty map
 	if len(agent.activeDeployments) != 0 {
@@ -917,14 +926,11 @@ func TestAgentCollectStats(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
-		Paths: config.AgentPathsConfig{
-			Releases: "/tmp",
-		},
+	cfg := testAgentConfig(t)
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-	agent, _ := NewAgent(cfg, logger)
 
 	stats := agent.collectStats()
 
@@ -958,14 +964,13 @@ func TestAgentCollectStatsWithInvalidPath(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
-		Paths: config.AgentPathsConfig{
-			Releases: "/nonexistent/path/that/should/not/exist",
-		},
+	cfg := testAgentConfig(t)
+	cfg.Paths.Releases = "/nonexistent/path/that/should/not/exist"
+
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-	agent, _ := NewAgent(cfg, logger)
 
 	// Should not panic, just return stats with zero disk values
 	stats := agent.collectStats()
@@ -980,11 +985,11 @@ func TestAgentGetActiveDeploymentStatuses(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	cfg := testAgentConfig(t)
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-	agent, _ := NewAgent(cfg, logger)
 
 	// Test empty deployments
 	statuses := agent.getActiveDeploymentStatuses()
@@ -1028,11 +1033,11 @@ func TestAgentUpdateDeploymentState(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	cfg := testAgentConfig(t)
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-	agent, _ := NewAgent(cfg, logger)
 
 	// Add a deployment
 	agent.deployMu.Lock()
@@ -1064,11 +1069,11 @@ func TestAgentProtoToDeployCommand(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	cfg := testAgentConfig(t)
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-	agent, _ := NewAgent(cfg, logger)
 
 	protoCmd := &pb.DeployCommand{
 		DeploymentId:    "deploy-123",
@@ -1174,11 +1179,11 @@ func TestAgentProtoToDeployCommandNilSettings(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	cfg := testAgentConfig(t)
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-	agent, _ := NewAgent(cfg, logger)
 
 	protoCmd := &pb.DeployCommand{
 		DeploymentId: "deploy-123",
@@ -1202,11 +1207,11 @@ func TestAgentProtoToDeployCommandEmptyReloadServices(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	cfg := testAgentConfig(t)
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-	agent, _ := NewAgent(cfg, logger)
 
 	protoCmd := &pb.DeployCommand{
 		DeploymentId:   "deploy-123",
@@ -1226,11 +1231,11 @@ func TestAgentForwardLogs(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	cfg := testAgentConfig(t)
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-	agent, _ := NewAgent(cfg, logger)
 
 	// Test with nil stream (should not panic)
 	logCh := make(chan deploy.LogEntry, 10)
@@ -1252,11 +1257,11 @@ func TestAgentForwardLogsAllLevels(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	cfg := testAgentConfig(t)
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-	agent, _ := NewAgent(cfg, logger)
 
 	logCh := make(chan deploy.LogEntry, 10)
 
@@ -1276,11 +1281,11 @@ func TestAgentSendDeploymentStatusNilStream(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	cfg := testAgentConfig(t)
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-	agent, _ := NewAgent(cfg, logger)
 
 	// Should not panic with nil stream
 	agent.sendDeploymentStatus(nil, "deploy-1", pb.DeploymentState_DEPLOYMENT_STATE_DEPLOYING, "test", 50)
@@ -1291,11 +1296,11 @@ func TestAgentSendCommandResultNilStream(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	cfg := testAgentConfig(t)
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-	agent, _ := NewAgent(cfg, logger)
 
 	// Should not panic with nil stream
 	agent.sendCommandResult(nil, "deploy-1", "test-command", 0, "stdout", "stderr")
@@ -1316,11 +1321,11 @@ func TestAgentPerformHealthCheckSuccess(t *testing.T) {
 	defer server.Close()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	cfg := testAgentConfig(t)
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-	agent, _ := NewAgent(cfg, logger)
 
 	ctx := context.Background()
 	result, msg := agent.performHealthCheck(ctx, server.URL, 10)
@@ -1340,11 +1345,11 @@ func TestAgentPerformHealthCheckStatus201(t *testing.T) {
 	defer server.Close()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	cfg := testAgentConfig(t)
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-	agent, _ := NewAgent(cfg, logger)
 
 	ctx := context.Background()
 	result, _ := agent.performHealthCheck(ctx, server.URL, 10)
@@ -1365,11 +1370,11 @@ func TestAgentPerformHealthCheckStatus404(t *testing.T) {
 	defer server.Close()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	cfg := testAgentConfig(t)
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-	agent, _ := NewAgent(cfg, logger)
 
 	ctx := context.Background()
 	result, msg := agent.performHealthCheck(ctx, server.URL, 10)
@@ -1392,11 +1397,11 @@ func TestAgentPerformHealthCheckStatus500(t *testing.T) {
 	defer server.Close()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	cfg := testAgentConfig(t)
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-	agent, _ := NewAgent(cfg, logger)
 
 	ctx := context.Background()
 	result, _ := agent.performHealthCheck(ctx, server.URL, 10)
@@ -1422,11 +1427,11 @@ func TestAgentPerformHealthCheckStatus301(t *testing.T) {
 	defer server.Close()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	cfg := testAgentConfig(t)
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-	agent, _ := NewAgent(cfg, logger)
 
 	ctx := context.Background()
 	result, _ := agent.performHealthCheck(ctx, server.URL+"/redirect", 10)
@@ -1442,11 +1447,11 @@ func TestAgentPerformHealthCheckConnectionRefused(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	cfg := testAgentConfig(t)
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-	agent, _ := NewAgent(cfg, logger)
 
 	ctx := context.Background()
 	// Use a port that's unlikely to be in use
@@ -1472,11 +1477,11 @@ func TestAgentPerformHealthCheckContextCancelled(t *testing.T) {
 	defer server.Close()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	cfg := testAgentConfig(t)
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-	agent, _ := NewAgent(cfg, logger)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
@@ -1498,11 +1503,11 @@ func TestAgentPerformHealthCheckDefaultTimeout(t *testing.T) {
 	defer server.Close()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	cfg := testAgentConfig(t)
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-	agent, _ := NewAgent(cfg, logger)
 
 	ctx := context.Background()
 	// timeout of 0 should use default
@@ -1518,11 +1523,11 @@ func TestAgentPerformHealthCheckInvalidURL(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	cfg := testAgentConfig(t)
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-	agent, _ := NewAgent(cfg, logger)
 
 	ctx := context.Background()
 	result, msg := agent.performHealthCheck(ctx, "://invalid-url", 10)
@@ -1540,10 +1545,7 @@ func TestNewAgentHTTPClient(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
-	}
+	cfg := testAgentConfig(t)
 	agent, err := NewAgent(cfg, logger)
 
 	if err != nil {
@@ -1576,11 +1578,11 @@ func TestAgentHTTPClientRedirect(t *testing.T) {
 	defer server.Close()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	cfg := testAgentConfig(t)
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-	agent, _ := NewAgent(cfg, logger)
 
 	ctx := context.Background()
 	result, msg := agent.performHealthCheck(ctx, server.URL+"/redirect", 30)
@@ -1633,11 +1635,11 @@ func TestAgentRunningStateConcurrency(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	cfg := testAgentConfig(t)
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-	agent, _ := NewAgent(cfg, logger)
 
 	// Start multiple goroutines accessing Status and modifying running
 	done := make(chan struct{})
@@ -1667,11 +1669,11 @@ func TestAgentDeploymentsConcurrency(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	cfg := testAgentConfig(t)
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-	agent, _ := NewAgent(cfg, logger)
 
 	done := make(chan struct{})
 
@@ -1714,10 +1716,7 @@ func TestAgentNewAgentCreatesStrategy(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
-	}
+	cfg := testAgentConfig(t)
 	agent, err := NewAgent(cfg, logger)
 
 	if err != nil {
@@ -1734,10 +1733,7 @@ func TestAgentNewAgentCreatesRunner(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
-	}
+	cfg := testAgentConfig(t)
 	agent, err := NewAgent(cfg, logger)
 
 	if err != nil {
@@ -1754,10 +1750,7 @@ func TestAgentNewAgentCreatesActiveDeploymentsMap(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
-	}
+	cfg := testAgentConfig(t)
 	agent, err := NewAgent(cfg, logger)
 
 	if err != nil {
@@ -1774,10 +1767,7 @@ func TestAgentNewAgentCreatesShutdownChannel(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
-	}
+	cfg := testAgentConfig(t)
 	agent, err := NewAgent(cfg, logger)
 
 	if err != nil {
@@ -2043,11 +2033,11 @@ func TestAgentProtoToDeployCommandWithZeroTimeout(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	cfg := testAgentConfig(t)
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-	agent, _ := NewAgent(cfg, logger)
 
 	protoCmd := &pb.DeployCommand{
 		DeploymentId: "deploy-123",
@@ -2069,11 +2059,11 @@ func TestAgentProtoToDeployCommandEmptyEnvVars(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	cfg := testAgentConfig(t)
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-	agent, _ := NewAgent(cfg, logger)
 
 	protoCmd := &pb.DeployCommand{
 		DeploymentId: "deploy-123",
@@ -2098,11 +2088,11 @@ func TestAgentPerformHealthCheckStatus299(t *testing.T) {
 	defer server.Close()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	cfg := testAgentConfig(t)
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-	agent, _ := NewAgent(cfg, logger)
 
 	ctx := context.Background()
 	result, _ := agent.performHealthCheck(ctx, server.URL, 10)
@@ -2124,11 +2114,11 @@ func TestAgentPerformHealthCheckStatus300(t *testing.T) {
 	defer server.Close()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	cfg := testAgentConfig(t)
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-	agent, _ := NewAgent(cfg, logger)
 
 	ctx := context.Background()
 	result, _ := agent.performHealthCheck(ctx, server.URL, 10)
@@ -2144,11 +2134,11 @@ func TestAgentStatusTransitions(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	cfg := testAgentConfig(t)
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-	agent, _ := NewAgent(cfg, logger)
 
 	// Initial state should be stopped
 	if status := agent.Status(); status != "stopped" {
@@ -2170,11 +2160,11 @@ func TestAgentShutdownCleansUp(t *testing.T) {
 	t.Parallel()
 
 	logger := zap.NewNop()
-	cfg := &config.AgentConfig{
-		Agent:  config.AgentIdentityConfig{ID: "test"},
-		Master: config.AgentMasterConfig{Address: "localhost:9090"},
+	cfg := testAgentConfig(t)
+	agent, err := NewAgent(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
 	}
-	agent, _ := NewAgent(cfg, logger)
 
 	agent.mu.Lock()
 	agent.running = true
@@ -2183,7 +2173,7 @@ func TestAgentShutdownCleansUp(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := agent.Shutdown(ctx)
+	err = agent.Shutdown(ctx)
 	if err != nil {
 		t.Fatalf("Shutdown() error = %v", err)
 	}
