@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/BlackOrder/vcdeploy/internal/security"
+	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"go.uber.org/zap"
 )
 
@@ -209,5 +210,95 @@ func (s *MasterServer) handleAdminTOTPDisable(w http.ResponseWriter, r *http.Req
 
 	s.writeJSON(w, http.StatusOK, map[string]string{
 		"message": "TOTP disabled successfully",
+	})
+}
+
+// handleRegenerateRecoveryCodes regenerates recovery codes for the current user.
+// POST /api/v1/totp/recovery/regenerate
+// Requires the user's current TOTP code for verification.
+func (s *MasterServer) handleRegenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	user, ok := GetUserFromContext(r.Context())
+	if !ok {
+		s.jsonError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	// User must have TOTP enabled
+	if !user.TOTPEnabled {
+		s.jsonError(w, http.StatusBadRequest, "TOTP is not enabled for this account")
+		return
+	}
+
+	// Parse request - requires current TOTP code for verification
+	var req struct {
+		TOTPCode string `json:"totp_code"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.jsonError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if req.TOTPCode == "" {
+		s.jsonError(w, http.StatusBadRequest, "TOTP code is required")
+		return
+	}
+
+	// Verify current TOTP code
+	if !security.ValidateTOTP(user.TOTPSecret, req.TOTPCode, security.DefaultTOTPConfig()) {
+		s.logAudit(r, "recovery_codes_regenerate_failed", "security",
+			"user: "+user.Username+", reason: invalid TOTP", "failure")
+		s.jsonError(w, http.StatusUnauthorized, "Invalid TOTP code")
+		return
+	}
+
+	ctx := r.Context()
+
+	// Delete existing recovery codes
+	if err := s.store.DeleteRecoveryCodes(ctx, user.ID); err != nil {
+		s.logger.Error("Failed to delete existing recovery codes", zap.Error(err))
+		s.jsonError(w, http.StatusInternalServerError, "Failed to regenerate recovery codes")
+		return
+	}
+
+	// Generate new recovery codes
+	codes, hashes, err := security.GenerateRecoveryCodes()
+	if err != nil {
+		s.logger.Error("Failed to generate recovery codes", zap.Error(err))
+		s.jsonError(w, http.StatusInternalServerError, "Failed to generate recovery codes")
+		return
+	}
+
+	// Save new recovery codes
+	recoveryCodes := make([]*storage.RecoveryCode, len(hashes))
+	for i, hash := range hashes {
+		recoveryCodes[i] = &storage.RecoveryCode{
+			UserID:   user.ID,
+			CodeHash: hash,
+		}
+	}
+	if err := s.store.SaveRecoveryCodes(ctx, user.ID, recoveryCodes); err != nil {
+		s.logger.Error("Failed to save recovery codes", zap.Error(err))
+		s.jsonError(w, http.StatusInternalServerError, "Failed to save recovery codes")
+		return
+	}
+
+	// Audit log
+	s.logAudit(r, "recovery_codes_regenerated", "security",
+		"user: "+user.Username, "success")
+
+	s.logger.Info("Recovery codes regenerated",
+		zap.String("user", user.Username),
+		zap.Int("code_count", len(codes)))
+
+	// Return formatted codes - this is the ONLY time they're shown
+	s.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"message":        "Recovery codes regenerated successfully",
+		"recovery_codes": security.FormatRecoveryCodes(codes),
+		"warning":        "Save these codes securely. They will not be shown again.",
 	})
 }

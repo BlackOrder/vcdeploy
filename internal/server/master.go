@@ -787,6 +787,9 @@ func (s *MasterServer) buildMainHandler() (http.Handler, error) {
 	mux.HandleFunc("/api/v1/admin/totp/status/", s.withAuth(s.handleAdminTOTPStatus))
 	mux.HandleFunc("/api/v1/admin/totp/disable", s.withAuth(s.handleAdminTOTPDisable))
 
+	// User TOTP Recovery Codes API
+	mux.HandleFunc("/api/v1/totp/recovery/regenerate", s.withAuth(s.handleRegenerateRecoveryCodes))
+
 	// Provision API
 	mux.HandleFunc("/api/v1/provision", s.withAuth(s.handleProvisionJobs))
 	mux.HandleFunc("/api/v1/provision/", s.withAuth(s.handleProvisionJob))
