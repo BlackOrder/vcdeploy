@@ -376,7 +376,12 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 			{"id": "deploy-1", "project": "webapp", "branch": "main", "status": "success", "startedAt": "2024-01-01T10:00:00Z"},
 			{"id": "deploy-2", "project": "api", "branch": "develop", "status": "running", "startedAt": "2024-01-01T11:00:00Z"},
 		}
-		_ = json.NewEncoder(w).Encode(deployments)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"items":      deployments,
+			"totalCount": len(deployments),
+			"limit":      50,
+			"offset":     0,
+		})
 	})
 
 	// Deployment by ID endpoint
@@ -393,7 +398,12 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 				{"createdAt": "2024-01-01T10:01:00Z", "level": "INFO", "message": "Dependencies installed"},
 				{"createdAt": "2024-01-01T10:02:00Z", "level": "INFO", "message": "Build complete"},
 			}
-			_ = json.NewEncoder(w).Encode(logs)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"items":      logs,
+				"totalCount": len(logs),
+				"limit":      50,
+				"offset":     0,
+			})
 			return
 		}
 		deployment := map[string]interface{}{
@@ -469,7 +479,12 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 				{"id": 1.0, "name": "ci-deploy", "createdAt": "2024-01-01T00:00:00Z", "expiresAt": nil, "lastUsedAt": "2024-01-15T10:00:00Z"},
 				{"id": 2.0, "name": "backup-key", "createdAt": "2024-01-05T00:00:00Z", "expiresAt": "2025-01-05T00:00:00Z", "lastUsedAt": nil},
 			}
-			_ = json.NewEncoder(w).Encode(keys)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"items":      keys,
+				"totalCount": len(keys),
+				"limit":      50,
+				"offset":     0,
+			})
 		case http.MethodPost:
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
@@ -493,7 +508,12 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 			{"timestamp": "2024-01-01T10:00:00Z", "user": "admin", "action": "deploy", "resource": "webapp", "result": "success"},
 			{"timestamp": "2024-01-01T09:00:00Z", "user": "admin", "action": "login", "resource": "system", "result": "success"},
 		}
-		_ = json.NewEncoder(w).Encode(entries)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"items":      entries,
+			"totalCount": len(entries),
+			"limit":      50,
+			"offset":     0,
+		})
 	})
 
 	// Health endpoint
@@ -956,7 +976,12 @@ func TestRunDeploymentLogs(t *testing.T) {
 // TestRunDeploymentLogsEmpty tests runDeploymentLogs when no logs exist.
 func TestRunDeploymentLogsEmpty(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode([]map[string]interface{}{})
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"items":      []map[string]interface{}{},
+			"totalCount": 0,
+			"limit":      50,
+			"offset":     0,
+		})
 	}))
 	defer server.Close()
 
@@ -1176,7 +1201,12 @@ func TestRunAPIKeyList(t *testing.T) {
 // TestRunAPIKeyListEmpty tests runAPIKeyList when no keys exist.
 func TestRunAPIKeyListEmpty(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode([]map[string]interface{}{})
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"items":      []map[string]interface{}{},
+			"totalCount": 0,
+			"limit":      50,
+			"offset":     0,
+		})
 	}))
 	defer server.Close()
 
