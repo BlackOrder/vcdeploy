@@ -250,7 +250,9 @@ func (a *Agent) extractFile(tr *tar.Reader, target string, header *tar.Header) e
 	}
 
 	// Sanitize file mode (remove setuid, setgid, sticky bits)
-	mode := os.FileMode(header.Mode) & 0755
+	// Mask to 12-bit mode value (0o7777) before uint32 conversion to avoid G115 overflow warning
+	// #nosec G115 - header.Mode is masked to only mode bits (0o7777 max = 4095, fits in uint32)
+	mode := os.FileMode(header.Mode&0o7777) & 0755
 	if mode == 0 {
 		mode = 0644
 	}
