@@ -25,14 +25,26 @@ func TestHandleHealthCheckConfigs(t *testing.T) {
 			t.Errorf("Expected status %d, got %d: %s", http.StatusOK, rr.Code, rr.Body.String())
 		}
 
-		var configs []*storage.HealthCheckConfig
-		if err := json.NewDecoder(rr.Body).Decode(&configs); err != nil {
+		var resp map[string]interface{}
+		if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
 
+		// Verify paginated response structure
+		if _, ok := resp["items"]; !ok {
+			t.Error("Response missing 'items' field")
+		}
+		if _, ok := resp["totalCount"]; !ok {
+			t.Error("Response missing 'totalCount' field")
+		}
+
+		items, ok := resp["items"].([]interface{})
+		if !ok {
+			t.Fatalf("items is not an array")
+		}
 		// Should include the default global config from migration
-		if len(configs) < 1 {
-			t.Errorf("Expected at least 1 config, got %d", len(configs))
+		if len(items) < 1 {
+			t.Errorf("Expected at least 1 config, got %d", len(items))
 		}
 	})
 
