@@ -10,6 +10,24 @@ export const TEST_USER_USERNAME = 'testuser';
 export const TEST_USER_PASSWORD = 'TestUser12345!';
 export const TEST_USER_EMAIL = 'testuser@example.com';
 
+// Skip flags for conditional test execution
+export const SKIP_AGENT_TESTS = process.env.SKIP_AGENT_TESTS === '1';
+export const SKIP_TARGET_TESTS = process.env.SKIP_TARGET_TESTS === '1';
+
+/**
+ * Skip the test if agent tests are disabled
+ */
+export function skipIfNoAgent(test: typeof base) {
+  test.skip(SKIP_AGENT_TESTS, 'Skipping: SKIP_AGENT_TESTS is set');
+}
+
+/**
+ * Skip the test if target/SSH tests are disabled
+ */
+export function skipIfNoTarget(test: typeof base) {
+  test.skip(SKIP_TARGET_TESTS, 'Skipping: SKIP_TARGET_TESTS is set');
+}
+
 /**
  * Authentication helper functions
  */
