@@ -572,3 +572,206 @@ func TestHandleAdminTOTPDisable_RequiresAdmin(t *testing.T) {
 		t.Errorf("expected status %d, got %d", http.StatusForbidden, w.Code)
 	}
 }
+
+// TestHandleRegenerateRecoveryCodes tests the recovery codes regeneration endpoint.
+func TestHandleRegenerateRecoveryCodes(t *testing.T) {
+	t.Parallel()
+
+	server, _, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	ctx := context.Background()
+
+	// Enable TOTP for the user
+	secret := "JBSWY3DPEHPK3PXP"
+	if err := server.userService.SetTOTP(ctx, userID, secret, true); err != nil {
+		t.Fatalf("failed to enable TOTP: %v", err)
+	}
+
+	// Add some existing recovery codes
+	_, hashes, err := security.GenerateRecoveryCodes()
+	if err != nil {
+		t.Fatalf("failed to generate recovery codes: %v", err)
+	}
+	var oldCodes []*storage.RecoveryCode
+	for _, hash := range hashes {
+		oldCodes = append(oldCodes, &storage.RecoveryCode{
+			UserID:    userID,
+			CodeHash:  hash,
+			CreatedAt: time.Now(),
+		})
+	}
+	if err := server.store.SaveRecoveryCodes(ctx, userID, oldCodes); err != nil {
+		t.Fatalf("failed to save recovery codes: %v", err)
+	}
+
+	// Get user for context
+	user, err := server.store.GetUserByID(ctx, userID)
+	if err != nil {
+		t.Fatalf("failed to get user: %v", err)
+	}
+
+	// Generate valid TOTP code
+	totp := security.GenerateTOTPCode(secret, time.Now().Unix(), security.DefaultTOTPConfig())
+
+	body := bytes.NewBufferString(`{"totp_code": "` + totp + `"}`)
+
+	req := httptest.NewRequest("POST", "/api/v1/totp/recovery/regenerate", body)
+	req.Header.Set("Content-Type", "application/json")
+	ctx = WithUserContext(req.Context(), user)
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	server.handleRegenerateRecoveryCodes(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+
+	var response struct {
+		Message       string   `json:"message"`
+		RecoveryCodes []string `json:"recovery_codes"`
+		Warning       string   `json:"warning"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if len(response.RecoveryCodes) != 8 {
+		t.Errorf("expected 8 recovery codes, got %d", len(response.RecoveryCodes))
+	}
+
+	// Verify codes are formatted with dashes
+	for _, code := range response.RecoveryCodes {
+		if len(code) != 9 || code[4] != '-' {
+			t.Errorf("expected formatted code like XXXX-XXXX, got %s", code)
+		}
+	}
+
+	// Verify old codes were deleted and new codes were saved
+	remaining, err := server.store.CountUnusedRecoveryCodes(ctx, userID)
+	if err != nil {
+		t.Fatalf("failed to count recovery codes: %v", err)
+	}
+	if remaining != 8 {
+		t.Errorf("expected 8 recovery codes in storage, got %d", remaining)
+	}
+}
+
+func TestHandleRegenerateRecoveryCodes_InvalidTOTP(t *testing.T) {
+	t.Parallel()
+
+	server, _, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	ctx := context.Background()
+
+	// Enable TOTP for the user
+	secret := "JBSWY3DPEHPK3PXP"
+	if err := server.userService.SetTOTP(ctx, userID, secret, true); err != nil {
+		t.Fatalf("failed to enable TOTP: %v", err)
+	}
+
+	user, err := server.store.GetUserByID(ctx, userID)
+	if err != nil {
+		t.Fatalf("failed to get user: %v", err)
+	}
+
+	body := bytes.NewBufferString(`{"totp_code": "000000"}`)
+
+	req := httptest.NewRequest("POST", "/api/v1/totp/recovery/regenerate", body)
+	req.Header.Set("Content-Type", "application/json")
+	ctx = WithUserContext(req.Context(), user)
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	server.handleRegenerateRecoveryCodes(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected status %d, got %d: %s", http.StatusUnauthorized, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleRegenerateRecoveryCodes_TOTPNotEnabled(t *testing.T) {
+	t.Parallel()
+
+	server, _, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	ctx := context.Background()
+
+	// User does NOT have TOTP enabled
+	user, err := server.store.GetUserByID(ctx, userID)
+	if err != nil {
+		t.Fatalf("failed to get user: %v", err)
+	}
+
+	body := bytes.NewBufferString(`{"totp_code": "123456"}`)
+
+	req := httptest.NewRequest("POST", "/api/v1/totp/recovery/regenerate", body)
+	req.Header.Set("Content-Type", "application/json")
+	ctx = WithUserContext(req.Context(), user)
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	server.handleRegenerateRecoveryCodes(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleRegenerateRecoveryCodes_MissingTOTPCode(t *testing.T) {
+	t.Parallel()
+
+	server, _, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	ctx := context.Background()
+
+	// Enable TOTP for the user
+	secret := "JBSWY3DPEHPK3PXP"
+	if err := server.userService.SetTOTP(ctx, userID, secret, true); err != nil {
+		t.Fatalf("failed to enable TOTP: %v", err)
+	}
+
+	user, err := server.store.GetUserByID(ctx, userID)
+	if err != nil {
+		t.Fatalf("failed to get user: %v", err)
+	}
+
+	body := bytes.NewBufferString(`{}`)
+
+	req := httptest.NewRequest("POST", "/api/v1/totp/recovery/regenerate", body)
+	req.Header.Set("Content-Type", "application/json")
+	ctx = WithUserContext(req.Context(), user)
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	server.handleRegenerateRecoveryCodes(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleRegenerateRecoveryCodes_MethodNotAllowed(t *testing.T) {
+	t.Parallel()
+
+	server, _, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	ctx := context.Background()
+	user, _ := server.store.GetUserByID(ctx, userID)
+
+	req := httptest.NewRequest("GET", "/api/v1/totp/recovery/regenerate", nil)
+	ctx = WithUserContext(req.Context(), user)
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	server.handleRegenerateRecoveryCodes(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected status %d, got %d", http.StatusMethodNotAllowed, w.Code)
+	}
+}
