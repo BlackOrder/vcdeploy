@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -59,15 +60,31 @@ func getSSHClientConfig() *ssh.ClientConfig {
 	}
 }
 
+// skipIfNoSSH skips the test if E2E_SKIP_SSH_TESTS is set or SSH target is unavailable.
+func skipIfNoSSH(t *testing.T) {
+	t.Helper()
+	if os.Getenv("E2E_SKIP_SSH_TESTS") != "" {
+		t.Skip("Skipping SSH test: E2E_SKIP_SSH_TESTS is set")
+	}
+	cfg := getTestConfig()
+	addr := fmt.Sprintf("%s:%s", cfg.TargetSSHHost, cfg.TargetSSHPort)
+	// Use short timeout (2s) to quickly detect unavailable SSH
+	err := waitForTCPPort(addr, 2*time.Second)
+	if err != nil {
+		t.Skipf("SSH target not available: %v", err)
+	}
+}
+
 // TestSSHTargetConnectivity verifies the SSH target is reachable.
 func TestSSHTargetConnectivity(t *testing.T) {
+	skipIfNoSSH(t)
 	cfg := getTestConfig()
 
-	// Wait for target SSH to be ready
+	// Wait for target SSH to be ready (full timeout since we know it should be available)
 	addr := fmt.Sprintf("%s:%s", cfg.TargetSSHHost, cfg.TargetSSHPort)
 	err := waitForTCPPort(addr, 60*time.Second)
 	if err != nil {
-		t.Skipf("SSH target not available: %v", err)
+		t.Fatalf("SSH target became unavailable: %v", err)
 	}
 
 	sshConfig := getSSHClientConfig()
@@ -96,12 +113,13 @@ func TestSSHTargetConnectivity(t *testing.T) {
 
 // TestSSHTargetDeployDirectory verifies the deploy directory exists.
 func TestSSHTargetDeployDirectory(t *testing.T) {
+	skipIfNoSSH(t)
 	cfg := getTestConfig()
 
 	addr := fmt.Sprintf("%s:%s", cfg.TargetSSHHost, cfg.TargetSSHPort)
 	err := waitForTCPPort(addr, 60*time.Second)
 	if err != nil {
-		t.Skipf("SSH target not available: %v", err)
+		t.Fatalf("SSH target became unavailable: %v", err)
 	}
 
 	sshConfig := getSSHClientConfig()
@@ -127,13 +145,14 @@ func TestSSHTargetDeployDirectory(t *testing.T) {
 
 // TestDeploymentSimulation simulates a basic deployment workflow.
 func TestDeploymentSimulation(t *testing.T) {
+	skipIfNoSSH(t)
 	cfg := getTestConfig()
 
-	// Check SSH target
+	// Wait for SSH target (full timeout since skipIfNoSSH passed)
 	addr := fmt.Sprintf("%s:%s", cfg.TargetSSHHost, cfg.TargetSSHPort)
 	err := waitForTCPPort(addr, 60*time.Second)
 	if err != nil {
-		t.Skipf("SSH target not available: %v", err)
+		t.Fatalf("SSH target became unavailable: %v", err)
 	}
 
 	sshConfig := getSSHClientConfig()
@@ -187,12 +206,13 @@ func TestDeploymentSimulation(t *testing.T) {
 
 // TestRollbackSimulation simulates a rollback operation.
 func TestRollbackSimulation(t *testing.T) {
+	skipIfNoSSH(t)
 	cfg := getTestConfig()
 
 	addr := fmt.Sprintf("%s:%s", cfg.TargetSSHHost, cfg.TargetSSHPort)
 	err := waitForTCPPort(addr, 60*time.Second)
 	if err != nil {
-		t.Skipf("SSH target not available: %v", err)
+		t.Fatalf("SSH target became unavailable: %v", err)
 	}
 
 	sshConfig := getSSHClientConfig()
