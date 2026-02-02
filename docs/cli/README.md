@@ -101,6 +101,10 @@ vcdeploy
 │   ├── create      # Create a project type
 │   ├── edit        # Edit a project type
 │   └── delete      # Delete a project type
+├── totp            # Two-factor authentication management
+│   ├── list        # List users with TOTP enabled
+│   ├── status      # Show TOTP status for a user
+│   └── disable     # Disable TOTP for a user (admin)
 ├── user            # User management
 │   ├── list        # List all users
 │   ├── create      # Create a new user
@@ -774,6 +778,69 @@ Delete a project type.
 ```bash
 vcdeploy type delete <name>
 ```
+
+---
+
+### totp
+
+Administrative commands for managing user TOTP two-factor authentication. These commands are for account recovery when users lose access to their authenticator and recovery codes.
+
+#### totp list
+
+List all users who have TOTP enabled.
+
+```bash
+vcdeploy totp list
+```
+
+**Output:**
+```
+ID    USERNAME    EMAIL                TOTP ENABLED
+1     admin       admin@example.com    true
+3     john        john@example.com     true
+
+Total: 2 users with TOTP enabled
+```
+
+#### totp status
+
+Show TOTP status for a specific user.
+
+```bash
+vcdeploy totp status <username>
+```
+
+**Output:**
+```
+User: john
+TOTP Enabled: true
+Recovery Codes Remaining: 6
+```
+
+#### totp disable
+
+Disable TOTP for a user who has lost access to their authenticator and recovery codes.
+
+```bash
+vcdeploy totp disable --user <username> --reason <reason> --confirm
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `--user` | Username or user ID (required) |
+| `--reason` | Reason for disabling TOTP, for audit (required, min 10 chars) |
+| `--confirm` | Confirm this destructive action (required) |
+
+**Example:**
+```bash
+vcdeploy totp disable --user john --reason "Lost phone, identity verified via video call" --confirm
+```
+
+**Security Notes:**
+- Always verify user identity through out-of-band means before disabling 2FA
+- All actions are logged for audit compliance
+- Users will need to re-enable TOTP after logging in
 
 ---
 

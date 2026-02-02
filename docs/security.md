@@ -1,6 +1,6 @@
 # Security Guide
 
-This guide covers vcdeploy's security architecture, including mutual TLS (mTLS) for master-agent communication, certificate management, and authentication flows.
+This guide covers vcdeploy's security architecture, including mutual TLS (mTLS) for master-agent communication, certificate management, authentication flows, and two-factor authentication.
 
 ## Overview
 
@@ -10,6 +10,73 @@ vcdeploy uses a defense-in-depth security model:
 2. **Internal CA** - vcdeploy maintains its own Certificate Authority for issuing agent certificates
 3. **KMS (Key Management Service)** - All sensitive data is encrypted at rest using a master key
 4. **HMAC Re-authentication** - Agents can re-authenticate using HMAC when certificates expire
+5. **Two-Factor Authentication (2FA)** - Optional TOTP-based 2FA for user accounts
+
+## Two-Factor Authentication (TOTP)
+
+vcdeploy supports TOTP (Time-based One-Time Password) two-factor authentication for enhanced account security.
+
+### Enabling 2FA
+
+Users can enable 2FA from their profile page:
+
+1. Navigate to your profile by clicking your username in the navigation bar
+2. Click "Enable Two-Factor Authentication"
+3. Scan the QR code with an authenticator app (Google Authenticator, Authy, etc.)
+4. Enter the 6-digit code from your app to verify
+5. Save your recovery codes securely
+
+### Recovery Codes
+
+When 2FA is enabled, you receive 8 single-use recovery codes. These codes:
+
+- Can be used instead of your TOTP code if you lose access to your authenticator
+- Are shown only once during setup - save them securely!
+- Can be regenerated from your profile page (requires current TOTP verification)
+- Are formatted as `XXXX-XXXX` for easy reading
+
+**Important:** Store recovery codes in a secure location like a password manager. Each code can only be used once.
+
+### Regenerating Recovery Codes
+
+If you've used some recovery codes or want fresh ones:
+
+1. Go to your profile page
+2. Click "Regenerate Codes"
+3. Enter your current TOTP code
+4. Save the new codes (old codes are invalidated)
+
+### Disabling 2FA
+
+You can disable 2FA from your profile page by entering your current TOTP code.
+
+### Admin Account Recovery
+
+If a user loses access to both their authenticator and all recovery codes, an administrator can disable their 2FA:
+
+**Via CLI:**
+```bash
+vcdeploy totp disable --user <username> --reason "Lost device, verified via video call" --confirm
+```
+
+**Via Admin UI:**
+1. Go to Settings → Users
+2. Click "Disable 2FA" next to the user
+3. Enter a reason for audit purposes
+4. If you have 2FA enabled, enter your own TOTP code
+5. Click "Disable 2FA"
+
+All admin 2FA disable actions are logged for audit compliance.
+
+### Configuration
+
+Enable 2FA requirements in your master configuration:
+
+```yaml
+security:
+  require_2fa_admin: true   # Require 2FA for admin users
+  require_2fa: false        # Require 2FA for all users
+```
 
 ## mTLS Architecture
 

@@ -39,6 +39,8 @@ tags:
     description: Authentication endpoints
   - name: Users
     description: User management
+  - name: TOTP
+    description: Two-factor authentication management
   - name: Projects
     description: Project management
   - name: Deployments
@@ -185,6 +187,246 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+
+  # TOTP (Two-Factor Authentication) Endpoints
+  /api/v1/totp/setup:
+    post:
+      tags: [TOTP]
+      summary: Start TOTP setup
+      description: Generate a new TOTP secret for the authenticated user to set up 2FA.
+      operationId: totpSetup
+      responses:
+        '200':
+          description: TOTP secret generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  secret:
+                    type: string
+                    description: Base32-encoded TOTP secret
+                    example: JBSWY3DPEHPK3PXP
+                  uri:
+                    type: string
+                    description: otpauth URI for QR code generation
+                    example: otpauth://totp/vcdeploy:admin?secret=JBSWY3DPEHPK3PXP&issuer=vcdeploy
+        '400':
+          description: TOTP is already enabled
+        '401':
+          description: Unauthorized
+
+  /api/v1/totp/enable:
+    post:
+      tags: [TOTP]
+      summary: Enable TOTP
+      description: Verify and enable TOTP for the authenticated user. Returns recovery codes.
+      operationId: totpEnable
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [secret, totp_code]
+              properties:
+                secret:
+                  type: string
+                  description: The TOTP secret from setup
+                totp_code:
+                  type: string
+                  pattern: '^[0-9]{6}$'
+                  description: 6-digit TOTP code to verify setup
+      responses:
+        '200':
+          description: TOTP enabled successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  recovery_codes:
+                    type: array
+                    items:
+                      type: string
+                    description: One-time recovery codes (XXXX-XXXX format)
+        '400':
+          description: TOTP already enabled or invalid request
+        '401':
+          description: Invalid TOTP code
+
+  /api/v1/totp/disable:
+    post:
+      tags: [TOTP]
+      summary: Disable TOTP (self-service)
+      description: Disable TOTP for the authenticated user. Requires current TOTP verification.
+      operationId: totpDisable
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [totp_code]
+              properties:
+                totp_code:
+                  type: string
+                  pattern: '^[0-9]{6}$'
+                  description: Current 6-digit TOTP code
+      responses:
+        '200':
+          description: TOTP disabled successfully
+        '400':
+          description: TOTP not enabled
+        '401':
+          description: Invalid TOTP code
+
+  /api/v1/totp/recovery/regenerate:
+    post:
+      tags: [TOTP]
+      summary: Regenerate recovery codes
+      description: Generate new recovery codes, invalidating all previous codes.
+      operationId: regenerateRecoveryCodes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [totp_code]
+              properties:
+                totp_code:
+                  type: string
+                  pattern: '^[0-9]{6}$'
+                  description: Current 6-digit TOTP code for verification
+      responses:
+        '200':
+          description: Recovery codes regenerated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  recovery_codes:
+                    type: array
+                    items:
+                      type: string
+                  warning:
+                    type: string
+        '400':
+          description: TOTP not enabled
+        '401':
+          description: Invalid TOTP code
+
+  /api/v1/admin/totp/users:
+    get:
+      tags: [TOTP]
+      summary: List users with TOTP enabled
+      description: Returns all users who have TOTP enabled (admin only).
+      operationId: listTotpUsers
+      responses:
+        '200':
+          description: List of TOTP-enabled users
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                        username:
+                          type: string
+                        email:
+                          type: string
+                        role:
+                          type: string
+                        totpEnabled:
+                          type: boolean
+        '403':
+          description: Admin access required
+
+  /api/v1/admin/totp/status/{username}:
+    get:
+      tags: [TOTP]
+      summary: Get user TOTP status
+      description: Returns TOTP status for a specific user including recovery code count (admin only).
+      operationId: getTotpStatus
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User TOTP status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_id:
+                    type: integer
+                  username:
+                    type: string
+                  email:
+                    type: string
+                  role:
+                    type: string
+                  totp_enabled:
+                    type: boolean
+                  recovery_codes_remaining:
+                    type: integer
+        '403':
+          description: Admin access required
+        '404':
+          description: User not found
+
+  /api/v1/admin/totp/disable:
+    post:
+      tags: [TOTP]
+      summary: Disable TOTP for user (admin)
+      description: Admin action to disable TOTP for a user who has lost access. Logged for audit.
+      operationId: adminDisableTotp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, reason]
+              properties:
+                username:
+                  type: string
+                  description: Username to disable TOTP for
+                reason:
+                  type: string
+                  minLength: 10
+                  description: Reason for disabling (for audit)
+                totp_code:
+                  type: string
+                  pattern: '^[0-9]{6}$'
+                  description: Admin's TOTP code (required if admin has TOTP enabled)
+      responses:
+        '200':
+          description: TOTP disabled successfully
+        '400':
+          description: Invalid request or user doesn't have TOTP
+        '401':
+          description: Invalid admin TOTP code
+        '403':
+          description: Admin access required or cannot disable own TOTP
+        '404':
+          description: User not found
 
   /api/v1/users:
     get:
