@@ -145,8 +145,11 @@ test-e2e: build ## Run E2E API tests (mirrors CI 'e2e-api' job)
 .PHONY: test-cli
 test-cli: build ## Run CLI tests (mirrors CI 'cli-tests' job)
 	@echo "=== CLI Tests (mirrors CI 'cli-tests' job) ==="
-	@echo "Starting master via docker compose..."
-	@TEST_ADMIN_PASSWORD=$(TEST_ADMIN_PASS) $(COMPOSE) -f docker/docker-compose.test.yml up -d master
+	@echo "Cleaning up previous Docker test environment..."
+	@$(COMPOSE) -f docker/docker-compose.test.yml down -v 2>/dev/null || true
+	@docker volume rm docker_test-data docker_test-logs 2>/dev/null || true
+	@echo "Building and starting master via docker compose..."
+	@TEST_ADMIN_PASSWORD=$(TEST_ADMIN_PASS) $(COMPOSE) -f docker/docker-compose.test.yml up -d master --build
 	@echo "Waiting for master to be ready..."
 	@for i in $$(seq 1 30); do \
 		if curl -sf $(TEST_HTTP_URL)/api/v1/health >/dev/null 2>&1; then \
@@ -196,6 +199,9 @@ test-all: test test-systemd test-integration test-e2e test-cli ## Run all tests 
 
 .PHONY: test-infra-up
 test-infra-up: ## Start full test infrastructure (for debugging)
+	@echo "Cleaning up previous Docker test environment..."
+	@$(COMPOSE) -f docker/docker-compose.test.yml down -v 2>/dev/null || true
+	@docker volume rm docker_test-data docker_test-logs docker_agent-test-data docker_agent-test-logs 2>/dev/null || true
 	TEST_ADMIN_PASSWORD=$(TEST_ADMIN_PASS) $(COMPOSE) -f docker/docker-compose.test.yml up -d --build --wait
 	@echo "Test infrastructure ready!"
 	@echo "  Master HTTP: $(TEST_HTTP_URL)"
@@ -204,6 +210,16 @@ test-infra-up: ## Start full test infrastructure (for debugging)
 .PHONY: test-infra-down
 test-infra-down: ## Stop test infrastructure
 	$(COMPOSE) -f docker/docker-compose.test.yml down -v
+
+.PHONY: test-infra-clean
+test-infra-clean: ## Clean all test data (Docker volumes and local data/)
+	@echo "Stopping any running test containers..."
+	@$(COMPOSE) -f docker/docker-compose.test.yml down -v 2>/dev/null || true
+	@echo "Removing Docker test volumes..."
+	@docker volume rm docker_test-data docker_test-logs docker_agent-test-data docker_agent-test-logs 2>/dev/null || true
+	@echo "Removing local test data directory..."
+	@rm -rf data/
+	@echo "Test infrastructure cleaned!"
 
 .PHONY: test-infra-logs
 test-infra-logs: ## Show test infrastructure logs
@@ -288,6 +304,8 @@ docker-logs: ## Show container logs
 # Start test server process (for e2e and ui tests)
 _start-test-server:
 	@echo "Starting test server..."
+	@echo "Cleaning up previous test data..."
+	@rm -rf data/
 	@mkdir -p data
 	@[ -L data/templates ] || ln -sf ../web/templates data/templates
 	@[ -L data/static ] || ln -sf ../web/static data/static
