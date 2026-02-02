@@ -323,8 +323,9 @@ func WaitForServer(url string, timeout time.Duration) error {
 	client := &http.Client{
 		Timeout: 1 * time.Second,
 		Transport: &http.Transport{
+			// #nosec G402 - InsecureSkipVerify is required for testing with self-signed certificates
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true, //nolint:gosec // Only for health check
+				InsecureSkipVerify: true,
 			},
 		},
 	}

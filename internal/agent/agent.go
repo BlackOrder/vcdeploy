@@ -1070,7 +1070,8 @@ func (a *Agent) performHealthCheckWithConfig(ctx context.Context, cmd *pb.Health
 	}
 	defer resp.Body.Close()
 
-	result.StatusCode = int32(resp.StatusCode) //nolint:gosec // G115: HTTP status codes are always small positive integers
+	// #nosec G115 - HTTP status codes are always small positive integers (100-599), well within int32 range
+	result.StatusCode = int32(resp.StatusCode)
 
 	// Read the response body
 	body, err := io.ReadAll(resp.Body)

@@ -294,6 +294,84 @@ vcdeploy certs audit --agent agent-001 --limit 50
 
 ## Configuration Reference
 
+### TLS Configuration Modes
+
+vcdeploy supports three TLS modes for the HTTP/API server:
+
+#### Disabled Mode
+
+```yaml
+server:
+  tls:
+    mode: disabled
+```
+
+Not recommended for production. API endpoints are served over plain HTTP.
+
+#### Static Mode
+
+Use your own certificates (e.g., from a corporate CA or purchased from a provider):
+
+```yaml
+server:
+  tls:
+    mode: static
+    cert_file: "/path/to/server.crt"
+    key_file: "/path/to/server.key"
+    force_https: true  # Redirect HTTP to HTTPS
+```
+
+The certificate files must exist and be readable. The server will reload certificates on each request, allowing certificate updates without restart.
+
+#### ACME Mode (Let's Encrypt)
+
+Automatic certificate management using ACME protocol:
+
+```yaml
+server:
+  tls:
+    mode: acme
+    force_https: true
+    acme:
+      domains:
+        - "vcdeploy.example.com"
+        - "www.vcdeploy.example.com"
+      email: "admin@example.com"
+      staging: false  # Use true for testing
+```
+
+Requirements:
+- Server must be publicly accessible on port 80 (for HTTP-01 challenge)
+- DNS must resolve the configured domains to the server
+
+Certificates are automatically renewed when within 30 days of expiry.
+
+### Certificate Rotation
+
+#### ACME Certificate Rotation
+
+Certificates are automatically renewed by the ACME client. No manual intervention required.
+
+Monitor renewal status via API:
+```bash
+curl -s https://vcdeploy.example.com/api/v1/tls/status | jq
+```
+
+#### Static Certificate Rotation
+
+To update static certificates:
+1. Replace the certificate and key files
+2. The server will automatically use the new files on the next request
+
+#### CA Rotation
+
+Rotate the internal CA used for agent certificates:
+```bash
+vcdeploy certs ca rotate --validity-days 3650
+```
+
+This preserves existing agent connections by keeping old CA in the trust pool.
+
 ### Master Configuration
 
 ```yaml

@@ -1407,6 +1407,7 @@ func (s *MasterServer) setupStaticTLS(_ context.Context) error {
 		return fmt.Errorf("key file not found: %w", err)
 	}
 
+	// #nosec G402 - MinVersion is dynamically set to TLS 1.2 or 1.3 by getTLSMinVersion()
 	s.tlsConfig = &tls.Config{
 		MinVersion: s.getTLSMinVersion(),
 		GetCertificate: func(_ *tls.ClientHelloInfo) (*tls.Certificate, error) {

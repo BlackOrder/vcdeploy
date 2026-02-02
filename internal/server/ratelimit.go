@@ -95,6 +95,7 @@ func DefaultRateLimitConfig() RateLimitConfig {
 		BlockThreshold:    10,
 		CleanupInterval:   5 * time.Minute,
 		PerEndpointLimits: map[string]EndpointLimit{
+			// Authentication endpoints - strict limits to prevent brute force
 			"/api/v1/login": {
 				RequestsPerSecond: 1, // Strict limit for login
 				BurstSize:         5,
@@ -102,6 +103,31 @@ func DefaultRateLimitConfig() RateLimitConfig {
 			"/api/v1/register": {
 				RequestsPerSecond: 0.1, // Very strict for registration
 				BurstSize:         2,
+			},
+			// API key creation - prevent mass key generation
+			"/api/v1/api-keys": {
+				RequestsPerSecond: 0.5, // 1 request per 2 seconds
+				BurstSize:         3,
+			},
+			// Certificate issuance endpoints - prevent DoS on CA
+			"/api/v1/certificates": {
+				RequestsPerSecond: 0.2, // 1 request per 5 seconds
+				BurstSize:         2,
+			},
+			// TOTP verification - prevent brute force
+			"/api/v1/totp/verify": {
+				RequestsPerSecond: 0.5, // 1 request per 2 seconds
+				BurstSize:         3,
+			},
+			// Password change endpoint
+			"/api/v1/password": {
+				RequestsPerSecond: 0.2, // 1 request per 5 seconds
+				BurstSize:         2,
+			},
+			// SSH key management - prevent mass key injection
+			"/api/v1/ssh-keys": {
+				RequestsPerSecond: 0.5, // 1 request per 2 seconds
+				BurstSize:         3,
 			},
 		},
 	}
