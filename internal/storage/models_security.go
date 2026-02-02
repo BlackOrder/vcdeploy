@@ -240,4 +240,3 @@ type RecoveryCode struct {
 
 // RecoveryCodeCount is the number of recovery codes generated.
 const RecoveryCodeCount = 8
-
