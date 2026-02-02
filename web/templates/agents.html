@@ -206,7 +206,8 @@ document.addEventListener('DOMContentLoaded', () => {
 function loadAgents() {
     fetch('/api/v1/agents')
         .then(response => response.json())
-        .then(agents => {
+        .then(response => {
+            const agents = response.items || response;
             renderAgents(agents);
             updateStats(agents);
         })

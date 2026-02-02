@@ -106,7 +106,7 @@ function loadDeployments() {
     
     fetch(url)
         .then(response => response.json())
-        .then(deployments => renderDeployments(deployments))
+        .then(response => renderDeployments(response.items || response))
         .catch(err => {
             console.error('Failed to load deployments:', err);
             document.getElementById('deployments-list').innerHTML = 
