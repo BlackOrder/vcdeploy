@@ -2,9 +2,13 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"net/http"
@@ -49,6 +53,7 @@ type Agent struct {
 	logger   *zap.Logger
 	strategy *deploy.SymlinkStrategy
 	runner   *LocalRunner
+	store    *AgentStore // Encrypted local storage
 
 	// gRPC connection to master
 	conn   *grpc.ClientConn
@@ -92,6 +97,18 @@ func NewAgent(cfg *config.AgentConfig, logger *zap.Logger) (*Agent, error) {
 	// Create the deployment strategy
 	strategy := deploy.NewSymlinkStrategy(runner)
 
+	// Create the local encrypted store
+	store, err := NewAgentStore(cfg.Paths.Data)
+	if err != nil {
+		return nil, fmt.Errorf("create agent store: %w", err)
+	}
+
+	// Initialize schema
+	if err := store.InitSchema(context.Background()); err != nil {
+		store.Close()
+		return nil, fmt.Errorf("initialize store schema: %w", err)
+	}
+
 	// Create HTTP client for health checks (reused for connection pooling)
 	httpClient := &http.Client{
 		Timeout: 30 * time.Second, // Default timeout, can be overridden per-request
@@ -114,6 +131,7 @@ func NewAgent(cfg *config.AgentConfig, logger *zap.Logger) (*Agent, error) {
 		logger:            logger,
 		strategy:          strategy,
 		runner:            runner,
+		store:             store,
 		httpClient:        httpClient,
 		activeDeployments: make(map[string]*activeDeployment),
 		shutdown:          make(chan struct{}),
@@ -192,8 +210,18 @@ func (a *Agent) connect(ctx context.Context) error {
 
 	var opts []grpc.DialOption
 
-	if a.config.Master.Cert != "" {
-		// Use TLS with CA cert
+	// Try to use mTLS if we have stored certificates
+	tlsConfig, err := a.buildTLSConfig(ctx)
+	if err != nil {
+		a.logger.Debug("Could not build mTLS config, falling back", zap.Error(err))
+	}
+
+	if tlsConfig != nil {
+		// Use mTLS with stored certificates
+		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
+		a.logger.Info("Using mTLS with stored certificates")
+	} else if a.config.Master.Cert != "" {
+		// Use TLS with CA cert (server-only auth for registration)
 		creds, err := credentials.NewClientTLSFromFile(a.config.Master.Cert, "")
 		if err != nil {
 			return fmt.Errorf("loading CA cert: %w", err)
@@ -230,8 +258,36 @@ func (a *Agent) connect(ctx context.Context) error {
 	return nil
 }
 
+// buildTLSConfig creates a TLS config using stored certificates for mTLS.
+func (a *Agent) buildTLSConfig(ctx context.Context) (*tls.Config, error) {
+	// Load agent certificate (our identity)
+	agentCert, err := a.store.GetTLSCertificate(ctx, "agent")
+	if err != nil {
+		return nil, fmt.Errorf("load agent certificate: %w", err)
+	}
+
+	// Load CA certificate
+	caCertRecord, err := a.store.GetCertificate(ctx, "ca")
+	if err != nil {
+		return nil, fmt.Errorf("load CA certificate: %w", err)
+	}
+
+	// Parse CA certificate for verification
+	caCertPool := x509.NewCertPool()
+	if !caCertPool.AppendCertsFromPEM(caCertRecord.Certificate) {
+		return nil, fmt.Errorf("failed to parse CA certificate")
+	}
+
+	return &tls.Config{
+		Certificates: []tls.Certificate{*agentCert},
+		RootCAs:      caCertPool,
+		MinVersion:   tls.VersionTLS12,
+	}, nil
+}
+
 // Register registers the agent with the master server using a token.
 // Returns the mTLS certificate and CA certificate on success.
+// Certificates are automatically stored for future mTLS connections.
 func (a *Agent) Register(ctx context.Context, token string) (cert []byte, caCert []byte, err error) {
 	// Connect to master
 	if err := a.connect(ctx); err != nil {
@@ -279,12 +335,54 @@ func (a *Agent) Register(ctx context.Context, token string) (cert []byte, caCert
 
 	resp, err := client.Register(ctx, req)
 	if err != nil {
+		// Log audit event for failed registration
+		a.store.LogAuditEvent(ctx, AuditEventConnect, fmt.Sprintf("registration failed: %v", err), false)
 		return nil, nil, fmt.Errorf("registration RPC failed: %w", err)
 	}
 
 	if !resp.Success {
+		a.store.LogAuditEvent(ctx, AuditEventConnect, fmt.Sprintf("registration rejected: %s", resp.Error), false)
 		return nil, nil, fmt.Errorf("registration rejected: %s", resp.Error)
 	}
+
+	// Store the certificates
+	if len(resp.Certificate) > 0 {
+		// Parse certificate to get expiry
+		notAfter := time.Now().AddDate(1, 0, 0) // Default 1 year
+		if block, _ := pem.Decode(resp.Certificate); block != nil {
+			if parsed, err := x509.ParseCertificate(block.Bytes); err == nil {
+				notAfter = parsed.NotAfter
+			}
+		}
+
+		// Extract private key if present (agent cert includes key)
+		certPEM, keyPEM := splitCertAndKey(resp.Certificate)
+
+		if err := a.store.SaveCertificate(ctx, "agent", certPEM, keyPEM, notAfter); err != nil {
+			a.logger.Warn("Failed to save agent certificate", zap.Error(err))
+		} else {
+			a.logger.Info("Stored agent certificate", zap.Time("expires", notAfter))
+		}
+	}
+
+	if len(resp.CaCertificate) > 0 {
+		// CA cert has no private key
+		notAfter := time.Now().AddDate(10, 0, 0) // Default 10 years for CA
+		if block, _ := pem.Decode(resp.CaCertificate); block != nil {
+			if parsed, err := x509.ParseCertificate(block.Bytes); err == nil {
+				notAfter = parsed.NotAfter
+			}
+		}
+
+		if err := a.store.SaveCertificate(ctx, "ca", resp.CaCertificate, nil, notAfter); err != nil {
+			a.logger.Warn("Failed to save CA certificate", zap.Error(err))
+		} else {
+			a.logger.Info("Stored CA certificate", zap.Time("expires", notAfter))
+		}
+	}
+
+	// Log successful registration
+	a.store.LogAuditEvent(ctx, AuditEventCertIssued, "agent registered successfully", true)
 
 	a.logger.Info("Registration successful")
 
@@ -1119,6 +1217,13 @@ func (a *Agent) Shutdown(ctx context.Context) error {
 	a.running = false
 	a.mu.Unlock()
 
+	// Close the store
+	if a.store != nil {
+		if err := a.store.Close(); err != nil {
+			a.logger.Warn("Error closing agent store", zap.Error(err))
+		}
+	}
+
 	// Wait for goroutines with timeout
 	done := make(chan struct{})
 	go func() {
@@ -1425,4 +1530,43 @@ func copyFile(src, dst string) error {
 	}
 
 	return dstFile.Sync()
+}
+
+// splitCertAndKey separates a PEM bundle into certificate and key parts.
+// If the input contains both CERTIFICATE and PRIVATE KEY blocks, they are split.
+// Otherwise, certPEM equals the input and keyPEM is nil.
+func splitCertAndKey(data []byte) (certPEM, keyPEM []byte) {
+	var certBlocks [][]byte
+	var keyBlocks [][]byte
+
+	rest := data
+	for {
+		var block *pem.Block
+		block, rest = pem.Decode(rest)
+		if block == nil {
+			break
+		}
+
+		// Re-encode the block to preserve formatting
+		encoded := pem.EncodeToMemory(block)
+
+		switch block.Type {
+		case "CERTIFICATE":
+			certBlocks = append(certBlocks, encoded)
+		case "PRIVATE KEY", "RSA PRIVATE KEY", "EC PRIVATE KEY":
+			keyBlocks = append(keyBlocks, encoded)
+		default:
+			// Unknown block type, add to certs
+			certBlocks = append(certBlocks, encoded)
+		}
+	}
+
+	if len(certBlocks) > 0 {
+		certPEM = bytes.Join(certBlocks, nil)
+	}
+	if len(keyBlocks) > 0 {
+		keyPEM = bytes.Join(keyBlocks, nil)
+	}
+
+	return certPEM, keyPEM
 }
