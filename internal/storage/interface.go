@@ -42,6 +42,17 @@ type Store interface {
 	HealthCheckStore
 	CleanupStore
 	BackupStore
+
+	// Security interfaces
+	CertificateAuthorityStore
+	AgentCertificateStore
+	ServerCertificateStore
+	RegistrationTokenStore
+	SourceCredentialStore
+	RevokedCertificateStore
+	EncryptionKeyStore
+	SSHKeyStore
+	CertAuditStore
 }
 
 // UserStore defines user-related operations.
@@ -285,6 +296,130 @@ type CleanupStore interface {
 // BackupStore defines backup operations.
 type BackupStore interface {
 	Backup(destPath string) error
+}
+
+// --- Security Store Interfaces ---
+
+// CertificateAuthorityStore defines CA-related operations.
+type CertificateAuthorityStore interface {
+	// GetCA returns a CA by ID.
+	GetCA(ctx context.Context, id string) (*CertificateAuthority, error)
+	// GetCurrentCA returns the currently active CA.
+	GetCurrentCA(ctx context.Context) (*CertificateAuthority, error)
+	// ListCAs returns all certificate authorities.
+	ListCAs(ctx context.Context) ([]*CertificateAuthority, error)
+	// SaveCA creates or updates a certificate authority.
+	SaveCA(ctx context.Context, ca *CertificateAuthority) error
+	// SetCurrentCA marks a CA as current and deactivates others.
+	SetCurrentCA(ctx context.Context, id string) error
+}
+
+// AgentCertificateStore defines agent certificate operations.
+type AgentCertificateStore interface {
+	// GetAgentCert returns the active certificate for an agent.
+	GetAgentCert(ctx context.Context, agentID string) (*AgentCertificate, error)
+	// GetAgentCertBySerial returns a certificate by serial number.
+	GetAgentCertBySerial(ctx context.Context, serialNumber string) (*AgentCertificate, error)
+	// ListAgentCerts returns all agent certificates.
+	ListAgentCerts(ctx context.Context) ([]*AgentCertificate, error)
+	// ListAgentCertsByAgent returns all certificates for an agent.
+	ListAgentCertsByAgent(ctx context.Context, agentID string) ([]*AgentCertificate, error)
+	// SaveAgentCert creates or updates an agent certificate.
+	SaveAgentCert(ctx context.Context, cert *AgentCertificate) error
+	// RevokeAgentCert revokes an agent's certificate.
+	RevokeAgentCert(ctx context.Context, agentID, reason, revokedBy string) error
+	// RevokeAgentCertBySerial revokes a specific certificate by serial.
+	RevokeAgentCertBySerial(ctx context.Context, serialNumber, reason, revokedBy string) error
+	// UpdateAgentCertStatus updates certificate status (e.g., mark expired).
+	UpdateAgentCertStatus(ctx context.Context, serialNumber, status string) error
+}
+
+// ServerCertificateStore defines server certificate operations.
+type ServerCertificateStore interface {
+	// GetServerCert returns the certificate for a hostname.
+	GetServerCert(ctx context.Context, hostname string) (*ServerCertificate, error)
+	// ListServerCerts returns all server certificates.
+	ListServerCerts(ctx context.Context) ([]*ServerCertificate, error)
+	// SaveServerCert creates or updates a server certificate.
+	SaveServerCert(ctx context.Context, cert *ServerCertificate) error
+	// DeleteServerCert removes a server certificate.
+	DeleteServerCert(ctx context.Context, hostname string) error
+}
+
+// RegistrationTokenStore defines registration token operations.
+type RegistrationTokenStore interface {
+	// GetRegistrationToken returns a token by its value.
+	GetRegistrationToken(ctx context.Context, token string) (*RegistrationToken, error)
+	// ListRegistrationTokens returns all registration tokens.
+	ListRegistrationTokens(ctx context.Context) ([]*RegistrationToken, error)
+	// SaveRegistrationToken creates or updates a registration token.
+	SaveRegistrationToken(ctx context.Context, rt *RegistrationToken) error
+	// DeleteRegistrationToken removes a registration token.
+	DeleteRegistrationToken(ctx context.Context, token string) error
+	// MarkTokenUsed marks a token as used.
+	MarkTokenUsed(ctx context.Context, token string) error
+	// CleanupExpiredTokens removes expired tokens.
+	CleanupExpiredTokens(ctx context.Context) (int64, error)
+}
+
+// SourceCredentialStore defines source credential operations.
+type SourceCredentialStore interface {
+	// GetSourceCredential returns a credential by ID.
+	GetSourceCredential(ctx context.Context, id int64) (*SourceCredential, error)
+	// GetSourceCredentialByName returns a credential by name.
+	GetSourceCredentialByName(ctx context.Context, name string) (*SourceCredential, error)
+	// ListSourceCredentials returns all source credentials.
+	ListSourceCredentials(ctx context.Context) ([]*SourceCredential, error)
+	// SaveSourceCredential creates or updates a source credential.
+	SaveSourceCredential(ctx context.Context, cred *SourceCredential) error
+	// DeleteSourceCredential removes a source credential.
+	DeleteSourceCredential(ctx context.Context, id int64) error
+}
+
+// RevokedCertificateStore defines CRL operations.
+type RevokedCertificateStore interface {
+	// IsRevoked checks if a certificate serial is revoked.
+	IsRevoked(ctx context.Context, serialNumber string) (bool, error)
+	// ListRevokedCerts returns all revoked certificates.
+	ListRevokedCerts(ctx context.Context) ([]*RevokedCertificate, error)
+	// SaveRevokedCert adds a certificate to the revocation list.
+	SaveRevokedCert(ctx context.Context, revoked *RevokedCertificate) error
+}
+
+// EncryptionKeyStore defines KMS key operations.
+type EncryptionKeyStore interface {
+	// GetEncryptionKey returns a key by ID.
+	GetEncryptionKey(ctx context.Context, id string) (*EncryptionKey, error)
+	// GetCurrentEncryptionKey returns the currently active encryption key.
+	GetCurrentEncryptionKey(ctx context.Context) (*EncryptionKey, error)
+	// ListEncryptionKeys returns all encryption keys.
+	ListEncryptionKeys(ctx context.Context) ([]*EncryptionKey, error)
+	// SaveEncryptionKey creates or updates an encryption key.
+	SaveEncryptionKey(ctx context.Context, key *EncryptionKey) error
+	// UpdateEncryptionKeyStatus updates a key's status.
+	UpdateEncryptionKeyStatus(ctx context.Context, id string, status string, scheduledDeletion *time.Time) error
+}
+
+// SSHKeyStore defines SSH key operations.
+type SSHKeyStore interface {
+	// GetSSHKey returns an SSH key by ID.
+	GetSSHKey(ctx context.Context, id int64) (*SSHKey, error)
+	// GetSSHKeyByName returns an SSH key by name.
+	GetSSHKeyByName(ctx context.Context, name string) (*SSHKey, error)
+	// ListSSHKeys returns all SSH keys.
+	ListSSHKeys(ctx context.Context) ([]*SSHKey, error)
+	// SaveSSHKey creates or updates an SSH key.
+	SaveSSHKey(ctx context.Context, key *SSHKey) error
+	// DeleteSSHKey removes an SSH key.
+	DeleteSSHKey(ctx context.Context, id int64) error
+}
+
+// CertAuditStore defines certificate audit log operations.
+type CertAuditStore interface {
+	// SaveCertAuditEvent logs a certificate audit event.
+	SaveCertAuditEvent(ctx context.Context, event *CertAuditEvent) error
+	// ListCertAuditEvents returns certificate audit events with optional filtering.
+	ListCertAuditEvents(ctx context.Context, filter CertAuditFilter) ([]*CertAuditEvent, error)
 }
 
 // Ensure DB implements Store at compile time.
