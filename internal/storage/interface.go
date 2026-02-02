@@ -119,6 +119,8 @@ type DeploymentStore interface {
 	GetDeployment(ctx context.Context, id string) (*DeploymentRecord, error)
 	UpdateDeployment(ctx context.Context, d *DeploymentRecord) error
 	ListDeploymentsRecent(ctx context.Context, limit int) ([]*DeploymentRecord, error)
+	ListDeploymentsPaginated(ctx context.Context, limit, offset int) ([]*DeploymentRecord, error)
+	CountDeployments(ctx context.Context) (int64, error)
 	CountDeploymentsByStatus(ctx context.Context) (map[string]int64, error)
 }
 
@@ -127,6 +129,8 @@ type DeploymentLogStore interface {
 	CreateDeploymentLog(ctx context.Context, log *DeploymentLog) error
 	ListDeploymentLogs(ctx context.Context, deploymentID string) ([]*DeploymentLog, error)
 	ListDeploymentLogsAfter(ctx context.Context, deploymentID string, afterID int64) ([]*DeploymentLog, error)
+	ListDeploymentLogsPaginated(ctx context.Context, deploymentID string, limit, offset int) ([]*DeploymentLog, error)
+	CountDeploymentLogs(ctx context.Context, deploymentID string) (int64, error)
 }
 
 // DeploymentRollbackStore defines rollback operations.

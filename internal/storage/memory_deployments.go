@@ -107,6 +107,48 @@ func (s *MemoryStore) CountDeploymentsByStatus(ctx context.Context) (map[string]
 	return counts, nil
 }
 
+// ListDeploymentsPaginated returns deployments with pagination support.
+func (s *MemoryStore) ListDeploymentsPaginated(ctx context.Context, limit, offset int) ([]*DeploymentRecord, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Collect all deployments
+	all := make([]*DeploymentRecord, 0, len(s.deployments))
+	for _, d := range s.deployments {
+		cp := *d
+		all = append(all, &cp)
+	}
+
+	// Sort by StartedAt descending (newest first)
+	for i := 0; i < len(all)-1; i++ {
+		for j := i + 1; j < len(all); j++ {
+			if all[j].StartedAt.After(all[i].StartedAt) {
+				all[i], all[j] = all[j], all[i]
+			}
+		}
+	}
+
+	// Apply offset
+	if offset >= len(all) {
+		return []*DeploymentRecord{}, nil
+	}
+	all = all[offset:]
+
+	// Apply limit
+	if limit > 0 && limit < len(all) {
+		all = all[:limit]
+	}
+
+	return all, nil
+}
+
+// CountDeployments returns the total number of deployments.
+func (s *MemoryStore) CountDeployments(ctx context.Context) (int64, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return int64(len(s.deployments)), nil
+}
+
 // --- DeploymentLog methods ---
 
 // CreateDeploymentLog creates a new deployment log entry.
@@ -157,6 +199,43 @@ func (s *MemoryStore) ListDeploymentLogsAfter(ctx context.Context, deploymentID 
 	}
 
 	return result, nil
+}
+
+// ListDeploymentLogsPaginated returns deployment logs with pagination support.
+func (s *MemoryStore) ListDeploymentLogsPaginated(ctx context.Context, deploymentID string, limit, offset int) ([]*DeploymentLog, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	logs := s.deploymentLogs[deploymentID]
+	if logs == nil {
+		return []*DeploymentLog{}, nil
+	}
+
+	// Apply offset
+	if offset >= len(logs) {
+		return []*DeploymentLog{}, nil
+	}
+	logs = logs[offset:]
+
+	// Apply limit
+	if limit > 0 && limit < len(logs) {
+		logs = logs[:limit]
+	}
+
+	// Copy results
+	result := make([]*DeploymentLog, len(logs))
+	for i, l := range logs {
+		cp := *l
+		result[i] = &cp
+	}
+	return result, nil
+}
+
+// CountDeploymentLogs returns the total number of logs for a deployment.
+func (s *MemoryStore) CountDeploymentLogs(ctx context.Context, deploymentID string) (int64, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return int64(len(s.deploymentLogs[deploymentID])), nil
 }
 
 // --- DeploymentRollback methods ---

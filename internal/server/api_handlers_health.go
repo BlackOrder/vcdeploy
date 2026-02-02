@@ -71,7 +71,27 @@ func (s *MasterServer) handleListHealthCheckConfigs(w http.ResponseWriter, r *ht
 		return
 	}
 
-	s.jsonResponse(w, configs)
+	// Apply pagination
+	p := parsePagination(r)
+	totalCount := len(configs)
+
+	// Apply offset
+	if p.Offset >= totalCount {
+		configs = []*storage.HealthCheckConfig{}
+	} else {
+		configs = configs[p.Offset:]
+		// Apply limit
+		if p.Limit > 0 && p.Limit < len(configs) {
+			configs = configs[:p.Limit]
+		}
+	}
+
+	s.jsonResponse(w, map[string]interface{}{
+		"items":      configs,
+		"totalCount": totalCount,
+		"limit":      p.Limit,
+		"offset":     p.Offset,
+	})
 }
 
 // handleCreateHealthCheckConfig creates a new health check configuration.

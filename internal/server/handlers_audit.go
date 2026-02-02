@@ -38,7 +38,23 @@ func (s *MasterServer) handleAuditLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.jsonResponse(w, entries)
+	// Note: totalCount is approximate - we return number of items fetched
+	// For a proper total, the storage layer would need a Count method
+	totalCount := len(entries)
+	if len(entries) == p.Limit {
+		// If we got exactly limit items, there are likely more
+		// This is an approximation; proper totalCount would require a COUNT query
+		totalCount = p.Offset + p.Limit + 1
+	} else {
+		totalCount = p.Offset + len(entries)
+	}
+
+	s.jsonResponse(w, map[string]interface{}{
+		"items":      entries,
+		"totalCount": totalCount,
+		"limit":      p.Limit,
+		"offset":     p.Offset,
+	})
 }
 
 // logAudit creates an audit log entry with request context.

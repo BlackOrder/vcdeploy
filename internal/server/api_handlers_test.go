@@ -339,9 +339,23 @@ func TestHandleDeploymentsAPI_List(t *testing.T) {
 		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
 	}
 
-	var deployments []map[string]interface{}
-	if err := json.NewDecoder(w.Body).Decode(&deployments); err != nil {
+	var result map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	// Verify paginated response structure
+	if _, ok := result["items"]; !ok {
+		t.Error("expected 'items' field in response")
+	}
+	if _, ok := result["totalCount"]; !ok {
+		t.Error("expected 'totalCount' field in response")
+	}
+	if _, ok := result["limit"]; !ok {
+		t.Error("expected 'limit' field in response")
+	}
+	if _, ok := result["offset"]; !ok {
+		t.Error("expected 'offset' field in response")
 	}
 }
 
@@ -374,13 +388,28 @@ func TestHandleAPIKeys_List(t *testing.T) {
 		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
 	}
 
-	var apiKeys []map[string]interface{}
-	if err := json.NewDecoder(w.Body).Decode(&apiKeys); err != nil {
+	var result map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
+	// Verify paginated response structure
+	if _, ok := result["items"]; !ok {
+		t.Error("expected 'items' field in response")
+	}
+	if _, ok := result["totalCount"]; !ok {
+		t.Error("expected 'totalCount' field in response")
+	}
+	if _, ok := result["limit"]; !ok {
+		t.Error("expected 'limit' field in response")
+	}
+	if _, ok := result["offset"]; !ok {
+		t.Error("expected 'offset' field in response")
+	}
+
 	// Should have at least the test API key
-	if len(apiKeys) < 1 {
+	items, ok := result["items"].([]interface{})
+	if !ok || len(items) < 1 {
 		t.Error("expected at least one API key in response")
 	}
 }

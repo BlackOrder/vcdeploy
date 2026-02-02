@@ -1305,13 +1305,18 @@ func (s *MasterServer) handleDeploymentsAPI(w http.ResponseWriter, r *http.Reque
 		// Parse pagination
 		p := parsePagination(r)
 
-		deployments, err := s.deploymentService.ListRecent(ctx, p.Limit)
+		result, err := s.deploymentService.ListPaginated(ctx, p)
 		if err != nil {
 			s.logger.Error("Failed to list deployments", zap.Error(err))
 			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
-		s.jsonResponse(w, deployments)
+		s.jsonResponse(w, map[string]interface{}{
+			"items":      result.Items,
+			"totalCount": result.TotalCount,
+			"limit":      result.Pagination.Limit,
+			"offset":     result.Pagination.Offset,
+		})
 
 	case http.MethodPost:
 		// Write access: user role + write scope
@@ -1600,13 +1605,19 @@ func (s *MasterServer) handleDeploymentLogs(w http.ResponseWriter, r *http.Reque
 	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
-	logs, err := s.deploymentService.ListLogs(ctx, deploymentID)
+	p := parsePagination(r)
+	result, err := s.deploymentService.ListLogsPaginated(ctx, deploymentID, p)
 	if err != nil {
 		s.logger.Error("Failed to get deployment logs", zap.Error(err))
 		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
-	s.jsonResponse(w, logs)
+	s.jsonResponse(w, map[string]interface{}{
+		"items":      result.Items,
+		"totalCount": result.TotalCount,
+		"limit":      result.Pagination.Limit,
+		"offset":     result.Pagination.Offset,
+	})
 }
 
 // handleDeploymentLogsStream streams deployment logs using Server-Sent Events (SSE).
@@ -1737,9 +1748,9 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Sanitize - don't return the hash
-		result := make([]map[string]interface{}, 0, len(keys))
+		allResults := make([]map[string]interface{}, 0, len(keys))
 		for _, k := range keys {
-			result = append(result, map[string]interface{}{
+			allResults = append(allResults, map[string]interface{}{
 				"id":         k.ID,
 				"name":       k.Name,
 				"createdAt":  k.CreatedAt,
@@ -1747,7 +1758,28 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 				"lastUsedAt": k.LastUsedAt,
 			})
 		}
-		s.jsonResponse(w, result)
+
+		// Apply pagination
+		p := parsePagination(r)
+		totalCount := len(allResults)
+
+		// Apply offset
+		if p.Offset >= totalCount {
+			allResults = []map[string]interface{}{}
+		} else {
+			allResults = allResults[p.Offset:]
+			// Apply limit
+			if p.Limit > 0 && p.Limit < len(allResults) {
+				allResults = allResults[:p.Limit]
+			}
+		}
+
+		s.jsonResponse(w, map[string]interface{}{
+			"items":      allResults,
+			"totalCount": totalCount,
+			"limit":      p.Limit,
+			"offset":     p.Offset,
+		})
 
 	case http.MethodPost:
 		// Write access: user role + write scope

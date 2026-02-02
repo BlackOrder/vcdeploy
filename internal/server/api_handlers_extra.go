@@ -34,7 +34,27 @@ func (s *MasterServer) handleHostKeys(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		s.jsonResponse(w, keys)
+		// Apply pagination
+		p := parsePagination(r)
+		totalCount := len(keys)
+
+		// Apply offset
+		if p.Offset >= totalCount {
+			keys = []*storage.SSHHostKey{}
+		} else {
+			keys = keys[p.Offset:]
+			// Apply limit
+			if p.Limit > 0 && p.Limit < len(keys) {
+				keys = keys[:p.Limit]
+			}
+		}
+
+		s.jsonResponse(w, map[string]interface{}{
+			"items":      keys,
+			"totalCount": totalCount,
+			"limit":      p.Limit,
+			"offset":     p.Offset,
+		})
 
 	case http.MethodPost:
 		// Check admin access for creating host keys
@@ -222,7 +242,27 @@ func (s *MasterServer) handleJumpServers(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
-		s.jsonResponse(w, servers)
+		// Apply pagination
+		p := parsePagination(r)
+		totalCount := len(servers)
+
+		// Apply offset
+		if p.Offset >= totalCount {
+			servers = []*storage.SSHJumpServer{}
+		} else {
+			servers = servers[p.Offset:]
+			// Apply limit
+			if p.Limit > 0 && p.Limit < len(servers) {
+				servers = servers[:p.Limit]
+			}
+		}
+
+		s.jsonResponse(w, map[string]interface{}{
+			"items":      servers,
+			"totalCount": totalCount,
+			"limit":      p.Limit,
+			"offset":     p.Offset,
+		})
 
 	case http.MethodPost:
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
@@ -546,7 +586,27 @@ func (s *MasterServer) handleProvisionJobs(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		s.jsonResponse(w, jobs)
+		// Apply pagination
+		p := parsePagination(r)
+		totalCount := len(jobs)
+
+		// Apply offset
+		if p.Offset >= totalCount {
+			jobs = []*storage.ProvisionJob{}
+		} else {
+			jobs = jobs[p.Offset:]
+			// Apply limit
+			if p.Limit > 0 && p.Limit < len(jobs) {
+				jobs = jobs[:p.Limit]
+			}
+		}
+
+		s.jsonResponse(w, map[string]interface{}{
+			"items":      jobs,
+			"totalCount": totalCount,
+			"limit":      p.Limit,
+			"offset":     p.Offset,
+		})
 
 	case http.MethodPost:
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {

@@ -64,9 +64,9 @@ func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
 			UpdatedAt time.Time `json:"updatedAt"`
 		}
 
-		result := make([]secretResponse, 0, len(secretsList))
+		allResults := make([]secretResponse, 0, len(secretsList))
 		for _, sec := range secretsList {
-			result = append(result, secretResponse{
+			allResults = append(allResults, secretResponse{
 				ID:        sec.ID,
 				Project:   sec.Project,
 				Scope:     sec.Scope,
@@ -75,7 +75,28 @@ func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
 				UpdatedAt: sec.UpdatedAt,
 			})
 		}
-		s.jsonResponse(w, result)
+
+		// Apply pagination
+		p := parsePagination(r)
+		totalCount := len(allResults)
+
+		// Apply offset
+		if p.Offset >= totalCount {
+			allResults = []secretResponse{}
+		} else {
+			allResults = allResults[p.Offset:]
+			// Apply limit
+			if p.Limit > 0 && p.Limit < len(allResults) {
+				allResults = allResults[:p.Limit]
+			}
+		}
+
+		s.jsonResponse(w, map[string]interface{}{
+			"items":      allResults,
+			"totalCount": totalCount,
+			"limit":      p.Limit,
+			"offset":     p.Offset,
+		})
 
 	case http.MethodPost:
 		// Write access: user role + write scope
