@@ -55,7 +55,7 @@ services:
       - ./test-deploy:/deploy
     environment:
       - TZ=UTC
-      - VCDEPLOY_MASTER_ADDR=master:9090
+      - VCDEPLOY_MASTER_ADDR=master:9001
       - VCDEPLOY_AGENT_LABELS=env=test,region=local
     networks:
       - vcdeploy-test

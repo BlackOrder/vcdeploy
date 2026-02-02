@@ -334,6 +334,26 @@ func NewMasterServer(cfg *config.MasterConfig, store storage.Store, logger *zap.
 		s.secretService = secrets.New(s.store, s.kms)
 		s.settingsSvc = settings.New(s.store, s.kms)
 		s.webhookService = webhooks.New(s.store, s.kms)
+
+		// Initialize CA manager for agent certificate operations
+		if conn != nil {
+			ca, caErr := security.NewCAManager(conn, s.kms, logger)
+			if caErr != nil {
+				logger.Warn("Failed to create CA manager, agent gRPC will be unavailable", zap.Error(caErr))
+			} else {
+				// Initialize CA if none exists
+				caConfig := security.DefaultCAConfig()
+				if initErr := ca.Initialize(context.Background(), caConfig); initErr != nil {
+					logger.Warn("Failed to initialize CA", zap.Error(initErr))
+				} else {
+					s.caManager = ca
+					// Create the gRPC agent server with the CA manager
+					s.agentServer = NewAgentServer(s.store, ca, s.logger)
+					s.agentServer.SetServices(s.agentService, s.deploymentService)
+					logger.Info("Agent gRPC server initialized")
+				}
+			}
+		}
 	}
 
 	// Sync admin credentials from env or mark system as requiring setup

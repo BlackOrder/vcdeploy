@@ -29,6 +29,7 @@ TEST_ADMIN_PASS   := Admin@Password123!
 TEST_HTTP_PORT    := 9000
 TEST_HTTP_URL     := http://localhost:$(TEST_HTTP_PORT)
 TEST_GRPC_PORT    := 9001
+TEST_GRPC_URL     := localhost:$(TEST_GRPC_PORT)
 TEST_SSH_PORT     := 2223
 TEST_LOG_FILE     := test-server.log
 TEST_COMPOSE_FILE := docker/docker-compose.test.yml
@@ -143,14 +144,16 @@ test-integration: ## Run integration tests (mirrors CI 'integration' job)
 # ============================================================================
 
 .PHONY: test-e2e
-test-e2e: build ## Run E2E API tests with SSH target (complete tests)
-	@echo "=== E2E API Tests (full mode with SSH target) ==="
+test-e2e: build ## Run E2E API tests with agent and SSH target (complete tests)
+	@echo "=== E2E API Tests (full mode with agent + SSH target) ==="
 	@echo "Server logs: $(TEST_LOG_FILE)"
-	@$(MAKE) -s _test-env-start SERVICES="master ssh-target"
+	@$(MAKE) -s _test-env-start SERVICES="master agent ssh-target"
 	@$(MAKE) -s _wait-for-port PORT=$(TEST_SSH_PORT) SERVICE="SSH target" || ($(MAKE) -s test-cleanup; exit 1)
+	@$(MAKE) -s _wait-for-agent || ($(MAKE) -s test-cleanup; exit 1)
 	@API_TOKEN=$$($(MAKE) -s _create-api-token) && \
 	echo "Running E2E tests..." && \
-	E2E_MASTER_HTTP_URL=$(TEST_HTTP_URL) E2E_API_TOKEN=$$API_TOKEN \
+	E2E_MASTER_HTTP_URL=$(TEST_HTTP_URL) E2E_MASTER_GRPC_URL=$(TEST_GRPC_URL) \
+		E2E_API_TOKEN=$$API_TOKEN \
 		E2E_ADMIN_USER=admin E2E_ADMIN_PASS=$(TEST_ADMIN_PASS) \
 		E2E_TARGET_SSH_HOST=localhost E2E_TARGET_SSH_PORT=$(TEST_SSH_PORT) \
 		go test -v -tags=e2e -timeout $(TEST_TIMEOUT) ./tests/e2e/... ; \
@@ -159,16 +162,16 @@ test-e2e: build ## Run E2E API tests with SSH target (complete tests)
 	exit $$TEST_EXIT
 
 .PHONY: test-e2e-short
-test-e2e-short: build ## Run E2E API tests (fast mode, skips SSH-dependent tests)
+test-e2e-short: build ## Run E2E API tests (fast mode, skips agent/SSH-dependent tests)
 	@echo "=== E2E API Tests (fast mode) ==="
-	@echo "Note: SSH/deploy tests will be skipped. Use 'make test-e2e' for complete tests."
+	@echo "Note: Agent/SSH/deploy tests will be skipped. Use 'make test-e2e' for complete tests."
 	@echo "Server logs: $(TEST_LOG_FILE)"
 	@$(MAKE) -s _test-env-start SERVICES="master"
 	@API_TOKEN=$$($(MAKE) -s _create-api-token) && \
 	echo "Running E2E tests (fast mode)..." && \
 	E2E_MASTER_HTTP_URL=$(TEST_HTTP_URL) E2E_API_TOKEN=$$API_TOKEN \
 		E2E_ADMIN_USER=admin E2E_ADMIN_PASS=$(TEST_ADMIN_PASS) \
-		E2E_SKIP_SSH_TESTS=1 \
+		E2E_SKIP_SSH_TESTS=1 SKIP_AGENT_TESTS=1 \
 		go test -v -tags=e2e -timeout $(TEST_TIMEOUT) ./tests/e2e/... ; \
 	TEST_EXIT=$$?; \
 	$(MAKE) -s test-cleanup; \
@@ -179,15 +182,17 @@ test-e2e-short: build ## Run E2E API tests (fast mode, skips SSH-dependent tests
 # ============================================================================
 
 .PHONY: test-cli
-test-cli: build ## Run CLI tests with SSH target (complete tests)
-	@echo "=== CLI Tests (full mode with SSH target) ==="
+test-cli: build ## Run CLI tests with agent and SSH target (complete tests)
+	@echo "=== CLI Tests (full mode with agent + SSH target) ==="
 	@echo "Server logs: $(TEST_LOG_FILE)"
-	@$(MAKE) -s _test-env-start SERVICES="master ssh-target"
+	@$(MAKE) -s _test-env-start SERVICES="master agent ssh-target"
 	@$(MAKE) -s _wait-for-port PORT=$(TEST_SSH_PORT) SERVICE="SSH target" || ($(MAKE) -s test-cleanup; exit 1)
+	@$(MAKE) -s _wait-for-agent || ($(MAKE) -s test-cleanup; exit 1)
 	@API_TOKEN=$$($(MAKE) -s _create-api-token) && \
 	echo "Running CLI tests..." && \
 	VCDEPLOY_BINARY=./$(OUT_DIR)/vcdeploy \
-		E2E_MASTER_HTTP_URL=$(TEST_HTTP_URL) E2E_API_TOKEN=$$API_TOKEN \
+		E2E_MASTER_HTTP_URL=$(TEST_HTTP_URL) E2E_MASTER_GRPC_URL=$(TEST_GRPC_URL) \
+		E2E_API_TOKEN=$$API_TOKEN \
 		E2E_ADMIN_PASS=$(TEST_ADMIN_PASS) \
 		E2E_TARGET_SSH_HOST=localhost E2E_TARGET_SSH_PORT=$(TEST_SSH_PORT) \
 		go test -v -tags=cli -timeout $(TEST_TIMEOUT) -p=1 ./tests/cli/... ; \
@@ -196,36 +201,60 @@ test-cli: build ## Run CLI tests with SSH target (complete tests)
 	exit $$TEST_EXIT
 
 .PHONY: test-cli-short
-test-cli-short: build ## Run CLI tests (fast mode, skips target-dependent tests)
+test-cli-short: build ## Run CLI tests (fast mode, skips agent/SSH-dependent tests)
 	@echo "=== CLI Tests (fast mode) ==="
-	@echo "Note: Target-dependent tests will be skipped. Use 'make test-cli' for complete tests."
+	@echo "Note: Agent/SSH/deploy tests will be skipped. Use 'make test-cli' for complete tests."
 	@echo "Server logs: $(TEST_LOG_FILE)"
 	@$(MAKE) -s _test-env-start SERVICES="master"
 	@API_TOKEN=$$($(MAKE) -s _create-api-token) && \
 	echo "Running CLI tests (fast mode)..." && \
 	VCDEPLOY_BINARY=./$(OUT_DIR)/vcdeploy \
 		E2E_MASTER_HTTP_URL=$(TEST_HTTP_URL) E2E_API_TOKEN=$$API_TOKEN \
-		E2E_ADMIN_PASS=$(TEST_ADMIN_PASS) SKIP_AGENT_TESTS=1 \
+		E2E_ADMIN_PASS=$(TEST_ADMIN_PASS) SKIP_AGENT_TESTS=1 E2E_SKIP_SSH_TESTS=1 \
 		go test -v -tags=cli -timeout $(TEST_TIMEOUT) -p=1 ./tests/cli/... ; \
 	TEST_EXIT=$$?; \
 	$(MAKE) -s test-cleanup; \
 	exit $$TEST_EXIT
 
 # ============================================================================
-# Testing - UI Tests (Starts own server process)
+# Testing - UI Tests (Playwright)
 # ============================================================================
 
 .PHONY: test-ui
-test-ui: build ## Run Playwright UI tests (mirrors CI 'ui-tests' job)
-	@echo "=== UI Tests (mirrors CI 'ui-tests' job) ==="
-	@echo "Cleaning up previous test data..."
-	@pkill -f "vcdeploy master" 2>/dev/null || true
-	@rm -rf data/
+test-ui: build ## Run Playwright UI tests with agent and SSH target (complete tests)
+	@echo "=== UI Tests (full mode with agent + SSH target) ==="
+	@echo "Server logs: $(TEST_LOG_FILE)"
 	@cd tests/ui && npm ci && npx playwright install --with-deps chromium
-	@$(MAKE) -s _start-local-server
-	@cd tests/ui && npx playwright test --workers=1; \
+	@$(MAKE) -s _test-env-start SERVICES="master agent ssh-target"
+	@$(MAKE) -s _wait-for-port PORT=$(TEST_SSH_PORT) SERVICE="SSH target" || ($(MAKE) -s test-cleanup; exit 1)
+	@$(MAKE) -s _wait-for-agent || ($(MAKE) -s test-cleanup; exit 1)
+	@cd tests/ui && \
+	VCDEPLOY_WEB_URL=$(TEST_HTTP_URL) \
+		VCDEPLOY_API_URL=$(TEST_HTTP_URL)/api \
+		TEST_ADMIN_USERNAME=admin \
+		TEST_ADMIN_PASSWORD=$(TEST_ADMIN_PASS) \
+		E2E_TARGET_SSH_HOST=localhost E2E_TARGET_SSH_PORT=$(TEST_SSH_PORT) \
+		npx playwright test --workers=1; \
 	TEST_EXIT=$$?; \
-	$(MAKE) -s _stop-local-server; \
+	$(MAKE) -s test-cleanup; \
+	exit $$TEST_EXIT
+
+.PHONY: test-ui-short
+test-ui-short: build ## Run Playwright UI tests (fast mode, skips agent/SSH-dependent tests)
+	@echo "=== UI Tests (fast mode) ==="
+	@echo "Note: Agent/SSH/deploy tests will be skipped. Use 'make test-ui' for complete tests."
+	@echo "Server logs: $(TEST_LOG_FILE)"
+	@cd tests/ui && npm ci && npx playwright install --with-deps chromium
+	@$(MAKE) -s _test-env-start SERVICES="master"
+	@cd tests/ui && \
+	VCDEPLOY_WEB_URL=$(TEST_HTTP_URL) \
+		VCDEPLOY_API_URL=$(TEST_HTTP_URL)/api \
+		TEST_ADMIN_USERNAME=admin \
+		TEST_ADMIN_PASSWORD=$(TEST_ADMIN_PASS) \
+		SKIP_AGENT_TESTS=1 SKIP_TARGET_TESTS=1 \
+		npx playwright test --workers=1; \
+	TEST_EXIT=$$?; \
+	$(MAKE) -s test-cleanup; \
 	exit $$TEST_EXIT
 
 # ============================================================================
@@ -381,30 +410,30 @@ _wait-for-port:
 	echo "$(SERVICE) failed to start within timeout"; \
 	exit 1
 
+# Wait for agent to be registered with master
+# Uses API token for authentication since agent list requires auth
+_wait-for-agent:
+	@echo "Waiting for agent to register with master..."
+	@SESSION=$$(curl -sf -X POST $(TEST_HTTP_URL)/api/v1/auth/login \
+		-H "Content-Type: application/json" \
+		-d '{"username":"admin","password":"$(TEST_ADMIN_PASS)"}' | jq -r '.token'); \
+	for i in $$(seq 1 30); do \
+		AGENT_COUNT=$$(curl -sf $(TEST_HTTP_URL)/api/v1/agents \
+			-H "Authorization: Bearer $$SESSION" 2>/dev/null | jq -r '.items | length // 0' 2>/dev/null || echo "0"); \
+		if [ "$$AGENT_COUNT" -gt 0 ]; then \
+			echo "Agent registered! ($$AGENT_COUNT agents connected)"; \
+			exit 0; \
+		fi; \
+		echo "Attempt $$i/30: Waiting for agent to register..."; \
+		sleep 2; \
+	done; \
+	echo "Agent failed to register within timeout"; \
+	exit 1
+
 # Dump logs to file and cleanup (used on startup failure)
 _dump-logs-and-cleanup:
 	@$(COMPOSE) -f $(TEST_COMPOSE_FILE) logs >> $(TEST_LOG_FILE) 2>&1
 	@$(MAKE) -s test-cleanup
-
-# Start local test server (non-Docker, for UI tests)
-_start-local-server:
-	@echo "Starting local test server..."
-	@> $(TEST_LOG_FILE)
-	@rm -rf data/
-	@mkdir -p data
-	@[ -L data/templates ] || ln -sf ../web/templates data/templates
-	@[ -L data/static ] || ln -sf ../web/static data/static
-	@VCDEPLOY_TEST_MODE=true VCDEPLOY_ADMIN_PASSWORD=$(TEST_ADMIN_PASS) \
-		VCDEPLOY_DATA_DIR=./data VCDEPLOY_CONFIG_DIR=./configs \
-		VCDEPLOY_RUN_DIR=./data VCDEPLOY_LOG_DIR=./data \
-		./$(OUT_DIR)/vcdeploy master start --config=configs/master-dev.yaml >> $(TEST_LOG_FILE) 2>&1 &
-	@$(MAKE) -s _wait-for-master || (echo "Check $(TEST_LOG_FILE) for details"; cat $(TEST_LOG_FILE); exit 1)
-
-# Stop local test server
-_stop-local-server:
-	@echo "Stopping local test server..."
-	@pkill -f "vcdeploy master" 2>/dev/null || true
-	@rm -rf data/
 
 # Create API token and output just the token value
 _create-api-token:
