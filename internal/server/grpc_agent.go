@@ -37,6 +37,9 @@ type AgentServer struct {
 	// Alert manager for system alerts
 	alertManager *alerting.Manager
 
+	// allowAutoRegister enables agents to register without a pre-generated token (for testing)
+	allowAutoRegister bool
+
 	// tokens maps agent IDs to their registration tokens
 	tokens     map[string]string
 	tokenMutex sync.RWMutex
@@ -84,6 +87,15 @@ func (s *AgentServer) SetAlertManager(alertMgr *alerting.Manager) {
 	s.alertManager = alertMgr
 }
 
+// SetAllowAutoRegister enables or disables auto-registration without pre-generated tokens.
+// This should only be enabled for testing environments.
+func (s *AgentServer) SetAllowAutoRegister(allow bool) {
+	s.allowAutoRegister = allow
+	if allow {
+		s.logger.Warn("Auto-registration enabled - agents can register without pre-generated tokens")
+	}
+}
+
 // RegisterToken adds a registration token for an agent.
 // This is called by the master when provisioning a new agent.
 func (s *AgentServer) RegisterToken(agentID, token string) {
@@ -103,15 +115,29 @@ func (s *AgentServer) RevokeToken(agentID string) {
 // Register handles agent registration requests.
 // The agent provides a one-time token and receives a certificate for mTLS.
 func (s *AgentServer) Register(ctx context.Context, req *proto.RegisterRequest) (*proto.RegisterResponse, error) {
-	if req.AgentId == "" || req.Token == "" {
+	if req.AgentId == "" {
 		return &proto.RegisterResponse{
 			Success: false,
-			Error:   "agent_id and token are required",
+			Error:   "agent_id is required",
 		}, nil
 	}
 
-	// Validate the registration token
-	if !s.validateToken(req.AgentId, req.Token) {
+	// In auto-register mode, allow agents to register without a pre-generated token
+	// This is only for testing environments
+	tokenValid := false
+	if s.allowAutoRegister && req.Token != "" {
+		// In auto-register mode, accept any non-empty token
+		s.logger.Info("Auto-registration mode: accepting agent registration",
+			zap.String("agent_id", req.AgentId),
+			zap.String("hostname", req.Hostname),
+		)
+		tokenValid = true
+	} else if req.Token != "" {
+		// Normal mode: validate the pre-generated token
+		tokenValid = s.validateToken(req.AgentId, req.Token)
+	}
+
+	if !tokenValid {
 		s.logger.Warn("Invalid registration token",
 			zap.String("agent_id", req.AgentId),
 			zap.String("hostname", req.Hostname),

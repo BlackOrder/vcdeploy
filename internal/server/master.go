@@ -350,6 +350,12 @@ func NewMasterServer(cfg *config.MasterConfig, store storage.Store, logger *zap.
 					// Create the gRPC agent server with the CA manager
 					s.agentServer = NewAgentServer(s.store, ca, s.logger)
 					s.agentServer.SetServices(s.agentService, s.deploymentService)
+
+					// Enable auto-registration in test mode
+					if os.Getenv("VCDEPLOY_TEST_MODE") == "true" {
+						s.agentServer.SetAllowAutoRegister(true)
+					}
+
 					logger.Info("Agent gRPC server initialized")
 				}
 			}
@@ -406,6 +412,11 @@ func (s *MasterServer) SetCAManager(ca *security.CAManager) {
 	s.caManager = ca
 	// Create the gRPC agent server with the CA manager
 	s.agentServer = NewAgentServer(s.store, ca, s.logger)
+
+	// Enable auto-registration in test mode
+	if os.Getenv("VCDEPLOY_TEST_MODE") == "true" {
+		s.agentServer.SetAllowAutoRegister(true)
+	}
 }
 
 // SetKMS configures the KMS for secret encryption/decryption.

@@ -140,6 +140,29 @@ func (a *Agent) Start(ctx context.Context) error {
 		return fmt.Errorf("connecting to master: %w", err)
 	}
 
+	// Auto-register if token is provided and we haven't registered yet
+	if a.config.Master.Token != "" {
+		a.logger.Info("Registration token provided, attempting auto-registration")
+
+		// Retry registration a few times in case of transient errors (e.g., database lock)
+		var registrationErr error
+		for attempt := 1; attempt <= 5; attempt++ {
+			if _, _, registrationErr = a.Register(ctx, a.config.Master.Token); registrationErr == nil {
+				a.logger.Info("Successfully registered with master")
+				break
+			}
+			a.logger.Warn("Registration attempt failed, retrying...",
+				zap.Int("attempt", attempt),
+				zap.Error(registrationErr))
+			// Wait before retrying (exponential backoff)
+			time.Sleep(time.Duration(attempt*500) * time.Millisecond)
+		}
+		if registrationErr != nil {
+			a.logger.Warn("Auto-registration failed after retries (agent may already be registered)",
+				zap.Error(registrationErr))
+		}
+	}
+
 	// Start heartbeat loop
 	a.wg.Go(func() {
 		a.heartbeatLoop(ctx)
