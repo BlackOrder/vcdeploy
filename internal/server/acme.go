@@ -43,11 +43,12 @@ type ACMEClient struct {
 // ACMEClientConfig holds configuration for the ACME client.
 type ACMEClientConfig struct {
 	Logger       *zap.Logger
-	DirectoryURL string   // ACME directory URL (e.g., Let's Encrypt), empty for default
-	Email        string   // Contact email for ACME registration
-	Domains      []string // Domains to obtain certificates for
-	CacheDir     string   // Directory to cache certificates (defaults to ~/.vcdeploy/certs)
-	TestMode     bool     // Use self-signed certificates for testing
+	DirectoryURL string         // ACME directory URL (e.g., Let's Encrypt), empty for default
+	Email        string         // Contact email for ACME registration
+	Domains      []string       // Domains to obtain certificates for
+	CacheDir     string         // Directory to cache certificates (defaults to ~/.vcdeploy/certs)
+	TestMode     bool           // Use self-signed certificates for testing
+	Cache        autocert.Cache // Optional: custom cache (e.g., DBCertCache for database storage)
 }
 
 // ACME directory URLs
@@ -100,9 +101,18 @@ func NewACMEClient(cfg ACMEClientConfig) (*ACMEClient, error) {
 
 	// Only create autocert.Manager if not in test mode
 	if !cfg.TestMode {
+		// Use custom cache if provided (e.g., DBCertCache for database storage),
+		// otherwise fall back to filesystem-based DirCache
+		var cache autocert.Cache
+		if cfg.Cache != nil {
+			cache = cfg.Cache
+		} else {
+			cache = autocert.DirCache(cacheDir)
+		}
+
 		client.manager = &autocert.Manager{
 			Prompt:     autocert.AcceptTOS,
-			Cache:      autocert.DirCache(cacheDir),
+			Cache:      cache,
 			HostPolicy: autocert.HostWhitelist(cfg.Domains...),
 			Email:      cfg.Email,
 		}
