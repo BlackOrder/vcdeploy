@@ -300,7 +300,13 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 				{"id": 1.0, "username": "admin", "email": "admin@test.com", "role": "admin", "createdAt": "2024-01-01T00:00:00Z"},
 				{"id": 2.0, "username": "deployer", "email": "deployer@test.com", "role": "deployer", "createdAt": "2024-01-02T00:00:00Z"},
 			}
-			_ = json.NewEncoder(w).Encode(users)
+			// Return paginated response (H6)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"items":      users,
+				"totalCount": len(users),
+				"limit":      100,
+				"offset":     0,
+			})
 		case http.MethodPost:
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": 3.0, "username": "newuser"})
@@ -327,7 +333,13 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 			{"id": "agent-1", "hostname": "server1.example.com", "status": "online", "lastSeenAt": "2024-01-01T12:00:00Z"},
 			{"id": "agent-2", "hostname": "server2.example.com", "status": "offline", "lastSeenAt": "2024-01-01T00:00:00Z"},
 		}
-		_ = json.NewEncoder(w).Encode(agents)
+		// Return paginated response (H6)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"items":      agents,
+			"totalCount": len(agents),
+			"limit":      100,
+			"offset":     0,
+		})
 	})
 
 	// Agent by ID endpoint
@@ -589,7 +601,13 @@ func TestRunAgentList(t *testing.T) {
 // TestRunAgentListEmpty tests runAgentList when no agents exist.
 func TestRunAgentListEmpty(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode([]map[string]interface{}{})
+		// Return empty paginated response (H6)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"items":      []map[string]interface{}{},
+			"totalCount": 0,
+			"limit":      100,
+			"offset":     0,
+		})
 	}))
 	defer server.Close()
 
@@ -1515,9 +1533,14 @@ func TestRunAdminRemote_WithMockedAPI(t *testing.T) {
 			switch r.Method {
 			case http.MethodGet:
 				getUsersCalled = true
-				// Return empty list - admin doesn't exist
+				// Return empty list - admin doesn't exist (paginated response)
 				w.WriteHeader(http.StatusOK)
-				_ = json.NewEncoder(w).Encode([]map[string]interface{}{})
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
+					"items":      []map[string]interface{}{},
+					"totalCount": 0,
+					"limit":      100,
+					"offset":     0,
+				})
 			case http.MethodPost:
 				createUserCalled = true
 				w.WriteHeader(http.StatusCreated)
@@ -1555,10 +1578,15 @@ func TestRunAdminRemote_UpdateExistingUser(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/v1/users":
-			// Return existing user
+			// Return existing user (paginated response)
 			w.WriteHeader(http.StatusOK)
-			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
-				{"id": float64(42), "username": "existingadmin", "email": "old@example.com"},
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"items": []map[string]interface{}{
+					{"id": float64(42), "username": "existingadmin", "email": "old@example.com"},
+				},
+				"totalCount": 1,
+				"limit":      100,
+				"offset":     0,
 			})
 		default:
 			if r.Method == "PATCH" && strings.HasPrefix(r.URL.Path, "/api/v1/users/") {
@@ -1698,7 +1726,6 @@ func TestIsServerRunning(t *testing.T) {
 }
 
 // TestRunAdminRemote_APIError tests error handling when API returns an error.
-// The API returns a JSON object instead of array, causing decode to fail.
 func TestRunAdminRemote_APIError(t *testing.T) {
 	t.Parallel()
 
@@ -1719,9 +1746,9 @@ func TestRunAdminRemote_APIError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for API failure")
 	}
-	// The API returns a JSON object instead of array, causing unmarshal to fail
-	if !strings.Contains(err.Error(), "decode") && !strings.Contains(err.Error(), "unmarshal") {
-		t.Errorf("expected decode/unmarshal error message, got: %v", err)
+	// The API returns 500 status, which causes an API error
+	if !strings.Contains(err.Error(), "API error") && !strings.Contains(err.Error(), "decode") && !strings.Contains(err.Error(), "unmarshal") {
+		t.Errorf("expected API error or decode/unmarshal error message, got: %v", err)
 	}
 }
 
