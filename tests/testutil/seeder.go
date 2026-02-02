@@ -586,10 +586,10 @@ func (s *Seeder) DeleteDeployment(deploymentID string) error {
 // SeedWebhook configures a webhook for a project.
 func (s *Seeder) SeedWebhook(projectID, provider, webhookURL, secret string) (map[string]interface{}, error) {
 	webhook := map[string]interface{}{
-		"provider":  provider,
-		"url":       webhookURL,
-		"secret":    secret,
-		"active":    true,
+		"provider": provider,
+		"url":      webhookURL,
+		"secret":   secret,
+		"active":   true,
 	}
 
 	resp, err := s.client.Post(fmt.Sprintf("/api/v1/projects/%s/webhooks", projectID), webhook)

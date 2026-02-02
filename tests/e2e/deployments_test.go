@@ -310,7 +310,7 @@ func TestDeploymentToNonexistentAgent(t *testing.T) {
 	// Try to trigger deployment
 	seeder := testutil.NewSeeder(ctx.Client)
 	deployment, err := seeder.TriggerDeployment(projectID, "main", "nonexistent-agent-12345")
-	
+
 	// Should either fail immediately or fail to reach running state
 	if err != nil {
 		// Error during trigger is acceptable
@@ -339,7 +339,7 @@ func TestDeploymentWithInvalidProject(t *testing.T) {
 	t.Run("deployment to nonexistent project", func(t *testing.T) {
 		seeder := testutil.NewSeeder(ctx.Client)
 		_, err := seeder.TriggerDeployment("nonexistent-project-id-99999", "main", "")
-		
+
 		if err == nil {
 			t.Error("expected error when deploying to nonexistent project")
 		}
@@ -348,7 +348,7 @@ func TestDeploymentWithInvalidProject(t *testing.T) {
 	t.Run("deployment with empty project ID", func(t *testing.T) {
 		seeder := testutil.NewSeeder(ctx.Client)
 		_, err := seeder.TriggerDeployment("", "main", "")
-		
+
 		if err == nil {
 			t.Error("expected error when deploying with empty project ID")
 		}
@@ -686,7 +686,7 @@ func TestDeploymentLogsStreaming(t *testing.T) {
 	}
 
 	deploymentID := result.Items[0]["id"].(string)
-	
+
 	// Get logs
 	seeder := testutil.NewSeeder(ctx.Client)
 	logs, err := seeder.GetDeploymentLogs(deploymentID)

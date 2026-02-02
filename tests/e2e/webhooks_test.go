@@ -328,7 +328,7 @@ func TestWebhookTriggersDeployment(t *testing.T) {
 	// Create project with webhook configured
 	projectName := "webhook-trigger-test"
 	webhookSecret := "webhook-test-secret-12345"
-	
+
 	project := map[string]interface{}{
 		"name":          projectName,
 		"repository":    "https://github.com/octocat/Hello-World.git",
@@ -401,7 +401,7 @@ func TestWebhookTriggersDeployment(t *testing.T) {
 	newCount := len(newDeps.Items)
 	if newCount > initialCount {
 		t.Logf("Webhook triggered a new deployment (count: %d → %d)", initialCount, newCount)
-		
+
 		// Verify the new deployment references the webhook commit
 		for _, dep := range newDeps.Items {
 			if commit, ok := dep["commit"].(string); ok {
@@ -431,7 +431,7 @@ func TestWebhookSignatureVerification(t *testing.T) {
 	// Create project with webhook configured
 	projectName := "signature-test-project"
 	webhookSecret := "correct-secret-for-signature-test"
-	
+
 	project := map[string]interface{}{
 		"name":          projectName,
 		"repository":    "https://github.com/test/repo.git",
@@ -451,7 +451,7 @@ func TestWebhookSignatureVerification(t *testing.T) {
 
 	t.Run("invalid signature is rejected", func(t *testing.T) {
 		payload := `{"ref": "refs/heads/main", "repository": {"full_name": "test/repo"}}`
-		
+
 		req, _ := http.NewRequest("POST", webhookURL, strings.NewReader(payload))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-GitHub-Event", "push")
@@ -466,7 +466,7 @@ func TestWebhookSignatureVerification(t *testing.T) {
 		// Should be rejected (4xx) or silently accepted without triggering
 		// Exact behavior depends on implementation
 		t.Logf("Invalid signature returned status: %d", resp.StatusCode)
-		
+
 		// If signature validation is strict, expect 401 or 403
 		if resp.StatusCode == 401 || resp.StatusCode == 403 {
 			t.Log("✓ Invalid signature correctly rejected with 401/403")
@@ -478,7 +478,7 @@ func TestWebhookSignatureVerification(t *testing.T) {
 	t.Run("wrong secret signature is rejected", func(t *testing.T) {
 		payload := []byte(`{"ref": "refs/heads/main", "repository": {"full_name": "test/repo"}}`)
 		wrongSignature := testutil.GenerateWebhookSignature(payload, "wrong-secret", "github")
-		
+
 		req, _ := http.NewRequest("POST", webhookURL, bytes.NewReader(payload))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-GitHub-Event", "push")
@@ -491,7 +491,7 @@ func TestWebhookSignatureVerification(t *testing.T) {
 		defer resp.Body.Close()
 
 		t.Logf("Wrong secret signature returned status: %d", resp.StatusCode)
-		
+
 		if resp.StatusCode == 401 || resp.StatusCode == 403 {
 			t.Log("✓ Wrong secret correctly rejected with 401/403")
 		}
@@ -500,7 +500,7 @@ func TestWebhookSignatureVerification(t *testing.T) {
 	t.Run("correct signature is accepted", func(t *testing.T) {
 		payload := []byte(`{"ref": "refs/heads/main", "repository": {"full_name": "test/repo"}, "head_commit": {"id": "abc123", "message": "Test"}}`)
 		correctSignature := testutil.GenerateWebhookSignature(payload, webhookSecret, "github")
-		
+
 		req, _ := http.NewRequest("POST", webhookURL, bytes.NewReader(payload))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-GitHub-Event", "push")
@@ -513,7 +513,7 @@ func TestWebhookSignatureVerification(t *testing.T) {
 		defer resp.Body.Close()
 
 		t.Logf("Correct signature returned status: %d", resp.StatusCode)
-		
+
 		// Should be accepted (2xx) or maybe 4xx if project config is incomplete
 		if resp.StatusCode >= 500 {
 			t.Error("Server error on correct signature - unexpected")
@@ -525,7 +525,7 @@ func TestWebhookSignatureVerification(t *testing.T) {
 
 	t.Run("empty signature is rejected", func(t *testing.T) {
 		payload := `{"ref": "refs/heads/main"}`
-		
+
 		req, _ := http.NewRequest("POST", webhookURL, strings.NewReader(payload))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-GitHub-Event", "push")
@@ -538,7 +538,7 @@ func TestWebhookSignatureVerification(t *testing.T) {
 		defer resp.Body.Close()
 
 		t.Logf("Missing signature returned status: %d", resp.StatusCode)
-		
+
 		if resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 400 {
 			t.Log("✓ Missing signature correctly rejected")
 		}
@@ -546,7 +546,7 @@ func TestWebhookSignatureVerification(t *testing.T) {
 
 	t.Run("malformed signature is rejected", func(t *testing.T) {
 		payload := `{"ref": "refs/heads/main"}`
-		
+
 		req, _ := http.NewRequest("POST", webhookURL, strings.NewReader(payload))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-GitHub-Event", "push")
@@ -559,7 +559,7 @@ func TestWebhookSignatureVerification(t *testing.T) {
 		defer resp.Body.Close()
 
 		t.Logf("Malformed signature returned status: %d", resp.StatusCode)
-		
+
 		if resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 400 {
 			t.Log("✓ Malformed signature correctly rejected")
 		}
@@ -577,7 +577,7 @@ func TestWebhookBranchFiltering(t *testing.T) {
 	// Create project configured for 'main' branch only
 	projectName := "branch-filter-test"
 	webhookSecret := "branch-filter-secret"
-	
+
 	project := map[string]interface{}{
 		"name":          projectName,
 		"repository":    "https://github.com/test/repo.git",
@@ -727,7 +727,7 @@ func TestWebhookProviders(t *testing.T) {
 	for _, provider := range providers {
 		t.Run(provider.name+" webhook", func(t *testing.T) {
 			payloadBytes, _ := json.Marshal(provider.payload)
-			
+
 			req, err := http.NewRequest("POST", ctx.Config.MasterHTTPURL+provider.endpoint, bytes.NewReader(payloadBytes))
 			if err != nil {
 				t.Fatalf("failed to create request: %v", err)
@@ -841,7 +841,7 @@ func TestProjectWebhookConfiguration(t *testing.T) {
 		for _, wh := range webhooks {
 			if wh["id"] == webhookID {
 				found = true
-				
+
 				// Verify secret is NOT exposed in GET response
 				if secret, ok := wh["secret"].(string); ok && secret != "" && secret != "***" && secret != "[REDACTED]" {
 					t.Error("SECURITY: Webhook secret is exposed in GET response!")

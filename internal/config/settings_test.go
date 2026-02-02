@@ -31,8 +31,8 @@ func setupTestSettingsDB(t *testing.T) (storage.Store, *security.KMS, func()) {
 		t.Fatalf("migrate database: %v", err)
 	}
 
-	// Initialize KMS
-	kms, err := security.NewKMS(context.Background(), db.Conn(), nil)
+	// Initialize KMS (db implements storage.Store interface)
+	kms, err := security.NewKMS(context.Background(), db, nil)
 	if err != nil {
 		db.Close()
 		t.Fatalf("init KMS: %v", err)

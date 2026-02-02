@@ -528,7 +528,7 @@ func TestAgentHeartbeatStatus(t *testing.T) {
 	t.Run("verify agent status is online/active", func(t *testing.T) {
 		status := agent["status"]
 		validStatuses := []string{"online", "active", "connected", "ready"}
-		
+
 		found := false
 		for _, valid := range validStatuses {
 			if status == valid {
