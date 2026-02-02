@@ -1134,6 +1134,29 @@ var migrations = []Migration{
 			return err
 		},
 	},
+	{
+		Version:     20,
+		Description: "Add recovery_codes table for TOTP recovery codes",
+		Up: func(tx *sql.Tx) error {
+			_, err := tx.Exec(`
+				CREATE TABLE IF NOT EXISTS recovery_codes (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					user_id INTEGER NOT NULL,
+					code_hash TEXT NOT NULL,
+					used_at DATETIME,
+					created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+					FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+				);
+
+				CREATE INDEX IF NOT EXISTS idx_recovery_codes_user_id ON recovery_codes(user_id);
+			`)
+			return err
+		},
+		Down: func(tx *sql.Tx) error {
+			_, err := tx.Exec(`DROP TABLE IF EXISTS recovery_codes`)
+			return err
+		},
+	},
 }
 
 // MigrateUp runs all pending migrations.
