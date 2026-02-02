@@ -139,6 +139,7 @@ test-integration: ## Run integration tests (mirrors CI 'integration' job)
 .PHONY: test-e2e
 test-e2e: build ## Run E2E API tests (mirrors CI 'e2e-api' job)
 	@echo "=== E2E API Tests (mirrors CI 'e2e-api' job) ==="
+	@echo "Server logs will be written to: test-server.log"
 	@$(MAKE) -s _start-test-server
 	@API_TOKEN=$$($(MAKE) -s _create-api-token) && \
 	echo "Running E2E tests..." && \
@@ -156,6 +157,8 @@ test-e2e: build ## Run E2E API tests (mirrors CI 'e2e-api' job)
 .PHONY: test-cli
 test-cli: build ## Run CLI tests (mirrors CI 'cli-tests' job)
 	@echo "=== CLI Tests (mirrors CI 'cli-tests' job) ==="
+	@echo "Server logs will be written to: test-server.log"
+	@> test-server.log
 	@echo "Cleaning up previous Docker test environment..."
 	@$(COMPOSE) -f docker/docker-compose.test.yml down -v 2>/dev/null || true
 	@docker volume rm docker_test-data docker_test-logs 2>/dev/null || true
@@ -171,7 +174,8 @@ test-cli: build ## Run CLI tests (mirrors CI 'cli-tests' job)
 		sleep 2; \
 	done
 	@curl -sf $(TEST_HTTP_URL)/api/v1/health >/dev/null || \
-		($(COMPOSE) -f docker/docker-compose.test.yml logs master && $(COMPOSE) -f docker/docker-compose.test.yml down -v && exit 1)
+		($(COMPOSE) -f docker/docker-compose.test.yml logs master >> test-server.log 2>&1 && $(COMPOSE) -f docker/docker-compose.test.yml down -v && exit 1)
+	@$(COMPOSE) -f docker/docker-compose.test.yml logs -f master >> test-server.log 2>&1 &
 	@API_TOKEN=$$($(MAKE) -s _create-api-token) && \
 	echo "Running CLI tests..." && \
 	VCDEPLOY_BINARY=./$(OUT_DIR)/vcdeploy \
@@ -319,6 +323,7 @@ docker-logs: ## Show container logs
 _start-test-server:
 	@echo "Starting test server..."
 	@echo "Cleaning up previous test data..."
+	@> test-server.log
 	@rm -rf data/
 	@mkdir -p data
 	@[ -L data/templates ] || ln -sf ../web/templates data/templates
@@ -326,7 +331,7 @@ _start-test-server:
 	@VCDEPLOY_TEST_MODE=true VCDEPLOY_ADMIN_PASSWORD=$(TEST_ADMIN_PASS) \
 		VCDEPLOY_DATA_DIR=./data VCDEPLOY_CONFIG_DIR=./configs \
 		VCDEPLOY_RUN_DIR=./data VCDEPLOY_LOG_DIR=./data \
-		./$(OUT_DIR)/vcdeploy master start --config=configs/master-dev.yaml &
+		./$(OUT_DIR)/vcdeploy master start --config=configs/master-dev.yaml >> test-server.log 2>&1 &
 	@echo "Waiting for server to be ready..."
 	@for i in $$(seq 1 30); do \
 		if curl -sf $(TEST_HTTP_URL)/api/v1/health >/dev/null 2>&1; then \
@@ -335,7 +340,7 @@ _start-test-server:
 		fi; \
 		sleep 2; \
 	done
-	@curl -sf $(TEST_HTTP_URL)/api/v1/health >/dev/null || (echo "Server failed to start"; exit 1)
+	@curl -sf $(TEST_HTTP_URL)/api/v1/health >/dev/null || (echo "Server failed to start. Check test-server.log for details"; cat test-server.log; exit 1)
 
 # Stop test server process
 _stop-test-server:
