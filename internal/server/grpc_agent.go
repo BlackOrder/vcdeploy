@@ -122,6 +122,21 @@ func (s *AgentServer) Register(ctx context.Context, req *proto.RegisterRequest) 
 		}, nil
 	}
 
+	// Validate agent ID format
+	if err := security.ValidateAgentID(req.AgentId); err != nil {
+		s.logger.Warn("Invalid agent ID format",
+			zap.String("agent_id", req.AgentId),
+			zap.Error(err),
+		)
+		return &proto.RegisterResponse{
+			Success: false,
+			Error:   err.Error(),
+		}, nil
+	}
+
+	// Extract client IP for audit logging
+	clientIP := ExtractGRPCClientIP(ctx)
+
 	// In auto-register mode, allow agents to register without a pre-generated token
 	// This is only for testing environments
 	tokenValid := false
@@ -130,17 +145,23 @@ func (s *AgentServer) Register(ctx context.Context, req *proto.RegisterRequest) 
 		s.logger.Info("Auto-registration mode: accepting agent registration",
 			zap.String("agent_id", req.AgentId),
 			zap.String("hostname", req.Hostname),
+			zap.String("client_ip", clientIP),
 		)
 		tokenValid = true
 	} else if req.Token != "" {
 		// Normal mode: validate the pre-generated token
-		tokenValid = s.validateToken(req.AgentId, req.Token)
+		// Try database token first, fall back to in-memory
+		tokenValid = s.validateDatabaseToken(ctx, req.AgentId, req.Token)
+		if !tokenValid {
+			tokenValid = s.validateToken(req.AgentId, req.Token)
+		}
 	}
 
 	if !tokenValid {
 		s.logger.Warn("Invalid registration token",
 			zap.String("agent_id", req.AgentId),
 			zap.String("hostname", req.Hostname),
+			zap.String("client_ip", clientIP),
 		)
 		return &proto.RegisterResponse{
 			Success: false,
@@ -151,6 +172,7 @@ func (s *AgentServer) Register(ctx context.Context, req *proto.RegisterRequest) 
 	s.logger.Info("Agent registration request",
 		zap.String("agent_id", req.AgentId),
 		zap.String("hostname", req.Hostname),
+		zap.String("client_ip", clientIP),
 	)
 
 	// Issue a certificate for the agent
@@ -498,7 +520,7 @@ func (s *AgentServer) DisconnectAgent(agentID string) {
 	s.connectionMutex.Unlock()
 }
 
-// validateToken checks if a registration token is valid for an agent.
+// validateToken checks if a registration token is valid for an agent (in-memory).
 func (s *AgentServer) validateToken(agentID, token string) bool {
 	s.tokenMutex.RLock()
 	defer s.tokenMutex.RUnlock()
@@ -510,6 +532,60 @@ func (s *AgentServer) validateToken(agentID, token string) bool {
 
 	// Constant-time comparison to prevent timing attacks
 	return subtle.ConstantTimeCompare([]byte(expectedToken), []byte(token)) == 1
+}
+
+// validateDatabaseToken checks if a registration token is valid using the database.
+// It also marks the token as used if valid.
+func (s *AgentServer) validateDatabaseToken(ctx context.Context, agentID, token string) bool {
+	// Get token from database
+	dbToken, err := s.store.GetRegistrationToken(ctx, token)
+	if err != nil {
+		if !errors.Is(err, storage.ErrNotFound) {
+			s.logger.Error("Failed to get registration token from database",
+				zap.String("agent_id", agentID),
+				zap.Error(err),
+			)
+		}
+		return false
+	}
+
+	// Check if token is expired
+	if time.Now().After(dbToken.ExpiresAt) {
+		s.logger.Warn("Registration token expired",
+			zap.String("agent_id", agentID),
+			zap.Time("expired_at", dbToken.ExpiresAt),
+		)
+		return false
+	}
+
+	// Check if token was already used
+	if dbToken.UsedAt != nil {
+		s.logger.Warn("Registration token already used",
+			zap.String("agent_id", agentID),
+			zap.Time("used_at", *dbToken.UsedAt),
+		)
+		return false
+	}
+
+	// Check if token is for a specific agent
+	if dbToken.AgentID != "" && dbToken.AgentID != agentID {
+		s.logger.Warn("Registration token not valid for this agent",
+			zap.String("agent_id", agentID),
+			zap.String("token_agent_id", dbToken.AgentID),
+		)
+		return false
+	}
+
+	// Mark token as used
+	if err := s.store.MarkTokenUsed(ctx, token); err != nil {
+		s.logger.Error("Failed to mark token as used",
+			zap.String("agent_id", agentID),
+			zap.Error(err),
+		)
+		// Continue anyway - the token was valid
+	}
+
+	return true
 }
 
 // sendCommands sends pending commands to an agent over the stream.
