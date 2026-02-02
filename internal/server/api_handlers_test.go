@@ -3017,3 +3017,176 @@ func TestHandleSettingsExport_Success(t *testing.T) {
 		t.Errorf("failed to decode settings export: %v", err)
 	}
 }
+
+// TestDeploymentsAPI_PaginationResponse verifies the paginated response structure
+func TestDeploymentsAPI_PaginationResponse(t *testing.T) {
+	t.Parallel()
+	server, apiKey, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	ctx := context.Background()
+	// Create 15 deployments
+	for i := 0; i < 15; i++ {
+		deployment := &storage.DeploymentRecord{
+			ID:      fmt.Sprintf("deploy-pagination-%d", i),
+			Project: "test-project",
+			Status:  "completed",
+		}
+		_ = server.store.CreateDeployment(ctx, deployment)
+	}
+
+	t.Run("default pagination returns all items", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/v1/deployments", nil)
+		req.Header.Set("X-API-Key", apiKey)
+		w := httptest.NewRecorder()
+		req = requestWithUserContext(req, userID)
+		server.handleDeploymentsAPI(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected status %d, got %d", http.StatusOK, w.Code)
+		}
+
+		var resp map[string]interface{}
+		if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+
+		// Verify response structure
+		if _, ok := resp["items"]; !ok {
+			t.Error("response missing 'items' field")
+		}
+		if _, ok := resp["totalCount"]; !ok {
+			t.Error("response missing 'totalCount' field")
+		}
+		if _, ok := resp["limit"]; !ok {
+			t.Error("response missing 'limit' field")
+		}
+		if _, ok := resp["offset"]; !ok {
+			t.Error("response missing 'offset' field")
+		}
+
+		items := resp["items"].([]interface{})
+		totalCount := int(resp["totalCount"].(float64))
+
+		if len(items) != 15 {
+			t.Errorf("expected 15 items, got %d", len(items))
+		}
+		if totalCount != 15 {
+			t.Errorf("expected totalCount 15, got %d", totalCount)
+		}
+	})
+
+	t.Run("custom limit", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/v1/deployments?limit=5", nil)
+		req.Header.Set("X-API-Key", apiKey)
+		w := httptest.NewRecorder()
+		req = requestWithUserContext(req, userID)
+		server.handleDeploymentsAPI(w, req)
+
+		var resp map[string]interface{}
+		json.NewDecoder(w.Body).Decode(&resp)
+
+		items := resp["items"].([]interface{})
+		totalCount := int(resp["totalCount"].(float64))
+		limit := int(resp["limit"].(float64))
+
+		if len(items) != 5 {
+			t.Errorf("expected 5 items, got %d", len(items))
+		}
+		if totalCount != 15 {
+			t.Errorf("expected totalCount 15, got %d", totalCount)
+		}
+		if limit != 5 {
+			t.Errorf("expected limit 5, got %d", limit)
+		}
+	})
+
+	t.Run("offset pagination", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/v1/deployments?limit=5&offset=10", nil)
+		req.Header.Set("X-API-Key", apiKey)
+		w := httptest.NewRecorder()
+		req = requestWithUserContext(req, userID)
+		server.handleDeploymentsAPI(w, req)
+
+		var resp map[string]interface{}
+		json.NewDecoder(w.Body).Decode(&resp)
+
+		items := resp["items"].([]interface{})
+		offset := int(resp["offset"].(float64))
+
+		if len(items) != 5 {
+			t.Errorf("expected 5 items, got %d", len(items))
+		}
+		if offset != 10 {
+			t.Errorf("expected offset 10, got %d", offset)
+		}
+	})
+
+	t.Run("offset beyond total returns empty items", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/v1/deployments?offset=100", nil)
+		req.Header.Set("X-API-Key", apiKey)
+		w := httptest.NewRecorder()
+		req = requestWithUserContext(req, userID)
+		server.handleDeploymentsAPI(w, req)
+
+		var resp map[string]interface{}
+		json.NewDecoder(w.Body).Decode(&resp)
+
+		items, _ := resp["items"].([]interface{})
+		totalCount := int(resp["totalCount"].(float64))
+
+		if items == nil {
+			items = []interface{}{}
+		}
+		if len(items) != 0 {
+			t.Errorf("expected 0 items, got %d", len(items))
+		}
+		if totalCount != 15 {
+			t.Errorf("expected totalCount 15, got %d", totalCount)
+		}
+	})
+}
+
+// TestAPIKeys_PaginationResponse verifies the paginated response for API keys
+func TestAPIKeys_PaginationResponse(t *testing.T) {
+	t.Parallel()
+	server, _, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	ctx := context.Background()
+	// Create 5 API keys
+	for i := 0; i < 5; i++ {
+		key := &storage.APIKey{
+			ID:           int64(i + 100),
+			Name:         fmt.Sprintf("key-%d", i),
+			KeyHash:      fmt.Sprintf("hash-%d", i),
+			UserID:       userID,
+			CreatedAt:    time.Now(),
+		}
+		_ = server.store.CreateAPIKey(ctx, key)
+	}
+
+	req := httptest.NewRequest("GET", "/api/v1/api-keys?limit=2", nil)
+	w := httptest.NewRecorder()
+	req = requestWithUserContext(req, userID)
+	server.handleAPIKeys(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	items := resp["items"].([]interface{})
+	totalCount := int(resp["totalCount"].(float64))
+
+	if len(items) != 2 {
+		t.Errorf("expected 2 items, got %d", len(items))
+	}
+	if totalCount < 5 {
+		t.Errorf("expected totalCount >= 5, got %d", totalCount)
+	}
+}
