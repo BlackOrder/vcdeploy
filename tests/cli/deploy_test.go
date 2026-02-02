@@ -103,7 +103,7 @@ func TestDeployTriggerWithAgent(t *testing.T) {
 
 	t.Run("trigger deployment via CLI", func(t *testing.T) {
 		result := ctx.CLI.Run("deploy", "trigger", projectName)
-		
+
 		if result.ExitCode != 0 {
 			// Check if it's an expected failure (no agents, etc.)
 			if result.ContainsStderr("no agents") || result.ContainsStderr("no matching") {
@@ -114,7 +114,7 @@ func TestDeployTriggerWithAgent(t *testing.T) {
 		}
 
 		t.Log("Deployment triggered successfully")
-		
+
 		// Try to extract deployment ID from output
 		// Output might contain "Deployment ID: xxx" or similar
 		stdout := result.Stdout
@@ -125,7 +125,7 @@ func TestDeployTriggerWithAgent(t *testing.T) {
 
 	t.Run("trigger with branch override", func(t *testing.T) {
 		result := ctx.CLI.Run("deploy", "trigger", projectName, "-b", "master")
-		
+
 		if result.ExitCode == 0 {
 			t.Log("Deployment with branch override succeeded")
 		} else {
@@ -175,7 +175,7 @@ func TestDeployCancelRunning(t *testing.T) {
 		// Try to cancel (might need to extract ID)
 		// Simplified: just try cancelling by project's latest deployment
 		cancelResult := ctx.CLI.Run("deploy", "cancel", "--project", projectName)
-		
+
 		if cancelResult.ExitCode == 0 {
 			t.Log("Deployment cancelled successfully")
 		} else if cancelResult.ContainsStderr("already completed") || cancelResult.ContainsStderr("not running") {
@@ -218,7 +218,7 @@ func TestDeployRollbackCLI(t *testing.T) {
 		// Trigger first deployment
 		ctx.CLI.Run("deploy", "trigger", projectName)
 		time.Sleep(5 * time.Second) // Wait for completion
-		
+
 		// Trigger second deployment
 		ctx.CLI.Run("deploy", "trigger", projectName)
 		time.Sleep(5 * time.Second)
@@ -266,7 +266,7 @@ func TestDeployLogsCLI(t *testing.T) {
 	})
 
 	t.Run("logs with line limit", func(t *testing.T) {
-		// Test that --tail/--lines flag exists  
+		// Test that --tail/--lines flag exists
 		result := ctx.CLI.Run("deploy", "logs", "--help")
 		if result.ContainsStdout("tail") || result.ContainsStdout("lines") {
 			t.Log("Logs line limit is supported")

@@ -94,7 +94,7 @@ func TestAgentShowWithRealAgent(t *testing.T) {
 	t.Run("list agents and extract ID", func(t *testing.T) {
 		result := ctx.CLI.Run("agent", "list", "--output", "json")
 		ctx.Assertions.Success(result)
-		
+
 		// Verify JSON contains agent data
 		if result.ContainsStdout("id") || result.ContainsStdout("\"id\"") {
 			t.Log("Agent list contains agent IDs")
@@ -112,7 +112,7 @@ func TestAgentShowWithRealAgent(t *testing.T) {
 
 		// Extract agent ID from JSON (simplified - just check the command works)
 		stdout := listResult.Stdout
-		
+
 		// Try to find an agent ID in the output
 		if strings.Contains(stdout, "id") {
 			// Found agents, try to show one
@@ -222,10 +222,10 @@ func TestAgentStatusCLI(t *testing.T) {
 	t.Run("agent status overview", func(t *testing.T) {
 		result := ctx.CLI.Run("agent", "status")
 		ctx.Assertions.Success(result)
-		
+
 		// Should show some status info
-		if result.ContainsStdout("online") || result.ContainsStdout("active") || 
-		   result.ContainsStdout("agents") || result.ContainsStdout("connected") {
+		if result.ContainsStdout("online") || result.ContainsStdout("active") ||
+			result.ContainsStdout("agents") || result.ContainsStdout("connected") {
 			t.Log("Status shows agent information")
 		}
 	})

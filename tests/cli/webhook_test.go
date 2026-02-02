@@ -147,8 +147,8 @@ func TestWebhookProviderCommands(t *testing.T) {
 	})
 
 	providers := []struct {
-		name   string
-		args   []string
+		name string
+		args []string
 	}{
 		{"github", []string{"--provider", "github", "--secret", "github-secret"}},
 		{"gitlab", []string{"--provider", "gitlab", "--secret", "gitlab-token"}},
@@ -191,7 +191,7 @@ func TestWebhookSecurityCommands(t *testing.T) {
 
 		// List webhooks
 		result := ctx.CLI.Run("webhook", "list", "cli-security-test")
-		
+
 		// Secret should NOT appear in output
 		if result.ContainsStdout("super-secret-value-12345") {
 			t.Error("SECURITY: Webhook secret is exposed in list output!")
