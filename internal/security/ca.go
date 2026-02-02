@@ -10,21 +10,22 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"database/sql"
 	"encoding/hex"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"math/big"
 	"sync"
 	"time"
 
+	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"go.uber.org/zap"
 )
 
 // CAManager manages certificate authorities with multi-CA trust support.
 // Old CAs are NEVER deleted, retained forever for backward compatibility.
 type CAManager struct {
-	db        *sql.DB
+	store     storage.Store
 	kms       *KMS
 	logger    *zap.Logger
 	currentCA *CertificateAuthority
@@ -110,25 +111,25 @@ func DefaultCAConfig() CAConfig {
 }
 
 // NewCAManager creates a new CA manager.
-func NewCAManager(db *sql.DB, kms *KMS, logger *zap.Logger) (*CAManager, error) {
+func NewCAManager(store storage.Store, kms *KMS, logger *zap.Logger) (*CAManager, error) {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 
 	mgr := &CAManager{
-		db:        db,
+		store:     store,
 		kms:       kms,
 		logger:    logger,
 		trustPool: x509.NewCertPool(),
 	}
 
 	// Load all CAs into trust pool
-	if err := mgr.loadTrustPool(); err != nil {
+	if err := mgr.loadTrustPool(context.Background()); err != nil {
 		return nil, fmt.Errorf("load trust pool: %w", err)
 	}
 
 	// Load current CA
-	if err := mgr.loadCurrentCA(); err != nil {
+	if err := mgr.loadCurrentCA(context.Background()); err != nil {
 		return nil, fmt.Errorf("load current CA: %w", err)
 	}
 
@@ -303,42 +304,23 @@ func (m *CAManager) RotateCA(ctx context.Context, config CAConfig) (*Certificate
 		return nil, fmt.Errorf("generate new CA: %w", err)
 	}
 
-	tx, err := m.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("begin transaction: %w", err)
+	// Save new CA first
+	storageCA := m.toStorageCA(newCA)
+	if err := m.store.SaveCA(ctx, storageCA); err != nil {
+		return nil, fmt.Errorf("save new CA: %w", err)
 	}
-	defer func() { _ = tx.Rollback() }()
 
-	now := time.Now()
+	// Set new CA as current (this deactivates the old one)
+	if err := m.store.SetCurrentCA(ctx, newCA.ID); err != nil {
+		return nil, fmt.Errorf("set current CA: %w", err)
+	}
 
-	// Deactivate current CA
+	// Update local state
 	if m.currentCA != nil {
-		_, err = tx.ExecContext(ctx, `
-			UPDATE certificate_authorities 
-			SET status = ?, is_current = 0, rotated_at = ?
-			WHERE id = ?
-		`, CAStatusInactive, now, m.currentCA.ID)
-		if err != nil {
-			return nil, fmt.Errorf("deactivate current CA: %w", err)
-		}
 		m.currentCA.Status = CAStatusInactive
 		m.currentCA.IsCurrent = false
+		now := time.Now()
 		m.currentCA.RotatedAt = &now
-	}
-
-	// Insert new CA
-	_, err = tx.ExecContext(ctx, `
-		INSERT INTO certificate_authorities 
-		(id, version, common_name, certificate_pem, private_key_encrypted, not_before, not_after, status, is_current, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, newCA.ID, newCA.Version, newCA.CommonName, newCA.CertificatePEM, newCA.PrivateKeyEnc,
-		newCA.NotBefore, newCA.NotAfter, newCA.Status, 1, newCA.CreatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("insert new CA: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit: %w", err)
 	}
 
 	m.currentCA = newCA
@@ -349,102 +331,31 @@ func (m *CAManager) RotateCA(ctx context.Context, config CAConfig) (*Certificate
 
 // ListCAs returns all certificate authorities.
 func (m *CAManager) ListCAs(ctx context.Context) ([]*CertificateAuthority, error) {
-	rows, err := m.db.QueryContext(ctx, `
-		SELECT id, version, common_name, certificate_pem, not_before, not_after, status, is_current, created_at, rotated_at
-		FROM certificate_authorities
-		ORDER BY version DESC
-	`)
+	storageCAs, err := m.store.ListCAs(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("query CAs: %w", err)
+		return nil, fmt.Errorf("list CAs: %w", err)
 	}
-	defer rows.Close()
 
-	var cas []*CertificateAuthority
-	for rows.Next() {
-		ca := &CertificateAuthority{}
-		var rotatedAt sql.NullTime
-		err := rows.Scan(
-			&ca.ID, &ca.Version, &ca.CommonName, &ca.CertificatePEM,
-			&ca.NotBefore, &ca.NotAfter, &ca.Status, &ca.IsCurrent, &ca.CreatedAt, &rotatedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("scan CA: %w", err)
-		}
-		if rotatedAt.Valid {
-			ca.RotatedAt = &rotatedAt.Time
-		}
-
-		// Parse certificate
-		block, _ := pem.Decode([]byte(ca.CertificatePEM))
-		if block != nil {
-			parsedCert, err := x509.ParseCertificate(block.Bytes)
-			if err != nil {
-				// Use global logger since this is in ListCAs before we have a manager
-				zap.L().Warn("failed to parse CA certificate", zap.String("caID", ca.ID), zap.Error(err))
-				ca.Certificate = nil
-			} else {
-				ca.Certificate = parsedCert
-			}
-		}
-
+	cas := make([]*CertificateAuthority, 0, len(storageCAs))
+	for _, sca := range storageCAs {
+		ca := m.fromStorageCA(sca)
 		cas = append(cas, ca)
 	}
 
-	return cas, rows.Err()
+	return cas, nil
 }
 
 // GetAgentCertificate returns an agent's current certificate.
 func (m *CAManager) GetAgentCertificate(ctx context.Context, agentID string) (*AgentCertificate, error) {
-	row := m.db.QueryRowContext(ctx, `
-		SELECT id, agent_id, ca_id, serial_number, certificate_pem, not_before, not_after, status, issued_at, renewed_at, revoked_at, revocation_reason
-		FROM agent_certificates
-		WHERE agent_id = ? AND status = ?
-		ORDER BY issued_at DESC
-		LIMIT 1
-	`, agentID, CertStatusActive)
-
-	cert := &AgentCertificate{}
-	var renewedAt, revokedAt sql.NullTime
-	var revocationReason sql.NullString
-	err := row.Scan(
-		&cert.ID, &cert.AgentID, &cert.CAID, &cert.SerialNumber, &cert.CertificatePEM,
-		&cert.NotBefore, &cert.NotAfter, &cert.Status, &cert.IssuedAt,
-		&renewedAt, &revokedAt, &revocationReason,
-	)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
+	storageCert, err := m.store.GetAgentCert(ctx, agentID)
 	if err != nil {
-		return nil, fmt.Errorf("scan certificate: %w", err)
-	}
-
-	if renewedAt.Valid {
-		cert.RenewedAt = &renewedAt.Time
-	}
-	if revokedAt.Valid {
-		cert.RevokedAt = &revokedAt.Time
-	}
-	if revocationReason.Valid {
-		cert.RevocationReason = revocationReason.String
-	}
-
-	// Parse certificate
-	block, _ := pem.Decode([]byte(cert.CertificatePEM))
-	if block != nil {
-		parsedCert, err := x509.ParseCertificate(block.Bytes)
-		if err != nil {
-			// Use global logger since GetAgentCertificate is called before we have context
-			zap.L().Warn("failed to parse agent certificate",
-				zap.String("agentID", cert.AgentID),
-				zap.String("serial", cert.SerialNumber),
-				zap.Error(err))
-			cert.Certificate = nil
-		} else {
-			cert.Certificate = parsedCert
+		if errors.Is(err, storage.ErrNotFound) {
+			return nil, nil
 		}
+		return nil, fmt.Errorf("get agent cert: %w", err)
 	}
 
-	return cert, nil
+	return m.fromStorageAgentCert(storageCert), nil
 }
 
 // ShouldRenew checks if a certificate should be renewed.
@@ -465,29 +376,30 @@ func (m *CAManager) ShouldRenew(cert *AgentCertificate, threshold time.Duration)
 
 // RevokeCertificate revokes a specific certificate.
 func (m *CAManager) RevokeCertificate(ctx context.Context, serialNumber, reason string) error {
-	now := time.Now()
-	_, err := m.db.ExecContext(ctx, `
-		UPDATE agent_certificates 
-		SET status = ?, revoked_at = ?, revocation_reason = ?
-		WHERE serial_number = ?
-	`, CertStatusRevoked, now, reason, serialNumber)
-	return err
+	return m.store.RevokeAgentCertBySerial(ctx, serialNumber, reason, "system")
 }
 
 // ProcessExpiredCertificates marks expired certificates.
 func (m *CAManager) ProcessExpiredCertificates(ctx context.Context) (int, error) {
-	now := time.Now()
-	result, err := m.db.ExecContext(ctx, `
-		UPDATE agent_certificates 
-		SET status = ?
-		WHERE status = ? AND not_after < ?
-	`, CertStatusExpired, CertStatusActive, now)
+	certs, err := m.store.ListAgentCerts(ctx)
 	if err != nil {
 		return 0, err
 	}
-	// Note: SQLite's RowsAffected() never returns an error
-	affected, _ := result.RowsAffected()
-	return int(affected), nil
+
+	now := time.Now()
+	count := 0
+
+	for _, cert := range certs {
+		if cert.Status == storage.CertStatusActive && cert.NotAfter.Before(now) {
+			if err := m.store.UpdateAgentCertStatus(ctx, cert.SerialNumber, storage.CertStatusExpired); err != nil {
+				m.logger.Warn("failed to mark cert expired", zap.String("serial", cert.SerialNumber), zap.Error(err))
+				continue
+			}
+			count++
+		}
+	}
+
+	return count, nil
 }
 
 // --- Internal methods ---
@@ -553,12 +465,13 @@ func (m *CAManager) generateCA(ctx context.Context, config CAConfig) (*Certifica
 	// Generate CA ID
 	caID := generateCAID(cert)
 
-	// Get next version
-	var maxVersion sql.NullInt64
-	_ = m.db.QueryRow(`SELECT MAX(version) FROM certificate_authorities`).Scan(&maxVersion)
+	// Get next version by listing existing CAs
+	cas, _ := m.store.ListCAs(ctx)
 	version := 1
-	if maxVersion.Valid {
-		version = int(maxVersion.Int64) + 1
+	for _, existingCA := range cas {
+		if existingCA.Version >= version {
+			version = existingCA.Version + 1
+		}
 	}
 
 	return &CertificateAuthority{
@@ -577,63 +490,31 @@ func (m *CAManager) generateCA(ctx context.Context, config CAConfig) (*Certifica
 	}, nil
 }
 
-func (m *CAManager) loadCurrentCA() error {
-	row := m.db.QueryRow(`
-		SELECT id, version, common_name, certificate_pem, private_key_encrypted, not_before, not_after, status, is_current, created_at, rotated_at
-		FROM certificate_authorities
-		WHERE is_current = 1
-		LIMIT 1
-	`)
-
-	ca := &CertificateAuthority{}
-	var rotatedAt sql.NullTime
-	err := row.Scan(
-		&ca.ID, &ca.Version, &ca.CommonName, &ca.CertificatePEM, &ca.PrivateKeyEnc,
-		&ca.NotBefore, &ca.NotAfter, &ca.Status, &ca.IsCurrent, &ca.CreatedAt, &rotatedAt,
-	)
-	if err == sql.ErrNoRows {
-		return nil // No CA yet
-	}
+func (m *CAManager) loadCurrentCA(ctx context.Context) error {
+	storageCA, err := m.store.GetCurrentCA(ctx)
 	if err != nil {
-		return fmt.Errorf("scan CA: %w", err)
-	}
-
-	if rotatedAt.Valid {
-		ca.RotatedAt = &rotatedAt.Time
-	}
-
-	// Parse certificate
-	block, _ := pem.Decode([]byte(ca.CertificatePEM))
-	if block != nil {
-		parsedCert, err := x509.ParseCertificate(block.Bytes)
-		if err != nil {
-			m.logger.Warn("failed to parse current CA certificate", zap.String("caID", ca.ID), zap.Error(err))
-			ca.Certificate = nil
-		} else {
-			ca.Certificate = parsedCert
+		if errors.Is(err, storage.ErrNotFound) {
+			return nil // No CA yet
 		}
+		return fmt.Errorf("get current CA: %w", err)
 	}
 
+	ca := m.fromStorageCA(storageCA)
 	m.currentCA = ca
 	return nil
 }
 
-func (m *CAManager) loadTrustPool() error {
-	rows, err := m.db.Query(`
-		SELECT certificate_pem FROM certificate_authorities
-	`)
+func (m *CAManager) loadTrustPool(ctx context.Context) error {
+	cas, err := m.store.ListCAs(ctx)
 	if err != nil {
+		if errors.Is(err, storage.ErrNotFound) {
+			return nil // No CAs yet
+		}
 		return err
 	}
-	defer rows.Close()
 
-	for rows.Next() {
-		var certPEM string
-		if err := rows.Scan(&certPEM); err != nil {
-			return err
-		}
-
-		block, _ := pem.Decode([]byte(certPEM))
+	for _, storageCA := range cas {
+		block, _ := pem.Decode([]byte(storageCA.CertificatePEM))
 		if block != nil {
 			cert, err := x509.ParseCertificate(block.Bytes)
 			if err == nil {
@@ -642,17 +523,12 @@ func (m *CAManager) loadTrustPool() error {
 		}
 	}
 
-	return rows.Err()
+	return nil
 }
 
 func (m *CAManager) saveCA(ctx context.Context, ca *CertificateAuthority) error {
-	_, err := m.db.ExecContext(ctx, `
-		INSERT INTO certificate_authorities 
-		(id, version, common_name, certificate_pem, private_key_encrypted, not_before, not_after, status, is_current, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, ca.ID, ca.Version, ca.CommonName, ca.CertificatePEM, ca.PrivateKeyEnc,
-		ca.NotBefore, ca.NotAfter, ca.Status, ca.IsCurrent, ca.CreatedAt)
-	return err
+	storageCA := m.toStorageCA(ca)
+	return m.store.SaveCA(ctx, storageCA)
 }
 
 func (m *CAManager) decryptCAKey(ctx context.Context, ca *CertificateAuthority) (*ecdsa.PrivateKey, error) {
@@ -671,29 +547,113 @@ func (m *CAManager) decryptCAKey(ctx context.Context, ca *CertificateAuthority) 
 }
 
 func (m *CAManager) saveAgentCert(ctx context.Context, cert *AgentCertificate) error {
-	result, err := m.db.ExecContext(ctx, `
-		INSERT INTO agent_certificates 
-		(agent_id, ca_id, serial_number, certificate_pem, not_before, not_after, status, issued_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, cert.AgentID, cert.CAID, cert.SerialNumber, cert.CertificatePEM,
-		cert.NotBefore, cert.NotAfter, cert.Status, cert.IssuedAt)
-	if err != nil {
+	storageCert := m.toStorageAgentCert(cert)
+	if err := m.store.SaveAgentCert(ctx, storageCert); err != nil {
 		return err
 	}
-	// Note: SQLite's LastInsertId() never returns an error
-	id, _ := result.LastInsertId()
-	cert.ID = id
+	cert.ID = storageCert.ID
 	return nil
 }
 
 func (m *CAManager) revokeAgentCertificates(ctx context.Context, agentID, reason string) error {
-	now := time.Now()
-	_, err := m.db.ExecContext(ctx, `
-		UPDATE agent_certificates 
-		SET status = ?, revoked_at = ?, revocation_reason = ?
-		WHERE agent_id = ? AND status = ?
-	`, CertStatusRevoked, now, reason, agentID, CertStatusActive)
-	return err
+	return m.store.RevokeAgentCert(ctx, agentID, reason, "system")
+}
+
+// --- Type conversion helpers ---
+
+func (m *CAManager) toStorageCA(ca *CertificateAuthority) *storage.CertificateAuthority {
+	return &storage.CertificateAuthority{
+		ID:             ca.ID,
+		Version:        ca.Version,
+		CommonName:     ca.CommonName,
+		CertificatePEM: ca.CertificatePEM,
+		PrivateKeyEnc:  ca.PrivateKeyEnc,
+		NotBefore:      ca.NotBefore,
+		NotAfter:       ca.NotAfter,
+		Status:         string(ca.Status),
+		IsCurrent:      ca.IsCurrent,
+		CreatedAt:      ca.CreatedAt,
+		RotatedAt:      ca.RotatedAt,
+	}
+}
+
+func (m *CAManager) fromStorageCA(sca *storage.CertificateAuthority) *CertificateAuthority {
+	ca := &CertificateAuthority{
+		ID:             sca.ID,
+		Version:        sca.Version,
+		CommonName:     sca.CommonName,
+		CertificatePEM: sca.CertificatePEM,
+		PrivateKeyEnc:  sca.PrivateKeyEnc,
+		NotBefore:      sca.NotBefore,
+		NotAfter:       sca.NotAfter,
+		Status:         CAStatus(sca.Status),
+		IsCurrent:      sca.IsCurrent,
+		CreatedAt:      sca.CreatedAt,
+		RotatedAt:      sca.RotatedAt,
+	}
+
+	// Parse certificate
+	block, _ := pem.Decode([]byte(ca.CertificatePEM))
+	if block != nil {
+		parsedCert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			m.logger.Warn("failed to parse CA certificate", zap.String("caID", ca.ID), zap.Error(err))
+		} else {
+			ca.Certificate = parsedCert
+		}
+	}
+
+	return ca
+}
+
+func (m *CAManager) toStorageAgentCert(cert *AgentCertificate) *storage.AgentCertificate {
+	return &storage.AgentCertificate{
+		ID:               cert.ID,
+		AgentID:          cert.AgentID,
+		CAID:             cert.CAID,
+		SerialNumber:     cert.SerialNumber,
+		CertificatePEM:   cert.CertificatePEM,
+		NotBefore:        cert.NotBefore,
+		NotAfter:         cert.NotAfter,
+		Status:           string(cert.Status),
+		IssuedAt:         cert.IssuedAt,
+		RenewedAt:        cert.RenewedAt,
+		RevokedAt:        cert.RevokedAt,
+		RevocationReason: cert.RevocationReason,
+	}
+}
+
+func (m *CAManager) fromStorageAgentCert(sc *storage.AgentCertificate) *AgentCertificate {
+	cert := &AgentCertificate{
+		ID:               sc.ID,
+		AgentID:          sc.AgentID,
+		CAID:             sc.CAID,
+		SerialNumber:     sc.SerialNumber,
+		CertificatePEM:   sc.CertificatePEM,
+		NotBefore:        sc.NotBefore,
+		NotAfter:         sc.NotAfter,
+		Status:           CertStatus(sc.Status),
+		IssuedAt:         sc.IssuedAt,
+		RenewedAt:        sc.RenewedAt,
+		RevokedAt:        sc.RevokedAt,
+		RevocationReason: sc.RevocationReason,
+	}
+
+	// Parse certificate
+	block, _ := pem.Decode([]byte(cert.CertificatePEM))
+	if block != nil {
+		parsedCert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			m.logger.Warn("failed to parse agent certificate",
+				zap.String("agentID", cert.AgentID),
+				zap.String("serial", cert.SerialNumber),
+				zap.Error(err))
+		} else {
+			cert.Certificate = parsedCert
+		}
+	}
+
+	return cert
 }
 
 func generateSerialNumber() (*big.Int, error) {

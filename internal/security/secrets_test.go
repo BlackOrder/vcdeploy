@@ -2,7 +2,6 @@ package security
 
 import (
 	"context"
-	"database/sql"
 	"path/filepath"
 	"testing"
 
@@ -15,68 +14,29 @@ func setupTestSecretService(t *testing.T) (*SecretService, func()) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	// Create storage DB
-	db, err := storage.New(dbPath, nil)
+	// Create storage DB (runs migrations and creates required tables)
+	store, err := storage.New(dbPath, nil)
 	if err != nil {
 		t.Fatalf("storage.New() error: %v", err)
 	}
 
-	// Create KMS with its own connection for encryption keys table
-	kmsDB, err := sql.Open("sqlite", dbPath+"?_journal_mode=WAL")
+	// Create KMS using the storage interface
+	kms, err := NewKMS(context.Background(), store, nil)
 	if err != nil {
-		db.Close()
-		t.Fatalf("sql.Open() error: %v", err)
-	}
-
-	// Create encryption_keys table (KMS requirement)
-	_, err = kmsDB.Exec(`
-		CREATE TABLE IF NOT EXISTS encryption_keys (
-			id TEXT PRIMARY KEY,
-			version INTEGER NOT NULL,
-			key_material_encrypted BLOB NOT NULL,
-			algorithm TEXT NOT NULL DEFAULT 'AES-256-GCM',
-			status TEXT NOT NULL DEFAULT 'active',
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			activated_at DATETIME,
-			deactivated_at DATETIME,
-			scheduled_deletion_at DATETIME,
-			deletion_cancelled_at DATETIME,
-			UNIQUE(version)
-		);
-		CREATE TABLE IF NOT EXISTS encryption_key_usage (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			key_id TEXT NOT NULL,
-			operation TEXT NOT NULL,
-			resource_type TEXT,
-			resource_id TEXT,
-			timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-		);
-	`)
-	if err != nil {
-		kmsDB.Close()
-		db.Close()
-		t.Fatalf("create tables: %v", err)
-	}
-
-	kms, err := NewKMS(context.Background(), kmsDB, nil)
-	if err != nil {
-		kmsDB.Close()
-		db.Close()
+		store.Close()
 		t.Fatalf("NewKMS() error: %v", err)
 	}
 
 	ctx := context.Background()
 	if err := kms.Initialize(ctx); err != nil {
-		kmsDB.Close()
-		db.Close()
+		store.Close()
 		t.Fatalf("kms.Initialize() error: %v", err)
 	}
 
-	svc := NewSecretService(db, kms)
+	svc := NewSecretService(store, kms)
 
 	cleanup := func() {
-		kmsDB.Close()
-		db.Close()
+		store.Close()
 	}
 
 	return svc, cleanup

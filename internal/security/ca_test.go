@@ -4,82 +4,25 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"database/sql"
 	"path/filepath"
 	"testing"
 	"time"
 
-	_ "modernc.org/sqlite"
+	"github.com/BlackOrder/vcdeploy/internal/storage"
 )
 
-func setupTestCADB(t *testing.T) (*sql.DB, *KMS) {
+func setupTestCADB(t *testing.T) (storage.Store, *KMS) {
 	t.Helper()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	db, err := sql.Open("sqlite", dbPath+"?_journal_mode=WAL")
+	store, err := storage.Open(dbPath)
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
 
-	// Create required tables
-	_, err = db.Exec(`
-		CREATE TABLE IF NOT EXISTS encryption_keys (
-			id TEXT PRIMARY KEY,
-			version INTEGER NOT NULL,
-			key_material_encrypted BLOB NOT NULL,
-			algorithm TEXT NOT NULL DEFAULT 'AES-256-GCM',
-			status TEXT NOT NULL DEFAULT 'active',
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			activated_at DATETIME,
-			deactivated_at DATETIME,
-			scheduled_deletion_at DATETIME,
-			deletion_cancelled_at DATETIME,
-			UNIQUE(version)
-		);
-		CREATE TABLE IF NOT EXISTS encryption_key_usage (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			key_id TEXT NOT NULL,
-			operation TEXT NOT NULL,
-			resource_type TEXT,
-			resource_id TEXT,
-			timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-		);
-		CREATE TABLE IF NOT EXISTS certificate_authorities (
-			id TEXT PRIMARY KEY,
-			version INTEGER NOT NULL,
-			common_name TEXT NOT NULL,
-			certificate_pem TEXT NOT NULL,
-			private_key_encrypted BLOB NOT NULL,
-			not_before DATETIME NOT NULL,
-			not_after DATETIME NOT NULL,
-			status TEXT NOT NULL DEFAULT 'active',
-			is_current INTEGER NOT NULL DEFAULT 0,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			rotated_at DATETIME,
-			UNIQUE(version)
-		);
-		CREATE TABLE IF NOT EXISTS agent_certificates (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			agent_id TEXT NOT NULL,
-			ca_id TEXT NOT NULL,
-			serial_number TEXT UNIQUE NOT NULL,
-			certificate_pem TEXT NOT NULL,
-			not_before DATETIME NOT NULL,
-			not_after DATETIME NOT NULL,
-			status TEXT NOT NULL DEFAULT 'active',
-			issued_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			renewed_at DATETIME,
-			revoked_at DATETIME,
-			revocation_reason TEXT
-		);
-	`)
-	if err != nil {
-		t.Fatalf("create tables: %v", err)
-	}
-
 	// Create KMS
-	kms, err := NewKMS(context.Background(), db, nil)
+	kms, err := NewKMS(context.Background(), store, nil)
 	if err != nil {
 		t.Fatalf("NewKMS: %v", err)
 	}
@@ -89,7 +32,7 @@ func setupTestCADB(t *testing.T) (*sql.DB, *KMS) {
 		t.Fatalf("KMS.Initialize: %v", err)
 	}
 
-	return db, kms
+	return store, kms
 }
 
 func TestNewCAManager(t *testing.T) {
@@ -398,10 +341,10 @@ func TestCAManagerShouldRenew(t *testing.T) {
 }
 
 func TestCAManagerProcessExpiredCertificates(t *testing.T) {
-	db, kms := setupTestCADB(t)
-	defer db.Close()
+	store, kms := setupTestCADB(t)
+	defer store.Close()
 
-	mgr, _ := NewCAManager(db, kms, nil)
+	mgr, _ := NewCAManager(store, kms, nil)
 	ctx := context.Background()
 	config := DefaultCAConfig()
 	_ = mgr.Initialize(ctx, config)
@@ -409,8 +352,11 @@ func TestCAManagerProcessExpiredCertificates(t *testing.T) {
 	// Issue certificate
 	_, _ = mgr.IssueAgentCertificate(ctx, "agent-001", "agent1.example.com")
 
-	// Manually set certificate as expired (backdoor for testing)
-	_, _ = db.Exec(`UPDATE agent_certificates SET not_after = datetime('now', '-1 day')`)
+	// Manually set certificate as expired using storage's Conn() for backdoor testing
+	conn := store.Conn()
+	if conn != nil {
+		_, _ = conn.Exec(`UPDATE agent_certificates SET not_after = datetime('now', '-1 day')`)
+	}
 
 	count, err := mgr.ProcessExpiredCertificates(ctx)
 	if err != nil {
@@ -461,40 +407,17 @@ func TestCAManagerPersistence(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	// Create initial CA
-	db1, _ := sql.Open("sqlite", dbPath+"?_journal_mode=WAL")
-	_, _ = db1.Exec(`
-		CREATE TABLE encryption_keys (
-			id TEXT PRIMARY KEY, version INTEGER NOT NULL, key_material_encrypted BLOB NOT NULL,
-			algorithm TEXT NOT NULL DEFAULT 'AES-256-GCM', status TEXT NOT NULL DEFAULT 'active',
-			created_at DATETIME, activated_at DATETIME, deactivated_at DATETIME,
-			scheduled_deletion_at DATETIME, deletion_cancelled_at DATETIME, UNIQUE(version)
-		);
-		CREATE TABLE encryption_key_usage (
-			id INTEGER PRIMARY KEY AUTOINCREMENT, key_id TEXT NOT NULL, operation TEXT NOT NULL,
-			resource_type TEXT, resource_id TEXT, timestamp DATETIME
-		);
-		CREATE TABLE certificate_authorities (
-			id TEXT PRIMARY KEY, version INTEGER NOT NULL, common_name TEXT NOT NULL,
-			certificate_pem TEXT NOT NULL, private_key_encrypted BLOB NOT NULL,
-			not_before DATETIME NOT NULL, not_after DATETIME NOT NULL,
-			status TEXT NOT NULL DEFAULT 'active', is_current INTEGER NOT NULL DEFAULT 0,
-			created_at DATETIME, rotated_at DATETIME, UNIQUE(version)
-		);
-		CREATE TABLE agent_certificates (
-			id INTEGER PRIMARY KEY AUTOINCREMENT, agent_id TEXT NOT NULL,
-			ca_id TEXT NOT NULL, serial_number TEXT UNIQUE NOT NULL,
-			certificate_pem TEXT NOT NULL, not_before DATETIME NOT NULL, not_after DATETIME NOT NULL,
-			status TEXT NOT NULL DEFAULT 'active', issued_at DATETIME, renewed_at DATETIME,
-			revoked_at DATETIME, revocation_reason TEXT
-		);
-	`)
+	// Create initial CA using storage package
+	store1, err := storage.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
 
 	ctx := context.Background()
-	kms1, _ := NewKMS(ctx, db1, nil)
+	kms1, _ := NewKMS(ctx, store1, nil)
 	_ = kms1.Initialize(ctx)
 
-	mgr1, _ := NewCAManager(db1, kms1, nil)
+	mgr1, _ := NewCAManager(store1, kms1, nil)
 	config := DefaultCAConfig()
 	_ = mgr1.Initialize(ctx, config)
 
@@ -502,14 +425,17 @@ func TestCAManagerPersistence(t *testing.T) {
 
 	// Issue a certificate
 	cert1, _ := mgr1.IssueAgentCertificate(ctx, "agent-001", "agent1.example.com")
-	db1.Close()
+	store1.Close()
 
 	// Reopen
-	db2, _ := sql.Open("sqlite", dbPath+"?_journal_mode=WAL")
-	defer db2.Close()
+	store2, err := storage.Open(dbPath)
+	if err != nil {
+		t.Fatalf("reopen store: %v", err)
+	}
+	defer store2.Close()
 
-	kms2, _ := NewKMS(ctx, db2, nil)
-	mgr2, err := NewCAManager(db2, kms2, nil)
+	kms2, _ := NewKMS(ctx, store2, nil)
+	mgr2, err := NewCAManager(store2, kms2, nil)
 	if err != nil {
 		t.Fatalf("NewCAManager() after reopen error: %v", err)
 	}
