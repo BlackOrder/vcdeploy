@@ -3157,11 +3157,11 @@ func TestAPIKeys_PaginationResponse(t *testing.T) {
 	// Create 5 API keys
 	for i := 0; i < 5; i++ {
 		key := &storage.APIKey{
-			ID:           int64(i + 100),
-			Name:         fmt.Sprintf("key-%d", i),
-			KeyHash:      fmt.Sprintf("hash-%d", i),
-			UserID:       userID,
-			CreatedAt:    time.Now(),
+			ID:        int64(i + 100),
+			Name:      fmt.Sprintf("key-%d", i),
+			KeyHash:   fmt.Sprintf("hash-%d", i),
+			UserID:    userID,
+			CreatedAt: time.Now(),
 		}
 		_ = server.store.CreateAPIKey(ctx, key)
 	}

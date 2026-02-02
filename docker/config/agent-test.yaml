@@ -9,8 +9,9 @@ agent:
     os: linux
 
 master:
-  address: "master:9090"
-  insecure: true
+  address: "master:9001"
+  cert: ""  # Explicitly disable TLS cert (use allow_insecure instead)
+  allow_insecure: true
 
 heartbeat:
   interval: 5s
