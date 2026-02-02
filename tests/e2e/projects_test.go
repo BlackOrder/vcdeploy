@@ -24,14 +24,14 @@ func TestProjectsAPI(t *testing.T) {
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
-		defer resp.Body.Close()
 
 		ctx.Assertions.StatusOK(resp)
 
-		var projects []map[string]interface{}
-		if err := testutil.DecodeJSON(resp, &projects); err != nil {
+		result, err := testutil.DecodePaginatedJSON(resp)
+		if err != nil {
 			t.Fatalf("failed to decode response: %v", err)
 		}
+		_ = result // Use result if needed
 	})
 
 	var createdProjectID interface{}
@@ -59,13 +59,12 @@ func TestProjectsAPI(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to list projects: %v", err)
 			}
-			defer listResp.Body.Close()
 
-			var projects []map[string]interface{}
-			if err := testutil.DecodeJSON(listResp, &projects); err != nil {
+			result, err := testutil.DecodePaginatedJSON(listResp)
+			if err != nil {
 				t.Fatalf("failed to decode projects list: %v", err)
 			}
-			for _, p := range projects {
+			for _, p := range result.Items {
 				if p["name"] == createdProjectName {
 					createdProjectID = p["id"]
 					break
@@ -249,10 +248,8 @@ func TestProjectDeployments(t *testing.T) {
 	if resp.StatusCode == http.StatusConflict {
 		// Find existing project ID
 		listResp, _ := ctx.Client.Get("/api/v1/projects")
-		defer listResp.Body.Close()
-		var projects []map[string]interface{}
-		testutil.DecodeJSON(listResp, &projects)
-		for _, p := range projects {
+		result, _ := testutil.DecodePaginatedJSON(listResp)
+		for _, p := range result.Items {
 			if p["name"] == projectName {
 				projectID = p["id"]
 				break
@@ -314,10 +311,8 @@ func TestProjectHealthCheck(t *testing.T) {
 	if resp.StatusCode == http.StatusConflict {
 		// Find existing project ID
 		listResp, _ := ctx.Client.Get("/api/v1/projects")
-		defer listResp.Body.Close()
-		var projects []map[string]interface{}
-		testutil.DecodeJSON(listResp, &projects)
-		for _, p := range projects {
+		result, _ := testutil.DecodePaginatedJSON(listResp)
+		for _, p := range result.Items {
 			if p["name"] == projectName {
 				projectID = p["id"]
 				break
