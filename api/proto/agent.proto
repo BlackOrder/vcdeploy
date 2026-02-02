@@ -18,6 +18,9 @@ service AgentService {
   // Reauthenticate allows an agent to re-authenticate using HMAC when its certificate expires.
   rpc Reauthenticate(ReauthRequest) returns (ReauthResponse);
   
+  // GetCATrustBundle retrieves the current CA trust bundle for certificate validation.
+  rpc GetCATrustBundle(GetCATrustBundleRequest) returns (GetCATrustBundleResponse);
+  
   // StreamRepoArchive streams a repository archive to an agent.
   // The master clones the repo with credentials and streams the archive.
   // This keeps credentials on the master and never exposes them to agents.
@@ -47,6 +50,7 @@ message RegisterResponse {
   string error = 2;
   bytes certificate = 3;      // mTLS certificate for future connections
   bytes ca_certificate = 4;   // CA certificate for verification
+  bytes hmac_secret = 5;      // HMAC secret for re-authentication
 }
 
 // HeartbeatRequest is sent periodically by agent.
@@ -293,4 +297,16 @@ message RepoChunk {
   string checksum = 2;  // SHA256 checksum, only in last chunk
   int64 total_size = 3; // Total archive size in bytes
   bool is_last = 4;
+}
+
+// GetCATrustBundleRequest requests the current CA trust bundle.
+message GetCATrustBundleRequest {
+  string current_version = 1;  // Version agent currently has (for caching)
+}
+
+// GetCATrustBundleResponse contains the CA trust bundle.
+message GetCATrustBundleResponse {
+  repeated bytes ca_certificates = 1;  // PEM-encoded CA certificates
+  string current_ca_id = 2;            // ID of the currently active CA
+  string version = 3;                  // Version hash for cache validation
 }
