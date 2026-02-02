@@ -30,7 +30,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 // Version information (set at build time via ldflags)
@@ -220,19 +219,16 @@ func (a *Agent) connect(ctx context.Context) error {
 		// Use mTLS with stored certificates
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
 		a.logger.Info("Using mTLS with stored certificates")
-	} else if a.config.Master.Cert != "" {
-		// Use TLS with CA cert (server-only auth for registration)
-		creds, err := credentials.NewClientTLSFromFile(a.config.Master.Cert, "")
+	} else if a.config.Master.CACert != "" {
+		// Use TLS with CA cert (server-only auth for initial registration)
+		creds, err := credentials.NewClientTLSFromFile(a.config.Master.CACert, "")
 		if err != nil {
 			return fmt.Errorf("loading CA cert: %w", err)
 		}
 		opts = append(opts, grpc.WithTransportCredentials(creds))
-	} else if a.config.Master.AllowInsecure {
-		// Explicit insecure mode - warn user
-		a.logger.Warn("Using insecure connection to master - TLS is disabled. This is NOT recommended for production!")
-		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		a.logger.Info("Using TLS with CA certificate (server-only auth)")
 	} else {
-		return fmt.Errorf("TLS certificate required: set master.cert or use master.allow_insecure=true (not recommended)")
+		return fmt.Errorf("TLS certificate required: set master.ca_cert for initial connection")
 	}
 
 	// Use the modern grpc.NewClient API

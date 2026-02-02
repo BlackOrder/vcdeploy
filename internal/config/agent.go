@@ -22,11 +22,10 @@ type AgentConfig struct {
 
 // AgentMasterConfig defines master connection settings.
 type AgentMasterConfig struct {
-	Address       string          `yaml:"address"`
-	Token         string          `yaml:"token"`
-	Cert          string          `yaml:"cert"`
-	AllowInsecure bool            `yaml:"allow_insecure"` // Allow unencrypted connection (NOT recommended)
-	Reconnect     ReconnectConfig `yaml:"reconnect"`
+	Address   string          `yaml:"address"`
+	Token     string          `yaml:"token"`
+	CACert    string          `yaml:"ca_cert"`  // CA certificate for TLS verification
+	Reconnect ReconnectConfig `yaml:"reconnect"`
 }
 
 // ReconnectConfig defines reconnection behavior.
@@ -78,7 +77,7 @@ type GracefulShutdownConfig struct {
 func DefaultAgentConfig() *AgentConfig {
 	return &AgentConfig{
 		Master: AgentMasterConfig{
-			Cert: "/etc/vcdeploy/agent/cert.pem",
+			CACert: "/etc/vcdeploy/agent/ca.pem",
 			Reconnect: ReconnectConfig{
 				InitialDelay:      1 * time.Second,
 				MaxDelay:          5 * time.Minute,

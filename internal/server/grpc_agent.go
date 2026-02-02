@@ -19,6 +19,8 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 )
 
@@ -261,6 +263,11 @@ func (s *AgentServer) Connect(stream proto.AgentService_ConnectServer) error {
 		return status.Error(codes.InvalidArgument, "agent_id is required")
 	}
 
+	// Verify agent certificate matches claimed ID (mTLS verification)
+	if err := s.verifyAgentCert(ctx, agentID); err != nil {
+		return err
+	}
+
 	// Verify agent exists and is registered
 	agent, err := s.agentService.GetByID(ctx, agentID)
 	if err != nil {
@@ -376,6 +383,11 @@ func (s *AgentServer) Connect(stream proto.AgentService_ConnectServer) error {
 func (s *AgentServer) Heartbeat(ctx context.Context, req *proto.HeartbeatRequest) (*proto.HeartbeatResponse, error) {
 	if req.AgentId == "" {
 		return nil, status.Error(codes.InvalidArgument, "agent_id is required")
+	}
+
+	// Verify agent certificate matches claimed ID (mTLS verification)
+	if err := s.verifyAgentCert(ctx, req.AgentId); err != nil {
+		return nil, err
 	}
 
 	// Get agent
@@ -586,6 +598,50 @@ func (s *AgentServer) validateDatabaseToken(ctx context.Context, agentID, token 
 	}
 
 	return true
+}
+
+// extractAgentIDFromCert extracts the agent ID from the client certificate in mTLS.
+// Returns empty string if no client certificate is present (e.g., during registration).
+func extractAgentIDFromCert(ctx context.Context) (string, error) {
+	p, ok := peer.FromContext(ctx)
+	if !ok {
+		return "", status.Errorf(codes.Unauthenticated, "no peer info")
+	}
+
+	tlsInfo, ok := p.AuthInfo.(credentials.TLSInfo)
+	if !ok {
+		// Not using TLS - this is okay during registration
+		return "", nil
+	}
+
+	if len(tlsInfo.State.PeerCertificates) == 0 {
+		// No client certificate - this is okay during registration
+		return "", nil
+	}
+
+	cert := tlsInfo.State.PeerCertificates[0]
+	// Agent ID is in the Common Name
+	return cert.Subject.CommonName, nil
+}
+
+// verifyAgentCert verifies the client certificate matches the claimed agent ID.
+// Used for authenticated RPCs like Heartbeat and Connect.
+func (s *AgentServer) verifyAgentCert(ctx context.Context, claimedAgentID string) error {
+	certAgentID, err := extractAgentIDFromCert(ctx)
+	if err != nil {
+		return err
+	}
+
+	// If we got an agent ID from the cert, verify it matches
+	if certAgentID != "" && certAgentID != claimedAgentID {
+		s.logger.Warn("Agent ID mismatch between certificate and request",
+			zap.String("cert_agent_id", certAgentID),
+			zap.String("claimed_agent_id", claimedAgentID),
+		)
+		return status.Errorf(codes.PermissionDenied, "agent ID mismatch: certificate says %s, request says %s", certAgentID, claimedAgentID)
+	}
+
+	return nil
 }
 
 // sendCommands sends pending commands to an agent over the stream.

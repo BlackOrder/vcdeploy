@@ -294,9 +294,6 @@ func runRegister(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			cfg = config.DefaultAgentConfig()
-			// Clear the default cert path for initial registration
-			// The agent will use insecure credentials until it receives its certificate
-			cfg.Master.Cert = ""
 		} else {
 			return fmt.Errorf("loading config: %w", err)
 		}
@@ -342,13 +339,13 @@ func runRegister(cmd *cobra.Command, args []string) error {
 		if err := os.WriteFile(certPath, cert, 0o600); err != nil {
 			return fmt.Errorf("saving certificate: %w", err)
 		}
-		cfg.Master.Cert = certPath
 	}
 
 	if len(caCert) > 0 {
 		if err := os.WriteFile(caPath, caCert, 0o600); err != nil {
 			return fmt.Errorf("saving CA certificate: %w", err)
 		}
+		cfg.Master.CACert = caPath
 	}
 
 	// Clear the token from config (used only for initial registration)
