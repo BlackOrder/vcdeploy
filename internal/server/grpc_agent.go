@@ -3,6 +3,7 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -206,6 +207,20 @@ func (s *AgentServer) Register(ctx context.Context, req *proto.RegisterRequest) 
 		s.logger.Error("Failed to marshal capabilities", zap.Error(err))
 		capabilities = []byte("{}")
 	}
+
+	// Generate HMAC secret for re-authentication
+	hmacSecret := make([]byte, 32)
+	if _, err := rand.Read(hmacSecret); err != nil {
+		s.logger.Error("Failed to generate HMAC secret",
+			zap.String("agent_id", req.AgentId),
+			zap.Error(err),
+		)
+		return &proto.RegisterResponse{
+			Success: false,
+			Error:   "failed to generate HMAC secret",
+		}, nil
+	}
+
 	agent := &storage.Agent{
 		ID:           req.AgentId,
 		Hostname:     req.Hostname,
@@ -214,6 +229,7 @@ func (s *AgentServer) Register(ctx context.Context, req *proto.RegisterRequest) 
 		Status:       "registered",
 		LastSeenAt:   time.Now(),
 		Certificate:  cert.SerialNumber,
+		HMACSecret:   hmacSecret,
 	}
 
 	if err := s.agentService.Upsert(ctx, agent); err != nil {
@@ -247,6 +263,7 @@ func (s *AgentServer) Register(ctx context.Context, req *proto.RegisterRequest) 
 		Success:       true,
 		Certificate:   []byte(cert.CertificatePEM + cert.PrivateKeyPEM),
 		CaCertificate: caCertPEM,
+		HmacSecret:    hmacSecret,
 	}, nil
 }
 
@@ -456,6 +473,49 @@ func (s *AgentServer) Heartbeat(ctx context.Context, req *proto.HeartbeatRequest
 	return &proto.HeartbeatResponse{
 		Ok:              true,
 		ServerTimestamp: time.Now().Unix(),
+	}, nil
+}
+
+// GetCATrustBundle returns the current CA trust bundle for certificate validation.
+func (s *AgentServer) GetCATrustBundle(ctx context.Context, req *proto.GetCATrustBundleRequest) (*proto.GetCATrustBundleResponse, error) {
+	// Verify agent from mTLS cert
+	if err := s.verifyAgentCert(ctx, ""); err != nil {
+		// Allow unauthenticated requests - agents need this before they have valid certs
+		s.logger.Debug("GetCATrustBundle called without valid cert, allowing for CA sync")
+	}
+
+	// Get current trust pool version
+	version := s.ca.GetTrustPoolVersion(ctx)
+
+	// If client already has current version, return minimal response
+	if req.CurrentVersion == version && req.CurrentVersion != "" {
+		return &proto.GetCATrustBundleResponse{
+			Version: version,
+		}, nil
+	}
+
+	// Get all CA certificates
+	certs, err := s.ca.GetAllCACertificates(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get CA certificates: %w", err)
+	}
+
+	// Get current CA ID
+	currentCA := s.ca.GetCurrentCA()
+	var currentCAID string
+	if currentCA != nil {
+		currentCAID = currentCA.ID
+	}
+
+	s.logger.Debug("Returning CA trust bundle",
+		zap.String("version", version),
+		zap.Int("ca_count", len(certs)),
+		zap.String("current_ca", currentCAID))
+
+	return &proto.GetCATrustBundleResponse{
+		CaCertificates: certs,
+		CurrentCaId:    currentCAID,
+		Version:        version,
 	}, nil
 }
 
@@ -985,10 +1045,10 @@ func (s *AgentServer) StreamRepoArchive(req *proto.StreamRepoRequest, stream pro
 	return nil
 }
 
-// Reauthenticate allows an agent to re-authenticate using HMAC when its certificate expires.
-// This enables agents to renew their certificates without human intervention.
+// Reauthenticate handles re-authentication requests.
+// On the main mTLS port, this returns an error directing agents to use the dedicated re-auth port.
+// The actual re-authentication is handled by ReauthOnlyServer on port 9444.
 func (s *AgentServer) Reauthenticate(ctx context.Context, req *proto.ReauthRequest) (*proto.ReauthResponse, error) {
-	// TODO: Implement HMAC re-authentication for Stage 4.5
-	// For now, return unimplemented
-	return nil, status.Error(codes.Unimplemented, "reauthentication not yet implemented")
+	// Re-authentication should use the dedicated port (9444) which doesn't require client certs
+	return nil, status.Error(codes.FailedPrecondition, "use the dedicated re-auth port (:9444) for re-authentication")
 }
