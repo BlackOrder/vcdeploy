@@ -869,6 +869,227 @@ var migrations = []Migration{
 			return err
 		},
 	},
+	{
+		Version:     17,
+		Description: "Security tables for certificate authorities, encryption keys, and SSH keys",
+		Up: func(tx *sql.Tx) error {
+			// Certificate authorities table
+			_, err := tx.Exec(`
+				CREATE TABLE IF NOT EXISTS certificate_authorities (
+					id TEXT PRIMARY KEY,
+					version INTEGER NOT NULL,
+					common_name TEXT NOT NULL,
+					certificate_pem TEXT NOT NULL,
+					private_key_encrypted BLOB NOT NULL,
+					not_before DATETIME NOT NULL,
+					not_after DATETIME NOT NULL,
+					status TEXT NOT NULL DEFAULT 'active',
+					is_current INTEGER NOT NULL DEFAULT 0,
+					created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+					rotated_at DATETIME,
+					UNIQUE(version)
+				)
+			`)
+			if err != nil {
+				return fmt.Errorf("creating certificate_authorities table: %w", err)
+			}
+
+			// Agent certificates table
+			_, err = tx.Exec(`
+				CREATE TABLE IF NOT EXISTS agent_certificates (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					agent_id TEXT NOT NULL,
+					ca_id TEXT NOT NULL,
+					serial_number TEXT UNIQUE NOT NULL,
+					certificate_pem TEXT NOT NULL,
+					not_before DATETIME NOT NULL,
+					not_after DATETIME NOT NULL,
+					status TEXT NOT NULL DEFAULT 'active',
+					issued_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+					renewed_at DATETIME,
+					revoked_at DATETIME,
+					revocation_reason TEXT,
+					FOREIGN KEY (ca_id) REFERENCES certificate_authorities(id)
+				)
+			`)
+			if err != nil {
+				return fmt.Errorf("creating agent_certificates table: %w", err)
+			}
+
+			// Server certificates table (for master server TLS)
+			_, err = tx.Exec(`
+				CREATE TABLE IF NOT EXISTS server_certificates (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					hostname TEXT NOT NULL,
+					certificate_pem TEXT NOT NULL,
+					private_key_encrypted BLOB NOT NULL,
+					sans TEXT,
+					not_before DATETIME NOT NULL,
+					not_after DATETIME NOT NULL,
+					ca_id TEXT NOT NULL,
+					created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+					FOREIGN KEY (ca_id) REFERENCES certificate_authorities(id)
+				)
+			`)
+			if err != nil {
+				return fmt.Errorf("creating server_certificates table: %w", err)
+			}
+
+			// Registration tokens for secure agent registration
+			_, err = tx.Exec(`
+				CREATE TABLE IF NOT EXISTS registration_tokens (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					token TEXT UNIQUE NOT NULL,
+					agent_id TEXT,
+					expires_at DATETIME,
+					used_at DATETIME,
+					created_by TEXT NOT NULL,
+					created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+				)
+			`)
+			if err != nil {
+				return fmt.Errorf("creating registration_tokens table: %w", err)
+			}
+
+			// Source credentials (git repo credentials)
+			_, err = tx.Exec(`
+				CREATE TABLE IF NOT EXISTS source_credentials (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					name TEXT UNIQUE NOT NULL,
+					type TEXT NOT NULL,
+					url_pattern TEXT NOT NULL,
+					credential_encrypted BLOB,
+					created_by TEXT NOT NULL,
+					created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+					updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+				)
+			`)
+			if err != nil {
+				return fmt.Errorf("creating source_credentials table: %w", err)
+			}
+
+			// Revoked certificates tracking
+			_, err = tx.Exec(`
+				CREATE TABLE IF NOT EXISTS revoked_certificates (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					serial_number TEXT UNIQUE NOT NULL,
+					agent_id TEXT,
+					reason TEXT,
+					revoked_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+					revoked_by TEXT NOT NULL
+				)
+			`)
+			if err != nil {
+				return fmt.Errorf("creating revoked_certificates table: %w", err)
+			}
+
+			// Encryption keys for KMS
+			_, err = tx.Exec(`
+				CREATE TABLE IF NOT EXISTS encryption_keys (
+					id TEXT PRIMARY KEY,
+					version INTEGER NOT NULL,
+					key_material_encrypted BLOB NOT NULL,
+					algorithm TEXT NOT NULL DEFAULT 'AES-256-GCM',
+					status TEXT NOT NULL DEFAULT 'active',
+					created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+					activated_at DATETIME,
+					deactivated_at DATETIME,
+					scheduled_deletion_at DATETIME,
+					deletion_cancelled_at DATETIME,
+					UNIQUE(version)
+				)
+			`)
+			if err != nil {
+				return fmt.Errorf("creating encryption_keys table: %w", err)
+			}
+
+			// Encryption key usage logs
+			_, err = tx.Exec(`
+				CREATE TABLE IF NOT EXISTS encryption_key_usage (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					key_id TEXT NOT NULL,
+					operation TEXT NOT NULL,
+					resource_type TEXT,
+					resource_id TEXT,
+					timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+				)
+			`)
+			if err != nil {
+				return fmt.Errorf("creating encryption_key_usage table: %w", err)
+			}
+
+			// Add created_by column to ssh_keys table (created in migration 6)
+			// This column tracks who created the key for audit purposes
+			_, err = tx.Exec(`ALTER TABLE ssh_keys ADD COLUMN created_by TEXT DEFAULT 'system'`)
+			if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+				return fmt.Errorf("adding created_by to ssh_keys: %w", err)
+			}
+
+			// Certificate audit events table
+			_, err = tx.Exec(`
+				CREATE TABLE IF NOT EXISTS cert_audit_events (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+					event_type TEXT NOT NULL,
+					agent_id TEXT,
+					hostname TEXT,
+					serial TEXT NOT NULL,
+					ca_id TEXT NOT NULL,
+					reason TEXT,
+					requested_by TEXT NOT NULL,
+					client_ip TEXT
+				)
+			`)
+			if err != nil {
+				return fmt.Errorf("creating cert_audit_events table: %w", err)
+			}
+
+			// Create indexes for security tables
+			// Note: ssh_keys and known_hosts indexes already exist from migration 6
+			indexes := []string{
+				`CREATE INDEX IF NOT EXISTS idx_agent_certificates_agent_id ON agent_certificates(agent_id)`,
+				`CREATE INDEX IF NOT EXISTS idx_agent_certificates_ca_id ON agent_certificates(ca_id)`,
+				`CREATE INDEX IF NOT EXISTS idx_agent_certificates_status ON agent_certificates(status)`,
+				`CREATE INDEX IF NOT EXISTS idx_server_certificates_ca_id ON server_certificates(ca_id)`,
+				`CREATE INDEX IF NOT EXISTS idx_server_certificates_hostname ON server_certificates(hostname)`,
+				`CREATE INDEX IF NOT EXISTS idx_registration_tokens_expires ON registration_tokens(expires_at)`,
+				`CREATE INDEX IF NOT EXISTS idx_revoked_certificates_serial ON revoked_certificates(serial_number)`,
+				`CREATE INDEX IF NOT EXISTS idx_encryption_keys_status ON encryption_keys(status)`,
+				`CREATE INDEX IF NOT EXISTS idx_encryption_keys_version ON encryption_keys(version)`,
+				`CREATE INDEX IF NOT EXISTS idx_cert_audit_events_event ON cert_audit_events(event_type)`,
+				`CREATE INDEX IF NOT EXISTS idx_cert_audit_events_created ON cert_audit_events(timestamp)`,
+			}
+
+			for _, idx := range indexes {
+				if _, err := tx.Exec(idx); err != nil {
+					return fmt.Errorf("creating index: %w", err)
+				}
+			}
+
+			return nil
+		},
+		Down: func(tx *sql.Tx) error {
+			// Note: ssh_keys and known_hosts were created in migration 6, not here
+			// We only added created_by column to ssh_keys which can't be easily removed in SQLite
+			tables := []string{
+				"cert_audit_events",
+				"encryption_key_usage",
+				"encryption_keys",
+				"revoked_certificates",
+				"source_credentials",
+				"registration_tokens",
+				"server_certificates",
+				"agent_certificates",
+				"certificate_authorities",
+			}
+			for _, table := range tables {
+				if _, err := tx.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", table)); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	},
 }
 
 // MigrateUp runs all pending migrations.
