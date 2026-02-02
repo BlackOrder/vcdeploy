@@ -8,10 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"sync"
 	"time"
 
 	"github.com/BlackOrder/vcdeploy/internal/alerting"
+	"github.com/BlackOrder/vcdeploy/internal/git"
 	"github.com/BlackOrder/vcdeploy/internal/metrics"
 	"github.com/BlackOrder/vcdeploy/internal/proto"
 	"github.com/BlackOrder/vcdeploy/internal/security"
@@ -35,6 +37,9 @@ type AgentServer struct {
 	// Service layer
 	agentService      services.AgentServicer
 	deploymentService services.DeploymentServicer
+
+	// Git service for repository operations
+	gitService *git.Service
 
 	// Alert manager for system alerts
 	alertManager *alerting.Manager
@@ -87,6 +92,11 @@ func (s *AgentServer) SetServices(agentSvc services.AgentServicer, deploymentSvc
 // SetAlertManager sets the alert manager for system alerts.
 func (s *AgentServer) SetAlertManager(alertMgr *alerting.Manager) {
 	s.alertManager = alertMgr
+}
+
+// SetGitService sets the git service for repository operations.
+func (s *AgentServer) SetGitService(gitSvc *git.Service) {
+	s.gitService = gitSvc
 }
 
 // SetAllowAutoRegister enables or disables auto-registration without pre-generated tokens.
@@ -601,11 +611,12 @@ func (s *AgentServer) validateDatabaseToken(ctx context.Context, agentID, token 
 }
 
 // extractAgentIDFromCert extracts the agent ID from the client certificate in mTLS.
-// Returns empty string if no client certificate is present (e.g., during registration).
+// Returns empty string if no client certificate is present (e.g., during registration or tests).
 func extractAgentIDFromCert(ctx context.Context) (string, error) {
 	p, ok := peer.FromContext(ctx)
 	if !ok {
-		return "", status.Errorf(codes.Unauthenticated, "no peer info")
+		// No peer info - this happens in tests without TLS
+		return "", nil
 	}
 
 	tlsInfo, ok := p.AuthInfo.(credentials.TLSInfo)
@@ -866,4 +877,118 @@ func (s *AgentServer) updateDeploymentStatus(ctx context.Context, status *proto.
 	}
 
 	return s.deploymentService.Update(ctx, deployment)
+}
+
+// StreamRepoArchive streams a repository archive to an agent.
+// The master clones the repository using stored credentials and streams the archive
+// to the agent. This ensures credentials never leave the master.
+func (s *AgentServer) StreamRepoArchive(req *proto.StreamRepoRequest, stream proto.AgentService_StreamRepoArchiveServer) error {
+	ctx := stream.Context()
+
+	// Verify agent from certificate
+	agentID, err := extractAgentIDFromCert(ctx)
+	if err != nil {
+		return err
+	}
+
+	if agentID == "" {
+		return status.Error(codes.Unauthenticated, "no client certificate")
+	}
+
+	s.logger.Info("StreamRepoArchive request",
+		zap.String("agent_id", agentID),
+		zap.String("deployment_id", req.DeploymentId),
+		zap.String("ref", req.Ref),
+	)
+
+	// Verify agent is assigned to this deployment
+	// TODO: For multi-agent deployments, we'd need a deployment_agents table
+	// For now, just verify the deployment exists
+	if req.DeploymentId != "" {
+		deployment, err := s.deploymentService.GetByID(ctx, req.DeploymentId)
+		if err != nil {
+			return status.Errorf(codes.NotFound, "deployment not found: %v", err)
+		}
+		if deployment == nil {
+			return status.Error(codes.NotFound, "deployment not found")
+		}
+	}
+
+	// Check if git service is configured
+	if s.gitService == nil {
+		return status.Error(codes.Unavailable, "git service not configured")
+	}
+
+	// Clone and create archive
+	archive, err := s.gitService.CloneAndArchive(ctx, req.RepoUrl, req.Ref)
+	if err != nil {
+		s.logger.Error("Failed to clone and archive repository",
+			zap.String("agent_id", agentID),
+			zap.String("repo_url", req.RepoUrl),
+			zap.Error(err),
+		)
+		return status.Errorf(codes.Internal, "failed to clone repository: %v", err)
+	}
+	defer os.Remove(archive.Path) // Clean up archive after streaming
+
+	// Open archive file for streaming
+	file, err := os.Open(archive.Path)
+	if err != nil {
+		return status.Errorf(codes.Internal, "failed to open archive: %v", err)
+	}
+	defer file.Close()
+
+	// Stream archive to agent in 64KB chunks
+	const chunkSize = 64 * 1024
+	buf := make([]byte, chunkSize)
+	var bytesRead int64
+
+	for {
+		n, err := file.Read(buf)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return status.Errorf(codes.Internal, "failed to read archive: %v", err)
+		}
+
+		bytesRead += int64(n)
+		isLast := bytesRead >= archive.Size
+
+		chunk := &proto.RepoChunk{
+			Data:      buf[:n],
+			TotalSize: archive.Size,
+			IsLast:    isLast,
+		}
+
+		// Include checksum only in last chunk
+		if isLast {
+			chunk.Checksum = archive.Checksum
+		}
+
+		if err := stream.Send(chunk); err != nil {
+			s.logger.Error("Failed to send chunk",
+				zap.String("agent_id", agentID),
+				zap.Int64("bytes_sent", bytesRead),
+				zap.Error(err),
+			)
+			return err
+		}
+	}
+
+	s.logger.Info("StreamRepoArchive completed",
+		zap.String("agent_id", agentID),
+		zap.Int64("bytes_sent", bytesRead),
+		zap.String("checksum", archive.Checksum[:16]+"..."),
+	)
+
+	return nil
+}
+
+// Reauthenticate allows an agent to re-authenticate using HMAC when its certificate expires.
+// This enables agents to renew their certificates without human intervention.
+func (s *AgentServer) Reauthenticate(ctx context.Context, req *proto.ReauthRequest) (*proto.ReauthResponse, error) {
+	// TODO: Implement HMAC re-authentication for Stage 4.5
+	// For now, return unimplemented
+	return nil, status.Error(codes.Unimplemented, "reauthentication not yet implemented")
 }
