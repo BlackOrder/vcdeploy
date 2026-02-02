@@ -23,7 +23,6 @@ const (
 	AgentService_Connect_FullMethodName           = "/vcdeploy.v1.AgentService/Connect"
 	AgentService_Heartbeat_FullMethodName         = "/vcdeploy.v1.AgentService/Heartbeat"
 	AgentService_Reauthenticate_FullMethodName    = "/vcdeploy.v1.AgentService/Reauthenticate"
-	AgentService_GetCATrustBundle_FullMethodName  = "/vcdeploy.v1.AgentService/GetCATrustBundle"
 	AgentService_StreamRepoArchive_FullMethodName = "/vcdeploy.v1.AgentService/StreamRepoArchive"
 )
 
@@ -41,8 +40,6 @@ type AgentServiceClient interface {
 	Heartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*HeartbeatResponse, error)
 	// Reauthenticate allows an agent to re-authenticate using HMAC when its certificate expires.
 	Reauthenticate(ctx context.Context, in *ReauthRequest, opts ...grpc.CallOption) (*ReauthResponse, error)
-	// GetCATrustBundle retrieves the current CA trust bundle for certificate validation.
-	GetCATrustBundle(ctx context.Context, in *GetCATrustBundleRequest, opts ...grpc.CallOption) (*GetCATrustBundleResponse, error)
 	// StreamRepoArchive streams a repository archive to an agent.
 	// The master clones the repo with credentials and streams the archive.
 	// This keeps credentials on the master and never exposes them to agents.
@@ -100,16 +97,6 @@ func (c *agentServiceClient) Reauthenticate(ctx context.Context, in *ReauthReque
 	return out, nil
 }
 
-func (c *agentServiceClient) GetCATrustBundle(ctx context.Context, in *GetCATrustBundleRequest, opts ...grpc.CallOption) (*GetCATrustBundleResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetCATrustBundleResponse)
-	err := c.cc.Invoke(ctx, AgentService_GetCATrustBundle_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *agentServiceClient) StreamRepoArchive(ctx context.Context, in *StreamRepoRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[RepoChunk], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &AgentService_ServiceDesc.Streams[1], AgentService_StreamRepoArchive_FullMethodName, cOpts...)
@@ -143,8 +130,6 @@ type AgentServiceServer interface {
 	Heartbeat(context.Context, *HeartbeatRequest) (*HeartbeatResponse, error)
 	// Reauthenticate allows an agent to re-authenticate using HMAC when its certificate expires.
 	Reauthenticate(context.Context, *ReauthRequest) (*ReauthResponse, error)
-	// GetCATrustBundle retrieves the current CA trust bundle for certificate validation.
-	GetCATrustBundle(context.Context, *GetCATrustBundleRequest) (*GetCATrustBundleResponse, error)
 	// StreamRepoArchive streams a repository archive to an agent.
 	// The master clones the repo with credentials and streams the archive.
 	// This keeps credentials on the master and never exposes them to agents.
@@ -170,9 +155,6 @@ func (UnimplementedAgentServiceServer) Heartbeat(context.Context, *HeartbeatRequ
 }
 func (UnimplementedAgentServiceServer) Reauthenticate(context.Context, *ReauthRequest) (*ReauthResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Reauthenticate not implemented")
-}
-func (UnimplementedAgentServiceServer) GetCATrustBundle(context.Context, *GetCATrustBundleRequest) (*GetCATrustBundleResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetCATrustBundle not implemented")
 }
 func (UnimplementedAgentServiceServer) StreamRepoArchive(*StreamRepoRequest, grpc.ServerStreamingServer[RepoChunk]) error {
 	return status.Error(codes.Unimplemented, "method StreamRepoArchive not implemented")
@@ -259,24 +241,6 @@ func _AgentService_Reauthenticate_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AgentService_GetCATrustBundle_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetCATrustBundleRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AgentServiceServer).GetCATrustBundle(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AgentService_GetCATrustBundle_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AgentServiceServer).GetCATrustBundle(ctx, req.(*GetCATrustBundleRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _AgentService_StreamRepoArchive_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(StreamRepoRequest)
 	if err := stream.RecvMsg(m); err != nil {
@@ -306,10 +270,6 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Reauthenticate",
 			Handler:    _AgentService_Reauthenticate_Handler,
-		},
-		{
-			MethodName: "GetCATrustBundle",
-			Handler:    _AgentService_GetCATrustBundle_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

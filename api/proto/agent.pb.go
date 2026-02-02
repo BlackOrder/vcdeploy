@@ -2349,112 +2349,6 @@ func (x *RepoChunk) GetIsLast() bool {
 	return false
 }
 
-// GetCATrustBundleRequest requests the current CA trust bundle.
-type GetCATrustBundleRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	CurrentVersion string                 `protobuf:"bytes,1,opt,name=current_version,json=currentVersion,proto3" json:"current_version,omitempty"` // Version agent currently has (for caching)
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *GetCATrustBundleRequest) Reset() {
-	*x = GetCATrustBundleRequest{}
-	mi := &file_api_proto_agent_proto_msgTypes[26]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetCATrustBundleRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetCATrustBundleRequest) ProtoMessage() {}
-
-func (x *GetCATrustBundleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_agent_proto_msgTypes[26]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetCATrustBundleRequest.ProtoReflect.Descriptor instead.
-func (*GetCATrustBundleRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_agent_proto_rawDescGZIP(), []int{26}
-}
-
-func (x *GetCATrustBundleRequest) GetCurrentVersion() string {
-	if x != nil {
-		return x.CurrentVersion
-	}
-	return ""
-}
-
-// GetCATrustBundleResponse contains the CA trust bundle.
-type GetCATrustBundleResponse struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	CaCertificates [][]byte               `protobuf:"bytes,1,rep,name=ca_certificates,json=caCertificates,proto3" json:"ca_certificates,omitempty"` // PEM-encoded CA certificates
-	CurrentCaId    string                 `protobuf:"bytes,2,opt,name=current_ca_id,json=currentCaId,proto3" json:"current_ca_id,omitempty"`        // ID of the currently active CA
-	Version        string                 `protobuf:"bytes,3,opt,name=version,proto3" json:"version,omitempty"`                                     // Version hash for cache validation
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *GetCATrustBundleResponse) Reset() {
-	*x = GetCATrustBundleResponse{}
-	mi := &file_api_proto_agent_proto_msgTypes[27]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetCATrustBundleResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetCATrustBundleResponse) ProtoMessage() {}
-
-func (x *GetCATrustBundleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_agent_proto_msgTypes[27]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetCATrustBundleResponse.ProtoReflect.Descriptor instead.
-func (*GetCATrustBundleResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_agent_proto_rawDescGZIP(), []int{27}
-}
-
-func (x *GetCATrustBundleResponse) GetCaCertificates() [][]byte {
-	if x != nil {
-		return x.CaCertificates
-	}
-	return nil
-}
-
-func (x *GetCATrustBundleResponse) GetCurrentCaId() string {
-	if x != nil {
-		return x.CurrentCaId
-	}
-	return ""
-}
-
-func (x *GetCATrustBundleResponse) GetVersion() string {
-	if x != nil {
-		return x.Version
-	}
-	return ""
-}
-
 var File_api_proto_agent_proto protoreflect.FileDescriptor
 
 const file_api_proto_agent_proto_rawDesc = "" +
@@ -2654,13 +2548,7 @@ const file_api_proto_agent_proto_rawDesc = "" +
 	"\bchecksum\x18\x02 \x01(\tR\bchecksum\x12\x1d\n" +
 	"\n" +
 	"total_size\x18\x03 \x01(\x03R\ttotalSize\x12\x17\n" +
-	"\ais_last\x18\x04 \x01(\bR\x06isLast\"B\n" +
-	"\x17GetCATrustBundleRequest\x12'\n" +
-	"\x0fcurrent_version\x18\x01 \x01(\tR\x0ecurrentVersion\"\x81\x01\n" +
-	"\x18GetCATrustBundleResponse\x12'\n" +
-	"\x0fca_certificates\x18\x01 \x03(\fR\x0ecaCertificates\x12\"\n" +
-	"\rcurrent_ca_id\x18\x02 \x01(\tR\vcurrentCaId\x12\x18\n" +
-	"\aversion\x18\x03 \x01(\tR\aversion*\xee\x02\n" +
+	"\ais_last\x18\x04 \x01(\bR\x06isLast*\xee\x02\n" +
 	"\x0fDeploymentState\x12 \n" +
 	"\x1cDEPLOYMENT_STATE_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18DEPLOYMENT_STATE_PENDING\x10\x01\x12\x1e\n" +
@@ -2679,13 +2567,12 @@ const file_api_proto_agent_proto_rawDesc = "" +
 	"\x0fLOG_LEVEL_DEBUG\x10\x01\x12\x12\n" +
 	"\x0eLOG_LEVEL_INFO\x10\x02\x12\x12\n" +
 	"\x0eLOG_LEVEL_WARN\x10\x03\x12\x13\n" +
-	"\x0fLOG_LEVEL_ERROR\x10\x042\xe4\x03\n" +
+	"\x0fLOG_LEVEL_ERROR\x10\x042\x83\x03\n" +
 	"\fAgentService\x12G\n" +
 	"\bRegister\x12\x1c.vcdeploy.v1.RegisterRequest\x1a\x1d.vcdeploy.v1.RegisterResponse\x12D\n" +
 	"\aConnect\x12\x19.vcdeploy.v1.AgentMessage\x1a\x1a.vcdeploy.v1.MasterMessage(\x010\x01\x12J\n" +
 	"\tHeartbeat\x12\x1d.vcdeploy.v1.HeartbeatRequest\x1a\x1e.vcdeploy.v1.HeartbeatResponse\x12I\n" +
-	"\x0eReauthenticate\x12\x1a.vcdeploy.v1.ReauthRequest\x1a\x1b.vcdeploy.v1.ReauthResponse\x12_\n" +
-	"\x10GetCATrustBundle\x12$.vcdeploy.v1.GetCATrustBundleRequest\x1a%.vcdeploy.v1.GetCATrustBundleResponse\x12M\n" +
+	"\x0eReauthenticate\x12\x1a.vcdeploy.v1.ReauthRequest\x1a\x1b.vcdeploy.v1.ReauthResponse\x12M\n" +
 	"\x11StreamRepoArchive\x12\x1e.vcdeploy.v1.StreamRepoRequest\x1a\x16.vcdeploy.v1.RepoChunk0\x01B/Z-github.com/BlackOrder/vcdeploy/internal/protob\x06proto3"
 
 var (
@@ -2701,44 +2588,42 @@ func file_api_proto_agent_proto_rawDescGZIP() []byte {
 }
 
 var file_api_proto_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_api_proto_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
+var file_api_proto_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
 var file_api_proto_agent_proto_goTypes = []any{
-	(DeploymentState)(0),             // 0: vcdeploy.v1.DeploymentState
-	(LogLevel)(0),                    // 1: vcdeploy.v1.LogLevel
-	(*RegisterRequest)(nil),          // 2: vcdeploy.v1.RegisterRequest
-	(*AgentCapabilities)(nil),        // 3: vcdeploy.v1.AgentCapabilities
-	(*RegisterResponse)(nil),         // 4: vcdeploy.v1.RegisterResponse
-	(*HeartbeatRequest)(nil),         // 5: vcdeploy.v1.HeartbeatRequest
-	(*AgentStats)(nil),               // 6: vcdeploy.v1.AgentStats
-	(*HeartbeatResponse)(nil),        // 7: vcdeploy.v1.HeartbeatResponse
-	(*UpdateNotification)(nil),       // 8: vcdeploy.v1.UpdateNotification
-	(*AgentMessage)(nil),             // 9: vcdeploy.v1.AgentMessage
-	(*UpdateResult)(nil),             // 10: vcdeploy.v1.UpdateResult
-	(*HealthCheckResult)(nil),        // 11: vcdeploy.v1.HealthCheckResult
-	(*MasterMessage)(nil),            // 12: vcdeploy.v1.MasterMessage
-	(*UpdateCommand)(nil),            // 13: vcdeploy.v1.UpdateCommand
-	(*DeployCommand)(nil),            // 14: vcdeploy.v1.DeployCommand
-	(*DeploymentSettings)(nil),       // 15: vcdeploy.v1.DeploymentSettings
-	(*ServiceReload)(nil),            // 16: vcdeploy.v1.ServiceReload
-	(*RollbackCommand)(nil),          // 17: vcdeploy.v1.RollbackCommand
-	(*CancelCommand)(nil),            // 18: vcdeploy.v1.CancelCommand
-	(*HealthCheckCommand)(nil),       // 19: vcdeploy.v1.HealthCheckCommand
-	(*DeploymentStatus)(nil),         // 20: vcdeploy.v1.DeploymentStatus
-	(*DeploymentLog)(nil),            // 21: vcdeploy.v1.DeploymentLog
-	(*CommandResult)(nil),            // 22: vcdeploy.v1.CommandResult
-	(*AgentReady)(nil),               // 23: vcdeploy.v1.AgentReady
-	(*ReauthRequest)(nil),            // 24: vcdeploy.v1.ReauthRequest
-	(*ReauthResponse)(nil),           // 25: vcdeploy.v1.ReauthResponse
-	(*StreamRepoRequest)(nil),        // 26: vcdeploy.v1.StreamRepoRequest
-	(*RepoChunk)(nil),                // 27: vcdeploy.v1.RepoChunk
-	(*GetCATrustBundleRequest)(nil),  // 28: vcdeploy.v1.GetCATrustBundleRequest
-	(*GetCATrustBundleResponse)(nil), // 29: vcdeploy.v1.GetCATrustBundleResponse
-	nil,                              // 30: vcdeploy.v1.RegisterRequest.LabelsEntry
-	nil,                              // 31: vcdeploy.v1.DeployCommand.EnvVarsEntry
-	nil,                              // 32: vcdeploy.v1.HealthCheckCommand.HeadersEntry
+	(DeploymentState)(0),       // 0: vcdeploy.v1.DeploymentState
+	(LogLevel)(0),              // 1: vcdeploy.v1.LogLevel
+	(*RegisterRequest)(nil),    // 2: vcdeploy.v1.RegisterRequest
+	(*AgentCapabilities)(nil),  // 3: vcdeploy.v1.AgentCapabilities
+	(*RegisterResponse)(nil),   // 4: vcdeploy.v1.RegisterResponse
+	(*HeartbeatRequest)(nil),   // 5: vcdeploy.v1.HeartbeatRequest
+	(*AgentStats)(nil),         // 6: vcdeploy.v1.AgentStats
+	(*HeartbeatResponse)(nil),  // 7: vcdeploy.v1.HeartbeatResponse
+	(*UpdateNotification)(nil), // 8: vcdeploy.v1.UpdateNotification
+	(*AgentMessage)(nil),       // 9: vcdeploy.v1.AgentMessage
+	(*UpdateResult)(nil),       // 10: vcdeploy.v1.UpdateResult
+	(*HealthCheckResult)(nil),  // 11: vcdeploy.v1.HealthCheckResult
+	(*MasterMessage)(nil),      // 12: vcdeploy.v1.MasterMessage
+	(*UpdateCommand)(nil),      // 13: vcdeploy.v1.UpdateCommand
+	(*DeployCommand)(nil),      // 14: vcdeploy.v1.DeployCommand
+	(*DeploymentSettings)(nil), // 15: vcdeploy.v1.DeploymentSettings
+	(*ServiceReload)(nil),      // 16: vcdeploy.v1.ServiceReload
+	(*RollbackCommand)(nil),    // 17: vcdeploy.v1.RollbackCommand
+	(*CancelCommand)(nil),      // 18: vcdeploy.v1.CancelCommand
+	(*HealthCheckCommand)(nil), // 19: vcdeploy.v1.HealthCheckCommand
+	(*DeploymentStatus)(nil),   // 20: vcdeploy.v1.DeploymentStatus
+	(*DeploymentLog)(nil),      // 21: vcdeploy.v1.DeploymentLog
+	(*CommandResult)(nil),      // 22: vcdeploy.v1.CommandResult
+	(*AgentReady)(nil),         // 23: vcdeploy.v1.AgentReady
+	(*ReauthRequest)(nil),      // 24: vcdeploy.v1.ReauthRequest
+	(*ReauthResponse)(nil),     // 25: vcdeploy.v1.ReauthResponse
+	(*StreamRepoRequest)(nil),  // 26: vcdeploy.v1.StreamRepoRequest
+	(*RepoChunk)(nil),          // 27: vcdeploy.v1.RepoChunk
+	nil,                        // 28: vcdeploy.v1.RegisterRequest.LabelsEntry
+	nil,                        // 29: vcdeploy.v1.DeployCommand.EnvVarsEntry
+	nil,                        // 30: vcdeploy.v1.HealthCheckCommand.HeadersEntry
 }
 var file_api_proto_agent_proto_depIdxs = []int32{
-	30, // 0: vcdeploy.v1.RegisterRequest.labels:type_name -> vcdeploy.v1.RegisterRequest.LabelsEntry
+	28, // 0: vcdeploy.v1.RegisterRequest.labels:type_name -> vcdeploy.v1.RegisterRequest.LabelsEntry
 	3,  // 1: vcdeploy.v1.RegisterRequest.capabilities:type_name -> vcdeploy.v1.AgentCapabilities
 	6,  // 2: vcdeploy.v1.HeartbeatRequest.stats:type_name -> vcdeploy.v1.AgentStats
 	20, // 3: vcdeploy.v1.HeartbeatRequest.active_deployments:type_name -> vcdeploy.v1.DeploymentStatus
@@ -2755,26 +2640,24 @@ var file_api_proto_agent_proto_depIdxs = []int32{
 	19, // 14: vcdeploy.v1.MasterMessage.health_check_command:type_name -> vcdeploy.v1.HealthCheckCommand
 	13, // 15: vcdeploy.v1.MasterMessage.update_command:type_name -> vcdeploy.v1.UpdateCommand
 	15, // 16: vcdeploy.v1.DeployCommand.settings:type_name -> vcdeploy.v1.DeploymentSettings
-	31, // 17: vcdeploy.v1.DeployCommand.env_vars:type_name -> vcdeploy.v1.DeployCommand.EnvVarsEntry
+	29, // 17: vcdeploy.v1.DeployCommand.env_vars:type_name -> vcdeploy.v1.DeployCommand.EnvVarsEntry
 	16, // 18: vcdeploy.v1.DeployCommand.reload_services:type_name -> vcdeploy.v1.ServiceReload
 	16, // 19: vcdeploy.v1.RollbackCommand.reload_services:type_name -> vcdeploy.v1.ServiceReload
-	32, // 20: vcdeploy.v1.HealthCheckCommand.headers:type_name -> vcdeploy.v1.HealthCheckCommand.HeadersEntry
+	30, // 20: vcdeploy.v1.HealthCheckCommand.headers:type_name -> vcdeploy.v1.HealthCheckCommand.HeadersEntry
 	0,  // 21: vcdeploy.v1.DeploymentStatus.state:type_name -> vcdeploy.v1.DeploymentState
 	1,  // 22: vcdeploy.v1.DeploymentLog.level:type_name -> vcdeploy.v1.LogLevel
 	2,  // 23: vcdeploy.v1.AgentService.Register:input_type -> vcdeploy.v1.RegisterRequest
 	9,  // 24: vcdeploy.v1.AgentService.Connect:input_type -> vcdeploy.v1.AgentMessage
 	5,  // 25: vcdeploy.v1.AgentService.Heartbeat:input_type -> vcdeploy.v1.HeartbeatRequest
 	24, // 26: vcdeploy.v1.AgentService.Reauthenticate:input_type -> vcdeploy.v1.ReauthRequest
-	28, // 27: vcdeploy.v1.AgentService.GetCATrustBundle:input_type -> vcdeploy.v1.GetCATrustBundleRequest
-	26, // 28: vcdeploy.v1.AgentService.StreamRepoArchive:input_type -> vcdeploy.v1.StreamRepoRequest
-	4,  // 29: vcdeploy.v1.AgentService.Register:output_type -> vcdeploy.v1.RegisterResponse
-	12, // 30: vcdeploy.v1.AgentService.Connect:output_type -> vcdeploy.v1.MasterMessage
-	7,  // 31: vcdeploy.v1.AgentService.Heartbeat:output_type -> vcdeploy.v1.HeartbeatResponse
-	25, // 32: vcdeploy.v1.AgentService.Reauthenticate:output_type -> vcdeploy.v1.ReauthResponse
-	29, // 33: vcdeploy.v1.AgentService.GetCATrustBundle:output_type -> vcdeploy.v1.GetCATrustBundleResponse
-	27, // 34: vcdeploy.v1.AgentService.StreamRepoArchive:output_type -> vcdeploy.v1.RepoChunk
-	29, // [29:35] is the sub-list for method output_type
-	23, // [23:29] is the sub-list for method input_type
+	26, // 27: vcdeploy.v1.AgentService.StreamRepoArchive:input_type -> vcdeploy.v1.StreamRepoRequest
+	4,  // 28: vcdeploy.v1.AgentService.Register:output_type -> vcdeploy.v1.RegisterResponse
+	12, // 29: vcdeploy.v1.AgentService.Connect:output_type -> vcdeploy.v1.MasterMessage
+	7,  // 30: vcdeploy.v1.AgentService.Heartbeat:output_type -> vcdeploy.v1.HeartbeatResponse
+	25, // 31: vcdeploy.v1.AgentService.Reauthenticate:output_type -> vcdeploy.v1.ReauthResponse
+	27, // 32: vcdeploy.v1.AgentService.StreamRepoArchive:output_type -> vcdeploy.v1.RepoChunk
+	28, // [28:33] is the sub-list for method output_type
+	23, // [23:28] is the sub-list for method input_type
 	23, // [23:23] is the sub-list for extension type_name
 	23, // [23:23] is the sub-list for extension extendee
 	0,  // [0:23] is the sub-list for field type_name
@@ -2806,7 +2689,7 @@ func file_api_proto_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_proto_agent_proto_rawDesc), len(file_api_proto_agent_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   31,
+			NumMessages:   29,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
