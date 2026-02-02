@@ -3,54 +3,25 @@ package security
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	_ "modernc.org/sqlite" // sqlite driver for database/sql
+	"github.com/BlackOrder/vcdeploy/internal/storage"
 )
 
-func setupTestKMSDB(t *testing.T) *sql.DB {
+func setupTestKMSDB(t *testing.T) storage.Store {
 	t.Helper()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	db, err := sql.Open("sqlite", dbPath+"?_journal_mode=WAL")
+	store, err := storage.Open(dbPath)
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
 
-	// Create required tables
-	_, err = db.Exec(`
-		CREATE TABLE IF NOT EXISTS encryption_keys (
-			id TEXT PRIMARY KEY,
-			version INTEGER NOT NULL,
-			key_material_encrypted BLOB NOT NULL,
-			algorithm TEXT NOT NULL DEFAULT 'AES-256-GCM',
-			status TEXT NOT NULL DEFAULT 'active',
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			activated_at DATETIME,
-			deactivated_at DATETIME,
-			scheduled_deletion_at DATETIME,
-			deletion_cancelled_at DATETIME,
-			UNIQUE(version)
-		);
-		CREATE TABLE IF NOT EXISTS encryption_key_usage (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			key_id TEXT NOT NULL,
-			operation TEXT NOT NULL,
-			resource_type TEXT,
-			resource_id TEXT,
-			timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-		);
-	`)
-	if err != nil {
-		t.Fatalf("create tables: %v", err)
-	}
-
-	return db
+	return store
 }
 
 func TestNewKMS(t *testing.T) {
@@ -621,27 +592,13 @@ func TestKMSPersistence(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	// Create and initialize
-	db1, err := sql.Open("sqlite", dbPath+"?_journal_mode=WAL")
+	// Create and initialize using storage package
+	store1, err := storage.Open(dbPath)
 	if err != nil {
-		t.Fatalf("sql.Open() for db1: %v", err)
-	}
-	if _, err := db1.Exec(`
-		CREATE TABLE encryption_keys (
-			id TEXT PRIMARY KEY, version INTEGER NOT NULL, key_material_encrypted BLOB NOT NULL,
-			algorithm TEXT NOT NULL DEFAULT 'AES-256-GCM', status TEXT NOT NULL DEFAULT 'active',
-			created_at DATETIME, activated_at DATETIME, deactivated_at DATETIME,
-			scheduled_deletion_at DATETIME, deletion_cancelled_at DATETIME, UNIQUE(version)
-		);
-		CREATE TABLE encryption_key_usage (
-			id INTEGER PRIMARY KEY AUTOINCREMENT, key_id TEXT NOT NULL, operation TEXT NOT NULL,
-			resource_type TEXT, resource_id TEXT, timestamp DATETIME
-		);
-	`); err != nil {
-		t.Fatalf("db1.Exec(): %v", err)
+		t.Fatalf("storage.Open() for store1: %v", err)
 	}
 
-	kms1, err := NewKMS(context.Background(), db1, nil)
+	kms1, err := NewKMS(context.Background(), store1, nil)
 	if err != nil {
 		t.Fatalf("NewKMS() for kms1: %v", err)
 	}
@@ -657,16 +614,16 @@ func TestKMSPersistence(t *testing.T) {
 	}
 
 	keyID := kms1.GetCurrentKey().ID
-	db1.Close()
+	store1.Close()
 
 	// Reopen
-	db2, err := sql.Open("sqlite", dbPath+"?_journal_mode=WAL")
+	store2, err := storage.Open(dbPath)
 	if err != nil {
-		t.Fatalf("sql.Open() for db2: %v", err)
+		t.Fatalf("storage.Open() for store2: %v", err)
 	}
-	defer db2.Close()
+	defer store2.Close()
 
-	kms2, err := NewKMS(context.Background(), db2, nil)
+	kms2, err := NewKMS(context.Background(), store2, nil)
 	if err != nil {
 		t.Fatalf("NewKMS() after reopen error: %v", err)
 	}
