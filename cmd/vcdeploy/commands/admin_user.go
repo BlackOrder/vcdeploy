@@ -59,6 +59,14 @@ func init() {
 	userCmd.AddCommand(passwdCmd)
 }
 
+// paginatedResponse represents a paginated API response.
+type paginatedResponse struct {
+	Items      []map[string]interface{} `json:"items"`
+	TotalCount int                      `json:"totalCount"`
+	Limit      int                      `json:"limit"`
+	Offset     int                      `json:"offset"`
+}
+
 func runUserList(cmd *cobra.Command, args []string) error {
 	client, err := newAPIClient(cmd)
 	if err != nil {
@@ -75,14 +83,14 @@ func runUserList(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("API error: %s", resp.Status)
 	}
 
-	var users []map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&users); err != nil {
+	var result paginatedResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return fmt.Errorf("decode response: %w", err)
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "ID\tUSERNAME\tEMAIL\tROLE\tCREATED")
-	for _, u := range users {
+	for _, u := range result.Items {
 		fmt.Fprintf(w, "%.0f\t%s\t%s\t%s\t%s\n",
 			u["id"], u["username"], u["email"], u["role"], u["createdAt"])
 	}
@@ -166,15 +174,15 @@ func runUserDelete(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("API request failed: %w", err)
 	}
 
-	var users []map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&users); err != nil {
+	var result paginatedResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		resp.Body.Close()
 		return fmt.Errorf("failed to decode users list: %w", err)
 	}
 	resp.Body.Close()
 
 	var userID float64
-	for _, u := range users {
+	for _, u := range result.Items {
 		if u["username"] == username {
 			id, ok := u["id"].(float64)
 			if !ok {
@@ -244,15 +252,15 @@ func runUserPasswd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("API request failed: %w", err)
 	}
 
-	var users []map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&users); err != nil {
+	var result paginatedResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		resp.Body.Close()
 		return fmt.Errorf("decode response: %w", err)
 	}
 	resp.Body.Close()
 
 	var userID float64
-	for _, u := range users {
+	for _, u := range result.Items {
 		if u["username"] == username {
 			id, ok := u["id"].(float64)
 			if !ok {

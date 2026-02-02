@@ -84,8 +84,8 @@ func runAgentList(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("API error: %s", resp.Status)
 	}
 
-	var agents []map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&agents); err != nil {
+	var result paginatedResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return fmt.Errorf("decode response: %w", err)
 	}
 
@@ -93,19 +93,19 @@ func runAgentList(cmd *cobra.Command, args []string) error {
 	case "json":
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		return enc.Encode(agents)
+		return enc.Encode(result.Items)
 	case "yaml":
-		return yaml.NewEncoder(os.Stdout).Encode(agents)
+		return yaml.NewEncoder(os.Stdout).Encode(result.Items)
 	default:
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 		fmt.Fprintln(w, "ID\tHOSTNAME\tSTATUS\tLAST SEEN")
-		for _, a := range agents {
+		for _, a := range result.Items {
 			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
 				a["id"], a["hostname"], a["status"], a["lastSeenAt"])
 		}
 		w.Flush()
 
-		if len(agents) == 0 {
+		if len(result.Items) == 0 {
 			fmt.Println("No agents registered.")
 		}
 	}

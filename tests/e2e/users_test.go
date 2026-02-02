@@ -24,15 +24,14 @@ func TestUsersAPI(t *testing.T) {
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
-		defer resp.Body.Close()
 		ctx.Assertions.StatusOK(resp)
 
-		var users []map[string]interface{}
-		if err := testutil.DecodeJSON(resp, &users); err != nil {
+		result, err := testutil.DecodePaginatedJSON(resp)
+		if err != nil {
 			t.Fatalf("failed to decode response: %v", err)
 		}
 		// Should have at least the admin user
-		ctx.Assertions.True(len(users) >= 1, "expected at least 1 user")
+		ctx.Assertions.True(len(result.Items) >= 1, "expected at least 1 user")
 	})
 
 	var createdUserID interface{}
@@ -58,13 +57,12 @@ func TestUsersAPI(t *testing.T) {
 			if err != nil {
 				t.Fatalf("request failed: %v", err)
 			}
-			defer listResp.Body.Close()
 
-			var users []map[string]interface{}
-			if err := testutil.DecodeJSON(listResp, &users); err != nil {
+			result, err := testutil.DecodePaginatedJSON(listResp)
+			if err != nil {
 				t.Fatalf("failed to decode users list: %v", err)
 			}
-			for _, u := range users {
+			for _, u := range result.Items {
 				if u["username"] == testUsername {
 					createdUserID = u["id"]
 					ctx.TrackResource("user", createdUserID)
@@ -212,9 +210,10 @@ func TestUsersRBAC(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	var viewerResult map[string]interface{}
+	var viewerResult *testutil.PaginatedResponse
 	resp, _ = ctx.Client.Get("/api/v1/users")
-	testutil.DecodeJSON(resp, &viewerResult)
+	viewerResult, _ = testutil.DecodePaginatedJSON(resp)
+	_ = viewerResult // Use result if needed
 
 	// Now login as the viewer
 	viewerCtx := testutil.NewAPITestContext(t)
