@@ -133,9 +133,13 @@ func hashKeyID(key []byte) string {
 
 // --- Password hashing ---
 
+// BcryptCost is the cost factor for bcrypt hashing.
+// Higher values are more secure but slower. Minimum of 12 is recommended.
+const BcryptCost = 12
+
 // HashPassword creates a bcrypt hash of the password.
 func HashPassword(password string) (string, error) {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), BcryptCost)
 	if err != nil {
 		return "", fmt.Errorf("hashing password: %w", err)
 	}
