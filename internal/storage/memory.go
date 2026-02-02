@@ -74,7 +74,7 @@ type MemoryStore struct {
 
 	// Security tables (Stage 1 migration)
 	certificateAuthorities map[string]*CertificateAuthority
-	agentCertificates      map[string]*AgentCertificate // keyed by serial number
+	agentCertificates      map[string]*AgentCertificate  // keyed by serial number
 	serverCertificates     map[string]*ServerCertificate // keyed by hostname
 	registrationTokens     map[string]*RegistrationToken // keyed by token
 	sourceCredentials      map[int64]*SourceCredential
@@ -103,13 +103,13 @@ type MemoryStore struct {
 	nextSettingID       atomic.Int64
 
 	// Security ID generators
-	nextAgentCertID    atomic.Int64
-	nextServerCertID   atomic.Int64
-	nextRegTokenID     atomic.Int64
-	nextSourceCredID   atomic.Int64
-	nextRevokedCertID  atomic.Int64
-	nextSSHKeyID       atomic.Int64
-	nextCertAuditID    atomic.Int64
+	nextAgentCertID   atomic.Int64
+	nextServerCertID  atomic.Int64
+	nextRegTokenID    atomic.Int64
+	nextSourceCredID  atomic.Int64
+	nextRevokedCertID atomic.Int64
+	nextSSHKeyID      atomic.Int64
+	nextCertAuditID   atomic.Int64
 
 	// Shutdown coordination
 	done chan struct{}

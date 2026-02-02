@@ -8,16 +8,16 @@ import "time"
 // CertificateAuthority represents a CA in the database.
 // Old CAs are NEVER deleted, retained forever for backward compatibility.
 type CertificateAuthority struct {
-	ID             string    `json:"id"`
-	Version        int       `json:"version"`
-	CommonName     string    `json:"common_name"`
-	CertificatePEM string    `json:"certificate_pem"`
-	PrivateKeyEnc  []byte    `json:"-"` // KMS-encrypted, never expose in JSON
-	NotBefore      time.Time `json:"not_before"`
-	NotAfter       time.Time `json:"not_after"`
-	Status         string    `json:"status"` // "active", "inactive"
-	IsCurrent      bool      `json:"is_current"`
-	CreatedAt      time.Time `json:"created_at"`
+	ID             string     `json:"id"`
+	Version        int        `json:"version"`
+	CommonName     string     `json:"common_name"`
+	CertificatePEM string     `json:"certificate_pem"`
+	PrivateKeyEnc  []byte     `json:"-"` // KMS-encrypted, never expose in JSON
+	NotBefore      time.Time  `json:"not_before"`
+	NotAfter       time.Time  `json:"not_after"`
+	Status         string     `json:"status"` // "active", "inactive"
+	IsCurrent      bool       `json:"is_current"`
+	CreatedAt      time.Time  `json:"created_at"`
 	RotatedAt      *time.Time `json:"rotated_at,omitempty"`
 }
 
@@ -59,7 +59,7 @@ type ServerCertificate struct {
 	ID             int64     `json:"id"`
 	Hostname       string    `json:"hostname"`
 	CertificatePEM string    `json:"certificate_pem"`
-	PrivateKeyEnc  []byte    `json:"-"` // KMS-encrypted, never expose in JSON
+	PrivateKeyEnc  []byte    `json:"-"`    // KMS-encrypted, never expose in JSON
 	SANs           string    `json:"sans"` // JSON array of Subject Alternative Names
 	NotBefore      time.Time `json:"not_before"`
 	NotAfter       time.Time `json:"not_after"`
@@ -87,9 +87,9 @@ type RegistrationToken struct {
 type SourceCredential struct {
 	ID            int64     `json:"id"`
 	Name          string    `json:"name"`
-	Type          string    `json:"type"` // "ssh_key", "https_token", "https_basic"
+	Type          string    `json:"type"`        // "ssh_key", "https_token", "https_basic"
 	URLPattern    string    `json:"url_pattern"` // Regex to match repo URLs
-	CredentialEnc []byte    `json:"-"` // KMS-encrypted, never expose in JSON
+	CredentialEnc []byte    `json:"-"`           // KMS-encrypted, never expose in JSON
 	CreatedBy     string    `json:"created_by"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
@@ -171,9 +171,9 @@ type CertAuditEvent struct {
 	AgentID     string    `json:"agent_id,omitempty"`
 	Hostname    string    `json:"hostname,omitempty"` // for server certs
 	Serial      string    `json:"serial"`
-	CAID        string    `json:"ca_id"` // Issuing CA
+	CAID        string    `json:"ca_id"`            // Issuing CA
 	Reason      string    `json:"reason,omitempty"` // for revocation/rejection
-	RequestedBy string    `json:"requested_by"` // user or system
+	RequestedBy string    `json:"requested_by"`     // user or system
 	ClientIP    string    `json:"client_ip,omitempty"`
 }
 

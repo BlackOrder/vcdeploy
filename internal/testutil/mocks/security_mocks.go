@@ -82,19 +82,19 @@ type MockCAManager struct {
 	Calls []string
 
 	// Mock returns
-	InitializeFunc             func(ctx context.Context) error
-	IssueAgentCertificateFunc  func(ctx context.Context, agentID string) (*tls.Certificate, error)
-	RevokeCertificateFunc      func(ctx context.Context, agentID, reason string) error
-	GetTrustPoolFunc           func(ctx context.Context) (*x509.CertPool, error)
-	VerifyCertificateFunc      func(cert *x509.Certificate) error
-	GetOrIssueServerCertFunc   func(ctx context.Context, hosts []string) (*tls.Certificate, error)
+	InitializeFunc              func(ctx context.Context) error
+	IssueAgentCertificateFunc   func(ctx context.Context, agentID string) (*tls.Certificate, error)
+	RevokeCertificateFunc       func(ctx context.Context, agentID, reason string) error
+	GetTrustPoolFunc            func(ctx context.Context) (*x509.CertPool, error)
+	VerifyCertificateFunc       func(cert *x509.Certificate) error
+	GetOrIssueServerCertFunc    func(ctx context.Context, hosts []string) (*tls.Certificate, error)
 	GetAgentCertificateInfoFunc func(ctx context.Context, agentID string) (*CertificateInfo, error)
 
 	// State
-	IssuedCerts     map[string]*tls.Certificate
-	RevokedCerts    map[string]bool
-	TrustPool       *x509.CertPool
-	ServerCert      *tls.Certificate
+	IssuedCerts  map[string]*tls.Certificate
+	RevokedCerts map[string]bool
+	TrustPool    *x509.CertPool
+	ServerCert   *tls.Certificate
 }
 
 // CertificateInfo contains certificate details for testing.

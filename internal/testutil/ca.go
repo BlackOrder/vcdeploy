@@ -20,10 +20,10 @@ import (
 
 // TestCABundle contains all components needed for testing with a CA.
 type TestCABundle struct {
-	Store      storage.Store
-	KMS        *security.KMS
-	CAManager  *security.CAManager
-	TrustPool  *x509.CertPool
+	Store     storage.Store
+	KMS       *security.KMS
+	CAManager *security.CAManager
+	TrustPool *x509.CertPool
 
 	// CleanupFuncs should be called in deferred order
 	CleanupFuncs []func()
