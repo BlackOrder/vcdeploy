@@ -43,12 +43,20 @@ func TestHandleHostKeys_List(t *testing.T) {
 		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
 
-	var keys []*storage.SSHHostKey
-	if err := json.NewDecoder(rec.Body).Decode(&keys); err != nil {
+	var result map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	if len(keys) < 1 {
+	// Verify paginated response structure
+	if _, ok := result["items"]; !ok {
+		t.Error("expected 'items' field in response")
+	}
+	if _, ok := result["totalCount"]; !ok {
+		t.Error("expected 'totalCount' field in response")
+	}
+	items, ok := result["items"].([]interface{})
+	if !ok || len(items) < 1 {
 		t.Error("expected at least one host key")
 	}
 }
@@ -356,12 +364,20 @@ func TestHandleJumpServers_List(t *testing.T) {
 		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
 
-	var servers []*storage.SSHJumpServer
-	if err := json.NewDecoder(rec.Body).Decode(&servers); err != nil {
+	var result map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	if len(servers) < 1 {
+	// Verify paginated response structure
+	if _, ok := result["items"]; !ok {
+		t.Error("expected 'items' field in response")
+	}
+	if _, ok := result["totalCount"]; !ok {
+		t.Error("expected 'totalCount' field in response")
+	}
+	items, ok := result["items"].([]interface{})
+	if !ok || len(items) < 1 {
 		t.Error("expected at least one jump server")
 	}
 }

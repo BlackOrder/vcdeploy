@@ -193,6 +193,7 @@ type DeploymentServicer interface {
 	GetByID(ctx context.Context, id string) (*storage.DeploymentRecord, error)
 	Update(ctx context.Context, deployment *storage.DeploymentRecord) error
 	ListRecent(ctx context.Context, limit int) ([]*storage.DeploymentRecord, error)
+	ListPaginated(ctx context.Context, p Pagination) (*ListResult[*storage.DeploymentRecord], error)
 	CountByStatus(ctx context.Context) (map[string]int64, error)
 	Cancel(ctx context.Context, id string) error
 	// Logs
@@ -200,6 +201,7 @@ type DeploymentServicer interface {
 	CreateLogsBatch(ctx context.Context, deploymentID string, logs []*storage.DeploymentLog) error
 	ListLogs(ctx context.Context, deploymentID string) ([]*storage.DeploymentLog, error)
 	ListLogsAfter(ctx context.Context, deploymentID string, afterID int64) ([]*storage.DeploymentLog, error)
+	ListLogsPaginated(ctx context.Context, deploymentID string, p Pagination) (*ListResult[*storage.DeploymentLog], error)
 	// Scheduled
 	CreateScheduled(ctx context.Context, id, project, target, branch string, scheduledAt time.Time, scheduledBy string) error
 	ListPendingScheduled(ctx context.Context) ([]*storage.ScheduledDeployment, error)

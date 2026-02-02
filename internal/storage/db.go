@@ -478,6 +478,39 @@ func (db *DB) ListDeploymentLogsAfter(ctx context.Context, deploymentID string, 
 	return logs, rows.Err()
 }
 
+// ListDeploymentLogsPaginated returns deployment logs with pagination support.
+func (db *DB) ListDeploymentLogsPaginated(ctx context.Context, deploymentID string, limit, offset int) ([]*DeploymentLog, error) {
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, deployment_id, level, message, source, created_at
+		FROM deployment_logs WHERE deployment_id = ? ORDER BY created_at
+		LIMIT ? OFFSET ?
+	`, deploymentID, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("querying deployment logs: %w", err)
+	}
+	defer rows.Close()
+
+	var logs []*DeploymentLog
+	for rows.Next() {
+		var log DeploymentLog
+		if err := rows.Scan(&log.ID, &log.DeploymentID, &log.Level, &log.Message, &log.Source, &log.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scanning deployment log: %w", err)
+		}
+		logs = append(logs, &log)
+	}
+	return logs, rows.Err()
+}
+
+// CountDeploymentLogs returns the total number of logs for a deployment.
+func (db *DB) CountDeploymentLogs(ctx context.Context, deploymentID string) (int64, error) {
+	var count int64
+	err := db.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM deployment_logs WHERE deployment_id = ?`, deploymentID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("counting deployment logs: %w", err)
+	}
+	return count, nil
+}
+
 // --- Audit log operations ---
 
 // LogAudit creates an audit log entry.
@@ -1696,6 +1729,59 @@ func (db *DB) CountDeploymentsByStatus(ctx context.Context) (map[string]int64, e
 		counts[status] = count
 	}
 	return counts, rows.Err()
+}
+
+// ListDeploymentsPaginated returns deployments with pagination support.
+func (db *DB) ListDeploymentsPaginated(ctx context.Context, limit, offset int) ([]*DeploymentRecord, error) {
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, project, target, branch, commit_hash, status, release_number,
+		       started_at, completed_at, triggered_by, trigger_source, error_message
+		FROM deployments
+		ORDER BY started_at DESC
+		LIMIT ? OFFSET ?
+	`, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("querying deployments: %w", err)
+	}
+	defer rows.Close()
+
+	var deployments []*DeploymentRecord
+	for rows.Next() {
+		var d DeploymentRecord
+		var completedAt sql.NullTime
+		var releaseNumber sql.NullInt64
+		var commitHash, triggeredBy, triggerSource, errorMessage sql.NullString
+
+		if err := rows.Scan(
+			&d.ID, &d.Project, &d.Target, &d.Branch, &commitHash, &d.Status, &releaseNumber,
+			&d.StartedAt, &completedAt, &triggeredBy, &triggerSource, &errorMessage,
+		); err != nil {
+			return nil, fmt.Errorf("scanning deployment: %w", err)
+		}
+
+		if completedAt.Valid {
+			d.CompletedAt = &completedAt.Time
+		}
+		if releaseNumber.Valid {
+			d.ReleaseNumber = int(releaseNumber.Int64)
+		}
+		d.CommitHash = commitHash.String
+		d.TriggeredBy = triggeredBy.String
+		d.TriggerSource = triggerSource.String
+		d.ErrorMessage = errorMessage.String
+		deployments = append(deployments, &d)
+	}
+	return deployments, rows.Err()
+}
+
+// CountDeployments returns the total number of deployments.
+func (db *DB) CountDeployments(ctx context.Context) (int64, error) {
+	var count int64
+	err := db.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM deployments`).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("counting deployments: %w", err)
+	}
+	return count, nil
 }
 
 // --- Additional Project operations ---

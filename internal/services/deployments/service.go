@@ -58,6 +58,25 @@ func (s *Service) ListRecent(ctx context.Context, limit int) ([]*storage.Deploym
 	return deployments, nil
 }
 
+// ListPaginated returns deployments with pagination support.
+func (s *Service) ListPaginated(ctx context.Context, p services.Pagination) (*services.ListResult[*storage.DeploymentRecord], error) {
+	deployments, err := s.store.ListDeploymentsPaginated(ctx, p.Limit, p.Offset)
+	if err != nil {
+		return nil, fmt.Errorf("listing deployments: %w", err)
+	}
+
+	totalCount, err := s.store.CountDeployments(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("counting deployments: %w", err)
+	}
+
+	return &services.ListResult[*storage.DeploymentRecord]{
+		Items:      deployments,
+		TotalCount: totalCount,
+		Pagination: p,
+	}, nil
+}
+
 // CountByStatus returns deployment counts grouped by status.
 func (s *Service) CountByStatus(ctx context.Context) (map[string]int64, error) {
 	counts, err := s.store.CountDeploymentsByStatus(ctx)
@@ -116,6 +135,25 @@ func (s *Service) ListLogsAfter(ctx context.Context, deploymentID string, afterI
 		return nil, fmt.Errorf("listing deployment logs: %w", err)
 	}
 	return logs, nil
+}
+
+// ListLogsPaginated returns logs for a deployment with pagination support.
+func (s *Service) ListLogsPaginated(ctx context.Context, deploymentID string, p services.Pagination) (*services.ListResult[*storage.DeploymentLog], error) {
+	logs, err := s.store.ListDeploymentLogsPaginated(ctx, deploymentID, p.Limit, p.Offset)
+	if err != nil {
+		return nil, fmt.Errorf("listing deployment logs: %w", err)
+	}
+
+	totalCount, err := s.store.CountDeploymentLogs(ctx, deploymentID)
+	if err != nil {
+		return nil, fmt.Errorf("counting deployment logs: %w", err)
+	}
+
+	return &services.ListResult[*storage.DeploymentLog]{
+		Items:      logs,
+		TotalCount: totalCount,
+		Pagination: p,
+	}, nil
 }
 
 // --- Scheduled deployment operations ---

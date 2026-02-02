@@ -827,9 +827,17 @@ func TestHandleProjectTypes(t *testing.T) {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
 
-	var types []interface{}
-	if err := json.NewDecoder(rec.Body).Decode(&types); err != nil {
+	var result map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 		t.Fatalf("decode error: %v", err)
+	}
+
+	// Verify paginated response structure
+	if _, ok := result["items"]; !ok {
+		t.Error("expected 'items' field in response")
+	}
+	if _, ok := result["totalCount"]; !ok {
+		t.Error("expected 'totalCount' field in response")
 	}
 }
 
@@ -859,18 +867,25 @@ func TestHandleProjectTypesPost(t *testing.T) {
 	rec = httptest.NewRecorder()
 	server.handleProjectTypes(rec, req)
 
-	var types []*storage.ProjectType
-	_ = json.NewDecoder(rec.Body).Decode(&types)
+	var result map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
 
 	found := false
-	for _, pt := range types {
-		if pt.Name == "nodejs" {
-			found = true
-			break
+	if items, ok := result["items"].([]interface{}); ok {
+		for _, item := range items {
+			if m, ok := item.(map[string]interface{}); ok {
+				// JSON struct uses Name, not name
+				if m["Name"] == "nodejs" {
+					found = true
+					break
+				}
+			}
 		}
 	}
 	if !found {
-		t.Error("project type 'nodejs' was not created")
+		t.Errorf("project type 'nodejs' was not created, result: %v", result)
 	}
 }
 

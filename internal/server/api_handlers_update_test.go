@@ -41,13 +41,25 @@ func TestHandleAgentBinaries(t *testing.T) {
 			t.Errorf("Expected status %d, got %d: %s", http.StatusOK, rr.Code, rr.Body.String())
 		}
 
-		var binaries []*storage.AgentBinary
-		if err := json.NewDecoder(rr.Body).Decode(&binaries); err != nil {
+		var resp map[string]interface{}
+		if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
 
-		if len(binaries) != 1 {
-			t.Errorf("Expected 1 binary, got %d", len(binaries))
+		// Verify paginated response structure
+		if _, ok := resp["items"]; !ok {
+			t.Error("Response missing 'items' field")
+		}
+		if _, ok := resp["totalCount"]; !ok {
+			t.Error("Response missing 'totalCount' field")
+		}
+
+		items, ok := resp["items"].([]interface{})
+		if !ok {
+			t.Fatalf("items is not an array")
+		}
+		if len(items) != 1 {
+			t.Errorf("Expected 1 binary, got %d", len(items))
 		}
 	})
 }
@@ -343,18 +355,33 @@ func TestHandleAgentsNeedingUpdate(t *testing.T) {
 			t.Errorf("Expected status %d, got %d: %s", http.StatusOK, rr.Code, rr.Body.String())
 		}
 
-		var agents []map[string]interface{}
-		if err := json.NewDecoder(rr.Body).Decode(&agents); err != nil {
+		var resp map[string]interface{}
+		if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
 
-		// Should only include the agent that needs an update
-		if len(agents) != 1 {
-			t.Errorf("Expected 1 agent needing update, got %d", len(agents))
+		// Verify paginated response structure
+		if _, ok := resp["items"]; !ok {
+			t.Error("Response missing 'items' field")
+		}
+		if _, ok := resp["totalCount"]; !ok {
+			t.Error("Response missing 'totalCount' field")
 		}
 
-		if len(agents) > 0 && agents[0]["ID"] != "agent-needs-update" {
-			t.Errorf("Expected agent-needs-update, got %v", agents[0]["ID"])
+		items, ok := resp["items"].([]interface{})
+		if !ok {
+			t.Fatalf("items is not an array")
+		}
+		// Should only include the agent that needs an update
+		if len(items) != 1 {
+			t.Errorf("Expected 1 agent needing update, got %d", len(items))
+		}
+
+		if len(items) > 0 {
+			agent := items[0].(map[string]interface{})
+			if agent["ID"] != "agent-needs-update" {
+				t.Errorf("Expected agent-needs-update, got %v", agent["ID"])
+			}
 		}
 	})
 }

@@ -44,7 +44,28 @@ func (s *MasterServer) handleAgentBinaries(w http.ResponseWriter, r *http.Reques
 			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
-		s.jsonResponse(w, binaries)
+
+		// Apply pagination
+		p := parsePagination(r)
+		totalCount := len(binaries)
+
+		// Apply offset
+		if p.Offset >= totalCount {
+			binaries = []*storage.AgentBinary{}
+		} else {
+			binaries = binaries[p.Offset:]
+			// Apply limit
+			if p.Limit > 0 && p.Limit < len(binaries) {
+				binaries = binaries[:p.Limit]
+			}
+		}
+
+		s.jsonResponse(w, map[string]interface{}{
+			"items":      binaries,
+			"totalCount": totalCount,
+			"limit":      p.Limit,
+			"offset":     p.Offset,
+		})
 
 	case http.MethodPost:
 		// Admin-only: uploading binaries
@@ -686,7 +707,27 @@ func (s *MasterServer) handleAgentsNeedingUpdate(w http.ResponseWriter, r *http.
 		})
 	}
 
-	s.jsonResponse(w, results)
+	// Apply pagination
+	p := parsePagination(r)
+	totalCount := len(results)
+
+	// Apply offset
+	if p.Offset >= totalCount {
+		results = []agentUpdate{}
+	} else {
+		results = results[p.Offset:]
+		// Apply limit
+		if p.Limit > 0 && p.Limit < len(results) {
+			results = results[:p.Limit]
+		}
+	}
+
+	s.jsonResponse(w, map[string]interface{}{
+		"items":      results,
+		"totalCount": totalCount,
+		"limit":      p.Limit,
+		"offset":     p.Offset,
+	})
 }
 
 // handleAllAgentUpdateHistory handles GET /api/v1/agents/updates/history

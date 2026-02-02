@@ -29,7 +29,28 @@ func (s *MasterServer) handleProjectTypes(w http.ResponseWriter, r *http.Request
 			s.jsonError(w, http.StatusInternalServerError, "Failed to list project types")
 			return
 		}
-		s.jsonResponse(w, types)
+
+		// Apply pagination
+		p := parsePagination(r)
+		totalCount := len(types)
+
+		// Apply offset
+		if p.Offset >= totalCount {
+			types = []*storage.ProjectType{}
+		} else {
+			types = types[p.Offset:]
+			// Apply limit
+			if p.Limit > 0 && p.Limit < len(types) {
+				types = types[:p.Limit]
+			}
+		}
+
+		s.jsonResponse(w, map[string]interface{}{
+			"items":      types,
+			"totalCount": totalCount,
+			"limit":      p.Limit,
+			"offset":     p.Offset,
+		})
 
 	case http.MethodPost:
 		// Write access: user role + write scope
