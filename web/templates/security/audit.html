@@ -1,0 +1,132 @@
+{{template "base" .}}
+
+{{define "title"}}Security Audit Log{{end}}
+
+{{define "content"}}
+<div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold">Security Audit Log</h1>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
+        <form method="GET" class="flex flex-wrap gap-4 items-end">
+            <div>
+                <label class="block text-sm font-medium mb-1">Event Type</label>
+                <select name="event_type" class="px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600">
+                    <option value="">All Events</option>
+                    <option value="issued" {{if eq .Filter.event_type "issued"}}selected{{end}}>Certificate Issued</option>
+                    <option value="revoked" {{if eq .Filter.event_type "revoked"}}selected{{end}}>Certificate Revoked</option>
+                    <option value="renewed" {{if eq .Filter.event_type "renewed"}}selected{{end}}>Certificate Renewed</option>
+                    <option value="rejected" {{if eq .Filter.event_type "rejected"}}selected{{end}}>Request Rejected</option>
+                    <option value="expired" {{if eq .Filter.event_type "expired"}}selected{{end}}>Certificate Expired</option>
+                    <option value="acme_obtained" {{if eq .Filter.event_type "acme_obtained"}}selected{{end}}>ACME Obtained</option>
+                    <option value="acme_renewed" {{if eq .Filter.event_type "acme_renewed"}}selected{{end}}>ACME Renewed</option>
+                    <option value="acme_failed" {{if eq .Filter.event_type "acme_failed"}}selected{{end}}>ACME Failed</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium mb-1">Agent ID</label>
+                <input type="text" name="agent_id" value="{{.Filter.agent_id}}"
+                       class="px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600"
+                       placeholder="Filter by agent...">
+            </div>
+            <div>
+                <button type="submit" class="bg-accent-600 hover:bg-accent-700 text-white px-4 py-2 rounded">
+                    Apply Filters
+                </button>
+                <a href="/security/audit" class="ml-2 text-gray-600 hover:text-gray-800 dark:text-gray-400">
+                    Clear
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Event Legend -->
+    <div class="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 mb-6">
+        <div class="text-sm font-medium mb-2">Event Types:</div>
+        <div class="flex flex-wrap gap-2">
+            <span class="px-2 py-1 text-xs rounded bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">issued</span>
+            <span class="px-2 py-1 text-xs rounded bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">revoked</span>
+            <span class="px-2 py-1 text-xs rounded bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">renewed</span>
+            <span class="px-2 py-1 text-xs rounded bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">rejected</span>
+            <span class="px-2 py-1 text-xs rounded bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300">expired</span>
+            <span class="px-2 py-1 text-xs rounded bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">acme_*</span>
+        </div>
+    </div>
+
+    <!-- Audit Log Table -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Timestamp</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Event</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Agent/Host</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Serial</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">CA</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Requested By</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Client IP</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Reason</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {{range .Events}}
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td class="px-4 py-3 text-sm whitespace-nowrap">{{formatTime .Timestamp}}</td>
+                        <td class="px-4 py-3">
+                            <span class="px-2 py-1 text-xs rounded 
+                                {{if eq .EventType "issued"}}bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200
+                                {{else if eq .EventType "revoked"}}bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200
+                                {{else if eq .EventType "renewed"}}bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200
+                                {{else if eq .EventType "rejected"}}bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200
+                                {{else if eq .EventType "expired"}}bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300
+                                {{else if hasPrefix .EventType "acme_"}}bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200
+                                {{else}}bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300{{end}}">
+                                {{.EventType}}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 font-mono text-sm">
+                            {{if .AgentID}}{{.AgentID}}{{else if .Hostname}}{{.Hostname}}{{else}}<span class="text-gray-400">-</span>{{end}}
+                        </td>
+                        <td class="px-4 py-3 font-mono text-xs text-gray-600 truncate max-w-[150px]">
+                            {{if .Serial}}{{.Serial}}{{else}}<span class="text-gray-400">-</span>{{end}}
+                        </td>
+                        <td class="px-4 py-3 text-sm">
+                            {{if .CAID}}{{slice .CAID 0 8}}...{{else}}<span class="text-gray-400">-</span>{{end}}
+                        </td>
+                        <td class="px-4 py-3 text-sm">{{.RequestedBy}}</td>
+                        <td class="px-4 py-3 font-mono text-sm">
+                            {{if .ClientIP}}{{.ClientIP}}{{else}}<span class="text-gray-400">-</span>{{end}}
+                        </td>
+                        <td class="px-4 py-3 text-sm text-gray-600">
+                            {{if .Reason}}{{.Reason}}{{else}}<span class="text-gray-400">-</span>{{end}}
+                        </td>
+                    </tr>
+                    {{else}}
+                    <tr>
+                        <td colspan="8" class="px-4 py-8 text-center text-gray-500">
+                            No audit events found{{if or .Filter.event_type .Filter.agent_id}} matching the current filters{{end}}.
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Export Options -->
+    <div class="mt-4 flex justify-end gap-2">
+        <a href="/api/v1/certificates/audit?format=csv{{if .Filter.event_type}}&event_type={{.Filter.event_type}}{{end}}{{if .Filter.agent_id}}&agent_id={{.Filter.agent_id}}{{end}}"
+           class="text-sm text-gray-600 hover:text-gray-800 dark:text-gray-400">
+            Export as CSV
+        </a>
+        <span class="text-gray-400">|</span>
+        <a href="/api/v1/certificates/audit?format=json{{if .Filter.event_type}}&event_type={{.Filter.event_type}}{{end}}{{if .Filter.agent_id}}&agent_id={{.Filter.agent_id}}{{end}}"
+           class="text-sm text-gray-600 hover:text-gray-800 dark:text-gray-400">
+            Export as JSON
+        </a>
+    </div>
+</div>
+{{end}}

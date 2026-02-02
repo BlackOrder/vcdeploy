@@ -1,0 +1,36 @@
+{{range .Certificates}}
+<tr class="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750">
+    <td class="px-4 py-3">
+        <a href="/agents/{{.AgentID}}" class="text-accent-600 hover:underline">{{.AgentID}}</a>
+    </td>
+    <td class="px-4 py-3 font-mono text-sm">{{.SerialNumber | truncate 16}}</td>
+    <td class="px-4 py-3">
+        {{if .RevokedAt}}
+            <span class="px-2 py-1 text-xs rounded bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-300">Revoked</span>
+        {{else if .IsExpired}}
+            <span class="px-2 py-1 text-xs rounded bg-red-200 text-red-800 dark:bg-red-800 dark:text-red-200">Expired</span>
+        {{else if .IsExpiringSoon}}
+            <span class="px-2 py-1 text-xs rounded bg-yellow-200 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-200">Expiring</span>
+        {{else}}
+            <span class="px-2 py-1 text-xs rounded bg-green-200 text-green-800 dark:bg-green-800 dark:text-green-200">Active</span>
+        {{end}}
+    </td>
+    <td class="px-4 py-3 text-sm">{{.NotBefore | formatTime}}</td>
+    <td class="px-4 py-3 text-sm">{{.NotAfter | formatTime}}</td>
+    <td class="px-4 py-3">
+        {{if not .RevokedAt}}
+        <button hx-post="/api/v1/certificates/agents/{{.AgentID}}/revoke"
+                hx-confirm="Revoke certificate for {{.AgentID}}?"
+                hx-swap="outerHTML"
+                hx-target="closest tr"
+                class="text-red-600 hover:text-red-800 text-sm">
+            Revoke
+        </button>
+        {{end}}
+    </td>
+</tr>
+{{else}}
+<tr>
+    <td colspan="6" class="px-4 py-8 text-center text-gray-500">No agent certificates found</td>
+</tr>
+{{end}}
