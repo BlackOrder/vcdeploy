@@ -106,19 +106,30 @@ test-bench: ## Run benchmarks (mirrors CI 'benchmarks' job)
 .PHONY: test-integration
 test-integration: ## Run integration tests (mirrors CI 'integration' job)
 	@echo "=== Integration Tests (mirrors CI 'integration' job) ==="
+	@echo "Cleaning up any existing SSH test container..."
+	@docker stop vcdeploy-test-ssh 2>/dev/null || true
+	@docker rm vcdeploy-test-ssh 2>/dev/null || true
 	@echo "Starting SSH test container..."
-	@docker run -d --name vcdeploy-test-ssh --rm \
+	@docker run -d --name vcdeploy-test-ssh \
 		-p 2222:2222 \
 		-e PUID=1000 -e PGID=1000 -e TZ=UTC \
 		-e PASSWORD_ACCESS=true -e USER_NAME=testuser -e USER_PASSWORD=testpass \
-		linuxserver/openssh-server >/dev/null 2>&1 || true
+		linuxserver/openssh-server >/dev/null 2>&1
 	@echo "Waiting for SSH server..."
-	@for i in $$(seq 1 30); do nc -z localhost 2222 2>/dev/null && break || sleep 1; done
+	@for i in $$(seq 1 30); do \
+		if nc -z localhost 2222 2>/dev/null; then \
+			echo "SSH server is ready!"; \
+			break; \
+		fi; \
+		sleep 1; \
+	done
+	@nc -z localhost 2222 2>/dev/null || (echo "SSH server failed to start"; docker stop vcdeploy-test-ssh 2>/dev/null || true; docker rm vcdeploy-test-ssh 2>/dev/null || true; exit 1)
 	@echo "Running integration tests..."
 	@TEST_SSH_HOST=localhost TEST_SSH_PORT=2222 TEST_SSH_USER=testuser TEST_SSH_PASS=testpass \
 		go test -tags=integration -race -v ./tests/integration/... ; \
 	TEST_EXIT=$$?; \
 	docker stop vcdeploy-test-ssh 2>/dev/null || true; \
+	docker rm vcdeploy-test-ssh 2>/dev/null || true; \
 	exit $$TEST_EXIT
 
 # ============================================================================
@@ -178,6 +189,9 @@ test-cli: build ## Run CLI tests (mirrors CI 'cli-tests' job)
 .PHONY: test-ui
 test-ui: build ## Run Playwright UI tests (mirrors CI 'ui-tests' job)
 	@echo "=== UI Tests (mirrors CI 'ui-tests' job) ==="
+	@echo "Cleaning up previous test data..."
+	@pkill -f "vcdeploy master" 2>/dev/null || true
+	@rm -rf data/
 	@cd tests/ui && npm ci && npx playwright install --with-deps chromium
 	@$(MAKE) -s _start-test-server
 	@cd tests/ui && npx playwright test --workers=1; \
@@ -339,7 +353,7 @@ _create-api-token:
 	fi; \
 	TOKEN=$$(curl -sf -X POST $(TEST_HTTP_URL)/api/v1/api-keys \
 		-H "Content-Type: application/json" \
-		-H "Cookie: session=$$SESSION" \
+		-H "Authorization: Bearer $$SESSION" \
 		-d '{"name":"test-key-'$$RANDOM'","description":"Test API key","scopes":["*"]}' | jq -r '.key'); \
 	if [ -z "$$TOKEN" ] || [ "$$TOKEN" = "null" ]; then \
 		echo "Failed to create API token" >&2; exit 1; \
