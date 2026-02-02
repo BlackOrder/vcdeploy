@@ -244,8 +244,8 @@ func runAdminRemote(cmd *cobra.Command, username, password, email string) error 
 		return fmt.Errorf("API request failed: %w", err)
 	}
 
-	var usersList []map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&usersList); err != nil {
+	var result paginatedResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		resp.Body.Close()
 		return fmt.Errorf("failed to decode users list: %w", err)
 	}
@@ -253,7 +253,7 @@ func runAdminRemote(cmd *cobra.Command, username, password, email string) error 
 
 	// Look for user by username
 	var userID float64
-	for _, u := range usersList {
+	for _, u := range result.Items {
 		if u["username"] == username {
 			id, ok := u["id"].(float64)
 			if ok {
