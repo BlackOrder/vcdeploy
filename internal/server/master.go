@@ -790,6 +790,11 @@ func (s *MasterServer) buildMainHandler() (http.Handler, error) {
 	// User TOTP Recovery Codes API
 	mux.HandleFunc("/api/v1/totp/recovery/regenerate", s.withAuth(s.handleRegenerateRecoveryCodes))
 
+	// User TOTP Self-Service API
+	mux.HandleFunc("/api/v1/totp/setup", s.withAuth(s.handleTOTPSetup))
+	mux.HandleFunc("/api/v1/totp/enable", s.withAuth(s.handleTOTPEnable))
+	mux.HandleFunc("/api/v1/totp/disable", s.withAuth(s.handleTOTPDisable))
+
 	// Provision API
 	mux.HandleFunc("/api/v1/provision", s.withAuth(s.handleProvisionJobs))
 	mux.HandleFunc("/api/v1/provision/", s.withAuth(s.handleProvisionJob))
@@ -857,6 +862,7 @@ func (s *MasterServer) buildMainHandler() (http.Handler, error) {
 	mux.HandleFunc("/audit", s.withUIAuth(s.handleAuditUI))
 	mux.HandleFunc("/api-keys", s.withUIAuth(s.handleAPIKeysUI))
 	mux.HandleFunc("/settings", s.withUIAuth(s.handleSettingsUI))
+	mux.HandleFunc("/profile", s.withUIAuth(s.handleProfileUI))
 
 	// Security management UI
 	mux.HandleFunc("/security/certificates", s.withUIAuth(s.handleCertificatesUI))

@@ -205,6 +205,14 @@ func (s *MasterServer) handleSettingsUI(w http.ResponseWriter, r *http.Request) 
 		"Active": "settings",
 	})
 	data["Settings"] = settings
+
+	// Add current user's TOTP status for admin disable modal
+	if userID, ok := GetUserIDFromContext(r.Context()); ok {
+		if user, err := s.userService.GetByID(ctx, userID); err == nil {
+			data["CurrentUserTOTPEnabled"] = user.TOTPEnabled
+		}
+	}
+
 	s.renderTemplate(w, "settings", data)
 }
 

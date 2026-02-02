@@ -128,11 +128,12 @@ func (s *MasterServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 		users := make([]map[string]interface{}, 0, len(result.Items))
 		for _, u := range result.Items {
 			users = append(users, map[string]interface{}{
-				"id":        u.ID,
-				"username":  u.Username,
-				"email":     u.Email,
-				"role":      u.Role,
-				"createdAt": u.CreatedAt,
+				"id":          u.ID,
+				"username":    u.Username,
+				"email":       u.Email,
+				"role":        u.Role,
+				"totpEnabled": u.TOTPEnabled,
+				"createdAt":   u.CreatedAt,
 			})
 		}
 		// Return paginated response with metadata
