@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"runtime"
 	"testing"
 )
 
@@ -26,6 +27,24 @@ func TestDeriveMachineKey(t *testing.T) {
 	}
 }
 
+func TestDeriveMachineKey_Consistent(t *testing.T) {
+	// Call multiple times to ensure consistency
+	var keys [][]byte
+	for i := 0; i < 5; i++ {
+		key, err := deriveMachineKey()
+		if err != nil {
+			t.Fatalf("deriveMachineKey call %d: %v", i, err)
+		}
+		keys = append(keys, key)
+	}
+
+	for i := 1; i < len(keys); i++ {
+		if string(keys[i]) != string(keys[0]) {
+			t.Errorf("key %d differs from key 0", i)
+		}
+	}
+}
+
 func TestGetMachineID(t *testing.T) {
 	// This test may not work in all environments (e.g., containers)
 	machineID, err := getMachineID()
@@ -38,6 +57,61 @@ func TestGetMachineID(t *testing.T) {
 	}
 
 	t.Logf("Machine ID: %s", machineID)
+}
+
+func TestGetMachineID_Linux(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux-specific test")
+	}
+
+	machineID, err := getMachineID()
+	if err != nil {
+		t.Fatalf("getMachineID on Linux: %v", err)
+	}
+
+	// Linux machine-id is typically a 32-char hex string
+	if len(machineID) < 16 {
+		t.Errorf("Linux machine ID too short: %d bytes", len(machineID))
+	}
+
+	t.Logf("Linux machine ID: %s", machineID)
+}
+
+func TestGetMachineID_Darwin(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS-specific test")
+	}
+
+	machineID, err := getMachineID()
+	if err != nil {
+		t.Fatalf("getMachineID on macOS: %v", err)
+	}
+
+	// macOS UUID is typically in the format: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
+	if len(machineID) < 32 {
+		t.Errorf("macOS machine ID too short: %d bytes", len(machineID))
+	}
+
+	t.Logf("macOS machine ID: %s", machineID)
+}
+
+func TestGetMacOSMachineID_ParsesIoreg(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS-specific test")
+	}
+
+	// getMacOSMachineID should return a valid UUID
+	machineID, err := getMacOSMachineID()
+	if err != nil {
+		t.Fatalf("getMacOSMachineID: %v", err)
+	}
+
+	// Should be a UUID format or similar identifier
+	if len(machineID) < 32 {
+		t.Errorf("macOS machine ID too short: got %d bytes, want >= 32", len(machineID))
+	}
+
+	t.Logf("macOS IOPlatformUUID: %s", machineID)
 }
 
 func TestGetPrimaryMAC(t *testing.T) {
