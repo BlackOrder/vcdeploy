@@ -334,11 +334,11 @@ func runTOTPStatusRemote(cmd *cobra.Command, username string) error {
 	}
 
 	var result struct {
-		UserID                int64  `json:"user_id"`
-		Username              string `json:"username"`
-		Email                 string `json:"email"`
-		Role                  string `json:"role"`
-		TOTPEnabled           bool   `json:"totp_enabled"`
+		UserID                 int64  `json:"user_id"`
+		Username               string `json:"username"`
+		Email                  string `json:"email"`
+		Role                   string `json:"role"`
+		TOTPEnabled            bool   `json:"totp_enabled"`
 		RecoveryCodesRemaining int    `json:"recovery_codes_remaining"`
 	}
 
