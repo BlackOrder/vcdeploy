@@ -24,11 +24,14 @@ PROTO_OUT  := internal/proto
 COMPOSE := $(shell command -v docker-compose 2>/dev/null || echo "docker compose")
 
 # Test configuration (mirrors CI)
-TEST_TIMEOUT     := 15m
-TEST_ADMIN_PASS  := Admin@Password123!
-TEST_HTTP_PORT   := 9000
-TEST_HTTP_URL    := http://localhost:$(TEST_HTTP_PORT)
-TEST_GRPC_PORT   := 9001
+TEST_TIMEOUT      := 15m
+TEST_ADMIN_PASS   := Admin@Password123!
+TEST_HTTP_PORT    := 9000
+TEST_HTTP_URL     := http://localhost:$(TEST_HTTP_PORT)
+TEST_GRPC_PORT    := 9001
+TEST_SSH_PORT     := 2223
+TEST_LOG_FILE     := test-server.log
+TEST_COMPOSE_FILE := docker/docker-compose.test.yml
 
 # ============================================================================
 # Development Build
@@ -60,14 +63,14 @@ clean: ## Remove build artifacts and stop any running servers
 	rm -rf $(OUT_DIR) dist/ coverage.out coverage.html data/
 	go clean -testcache
 	-@pkill -f "vcdeploy master" 2>/dev/null || true
-	-@$(COMPOSE) -f docker/docker-compose.test.yml down -v 2>/dev/null || true
+	-@$(COMPOSE) -f $(TEST_COMPOSE_FILE) down -v 2>/dev/null || true
 
 .PHONY: test-cleanup
 test-cleanup: ## Clean up test Docker environment (use after interrupted tests)
 	@echo "Cleaning up test environment..."
 	-@pkill -f "vcdeploy master" 2>/dev/null || true
 	-@pkill -f "docker.*logs" 2>/dev/null || true
-	-@$(COMPOSE) -f docker/docker-compose.test.yml down -v 2>/dev/null || true
+	-@$(COMPOSE) -f $(TEST_COMPOSE_FILE) down -v 2>/dev/null || true
 	-@docker volume rm docker_test-data docker_test-logs docker_agent-test-data docker_agent-test-logs docker_ssh-target-data 2>/dev/null || true
 	-@rm -rf data/
 	@echo "Test environment cleaned up."
@@ -125,15 +128,8 @@ test-integration: ## Run integration tests (mirrors CI 'integration' job)
 		-e PUID=1000 -e PGID=1000 -e TZ=UTC \
 		-e PASSWORD_ACCESS=true -e USER_NAME=testuser -e USER_PASSWORD=testpass \
 		linuxserver/openssh-server >/dev/null 2>&1
-	@echo "Waiting for SSH server..."
-	@for i in $$(seq 1 30); do \
-		if nc -z localhost 2222 2>/dev/null; then \
-			echo "SSH server is ready!"; \
-			break; \
-		fi; \
-		sleep 1; \
-	done
-	@nc -z localhost 2222 2>/dev/null || (echo "SSH server failed to start"; docker stop vcdeploy-test-ssh 2>/dev/null || true; docker rm vcdeploy-test-ssh 2>/dev/null || true; exit 1)
+	@$(MAKE) -s _wait-for-port PORT=2222 SERVICE="SSH server" || \
+		(docker stop vcdeploy-test-ssh 2>/dev/null || true; docker rm vcdeploy-test-ssh 2>/dev/null || true; exit 1)
 	@echo "Running integration tests..."
 	@TEST_SSH_HOST=localhost TEST_SSH_PORT=2222 TEST_SSH_USER=testuser TEST_SSH_PASS=testpass \
 		go test -tags=integration -race -v ./tests/integration/... ; \
@@ -143,30 +139,31 @@ test-integration: ## Run integration tests (mirrors CI 'integration' job)
 	exit $$TEST_EXIT
 
 # ============================================================================
-# Testing - E2E API Tests (Starts own server process)
+# Testing - E2E API Tests
 # ============================================================================
 
 .PHONY: test-e2e
-test-e2e: build ## Run E2E API tests (fast mode, skips SSH-dependent tests)
+test-e2e: build ## Run E2E API tests with SSH target (complete tests)
+	@echo "=== E2E API Tests (full mode with SSH target) ==="
+	@echo "Server logs: $(TEST_LOG_FILE)"
+	@$(MAKE) -s _test-env-start SERVICES="master ssh-target"
+	@$(MAKE) -s _wait-for-port PORT=$(TEST_SSH_PORT) SERVICE="SSH target" || ($(MAKE) -s test-cleanup; exit 1)
+	@API_TOKEN=$$($(MAKE) -s _create-api-token) && \
+	echo "Running E2E tests..." && \
+	E2E_MASTER_HTTP_URL=$(TEST_HTTP_URL) E2E_API_TOKEN=$$API_TOKEN \
+		E2E_ADMIN_USER=admin E2E_ADMIN_PASS=$(TEST_ADMIN_PASS) \
+		E2E_TARGET_SSH_HOST=localhost E2E_TARGET_SSH_PORT=$(TEST_SSH_PORT) \
+		go test -v -tags=e2e -timeout $(TEST_TIMEOUT) ./tests/e2e/... ; \
+	TEST_EXIT=$$?; \
+	$(MAKE) -s test-cleanup; \
+	exit $$TEST_EXIT
+
+.PHONY: test-e2e-short
+test-e2e-short: build ## Run E2E API tests (fast mode, skips SSH-dependent tests)
 	@echo "=== E2E API Tests (fast mode) ==="
-	@echo "Note: SSH/deploy tests will be skipped. Use 'make test-e2e-full' for complete tests."
-	@echo "Server logs will be written to: test-server.log"
-	@$(MAKE) -s test-cleanup 2>/dev/null || true
-	@> test-server.log
-	@echo "Building and starting master via docker compose..."
-	@TEST_ADMIN_PASSWORD=$(TEST_ADMIN_PASS) $(COMPOSE) -f docker/docker-compose.test.yml up -d master --build
-	@echo "Waiting for master to be ready..."
-	@for i in $$(seq 1 30); do \
-		if curl -sf $(TEST_HTTP_URL)/api/v1/health >/dev/null 2>&1; then \
-			echo "Master is ready!"; \
-			break; \
-		fi; \
-		echo "Attempt $$i/30: Waiting..."; \
-		sleep 2; \
-	done
-	@curl -sf $(TEST_HTTP_URL)/api/v1/health >/dev/null || \
-		($(COMPOSE) -f docker/docker-compose.test.yml logs master >> test-server.log 2>&1 && $(MAKE) -s test-cleanup && exit 1)
-	@$(COMPOSE) -f docker/docker-compose.test.yml logs -f master >> test-server.log 2>&1 &
+	@echo "Note: SSH/deploy tests will be skipped. Use 'make test-e2e' for complete tests."
+	@echo "Server logs: $(TEST_LOG_FILE)"
+	@$(MAKE) -s _test-env-start SERVICES="master"
 	@API_TOKEN=$$($(MAKE) -s _create-api-token) && \
 	echo "Running E2E tests (fast mode)..." && \
 	E2E_MASTER_HTTP_URL=$(TEST_HTTP_URL) E2E_API_TOKEN=$$API_TOKEN \
@@ -177,71 +174,35 @@ test-e2e: build ## Run E2E API tests (fast mode, skips SSH-dependent tests)
 	$(MAKE) -s test-cleanup; \
 	exit $$TEST_EXIT
 
-.PHONY: test-e2e-full
-test-e2e-full: build ## Run E2E API tests with SSH target (complete tests)
-	@echo "=== E2E API Tests (full mode with SSH target) ==="
-	@echo "Server logs will be written to: test-server.log"
-	@$(MAKE) -s test-cleanup 2>/dev/null || true
-	@> test-server.log
-	@echo "Building and starting master + ssh-target via docker compose..."
-	@TEST_ADMIN_PASSWORD=$(TEST_ADMIN_PASS) $(COMPOSE) -f docker/docker-compose.test.yml up -d master ssh-target --build
-	@echo "Waiting for master to be ready..."
-	@for i in $$(seq 1 30); do \
-		if curl -sf $(TEST_HTTP_URL)/api/v1/health >/dev/null 2>&1; then \
-			echo "Master is ready!"; \
-			break; \
-		fi; \
-		echo "Attempt $$i/30: Waiting..."; \
-		sleep 2; \
-	done
-	@curl -sf $(TEST_HTTP_URL)/api/v1/health >/dev/null || \
-		($(COMPOSE) -f docker/docker-compose.test.yml logs master >> test-server.log 2>&1 && $(MAKE) -s test-cleanup && exit 1)
-	@echo "Waiting for SSH target to be ready..."
-	@for i in $$(seq 1 30); do \
-		if nc -z localhost 2223 2>/dev/null; then \
-			echo "SSH target is ready!"; \
-			break; \
-		fi; \
-		echo "Attempt $$i/30: Waiting for SSH..."; \
-		sleep 2; \
-	done
-	@$(COMPOSE) -f docker/docker-compose.test.yml logs -f master ssh-target >> test-server.log 2>&1 &
+# ============================================================================
+# Testing - CLI Tests
+# ============================================================================
+
+.PHONY: test-cli
+test-cli: build ## Run CLI tests with SSH target (complete tests)
+	@echo "=== CLI Tests (full mode with SSH target) ==="
+	@echo "Server logs: $(TEST_LOG_FILE)"
+	@$(MAKE) -s _test-env-start SERVICES="master ssh-target"
+	@$(MAKE) -s _wait-for-port PORT=$(TEST_SSH_PORT) SERVICE="SSH target" || ($(MAKE) -s test-cleanup; exit 1)
 	@API_TOKEN=$$($(MAKE) -s _create-api-token) && \
-	echo "Running E2E tests (full mode)..." && \
-	E2E_MASTER_HTTP_URL=$(TEST_HTTP_URL) E2E_API_TOKEN=$$API_TOKEN \
-		E2E_ADMIN_USER=admin E2E_ADMIN_PASS=$(TEST_ADMIN_PASS) \
-		E2E_TARGET_SSH_HOST=localhost E2E_TARGET_SSH_PORT=2223 \
-		go test -v -tags=e2e -timeout $(TEST_TIMEOUT) ./tests/e2e/... ; \
+	echo "Running CLI tests..." && \
+	VCDEPLOY_BINARY=./$(OUT_DIR)/vcdeploy \
+		E2E_MASTER_HTTP_URL=$(TEST_HTTP_URL) E2E_API_TOKEN=$$API_TOKEN \
+		E2E_ADMIN_PASS=$(TEST_ADMIN_PASS) \
+		E2E_TARGET_SSH_HOST=localhost E2E_TARGET_SSH_PORT=$(TEST_SSH_PORT) \
+		go test -v -tags=cli -timeout $(TEST_TIMEOUT) -p=1 ./tests/cli/... ; \
 	TEST_EXIT=$$?; \
 	$(MAKE) -s test-cleanup; \
 	exit $$TEST_EXIT
 
-# ============================================================================
-# Testing - CLI Tests (Starts own server via Docker)
-# ============================================================================
-
-.PHONY: test-cli
-test-cli: build ## Run CLI tests (mirrors CI 'cli-tests' job)
-	@echo "=== CLI Tests (mirrors CI 'cli-tests' job) ==="
-	@echo "Server logs will be written to: test-server.log"
-	@$(MAKE) -s test-cleanup 2>/dev/null || true
-	@> test-server.log
-	@echo "Building and starting master via docker compose..."
-	@TEST_ADMIN_PASSWORD=$(TEST_ADMIN_PASS) $(COMPOSE) -f docker/docker-compose.test.yml up -d master --build
-	@echo "Waiting for master to be ready..."
-	@for i in $$(seq 1 30); do \
-		if curl -sf $(TEST_HTTP_URL)/api/v1/health >/dev/null 2>&1; then \
-			echo "Master is ready!"; \
-			break; \
-		fi; \
-		echo "Attempt $$i/30: Waiting..."; \
-		sleep 2; \
-	done
-	@curl -sf $(TEST_HTTP_URL)/api/v1/health >/dev/null || \
-		($(COMPOSE) -f docker/docker-compose.test.yml logs master >> test-server.log 2>&1 && $(MAKE) -s test-cleanup && exit 1)
-	@$(COMPOSE) -f docker/docker-compose.test.yml logs -f master >> test-server.log 2>&1 &
+.PHONY: test-cli-short
+test-cli-short: build ## Run CLI tests (fast mode, skips target-dependent tests)
+	@echo "=== CLI Tests (fast mode) ==="
+	@echo "Note: Target-dependent tests will be skipped. Use 'make test-cli' for complete tests."
+	@echo "Server logs: $(TEST_LOG_FILE)"
+	@$(MAKE) -s _test-env-start SERVICES="master"
 	@API_TOKEN=$$($(MAKE) -s _create-api-token) && \
-	echo "Running CLI tests..." && \
+	echo "Running CLI tests (fast mode)..." && \
 	VCDEPLOY_BINARY=./$(OUT_DIR)/vcdeploy \
 		E2E_MASTER_HTTP_URL=$(TEST_HTTP_URL) E2E_API_TOKEN=$$API_TOKEN \
 		E2E_ADMIN_PASS=$(TEST_ADMIN_PASS) SKIP_AGENT_TESTS=1 \
@@ -261,10 +222,10 @@ test-ui: build ## Run Playwright UI tests (mirrors CI 'ui-tests' job)
 	@pkill -f "vcdeploy master" 2>/dev/null || true
 	@rm -rf data/
 	@cd tests/ui && npm ci && npx playwright install --with-deps chromium
-	@$(MAKE) -s _start-test-server
+	@$(MAKE) -s _start-local-server
 	@cd tests/ui && npx playwright test --workers=1; \
 	TEST_EXIT=$$?; \
-	$(MAKE) -s _stop-test-server; \
+	$(MAKE) -s _stop-local-server; \
 	exit $$TEST_EXIT
 
 # ============================================================================
@@ -275,6 +236,10 @@ test-ui: build ## Run Playwright UI tests (mirrors CI 'ui-tests' job)
 test-all: test test-systemd test-integration test-e2e test-cli ## Run all tests (mirrors full CI)
 	@echo "=== All tests passed! ==="
 
+.PHONY: test-all-short
+test-all-short: test test-systemd test-integration test-e2e-short test-cli-short ## Run all tests (fast mode)
+	@echo "=== All tests passed (fast mode)! ==="
+
 # ============================================================================
 # Testing - Manual Infrastructure (for debugging)
 # ============================================================================
@@ -282,30 +247,24 @@ test-all: test test-systemd test-integration test-e2e test-cli ## Run all tests 
 .PHONY: test-infra-up
 test-infra-up: ## Start full test infrastructure (for debugging)
 	@echo "Cleaning up previous Docker test environment..."
-	@$(COMPOSE) -f docker/docker-compose.test.yml down -v 2>/dev/null || true
+	@$(COMPOSE) -f $(TEST_COMPOSE_FILE) down -v 2>/dev/null || true
 	@docker volume rm docker_test-data docker_test-logs docker_agent-test-data docker_agent-test-logs 2>/dev/null || true
-	TEST_ADMIN_PASSWORD=$(TEST_ADMIN_PASS) $(COMPOSE) -f docker/docker-compose.test.yml up -d --build --wait
+	TEST_ADMIN_PASSWORD=$(TEST_ADMIN_PASS) $(COMPOSE) -f $(TEST_COMPOSE_FILE) up -d --build --wait
 	@echo "Test infrastructure ready!"
 	@echo "  Master HTTP: $(TEST_HTTP_URL)"
 	@echo "  Master gRPC: localhost:$(TEST_GRPC_PORT)"
+	@echo "  SSH Target:  localhost:$(TEST_SSH_PORT)"
 
 .PHONY: test-infra-down
 test-infra-down: ## Stop test infrastructure
-	$(COMPOSE) -f docker/docker-compose.test.yml down -v
+	$(COMPOSE) -f $(TEST_COMPOSE_FILE) down -v
 
 .PHONY: test-infra-clean
-test-infra-clean: ## Clean all test data (Docker volumes and local data/)
-	@echo "Stopping any running test containers..."
-	@$(COMPOSE) -f docker/docker-compose.test.yml down -v 2>/dev/null || true
-	@echo "Removing Docker test volumes..."
-	@docker volume rm docker_test-data docker_test-logs docker_agent-test-data docker_agent-test-logs 2>/dev/null || true
-	@echo "Removing local test data directory..."
-	@rm -rf data/
-	@echo "Test infrastructure cleaned!"
+test-infra-clean: test-cleanup ## Clean all test data (alias for test-cleanup)
 
 .PHONY: test-infra-logs
 test-infra-logs: ## Show test infrastructure logs
-	$(COMPOSE) -f docker/docker-compose.test.yml logs -f
+	$(COMPOSE) -f $(TEST_COMPOSE_FILE) logs -f
 
 # ============================================================================
 # Code Quality
@@ -383,11 +342,54 @@ docker-logs: ## Show container logs
 # Internal Helpers (not shown in help)
 # ============================================================================
 
-# Start test server process (for e2e and ui tests)
-_start-test-server:
-	@echo "Starting test server..."
-	@echo "Cleaning up previous test data..."
-	@> test-server.log
+# Initialize test environment: cleanup, reset log file, start services
+# Usage: $(MAKE) _test-env-start SERVICES="master" or SERVICES="master ssh-target"
+_test-env-start:
+	@$(MAKE) -s test-cleanup 2>/dev/null || true
+	@> $(TEST_LOG_FILE)
+	@echo "Building and starting services: $(SERVICES)..."
+	@TEST_ADMIN_PASSWORD=$(TEST_ADMIN_PASS) $(COMPOSE) -f $(TEST_COMPOSE_FILE) up -d $(SERVICES) --build
+	@$(MAKE) -s _wait-for-master || ($(MAKE) -s _dump-logs-and-cleanup; exit 1)
+	@$(COMPOSE) -f $(TEST_COMPOSE_FILE) logs -f $(SERVICES) >> $(TEST_LOG_FILE) 2>&1 &
+
+# Wait for master to be ready (health check)
+_wait-for-master:
+	@echo "Waiting for master to be ready..."
+	@for i in $$(seq 1 30); do \
+		if curl -sf $(TEST_HTTP_URL)/api/v1/health >/dev/null 2>&1; then \
+			echo "Master is ready!"; \
+			exit 0; \
+		fi; \
+		echo "Attempt $$i/30: Waiting..."; \
+		sleep 2; \
+	done; \
+	echo "Master failed to start within timeout"; \
+	exit 1
+
+# Wait for a TCP port to be available
+# Usage: $(MAKE) _wait-for-port PORT=2223 SERVICE="SSH target"
+_wait-for-port:
+	@echo "Waiting for $(SERVICE) on port $(PORT)..."
+	@for i in $$(seq 1 30); do \
+		if nc -z localhost $(PORT) 2>/dev/null; then \
+			echo "$(SERVICE) is ready!"; \
+			exit 0; \
+		fi; \
+		echo "Attempt $$i/30: Waiting for $(SERVICE)..."; \
+		sleep 2; \
+	done; \
+	echo "$(SERVICE) failed to start within timeout"; \
+	exit 1
+
+# Dump logs to file and cleanup (used on startup failure)
+_dump-logs-and-cleanup:
+	@$(COMPOSE) -f $(TEST_COMPOSE_FILE) logs >> $(TEST_LOG_FILE) 2>&1
+	@$(MAKE) -s test-cleanup
+
+# Start local test server (non-Docker, for UI tests)
+_start-local-server:
+	@echo "Starting local test server..."
+	@> $(TEST_LOG_FILE)
 	@rm -rf data/
 	@mkdir -p data
 	@[ -L data/templates ] || ln -sf ../web/templates data/templates
@@ -395,20 +397,12 @@ _start-test-server:
 	@VCDEPLOY_TEST_MODE=true VCDEPLOY_ADMIN_PASSWORD=$(TEST_ADMIN_PASS) \
 		VCDEPLOY_DATA_DIR=./data VCDEPLOY_CONFIG_DIR=./configs \
 		VCDEPLOY_RUN_DIR=./data VCDEPLOY_LOG_DIR=./data \
-		./$(OUT_DIR)/vcdeploy master start --config=configs/master-dev.yaml >> test-server.log 2>&1 &
-	@echo "Waiting for server to be ready..."
-	@for i in $$(seq 1 30); do \
-		if curl -sf $(TEST_HTTP_URL)/api/v1/health >/dev/null 2>&1; then \
-			echo "Server is ready!"; \
-			break; \
-		fi; \
-		sleep 2; \
-	done
-	@curl -sf $(TEST_HTTP_URL)/api/v1/health >/dev/null || (echo "Server failed to start. Check test-server.log for details"; cat test-server.log; exit 1)
+		./$(OUT_DIR)/vcdeploy master start --config=configs/master-dev.yaml >> $(TEST_LOG_FILE) 2>&1 &
+	@$(MAKE) -s _wait-for-master || (echo "Check $(TEST_LOG_FILE) for details"; cat $(TEST_LOG_FILE); exit 1)
 
-# Stop test server process
-_stop-test-server:
-	@echo "Stopping test server..."
+# Stop local test server
+_stop-local-server:
+	@echo "Stopping local test server..."
 	@pkill -f "vcdeploy master" 2>/dev/null || true
 	@rm -rf data/
 
