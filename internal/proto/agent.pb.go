@@ -2081,6 +2081,266 @@ func (x *AgentReady) GetTimestamp() int64 {
 	return 0
 }
 
+// ReauthRequest is sent by agent to re-authenticate using HMAC.
+type ReauthRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AgentId       string                 `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	Timestamp     int64                  `protobuf:"varint,2,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	Nonce         []byte                 `protobuf:"bytes,3,opt,name=nonce,proto3" json:"nonce,omitempty"`
+	Signature     []byte                 `protobuf:"bytes,4,opt,name=signature,proto3" json:"signature,omitempty"` // HMAC(agent_id + timestamp + nonce) using shared secret
+	Csr           []byte                 `protobuf:"bytes,5,opt,name=csr,proto3" json:"csr,omitempty"`             // Certificate Signing Request for new certificate
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReauthRequest) Reset() {
+	*x = ReauthRequest{}
+	mi := &file_api_proto_agent_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReauthRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReauthRequest) ProtoMessage() {}
+
+func (x *ReauthRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_agent_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReauthRequest.ProtoReflect.Descriptor instead.
+func (*ReauthRequest) Descriptor() ([]byte, []int) {
+	return file_api_proto_agent_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *ReauthRequest) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+func (x *ReauthRequest) GetTimestamp() int64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
+func (x *ReauthRequest) GetNonce() []byte {
+	if x != nil {
+		return x.Nonce
+	}
+	return nil
+}
+
+func (x *ReauthRequest) GetSignature() []byte {
+	if x != nil {
+		return x.Signature
+	}
+	return nil
+}
+
+func (x *ReauthRequest) GetCsr() []byte {
+	if x != nil {
+		return x.Csr
+	}
+	return nil
+}
+
+// ReauthResponse contains the new certificate after re-authentication.
+type ReauthResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Certificate   []byte                 `protobuf:"bytes,1,opt,name=certificate,proto3" json:"certificate,omitempty"`
+	CaCertificate []byte                 `protobuf:"bytes,2,opt,name=ca_certificate,json=caCertificate,proto3" json:"ca_certificate,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReauthResponse) Reset() {
+	*x = ReauthResponse{}
+	mi := &file_api_proto_agent_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReauthResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReauthResponse) ProtoMessage() {}
+
+func (x *ReauthResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_agent_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReauthResponse.ProtoReflect.Descriptor instead.
+func (*ReauthResponse) Descriptor() ([]byte, []int) {
+	return file_api_proto_agent_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *ReauthResponse) GetCertificate() []byte {
+	if x != nil {
+		return x.Certificate
+	}
+	return nil
+}
+
+func (x *ReauthResponse) GetCaCertificate() []byte {
+	if x != nil {
+		return x.CaCertificate
+	}
+	return nil
+}
+
+// StreamRepoRequest requests a repository archive stream.
+type StreamRepoRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DeploymentId  string                 `protobuf:"bytes,1,opt,name=deployment_id,json=deploymentId,proto3" json:"deployment_id,omitempty"`
+	RepoUrl       string                 `protobuf:"bytes,2,opt,name=repo_url,json=repoUrl,proto3" json:"repo_url,omitempty"`
+	Ref           string                 `protobuf:"bytes,3,opt,name=ref,proto3" json:"ref,omitempty"` // Branch, tag, or commit
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StreamRepoRequest) Reset() {
+	*x = StreamRepoRequest{}
+	mi := &file_api_proto_agent_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StreamRepoRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StreamRepoRequest) ProtoMessage() {}
+
+func (x *StreamRepoRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_agent_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StreamRepoRequest.ProtoReflect.Descriptor instead.
+func (*StreamRepoRequest) Descriptor() ([]byte, []int) {
+	return file_api_proto_agent_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *StreamRepoRequest) GetDeploymentId() string {
+	if x != nil {
+		return x.DeploymentId
+	}
+	return ""
+}
+
+func (x *StreamRepoRequest) GetRepoUrl() string {
+	if x != nil {
+		return x.RepoUrl
+	}
+	return ""
+}
+
+func (x *StreamRepoRequest) GetRef() string {
+	if x != nil {
+		return x.Ref
+	}
+	return ""
+}
+
+// RepoChunk is a chunk of a repository archive stream.
+type RepoChunk struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Data          []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	Checksum      string                 `protobuf:"bytes,2,opt,name=checksum,proto3" json:"checksum,omitempty"`                     // SHA256 checksum, only in last chunk
+	TotalSize     int64                  `protobuf:"varint,3,opt,name=total_size,json=totalSize,proto3" json:"total_size,omitempty"` // Total archive size in bytes
+	IsLast        bool                   `protobuf:"varint,4,opt,name=is_last,json=isLast,proto3" json:"is_last,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RepoChunk) Reset() {
+	*x = RepoChunk{}
+	mi := &file_api_proto_agent_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RepoChunk) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RepoChunk) ProtoMessage() {}
+
+func (x *RepoChunk) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_agent_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RepoChunk.ProtoReflect.Descriptor instead.
+func (*RepoChunk) Descriptor() ([]byte, []int) {
+	return file_api_proto_agent_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *RepoChunk) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+func (x *RepoChunk) GetChecksum() string {
+	if x != nil {
+		return x.Checksum
+	}
+	return ""
+}
+
+func (x *RepoChunk) GetTotalSize() int64 {
+	if x != nil {
+		return x.TotalSize
+	}
+	return 0
+}
+
+func (x *RepoChunk) GetIsLast() bool {
+	if x != nil {
+		return x.IsLast
+	}
+	return false
+}
+
 var File_api_proto_agent_proto protoreflect.FileDescriptor
 
 const file_api_proto_agent_proto_rawDesc = "" +
@@ -2259,7 +2519,26 @@ const file_api_proto_agent_proto_rawDesc = "" +
 	"\n" +
 	"AgentReady\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x1c\n" +
-	"\ttimestamp\x18\x02 \x01(\x03R\ttimestamp*\xee\x02\n" +
+	"\ttimestamp\x18\x02 \x01(\x03R\ttimestamp\"\x8e\x01\n" +
+	"\rReauthRequest\x12\x19\n" +
+	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x1c\n" +
+	"\ttimestamp\x18\x02 \x01(\x03R\ttimestamp\x12\x14\n" +
+	"\x05nonce\x18\x03 \x01(\fR\x05nonce\x12\x1c\n" +
+	"\tsignature\x18\x04 \x01(\fR\tsignature\x12\x10\n" +
+	"\x03csr\x18\x05 \x01(\fR\x03csr\"Y\n" +
+	"\x0eReauthResponse\x12 \n" +
+	"\vcertificate\x18\x01 \x01(\fR\vcertificate\x12%\n" +
+	"\x0eca_certificate\x18\x02 \x01(\fR\rcaCertificate\"e\n" +
+	"\x11StreamRepoRequest\x12#\n" +
+	"\rdeployment_id\x18\x01 \x01(\tR\fdeploymentId\x12\x19\n" +
+	"\brepo_url\x18\x02 \x01(\tR\arepoUrl\x12\x10\n" +
+	"\x03ref\x18\x03 \x01(\tR\x03ref\"s\n" +
+	"\tRepoChunk\x12\x12\n" +
+	"\x04data\x18\x01 \x01(\fR\x04data\x12\x1a\n" +
+	"\bchecksum\x18\x02 \x01(\tR\bchecksum\x12\x1d\n" +
+	"\n" +
+	"total_size\x18\x03 \x01(\x03R\ttotalSize\x12\x17\n" +
+	"\ais_last\x18\x04 \x01(\bR\x06isLast*\xee\x02\n" +
 	"\x0fDeploymentState\x12 \n" +
 	"\x1cDEPLOYMENT_STATE_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18DEPLOYMENT_STATE_PENDING\x10\x01\x12\x1e\n" +
@@ -2278,11 +2557,13 @@ const file_api_proto_agent_proto_rawDesc = "" +
 	"\x0fLOG_LEVEL_DEBUG\x10\x01\x12\x12\n" +
 	"\x0eLOG_LEVEL_INFO\x10\x02\x12\x12\n" +
 	"\x0eLOG_LEVEL_WARN\x10\x03\x12\x13\n" +
-	"\x0fLOG_LEVEL_ERROR\x10\x042\xe9\x01\n" +
+	"\x0fLOG_LEVEL_ERROR\x10\x042\x83\x03\n" +
 	"\fAgentService\x12G\n" +
 	"\bRegister\x12\x1c.vcdeploy.v1.RegisterRequest\x1a\x1d.vcdeploy.v1.RegisterResponse\x12D\n" +
 	"\aConnect\x12\x19.vcdeploy.v1.AgentMessage\x1a\x1a.vcdeploy.v1.MasterMessage(\x010\x01\x12J\n" +
-	"\tHeartbeat\x12\x1d.vcdeploy.v1.HeartbeatRequest\x1a\x1e.vcdeploy.v1.HeartbeatResponseB/Z-github.com/BlackOrder/vcdeploy/internal/protob\x06proto3"
+	"\tHeartbeat\x12\x1d.vcdeploy.v1.HeartbeatRequest\x1a\x1e.vcdeploy.v1.HeartbeatResponse\x12I\n" +
+	"\x0eReauthenticate\x12\x1a.vcdeploy.v1.ReauthRequest\x1a\x1b.vcdeploy.v1.ReauthResponse\x12M\n" +
+	"\x11StreamRepoArchive\x12\x1e.vcdeploy.v1.StreamRepoRequest\x1a\x16.vcdeploy.v1.RepoChunk0\x01B/Z-github.com/BlackOrder/vcdeploy/internal/protob\x06proto3"
 
 var (
 	file_api_proto_agent_proto_rawDescOnce sync.Once
@@ -2297,7 +2578,7 @@ func file_api_proto_agent_proto_rawDescGZIP() []byte {
 }
 
 var file_api_proto_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_api_proto_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
+var file_api_proto_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
 var file_api_proto_agent_proto_goTypes = []any{
 	(DeploymentState)(0),       // 0: vcdeploy.v1.DeploymentState
 	(LogLevel)(0),              // 1: vcdeploy.v1.LogLevel
@@ -2323,12 +2604,16 @@ var file_api_proto_agent_proto_goTypes = []any{
 	(*DeploymentLog)(nil),      // 21: vcdeploy.v1.DeploymentLog
 	(*CommandResult)(nil),      // 22: vcdeploy.v1.CommandResult
 	(*AgentReady)(nil),         // 23: vcdeploy.v1.AgentReady
-	nil,                        // 24: vcdeploy.v1.RegisterRequest.LabelsEntry
-	nil,                        // 25: vcdeploy.v1.DeployCommand.EnvVarsEntry
-	nil,                        // 26: vcdeploy.v1.HealthCheckCommand.HeadersEntry
+	(*ReauthRequest)(nil),      // 24: vcdeploy.v1.ReauthRequest
+	(*ReauthResponse)(nil),     // 25: vcdeploy.v1.ReauthResponse
+	(*StreamRepoRequest)(nil),  // 26: vcdeploy.v1.StreamRepoRequest
+	(*RepoChunk)(nil),          // 27: vcdeploy.v1.RepoChunk
+	nil,                        // 28: vcdeploy.v1.RegisterRequest.LabelsEntry
+	nil,                        // 29: vcdeploy.v1.DeployCommand.EnvVarsEntry
+	nil,                        // 30: vcdeploy.v1.HealthCheckCommand.HeadersEntry
 }
 var file_api_proto_agent_proto_depIdxs = []int32{
-	24, // 0: vcdeploy.v1.RegisterRequest.labels:type_name -> vcdeploy.v1.RegisterRequest.LabelsEntry
+	28, // 0: vcdeploy.v1.RegisterRequest.labels:type_name -> vcdeploy.v1.RegisterRequest.LabelsEntry
 	3,  // 1: vcdeploy.v1.RegisterRequest.capabilities:type_name -> vcdeploy.v1.AgentCapabilities
 	6,  // 2: vcdeploy.v1.HeartbeatRequest.stats:type_name -> vcdeploy.v1.AgentStats
 	20, // 3: vcdeploy.v1.HeartbeatRequest.active_deployments:type_name -> vcdeploy.v1.DeploymentStatus
@@ -2345,20 +2630,24 @@ var file_api_proto_agent_proto_depIdxs = []int32{
 	19, // 14: vcdeploy.v1.MasterMessage.health_check_command:type_name -> vcdeploy.v1.HealthCheckCommand
 	13, // 15: vcdeploy.v1.MasterMessage.update_command:type_name -> vcdeploy.v1.UpdateCommand
 	15, // 16: vcdeploy.v1.DeployCommand.settings:type_name -> vcdeploy.v1.DeploymentSettings
-	25, // 17: vcdeploy.v1.DeployCommand.env_vars:type_name -> vcdeploy.v1.DeployCommand.EnvVarsEntry
+	29, // 17: vcdeploy.v1.DeployCommand.env_vars:type_name -> vcdeploy.v1.DeployCommand.EnvVarsEntry
 	16, // 18: vcdeploy.v1.DeployCommand.reload_services:type_name -> vcdeploy.v1.ServiceReload
 	16, // 19: vcdeploy.v1.RollbackCommand.reload_services:type_name -> vcdeploy.v1.ServiceReload
-	26, // 20: vcdeploy.v1.HealthCheckCommand.headers:type_name -> vcdeploy.v1.HealthCheckCommand.HeadersEntry
+	30, // 20: vcdeploy.v1.HealthCheckCommand.headers:type_name -> vcdeploy.v1.HealthCheckCommand.HeadersEntry
 	0,  // 21: vcdeploy.v1.DeploymentStatus.state:type_name -> vcdeploy.v1.DeploymentState
 	1,  // 22: vcdeploy.v1.DeploymentLog.level:type_name -> vcdeploy.v1.LogLevel
 	2,  // 23: vcdeploy.v1.AgentService.Register:input_type -> vcdeploy.v1.RegisterRequest
 	9,  // 24: vcdeploy.v1.AgentService.Connect:input_type -> vcdeploy.v1.AgentMessage
 	5,  // 25: vcdeploy.v1.AgentService.Heartbeat:input_type -> vcdeploy.v1.HeartbeatRequest
-	4,  // 26: vcdeploy.v1.AgentService.Register:output_type -> vcdeploy.v1.RegisterResponse
-	12, // 27: vcdeploy.v1.AgentService.Connect:output_type -> vcdeploy.v1.MasterMessage
-	7,  // 28: vcdeploy.v1.AgentService.Heartbeat:output_type -> vcdeploy.v1.HeartbeatResponse
-	26, // [26:29] is the sub-list for method output_type
-	23, // [23:26] is the sub-list for method input_type
+	24, // 26: vcdeploy.v1.AgentService.Reauthenticate:input_type -> vcdeploy.v1.ReauthRequest
+	26, // 27: vcdeploy.v1.AgentService.StreamRepoArchive:input_type -> vcdeploy.v1.StreamRepoRequest
+	4,  // 28: vcdeploy.v1.AgentService.Register:output_type -> vcdeploy.v1.RegisterResponse
+	12, // 29: vcdeploy.v1.AgentService.Connect:output_type -> vcdeploy.v1.MasterMessage
+	7,  // 30: vcdeploy.v1.AgentService.Heartbeat:output_type -> vcdeploy.v1.HeartbeatResponse
+	25, // 31: vcdeploy.v1.AgentService.Reauthenticate:output_type -> vcdeploy.v1.ReauthResponse
+	27, // 32: vcdeploy.v1.AgentService.StreamRepoArchive:output_type -> vcdeploy.v1.RepoChunk
+	28, // [28:33] is the sub-list for method output_type
+	23, // [23:28] is the sub-list for method input_type
 	23, // [23:23] is the sub-list for extension type_name
 	23, // [23:23] is the sub-list for extension extendee
 	0,  // [0:23] is the sub-list for field type_name
@@ -2390,7 +2679,7 @@ func file_api_proto_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_proto_agent_proto_rawDesc), len(file_api_proto_agent_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   25,
+			NumMessages:   29,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

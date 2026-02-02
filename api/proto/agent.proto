@@ -14,6 +14,14 @@ service AgentService {
   
   // Heartbeat sends periodic health updates.
   rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+  
+  // Reauthenticate allows an agent to re-authenticate using HMAC when its certificate expires.
+  rpc Reauthenticate(ReauthRequest) returns (ReauthResponse);
+  
+  // StreamRepoArchive streams a repository archive to an agent.
+  // The master clones the repo with credentials and streams the archive.
+  // This keeps credentials on the master and never exposes them to agents.
+  rpc StreamRepoArchive(StreamRepoRequest) returns (stream RepoChunk);
 }
 
 // RegisterRequest is sent by agent to register with master.
@@ -255,4 +263,34 @@ message CommandResult {
 message AgentReady {
   string agent_id = 1;
   int64 timestamp = 2;
+}
+
+// ReauthRequest is sent by agent to re-authenticate using HMAC.
+message ReauthRequest {
+  string agent_id = 1;
+  int64 timestamp = 2;
+  bytes nonce = 3;
+  bytes signature = 4;  // HMAC(agent_id + timestamp + nonce) using shared secret
+  bytes csr = 5;        // Certificate Signing Request for new certificate
+}
+
+// ReauthResponse contains the new certificate after re-authentication.
+message ReauthResponse {
+  bytes certificate = 1;
+  bytes ca_certificate = 2;
+}
+
+// StreamRepoRequest requests a repository archive stream.
+message StreamRepoRequest {
+  string deployment_id = 1;
+  string repo_url = 2;
+  string ref = 3;  // Branch, tag, or commit
+}
+
+// RepoChunk is a chunk of a repository archive stream.
+message RepoChunk {
+  bytes data = 1;
+  string checksum = 2;  // SHA256 checksum, only in last chunk
+  int64 total_size = 3; // Total archive size in bytes
+  bool is_last = 4;
 }

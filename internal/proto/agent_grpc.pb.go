@@ -19,9 +19,11 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AgentService_Register_FullMethodName  = "/vcdeploy.v1.AgentService/Register"
-	AgentService_Connect_FullMethodName   = "/vcdeploy.v1.AgentService/Connect"
-	AgentService_Heartbeat_FullMethodName = "/vcdeploy.v1.AgentService/Heartbeat"
+	AgentService_Register_FullMethodName          = "/vcdeploy.v1.AgentService/Register"
+	AgentService_Connect_FullMethodName           = "/vcdeploy.v1.AgentService/Connect"
+	AgentService_Heartbeat_FullMethodName         = "/vcdeploy.v1.AgentService/Heartbeat"
+	AgentService_Reauthenticate_FullMethodName    = "/vcdeploy.v1.AgentService/Reauthenticate"
+	AgentService_StreamRepoArchive_FullMethodName = "/vcdeploy.v1.AgentService/StreamRepoArchive"
 )
 
 // AgentServiceClient is the client API for AgentService service.
@@ -36,6 +38,12 @@ type AgentServiceClient interface {
 	Connect(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[AgentMessage, MasterMessage], error)
 	// Heartbeat sends periodic health updates.
 	Heartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*HeartbeatResponse, error)
+	// Reauthenticate allows an agent to re-authenticate using HMAC when its certificate expires.
+	Reauthenticate(ctx context.Context, in *ReauthRequest, opts ...grpc.CallOption) (*ReauthResponse, error)
+	// StreamRepoArchive streams a repository archive to an agent.
+	// The master clones the repo with credentials and streams the archive.
+	// This keeps credentials on the master and never exposes them to agents.
+	StreamRepoArchive(ctx context.Context, in *StreamRepoRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[RepoChunk], error)
 }
 
 type agentServiceClient struct {
@@ -79,6 +87,35 @@ func (c *agentServiceClient) Heartbeat(ctx context.Context, in *HeartbeatRequest
 	return out, nil
 }
 
+func (c *agentServiceClient) Reauthenticate(ctx context.Context, in *ReauthRequest, opts ...grpc.CallOption) (*ReauthResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReauthResponse)
+	err := c.cc.Invoke(ctx, AgentService_Reauthenticate_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentServiceClient) StreamRepoArchive(ctx context.Context, in *StreamRepoRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[RepoChunk], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &AgentService_ServiceDesc.Streams[1], AgentService_StreamRepoArchive_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[StreamRepoRequest, RepoChunk]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentService_StreamRepoArchiveClient = grpc.ServerStreamingClient[RepoChunk]
+
 // AgentServiceServer is the server API for AgentService service.
 // All implementations must embed UnimplementedAgentServiceServer
 // for forward compatibility.
@@ -91,6 +128,12 @@ type AgentServiceServer interface {
 	Connect(grpc.BidiStreamingServer[AgentMessage, MasterMessage]) error
 	// Heartbeat sends periodic health updates.
 	Heartbeat(context.Context, *HeartbeatRequest) (*HeartbeatResponse, error)
+	// Reauthenticate allows an agent to re-authenticate using HMAC when its certificate expires.
+	Reauthenticate(context.Context, *ReauthRequest) (*ReauthResponse, error)
+	// StreamRepoArchive streams a repository archive to an agent.
+	// The master clones the repo with credentials and streams the archive.
+	// This keeps credentials on the master and never exposes them to agents.
+	StreamRepoArchive(*StreamRepoRequest, grpc.ServerStreamingServer[RepoChunk]) error
 	mustEmbedUnimplementedAgentServiceServer()
 }
 
@@ -109,6 +152,12 @@ func (UnimplementedAgentServiceServer) Connect(grpc.BidiStreamingServer[AgentMes
 }
 func (UnimplementedAgentServiceServer) Heartbeat(context.Context, *HeartbeatRequest) (*HeartbeatResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Heartbeat not implemented")
+}
+func (UnimplementedAgentServiceServer) Reauthenticate(context.Context, *ReauthRequest) (*ReauthResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Reauthenticate not implemented")
+}
+func (UnimplementedAgentServiceServer) StreamRepoArchive(*StreamRepoRequest, grpc.ServerStreamingServer[RepoChunk]) error {
+	return status.Error(codes.Unimplemented, "method StreamRepoArchive not implemented")
 }
 func (UnimplementedAgentServiceServer) mustEmbedUnimplementedAgentServiceServer() {}
 func (UnimplementedAgentServiceServer) testEmbeddedByValue()                      {}
@@ -174,6 +223,35 @@ func _AgentService_Heartbeat_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AgentService_Reauthenticate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReauthRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).Reauthenticate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_Reauthenticate_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).Reauthenticate(ctx, req.(*ReauthRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentService_StreamRepoArchive_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(StreamRepoRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(AgentServiceServer).StreamRepoArchive(m, &grpc.GenericServerStream[StreamRepoRequest, RepoChunk]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentService_StreamRepoArchiveServer = grpc.ServerStreamingServer[RepoChunk]
+
 // AgentService_ServiceDesc is the grpc.ServiceDesc for AgentService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -189,6 +267,10 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "Heartbeat",
 			Handler:    _AgentService_Heartbeat_Handler,
 		},
+		{
+			MethodName: "Reauthenticate",
+			Handler:    _AgentService_Reauthenticate_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -196,6 +278,11 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 			Handler:       _AgentService_Connect_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
+		},
+		{
+			StreamName:    "StreamRepoArchive",
+			Handler:       _AgentService_StreamRepoArchive_Handler,
+			ServerStreams: true,
 		},
 	},
 	Metadata: "api/proto/agent.proto",

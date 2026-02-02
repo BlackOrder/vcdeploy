@@ -149,7 +149,7 @@ func TestDeploymentState_String(t *testing.T) {
 		{DeploymentState_DEPLOYMENT_STATE_PENDING, "DEPLOYMENT_STATE_PENDING"},
 		{DeploymentState_DEPLOYMENT_STATE_COMPLETED, "DEPLOYMENT_STATE_COMPLETED"},
 		{DeploymentState_DEPLOYMENT_STATE_FAILED, "DEPLOYMENT_STATE_FAILED"},
-		{DeploymentState(999), "UNKNOWN"},
+		{DeploymentState(999), "999"}, // Proto returns numeric value for unknown enums
 	}
 
 	for _, tt := range tests {
@@ -173,7 +173,7 @@ func TestLogLevel_String(t *testing.T) {
 		{LogLevel_LOG_LEVEL_INFO, "LOG_LEVEL_INFO"},
 		{LogLevel_LOG_LEVEL_WARN, "LOG_LEVEL_WARN"},
 		{LogLevel_LOG_LEVEL_ERROR, "LOG_LEVEL_ERROR"},
-		{LogLevel(999), "UNKNOWN"},
+		{LogLevel(999), "999"}, // Proto returns numeric value for unknown enums
 	}
 
 	for _, tt := range tests {
