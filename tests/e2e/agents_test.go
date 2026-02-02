@@ -498,8 +498,8 @@ func TestAgentDeletion(t *testing.T) {
 	})
 }
 
-// TestAgentHeartbeat tests agent heartbeat/connection status.
-func TestAgentHeartbeat(t *testing.T) {
+// TestAgentHeartbeatStatus tests agent heartbeat/connection status via API.
+func TestAgentHeartbeatStatus(t *testing.T) {
 	testutil.SkipIfNoAgent(t)
 	ctx := setupTest(t)
 	cfg := testutil.GetConfig()
