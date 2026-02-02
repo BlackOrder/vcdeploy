@@ -18,8 +18,8 @@ func TestDefaultAgentConfig(t *testing.T) {
 	}
 
 	// Check default values
-	if config.Master.Cert != "/etc/vcdeploy/agent/cert.pem" {
-		t.Errorf("unexpected default cert path: %s", config.Master.Cert)
+	if config.Master.CACert != "/etc/vcdeploy/agent/ca.pem" {
+		t.Errorf("unexpected default CA cert path: %s", config.Master.CACert)
 	}
 	if config.Master.Reconnect.InitialDelay != 1*time.Second {
 		t.Errorf("unexpected default initial delay: %v", config.Master.Reconnect.InitialDelay)
@@ -482,8 +482,7 @@ func TestLoadAgentConfigWithAllFields(t *testing.T) {
 master:
   address: "master.example.com:9090"
   token: "secret-token"
-  cert: "/custom/cert.pem"
-  allow_insecure: true
+  ca_cert: "/custom/ca.pem"
   reconnect:
     initial_delay: 5s
     max_delay: 30m
@@ -531,8 +530,8 @@ graceful_shutdown:
 	if config.Master.Token != "secret-token" {
 		t.Errorf("unexpected Master.Token: %s", config.Master.Token)
 	}
-	if !config.Master.AllowInsecure {
-		t.Error("expected AllowInsecure to be true")
+	if config.Master.CACert != "/custom/ca.pem" {
+		t.Errorf("unexpected Master.CACert: %s", config.Master.CACert)
 	}
 	if config.Master.Reconnect.InitialDelay != 5*time.Second {
 		t.Errorf("unexpected InitialDelay: %v", config.Master.Reconnect.InitialDelay)

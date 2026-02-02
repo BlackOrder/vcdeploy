@@ -12,17 +12,4 @@ agent:
 master:
   address: "master:9001"
   token: "test-registration-token"  # Auto-registration token for test mode
-  cert: ""  # Explicitly disable TLS cert (use allow_insecure instead)
-  allow_insecure: true
-
-heartbeat:
-  interval: 5s
-
-deploy:
-  work_dir: "/deploy"
-  cleanup: true
-
-logging:
-  level: debug
-  format: json
-  output: stdout
+  ca_cert: "/etc/vcdeploy/ca.pem"   # CA certificate for TLS
