@@ -45,6 +45,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
+	"golang.org/x/crypto/acme/autocert"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -132,11 +133,17 @@ func createNotifyManager(cfg config.NotificationsConfig, logger *zap.Logger) *no
 
 // MasterServer is the main daemon server.
 type MasterServer struct {
-	config     *config.MasterConfig
-	store      storage.Store
-	logger     *zap.Logger
-	httpServer *http.Server
-	grpcServer *grpc.Server
+	config      *config.MasterConfig
+	store       storage.Store
+	logger      *zap.Logger
+	httpServer  *http.Server
+	httpsServer *http.Server // HTTPS server when TLS enabled
+	grpcServer  *grpc.Server
+
+	// TLS configuration
+	tlsConfig    *tls.Config
+	acmeClient   *ACMEClient
+	acmeFallback bool // True if ACME failed and using self-signed fallback
 
 	// gRPC agent service
 	agentServer *AgentServer
@@ -605,6 +612,12 @@ func (s *MasterServer) templateFuncs() template.FuncMap {
 		"formatTime": func(t time.Time) string {
 			return t.Format("2006-01-02 15:04:05")
 		},
+		"truncate": func(s string, n int) string {
+			if len(s) <= n {
+				return s
+			}
+			return s[:n] + "..."
+		},
 		"json": func(v interface{}) string {
 			b, err := json.Marshal(v)
 			if err != nil {
@@ -612,23 +625,72 @@ func (s *MasterServer) templateFuncs() template.FuncMap {
 			}
 			return string(b)
 		},
+		"hasPrefix": func(s, prefix string) bool {
+			return strings.HasPrefix(s, prefix)
+		},
+		"formatBytes": func(bytes int64) string {
+			const unit = 1024
+			if bytes < unit {
+				return fmt.Sprintf("%d B", bytes)
+			}
+			div, exp := int64(unit), 0
+			for n := bytes / unit; n >= unit; n /= unit {
+				div *= unit
+				exp++
+			}
+			return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+		},
+		"slice": func(s string, start, end int) string {
+			if start < 0 {
+				start = 0
+			}
+			if end > len(s) {
+				end = len(s)
+			}
+			if start > end {
+				return ""
+			}
+			return s[start:end]
+		},
 	}
 }
 
 // Start starts the master server.
 func (s *MasterServer) Start(ctx context.Context) error {
-	errCh := make(chan error, 2)
+	// Setup TLS first
+	if err := s.setupServerTLS(ctx); err != nil {
+		return fmt.Errorf("setup TLS: %w", err)
+	}
+
+	errCh := make(chan error, 4)
 
 	s.wg.Go(func() {
-		if err := s.startHTTP(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := s.startHTTP(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			s.logger.Error("HTTP server error", zap.Error(err))
 			errCh <- err
 		}
 	})
 
+	// Start HTTPS server if TLS is enabled
+	if s.config.Server.TLS.Mode != config.TLSModeDisabled && s.tlsConfig != nil {
+		s.wg.Go(func() {
+			if err := s.startHTTPS(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				s.logger.Error("HTTPS server error", zap.Error(err))
+				errCh <- err
+			}
+		})
+	}
+
 	s.wg.Go(func() {
 		if err := s.startGRPC(); err != nil {
 			s.logger.Error("gRPC server error", zap.Error(err))
+			errCh <- err
+		}
+	})
+
+	s.wg.Go(func() {
+		if err := s.startReauthServer(ctx); err != nil {
+			s.logger.Error("Re-auth gRPC server error", zap.Error(err))
 			errCh <- err
 		}
 	})
@@ -645,12 +707,13 @@ func (s *MasterServer) Start(ctx context.Context) error {
 	}
 }
 
-func (s *MasterServer) startHTTP() error {
+// buildMainHandler builds the main HTTP handler with all routes and middleware.
+func (s *MasterServer) buildMainHandler() (http.Handler, error) {
 	mux := http.NewServeMux()
 
 	sysCfg, err := config.GetSystemConfig()
 	if err != nil {
-		return fmt.Errorf("failed to load system config: %w", err)
+		return nil, fmt.Errorf("failed to load system config: %w", err)
 	}
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir(sysCfg.StaticDir()))))
 
@@ -732,6 +795,14 @@ func (s *MasterServer) startHTTP() error {
 	mux.HandleFunc("/api/v1/certificates/server/", s.withAuth(s.handleServerCertificate))
 	mux.HandleFunc("/api/v1/certificates/audit", s.withAuth(s.handleCertAudit))
 
+	// Security - TLS Status API
+	mux.HandleFunc("/api/v1/tls/status", s.withAuth(s.handleGetTLSStatus))
+	mux.HandleFunc("/api/v1/tls/renew", s.withAuth(s.handleForceACMERenewal))
+	mux.HandleFunc("/api/v1/tls/settings", s.withAuth(s.handleUpdateTLSSettings))
+
+	// TLS Partials (for HTMX)
+	mux.HandleFunc("/partials/tls/status", s.withAuth(s.handleTLSStatusPartial))
+
 	// Security - Credentials API
 	mux.HandleFunc("/api/v1/credentials", s.withAuth(s.handleCredentials))
 	mux.HandleFunc("/api/v1/credentials/", s.withAuth(s.handleCredentials))
@@ -779,11 +850,15 @@ func (s *MasterServer) startHTTP() error {
 	mux.HandleFunc("/api-keys", s.withUIAuth(s.handleAPIKeysUI))
 	mux.HandleFunc("/settings", s.withUIAuth(s.handleSettingsUI))
 
-	addr := s.config.Server.Listen
-	if addr == "" {
-		addr = ":8080"
-	}
-	s.logger.Info("Starting HTTP server", zap.String("addr", addr))
+	// Security management UI
+	mux.HandleFunc("/security/certificates", s.withUIAuth(s.handleCertificatesUI))
+	mux.HandleFunc("/security/credentials", s.withUIAuth(s.handleCredentialsUI))
+	mux.HandleFunc("/security/ssh-keys", s.withUIAuth(s.handleSSHKeysUI))
+	mux.HandleFunc("/security/provision", s.withUIAuth(s.handleProvisionUI))
+	mux.HandleFunc("/security/audit", s.withUIAuth(s.handleSecurityAuditUI))
+	mux.HandleFunc("/settings/tls", s.withUIAuth(s.handleTLSSettingsUI))
+	mux.HandleFunc("/partials/certificates/cas", s.withUIAuth(s.handleCAsPartial))
+	mux.HandleFunc("/partials/certificates/agents", s.withUIAuth(s.handleAgentCertsPartial))
 
 	// Build middleware chain: otel -> request ID -> logging -> CSP -> security headers -> rate limiting -> handler
 	var handler http.Handler = mux
@@ -813,6 +888,49 @@ func (s *MasterServer) startHTTP() error {
 	// Add setup required middleware (redirects to /setup when system needs initial configuration)
 	handler = s.setupRequiredMiddleware(handler)
 
+	return handler, nil
+}
+
+func (s *MasterServer) startHTTP(_ context.Context) error {
+	tlsMode := s.config.Server.TLS.Mode
+
+	// Determine HTTP server behavior based on TLS mode
+	switch tlsMode {
+	case config.TLSModeDisabled:
+		// Serve the full application on HTTP
+		return s.startHTTPApplication()
+
+	case config.TLSModeStatic:
+		// HTTP only serves redirects to HTTPS (if ForceHTTPS enabled)
+		if s.config.Server.TLS.ForceHTTPS {
+			return s.startHTTPRedirect()
+		}
+		// Otherwise serve application on HTTP too
+		return s.startHTTPApplication()
+
+	case config.TLSModeACME:
+		// HTTP serves ACME challenges and redirects
+		return s.startHTTPWithACME()
+
+	default:
+		// Fallback to serving application on HTTP
+		return s.startHTTPApplication()
+	}
+}
+
+// startHTTPApplication starts HTTP server serving the full application.
+func (s *MasterServer) startHTTPApplication() error {
+	handler, err := s.buildMainHandler()
+	if err != nil {
+		return fmt.Errorf("build handler: %w", err)
+	}
+
+	addr := s.config.Server.Listen
+	if addr == "" {
+		addr = ":8080"
+	}
+	s.logger.Info("Starting HTTP server (application mode)", zap.String("addr", addr))
+
 	s.httpServer = &http.Server{
 		Addr:         addr,
 		Handler:      handler,
@@ -821,10 +939,98 @@ func (s *MasterServer) startHTTP() error {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	if s.config.Server.TLS.Enabled {
-		return s.httpServer.ListenAndServeTLS(s.config.Server.TLS.Cert, s.config.Server.TLS.Key)
-	}
 	return s.httpServer.ListenAndServe()
+}
+
+// startHTTPRedirect starts HTTP server that only redirects to HTTPS.
+func (s *MasterServer) startHTTPRedirect() error {
+	redirectHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		target := "https://" + r.Host + r.URL.Path
+		if r.URL.RawQuery != "" {
+			target += "?" + r.URL.RawQuery
+		}
+		http.Redirect(w, r, target, http.StatusMovedPermanently)
+	})
+
+	addr := s.config.Server.Listen
+	if addr == "" {
+		addr = ":80"
+	}
+	s.logger.Info("Starting HTTP server (redirect mode)", zap.String("addr", addr))
+
+	s.httpServer = &http.Server{
+		Addr:         addr,
+		Handler:      redirectHandler,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 5 * time.Second,
+		IdleTimeout:  30 * time.Second,
+	}
+
+	return s.httpServer.ListenAndServe()
+}
+
+// startHTTPWithACME starts HTTP server for ACME challenges and redirects.
+func (s *MasterServer) startHTTPWithACME() error {
+	mux := http.NewServeMux()
+
+	// ACME HTTP-01 challenge handler
+	if s.acmeClient != nil {
+		acmeHandler := s.acmeClient.HTTPHandler(nil)
+		if acmeHandler != nil {
+			mux.Handle("/.well-known/acme-challenge/", acmeHandler)
+		}
+	}
+
+	// Redirect all other requests to HTTPS
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		target := "https://" + r.Host + r.URL.Path
+		if r.URL.RawQuery != "" {
+			target += "?" + r.URL.RawQuery
+		}
+		http.Redirect(w, r, target, http.StatusMovedPermanently)
+	})
+
+	addr := s.config.Server.Listen
+	if addr == "" {
+		addr = ":80"
+	}
+	s.logger.Info("Starting HTTP server (ACME + redirect mode)", zap.String("addr", addr))
+
+	s.httpServer = &http.Server{
+		Addr:         addr,
+		Handler:      mux,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 5 * time.Second,
+		IdleTimeout:  30 * time.Second,
+	}
+
+	return s.httpServer.ListenAndServe()
+}
+
+// startHTTPS starts the HTTPS server with TLS.
+func (s *MasterServer) startHTTPS(_ context.Context) error {
+	handler, err := s.buildMainHandler()
+	if err != nil {
+		return fmt.Errorf("build handler: %w", err)
+	}
+
+	addr := s.config.Server.HTTPSAddress
+	if addr == "" {
+		addr = ":443"
+	}
+	s.logger.Info("Starting HTTPS server", zap.String("addr", addr))
+
+	s.httpsServer = &http.Server{
+		Addr:         addr,
+		Handler:      handler,
+		TLSConfig:    s.tlsConfig,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	// Empty cert/key paths because TLSConfig provides GetCertificate
+	return s.httpsServer.ListenAndServeTLS("", "")
 }
 
 func (s *MasterServer) startGRPC() error {
@@ -832,7 +1038,7 @@ func (s *MasterServer) startGRPC() error {
 	if addr == "" {
 		addr = ":9090"
 	}
-	s.logger.Info("Starting gRPC server", zap.String("addr", addr))
+	s.logger.Info("Starting gRPC server with mandatory mTLS", zap.String("addr", addr))
 
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -844,17 +1050,13 @@ func (s *MasterServer) startGRPC() error {
 	// Add OpenTelemetry gRPC instrumentation
 	opts = append(opts, grpc.StatsHandler(otelgrpc.NewServerHandler()))
 
-	if s.config.Server.TLS.Enabled {
-		cert, err := tls.LoadX509KeyPair(s.config.Server.TLS.Cert, s.config.Server.TLS.Key)
-		if err != nil {
-			return fmt.Errorf("loading TLS cert: %w", err)
-		}
-		creds := credentials.NewTLS(&tls.Config{
-			Certificates: []tls.Certificate{cert},
-			MinVersion:   tls.VersionTLS12,
-		})
-		opts = append(opts, grpc.Creds(creds))
+	// Mandatory mTLS - no condition
+	tlsConfig, err := s.setupMTLS()
+	if err != nil {
+		return fmt.Errorf("setup mTLS: %w", err)
 	}
+	creds := credentials.NewTLS(tlsConfig)
+	opts = append(opts, grpc.Creds(creds))
 
 	s.grpcServer = grpc.NewServer(opts...)
 
@@ -865,6 +1067,70 @@ func (s *MasterServer) startGRPC() error {
 	}
 
 	return s.grpcServer.Serve(lis)
+}
+
+// setupMTLS configures TLS with mandatory client certificate verification.
+func (s *MasterServer) setupMTLS() (*tls.Config, error) {
+	// Load server certificate
+	serverCert, err := tls.LoadX509KeyPair(s.config.Server.TLS.Cert, s.config.Server.TLS.Key)
+	if err != nil {
+		return nil, fmt.Errorf("load server certificate: %w", err)
+	}
+
+	// Get CA trust pool for client verification
+	trustPool := s.caManager.GetTrustPool()
+
+	return &tls.Config{
+		Certificates: []tls.Certificate{serverCert},
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		ClientCAs:    trustPool,
+		MinVersion:   tls.VersionTLS12,
+	}, nil
+}
+
+// startReauthServer starts the dedicated re-authentication gRPC server.
+// This server does not require client certificates, allowing agents with
+// expired certificates to re-authenticate using HMAC.
+func (s *MasterServer) startReauthServer(ctx context.Context) error {
+	addr := s.config.GRPC.ReauthAddress
+	if addr == "" {
+		addr = ":9444"
+	}
+	s.logger.Info("Starting re-auth gRPC server", zap.String("addr", addr))
+
+	lis, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("listen reauth port: %w", err)
+	}
+
+	// Server TLS (verify server to client) but NO client cert required
+	serverCert, err := tls.LoadX509KeyPair(s.config.Server.TLS.Cert, s.config.Server.TLS.Key)
+	if err != nil {
+		return fmt.Errorf("load server certificate: %w", err)
+	}
+
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{serverCert},
+		ClientAuth:   tls.NoClientCert, // Key difference: no client cert required
+		MinVersion:   tls.VersionTLS12,
+	}
+
+	// Create server with only Reauthenticate RPC allowed
+	var certAuditor *security.CertAuditor
+	if s.caManager != nil {
+		certAuditor = security.NewCertAuditor(s.store)
+	}
+
+	reauthServer := NewReauthOnlyServer(s.store, s.caManager, certAuditor, s.logger)
+
+	grpcServer := grpc.NewServer(
+		grpc.Creds(credentials.NewTLS(tlsConfig)),
+		grpc.UnaryInterceptor(reauthOnlyInterceptor),
+	)
+
+	proto.RegisterAgentServiceServer(grpcServer, reauthServer)
+
+	return grpcServer.Serve(lis)
 }
 
 func (s *MasterServer) runBackgroundTasks(ctx context.Context) {
@@ -1087,6 +1353,166 @@ func (s *MasterServer) triggerDeploymentOnAgent(ctx context.Context, deployment 
 	return nil
 }
 
+// setupServerTLS configures TLS based on the configured mode.
+func (s *MasterServer) setupServerTLS(ctx context.Context) error {
+	tlsMode := s.config.Server.TLS.Mode
+
+	// Handle legacy config (when Mode is empty but Enabled is set)
+	if tlsMode == "" {
+		if s.config.Server.TLS.Enabled {
+			tlsMode = config.TLSModeStatic
+			// Migrate legacy cert/key paths
+			if s.config.Server.TLS.CertFile == "" && s.config.Server.TLS.Cert != "" {
+				s.config.Server.TLS.CertFile = s.config.Server.TLS.Cert
+			}
+			if s.config.Server.TLS.KeyFile == "" && s.config.Server.TLS.Key != "" {
+				s.config.Server.TLS.KeyFile = s.config.Server.TLS.Key
+			}
+		} else {
+			tlsMode = config.TLSModeDisabled
+		}
+		s.config.Server.TLS.Mode = tlsMode
+	}
+
+	switch tlsMode {
+	case config.TLSModeDisabled:
+		s.logger.Info("TLS disabled, serving HTTP only")
+		return nil
+
+	case config.TLSModeStatic:
+		return s.setupStaticTLS(ctx)
+
+	case config.TLSModeACME:
+		return s.setupACMETLS(ctx)
+
+	default:
+		return fmt.Errorf("unknown TLS mode: %s", tlsMode)
+	}
+}
+
+// setupStaticTLS configures TLS with static certificate files.
+func (s *MasterServer) setupStaticTLS(_ context.Context) error {
+	certFile := s.config.Server.TLS.CertFile
+	keyFile := s.config.Server.TLS.KeyFile
+
+	if certFile == "" || keyFile == "" {
+		return fmt.Errorf("static TLS mode requires cert_file and key_file")
+	}
+
+	// Validate cert files exist
+	if _, err := os.Stat(certFile); err != nil {
+		return fmt.Errorf("certificate file not found: %w", err)
+	}
+	if _, err := os.Stat(keyFile); err != nil {
+		return fmt.Errorf("key file not found: %w", err)
+	}
+
+	s.tlsConfig = &tls.Config{
+		MinVersion: s.getTLSMinVersion(),
+		GetCertificate: func(_ *tls.ClientHelloInfo) (*tls.Certificate, error) {
+			cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+			if err != nil {
+				return nil, err
+			}
+			return &cert, nil
+		},
+	}
+
+	s.logger.Info("Static TLS configured",
+		zap.String("cert", certFile),
+		zap.String("key", keyFile))
+	return nil
+}
+
+// setupACMETLS configures TLS with automatic certificate management (ACME/Let's Encrypt).
+func (s *MasterServer) setupACMETLS(ctx context.Context) error {
+	acmeCfg := s.config.Server.TLS.ACME
+
+	if len(acmeCfg.Domains) == 0 {
+		return fmt.Errorf("ACME mode requires at least one domain")
+	}
+	if acmeCfg.Email == "" {
+		return fmt.Errorf("ACME mode requires contact email")
+	}
+
+	directoryURL := LetsEncryptProduction
+	if acmeCfg.Staging {
+		directoryURL = LetsEncryptStaging
+	}
+
+	// Use database-backed certificate cache when storage is available
+	var cache autocert.Cache
+	if s.store != nil {
+		cache = NewDBCertCache(s.store)
+	}
+
+	acmeClient, err := NewACMEClient(ACMEClientConfig{
+		Logger:       s.logger,
+		DirectoryURL: directoryURL,
+		Email:        acmeCfg.Email,
+		Domains:      acmeCfg.Domains,
+		CacheDir:     acmeCfg.CacheDir,
+		TestMode:     false,
+		Cache:        cache,
+	})
+	if err != nil {
+		// Fallback to self-signed with warning
+		s.logger.Error("ACME client initialization failed, falling back to self-signed",
+			zap.Error(err))
+		s.acmeFallback = true
+		return s.setupSelfSignedFallback(ctx)
+	}
+
+	s.acmeClient = acmeClient
+	s.tlsConfig = acmeClient.GetTLSConfig()
+
+	// Start renewal loop
+	go acmeClient.StartRenewalLoop(ctx)
+
+	s.logger.Info("ACME TLS configured",
+		zap.Strings("domains", acmeCfg.Domains),
+		zap.Bool("staging", acmeCfg.Staging))
+
+	return nil
+}
+
+// setupSelfSignedFallback generates a self-signed certificate when ACME fails.
+func (s *MasterServer) setupSelfSignedFallback(ctx context.Context) error {
+	domains := s.config.Server.TLS.ACME.Domains
+	if len(domains) == 0 {
+		domains = []string{"localhost"}
+	}
+
+	// Create a temporary ACME client in test mode for self-signed cert generation
+	acmeClient, err := NewACMEClient(ACMEClientConfig{
+		Logger:   s.logger,
+		Domains:  domains,
+		TestMode: true,
+	})
+	if err != nil {
+		return fmt.Errorf("create fallback cert generator: %w", err)
+	}
+
+	s.acmeClient = acmeClient
+	s.tlsConfig = acmeClient.GetTLSConfig()
+
+	s.logger.Warn("Using self-signed certificate fallback",
+		zap.Strings("domains", domains))
+
+	_ = ctx // Reserved for future audit logging
+	return nil
+}
+
+// getTLSMinVersion returns the minimum TLS version based on config.
+func (s *MasterServer) getTLSMinVersion() uint16 {
+	switch s.config.Server.TLS.MinVersion {
+	case "1.3":
+		return tls.VersionTLS13
+	default:
+		return tls.VersionTLS12
+	}
+}
+
 // Shutdown gracefully stops the server.
 // Shutdown is idempotent and can be called multiple times safely.
 func (s *MasterServer) Shutdown(ctx context.Context) error {
@@ -1104,6 +1530,9 @@ func (s *MasterServer) Shutdown(ctx context.Context) error {
 
 		if s.httpServer != nil {
 			_ = s.httpServer.Shutdown(ctx)
+		}
+		if s.httpsServer != nil {
+			_ = s.httpsServer.Shutdown(ctx)
 		}
 		if s.grpcServer != nil {
 			s.grpcServer.GracefulStop()
