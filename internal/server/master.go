@@ -723,6 +723,27 @@ func (s *MasterServer) startHTTP() error {
 	mux.HandleFunc("/api/v1/provision", s.withAuth(s.handleProvisionJobs))
 	mux.HandleFunc("/api/v1/provision/", s.withAuth(s.handleProvisionJob))
 
+	// Security - Certificates API
+	mux.HandleFunc("/api/v1/certificates/agents", s.withAuth(s.handleCertificates))
+	mux.HandleFunc("/api/v1/certificates/agents/", s.withAuth(s.handleCertificates))
+	mux.HandleFunc("/api/v1/certificates/cas", s.withAuth(s.handleCAs))
+	mux.HandleFunc("/api/v1/certificates/cas/", s.withAuth(s.handleCAs))
+	mux.HandleFunc("/api/v1/certificates/server", s.withAuth(s.handleServerCertificate))
+	mux.HandleFunc("/api/v1/certificates/server/", s.withAuth(s.handleServerCertificate))
+	mux.HandleFunc("/api/v1/certificates/audit", s.withAuth(s.handleCertAudit))
+
+	// Security - Credentials API
+	mux.HandleFunc("/api/v1/credentials", s.withAuth(s.handleCredentials))
+	mux.HandleFunc("/api/v1/credentials/", s.withAuth(s.handleCredentials))
+
+	// Security - SSH Keys API
+	mux.HandleFunc("/api/v1/ssh-keys", s.withAuth(s.handleSSHKeys))
+	mux.HandleFunc("/api/v1/ssh-keys/", s.withAuth(s.handleSSHKeys))
+
+	// Security - Agent Provisioning API
+	mux.HandleFunc("/api/v1/agents/provision", s.withAuth(s.handleProvisionAgent))
+	mux.HandleFunc("/api/v1/agents/provision/", s.withAuth(s.handleProvisionAgent))
+
 	// Agent Binaries API
 	mux.HandleFunc("/api/v1/binaries", s.withAuth(s.handleAgentBinaries))
 	mux.HandleFunc("/api/v1/binaries/latest", s.withAuth(s.handleAgentBinaryLatest))

@@ -103,6 +103,28 @@ func Conflict(op, resource, id string) error {
 	return &ServiceError{Op: op, Err: ErrConflict, Resource: resource, ID: id}
 }
 
+// InputError represents a validation error on a specific field.
+type InputError struct {
+	Message string
+	Field   string
+}
+
+func (e *InputError) Error() string {
+	if e.Field != "" {
+		return fmt.Sprintf("%s (field: %s)", e.Message, e.Field)
+	}
+	return e.Message
+}
+
+func (e *InputError) Unwrap() error {
+	return ErrInvalidInput
+}
+
+// NewInputError creates an input validation error for a specific field.
+func NewInputError(message, field string) *InputError {
+	return &InputError{Message: message, Field: field}
+}
+
 // Error checking helpers.
 
 // IsNotFound returns true if the error is or wraps ErrNotFound or storage.ErrNotFound.
