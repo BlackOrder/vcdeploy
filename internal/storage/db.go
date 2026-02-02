@@ -732,7 +732,7 @@ func (db *DB) Backup(destPath string) error {
 	}
 	defer src.Close()
 
-	dst, err := os.Create(destPath)
+	dst, err := os.Create(destPath) //nolint:gosec // G304: destPath is admin-controlled backup destination
 	if err != nil {
 		return fmt.Errorf("create dest: %w", err)
 	}

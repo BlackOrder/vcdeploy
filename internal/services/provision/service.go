@@ -3,7 +3,6 @@ package provision
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -62,7 +61,7 @@ func (s *Service) GetJob(ctx context.Context, id string) (*storage.ProvisionJob,
 
 	job, err := s.store.GetProvisionJob(ctx, id)
 	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
+		if services.IsNotFound(err) {
 			return nil, &services.ServiceError{
 				Op:       op,
 				Err:      services.ErrNotFound,
@@ -99,7 +98,7 @@ func (s *Service) UpdateStatus(ctx context.Context, id, status, stage, errorMess
 	}
 
 	if err := s.store.UpdateProvisionJobStatus(ctx, id, status, stage, errorMessage, progress); err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
+		if services.IsNotFound(err) {
 			return &services.ServiceError{
 				Op:       op,
 				Err:      services.ErrNotFound,

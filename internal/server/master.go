@@ -222,7 +222,7 @@ func (a *webhookSecretStoreAdapter) GetWebhookSecret(projectID string) (string, 
 
 	// Look up project by name (projectID in URL is the project name/slug)
 	project, err := a.store.GetProjectByName(ctx, projectID)
-	if errors.Is(err, storage.ErrNotFound) {
+	if services.IsNotFound(err) {
 		return "", fmt.Errorf("project not found: %s", projectID)
 	}
 	if err != nil {
@@ -233,7 +233,7 @@ func (a *webhookSecretStoreAdapter) GetWebhookSecret(projectID string) (string, 
 	providers := []string{"github", "gitlab", "bitbucket"}
 	for _, provider := range providers {
 		webhook, err := a.store.GetProjectWebhook(ctx, project.ID, provider)
-		if errors.Is(err, storage.ErrNotFound) {
+		if services.IsNotFound(err) {
 			continue
 		}
 		if err != nil {
@@ -1286,7 +1286,7 @@ func (s *MasterServer) validateAPIKey(ctx context.Context, key string) (*storage
 
 	// Look up using API key service
 	apiKey, err := s.apiKeyService.GetByRawKey(ctx, key)
-	if errors.Is(err, storage.ErrNotFound) {
+	if services.IsNotFound(err) {
 		return nil, 0, fmt.Errorf("API key not found")
 	}
 	if err != nil {
@@ -1321,7 +1321,7 @@ func (s *MasterServer) validateSession(ctx context.Context, token string) (int64
 
 	// Look up using session service
 	session, err := s.sessionService.GetByToken(ctx, token)
-	if errors.Is(err, storage.ErrNotFound) {
+	if services.IsNotFound(err) {
 		return 0, fmt.Errorf("session not found or expired")
 	}
 	if err != nil {

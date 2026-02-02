@@ -41,7 +41,7 @@ func (s *Service) IsInitialized(ctx context.Context) (bool, error) {
 // Get retrieves a setting value as a string.
 func (s *Service) Get(ctx context.Context, category, key string) (string, error) {
 	setting, err := s.store.GetSetting(ctx, category, key)
-	if errors.Is(err, storage.ErrNotFound) {
+	if services.IsNotFound(err) {
 		return "", nil
 	}
 	if err != nil {

@@ -96,7 +96,7 @@ func (s *MasterServer) handleAgentBinaries(w http.ResponseWriter, r *http.Reques
 		destPath := filepath.Join(binDir, filename)
 
 		// Create destination file
-		dest, err := os.Create(destPath)
+		dest, err := os.Create(destPath) //nolint:gosec // G304: destPath is constructed from server-controlled binDir and validated version/os/arch
 		if err != nil {
 			s.logger.Error("Failed to create binary file", zap.Error(err))
 			s.jsonError(w, http.StatusInternalServerError, "Internal server error")

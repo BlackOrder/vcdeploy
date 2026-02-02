@@ -21,7 +21,7 @@ The master server is the central control plane for vcdeploy, orchestrating deplo
 │  │                        Entry Points                                     │ │
 │  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌────────────┐ │ │
 │  │  │   REST API   │  │   Web UI     │  │   gRPC API   │  │  Webhooks  │ │ │
-│  │  │   :8080      │  │   :8080      │  │   :9001      │  │  :8080     │ │ │
+│  │  │   :9000      │  │   :9000      │  │   :9001      │  │  :9000     │ │ │
 │  │  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └─────┬──────┘ │ │
 │  └─────────┼─────────────────┼─────────────────┼────────────────┼────────┘ │
 │            │                 │                 │                │          │
@@ -66,7 +66,7 @@ The master server is the central control plane for vcdeploy, orchestrating deplo
 
 ## Entry Points
 
-### REST API (Port 8080)
+### REST API (Port 9000)
 
 HTTP/JSON API for external integrations:
 
@@ -80,7 +80,7 @@ mux.HandleFunc("/api/v1/secrets", s.withAuth(s.handleSecretsAPI))
 // ... more routes
 ```
 
-### Web UI (Port 8080)
+### Web UI (Port 9000)
 
 HTML templates with HTMX for dynamic updates:
 - Dashboard with deployment overview
@@ -99,7 +99,7 @@ service AgentService {
 }
 ```
 
-### Webhooks (Port 8080)
+### Webhooks (Port 9000)
 
 Git provider callbacks:
 - GitHub: `/webhooks/github/{project}`
@@ -433,7 +433,7 @@ Master server is configured via `/etc/vcdeploy/master.yaml`:
 
 ```yaml
 server:
-  address: ":8080"
+  address: ":9000"
 
 grpc:
   address: ":9001"

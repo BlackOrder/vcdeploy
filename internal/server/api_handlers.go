@@ -6,7 +6,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -1156,7 +1155,7 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 
 		agent, err := s.agentService.GetByID(ctx, agentID)
 		if err != nil {
-			if errors.Is(err, storage.ErrNotFound) {
+			if services.IsNotFound(err) {
 				s.jsonError(w, http.StatusNotFound, "Agent not found")
 				return
 			}
@@ -1384,7 +1383,7 @@ func (s *MasterServer) handleDeploymentAPI(w http.ResponseWriter, r *http.Reques
 	case http.MethodGet:
 		deployment, err := s.deploymentService.GetByID(ctx, deploymentID)
 		if err != nil {
-			if errors.Is(err, storage.ErrNotFound) {
+			if services.IsNotFound(err) {
 				s.jsonError(w, http.StatusNotFound, "Deployment not found")
 				return
 			}
@@ -1844,7 +1843,7 @@ func (s *MasterServer) handleAPIKey(w http.ResponseWriter, r *http.Request) {
 		// Get API key by ID
 		key, err := s.apiKeyService.GetByID(ctx, keyID)
 		if err != nil {
-			if errors.Is(err, storage.ErrNotFound) {
+			if services.IsNotFound(err) {
 				s.jsonError(w, http.StatusNotFound, "API key not found")
 				return
 			}

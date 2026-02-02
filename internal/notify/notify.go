@@ -120,6 +120,37 @@ type SlackConfig struct {
 	IconEmoji  string
 }
 
+// Slack Block Kit types for type-safe payload construction
+type slackPayload struct {
+	Channel     string            `json:"channel,omitempty"`
+	Username    string            `json:"username,omitempty"`
+	IconEmoji   string            `json:"icon_emoji,omitempty"`
+	Attachments []slackAttachment `json:"attachments"`
+}
+
+type slackAttachment struct {
+	Color  string       `json:"color"`
+	Blocks []slackBlock `json:"blocks"`
+}
+
+type slackBlock struct {
+	Type     string         `json:"type"`
+	Text     *slackText     `json:"text,omitempty"`
+	Fields   []slackText    `json:"fields,omitempty"`
+	Elements []slackElement `json:"elements,omitempty"`
+}
+
+type slackText struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
+type slackElement struct {
+	Type string     `json:"type"`
+	Text *slackText `json:"text,omitempty"`
+	URL  string     `json:"url,omitempty"`
+}
+
 // SlackNotifier sends notifications to Slack
 type SlackNotifier struct {
 	config SlackConfig
@@ -145,83 +176,58 @@ func (s *SlackNotifier) Send(ctx context.Context, event Event) error {
 		return nil
 	}
 
-	color := "#36a64f" // green
-	switch event.Status {
-	case "failed":
-		color = "#dc3545"
-	case "pending", "running":
-		color = "#ffc107"
-	case "rolled_back":
-		color = "#fd7e14"
-	}
+	color := s.getStatusColor(event.Status)
+	emoji := s.getEventEmoji(event.Type)
 
-	emoji := ":rocket:"
-	switch event.Type {
-	case "rollback":
-		emoji = ":rewind:"
-	case "failed":
-		emoji = ":x:"
-	}
-
-	payload := map[string]interface{}{
-		"channel":    s.config.Channel,
-		"username":   s.config.Username,
-		"icon_emoji": s.config.IconEmoji,
-		"attachments": []map[string]interface{}{
-			{
-				"color": color,
-				"blocks": []map[string]interface{}{
-					{
-						"type": "section",
-						"text": map[string]string{
-							"type": "mrkdwn",
-							"text": fmt.Sprintf("%s *%s* deployment to *%s*", emoji, event.ProjectName, event.Environment),
-						},
-					},
-					{
-						"type": "section",
-						"fields": []map[string]string{
-							{"type": "mrkdwn", "text": fmt.Sprintf("*Status:*\n%s", event.Status)},
-							{"type": "mrkdwn", "text": fmt.Sprintf("*Version:*\n%s", event.Version)},
-							{"type": "mrkdwn", "text": fmt.Sprintf("*Triggered by:*\n%s", event.User)},
-							{"type": "mrkdwn", "text": fmt.Sprintf("*Time:*\n%s", event.Timestamp.Format(time.RFC822))},
-						},
-					},
-				},
+	blocks := []slackBlock{
+		{
+			Type: "section",
+			Text: &slackText{
+				Type: "mrkdwn",
+				Text: fmt.Sprintf("%s *%s* deployment to *%s*", emoji, event.ProjectName, event.Environment),
+			},
+		},
+		{
+			Type: "section",
+			Fields: []slackText{
+				{Type: "mrkdwn", Text: fmt.Sprintf("*Status:*\n%s", event.Status)},
+				{Type: "mrkdwn", Text: fmt.Sprintf("*Version:*\n%s", event.Version)},
+				{Type: "mrkdwn", Text: fmt.Sprintf("*Triggered by:*\n%s", event.User)},
+				{Type: "mrkdwn", Text: fmt.Sprintf("*Time:*\n%s", event.Timestamp.Format(time.RFC822))},
 			},
 		},
 	}
 
 	if event.Message != "" {
-		attachments := payload["attachments"].([]map[string]interface{})
-		blocks := attachments[0]["blocks"].([]map[string]interface{})
-		blocks = append(blocks, map[string]interface{}{
-			"type": "section",
-			"text": map[string]string{
-				"type": "mrkdwn",
-				"text": fmt.Sprintf("*Message:*\n%s", event.Message),
+		blocks = append(blocks, slackBlock{
+			Type: "section",
+			Text: &slackText{
+				Type: "mrkdwn",
+				Text: fmt.Sprintf("*Message:*\n%s", event.Message),
 			},
 		})
-		attachments[0]["blocks"] = blocks
 	}
 
 	if event.URL != "" {
-		attachments := payload["attachments"].([]map[string]interface{})
-		blocks := attachments[0]["blocks"].([]map[string]interface{})
-		blocks = append(blocks, map[string]interface{}{
-			"type": "actions",
-			"elements": []map[string]interface{}{
+		blocks = append(blocks, slackBlock{
+			Type: "actions",
+			Elements: []slackElement{
 				{
-					"type": "button",
-					"text": map[string]string{
-						"type": "plain_text",
-						"text": "View Deployment",
-					},
-					"url": event.URL,
+					Type: "button",
+					Text: &slackText{Type: "plain_text", Text: "View Deployment"},
+					URL:  event.URL,
 				},
 			},
 		})
-		attachments[0]["blocks"] = blocks
+	}
+
+	payload := slackPayload{
+		Channel:   s.config.Channel,
+		Username:  s.config.Username,
+		IconEmoji: s.config.IconEmoji,
+		Attachments: []slackAttachment{
+			{Color: color, Blocks: blocks},
+		},
 	}
 
 	body, err := json.Marshal(payload)
@@ -246,6 +252,30 @@ func (s *SlackNotifier) Send(ctx context.Context, event Event) error {
 	}
 
 	return nil
+}
+
+func (s *SlackNotifier) getStatusColor(status string) string {
+	switch status {
+	case "failed":
+		return "#dc3545"
+	case "pending", "running":
+		return "#ffc107"
+	case "rolled_back":
+		return "#fd7e14"
+	default:
+		return "#36a64f" // green
+	}
+}
+
+func (s *SlackNotifier) getEventEmoji(eventType string) string {
+	switch eventType {
+	case "rollback":
+		return ":rewind:"
+	case "failed":
+		return ":x:"
+	default:
+		return ":rocket:"
+	}
 }
 
 // EmailConfig holds email notification settings
@@ -496,6 +526,33 @@ type DiscordConfig struct {
 	AvatarURL  string
 }
 
+// Discord embed types for type-safe payload construction
+type discordPayload struct {
+	Username  string         `json:"username,omitempty"`
+	AvatarURL string         `json:"avatar_url,omitempty"`
+	Embeds    []discordEmbed `json:"embeds"`
+}
+
+type discordEmbed struct {
+	Title       string         `json:"title"`
+	Description string         `json:"description"`
+	URL         string         `json:"url,omitempty"`
+	Color       int            `json:"color"`
+	Fields      []discordField `json:"fields"`
+	Timestamp   string         `json:"timestamp"`
+	Footer      *discordFooter `json:"footer,omitempty"`
+}
+
+type discordField struct {
+	Name   string `json:"name"`
+	Value  string `json:"value"`
+	Inline bool   `json:"inline"`
+}
+
+type discordFooter struct {
+	Text string `json:"text"`
+}
+
 // DiscordNotifier sends notifications to Discord
 type DiscordNotifier struct {
 	config DiscordConfig
@@ -521,76 +578,40 @@ func (d *DiscordNotifier) Send(ctx context.Context, event Event) error {
 		return nil
 	}
 
-	// Map status to color (Discord uses decimal colors)
-	color := 3066993 // green (#2ECC71)
-	switch event.Status {
-	case "failed":
-		color = 15158332 // red (#E74C3C)
-	case "pending", "running":
-		color = 16776960 // yellow (#FFFF00)
-	case "rolled_back":
-		color = 15105570 // orange (#E67E22)
-	}
+	color := d.getStatusColor(event.Status)
+	emoji := d.getEventEmoji(event.Type)
 
-	emoji := "🚀"
-	switch event.Type {
-	case "rollback":
-		emoji = "⏪"
-	case "failed":
-		emoji = "❌"
-	}
-
-	// Build Discord embed
-	embed := map[string]interface{}{
-		"title":       fmt.Sprintf("%s %s Deployment", emoji, event.ProjectName),
-		"description": fmt.Sprintf("Deployment to **%s**", event.Environment),
-		"color":       color,
-		"fields": []map[string]interface{}{
-			{
-				"name":   "Status",
-				"value":  event.Status,
-				"inline": true,
-			},
-			{
-				"name":   "Version",
-				"value":  event.Version,
-				"inline": true,
-			},
-			{
-				"name":   "Triggered By",
-				"value":  event.User,
-				"inline": true,
-			},
-		},
-		"timestamp": event.Timestamp.Format(time.RFC3339),
-		"footer": map[string]string{
-			"text": "VCDeploy",
-		},
+	fields := []discordField{
+		{Name: "Status", Value: event.Status, Inline: true},
+		{Name: "Version", Value: event.Version, Inline: true},
+		{Name: "Triggered By", Value: event.User, Inline: true},
 	}
 
 	if event.Message != "" {
-		fields := embed["fields"].([]map[string]interface{})
-		fields = append(fields, map[string]interface{}{
-			"name":   "Message",
-			"value":  truncateString(event.Message, 1024),
-			"inline": false,
+		fields = append(fields, discordField{
+			Name:   "Message",
+			Value:  truncateString(event.Message, 1024),
+			Inline: false,
 		})
-		embed["fields"] = fields
+	}
+
+	embed := discordEmbed{
+		Title:       fmt.Sprintf("%s %s Deployment", emoji, event.ProjectName),
+		Description: fmt.Sprintf("Deployment to **%s**", event.Environment),
+		Color:       color,
+		Fields:      fields,
+		Timestamp:   event.Timestamp.Format(time.RFC3339),
+		Footer:      &discordFooter{Text: "VCDeploy"},
 	}
 
 	if event.URL != "" {
-		embed["url"] = event.URL
+		embed.URL = event.URL
 	}
 
-	payload := map[string]interface{}{
-		"embeds": []map[string]interface{}{embed},
-	}
-
-	if d.config.Username != "" {
-		payload["username"] = d.config.Username
-	}
-	if d.config.AvatarURL != "" {
-		payload["avatar_url"] = d.config.AvatarURL
+	payload := discordPayload{
+		Username:  d.config.Username,
+		AvatarURL: d.config.AvatarURL,
+		Embeds:    []discordEmbed{embed},
 	}
 
 	body, err := json.Marshal(payload)
@@ -617,6 +638,30 @@ func (d *DiscordNotifier) Send(ctx context.Context, event Event) error {
 	}
 
 	return nil
+}
+
+func (d *DiscordNotifier) getStatusColor(status string) int {
+	switch status {
+	case "failed":
+		return 15158332 // red (#E74C3C)
+	case "pending", "running":
+		return 16776960 // yellow (#FFFF00)
+	case "rolled_back":
+		return 15105570 // orange (#E67E22)
+	default:
+		return 3066993 // green (#2ECC71)
+	}
+}
+
+func (d *DiscordNotifier) getEventEmoji(eventType string) string {
+	switch eventType {
+	case "rollback":
+		return "⏪"
+	case "failed":
+		return "❌"
+	default:
+		return "🚀"
+	}
 }
 
 // truncateString truncates a string to the specified max length
