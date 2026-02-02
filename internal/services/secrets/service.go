@@ -3,7 +3,6 @@ package secrets
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -71,7 +70,7 @@ func (s *Service) Set(ctx context.Context, project, scope, key, value string) er
 // Get retrieves and decrypts a secret. Returns the decrypted value or empty string if not found.
 func (s *Service) Get(ctx context.Context, project, scope, key string) (string, error) {
 	secret, err := s.store.GetSecret(ctx, project, scope, key)
-	if errors.Is(err, storage.ErrNotFound) {
+	if services.IsNotFound(err) {
 		return "", nil
 	}
 	if err != nil {
@@ -90,7 +89,7 @@ func (s *Service) Get(ctx context.Context, project, scope, key string) (string, 
 // GetEntry retrieves and decrypts a secret with full metadata.
 func (s *Service) GetEntry(ctx context.Context, project, scope, key string) (*Entry, error) {
 	secret, err := s.store.GetSecret(ctx, project, scope, key)
-	if errors.Is(err, storage.ErrNotFound) {
+	if services.IsNotFound(err) {
 		return nil, services.NotFound("secrets.GetEntry", "secret", project+"/"+scope+"/"+key)
 	}
 	if err != nil {

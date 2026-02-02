@@ -3,7 +3,6 @@ package ratelimit
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/BlackOrder/vcdeploy/internal/services"
@@ -87,7 +86,7 @@ func (s *Service) GetBlock(ctx context.Context, ip string) (*storage.BlockedIP, 
 
 	block, err := s.store.GetBlockedIP(ctx, ip)
 	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
+		if services.IsNotFound(err) {
 			return nil, &services.ServiceError{
 				Op:       op,
 				Err:      services.ErrNotFound,

@@ -74,10 +74,10 @@ The master server is the central control plane responsible for:
 
 | Interface | Default Port | Purpose |
 |-----------|--------------|---------|
-| REST API | 8080 | CLI, automation, integrations |
-| Web UI | 8080 | Browser-based management |
+| REST API | 9000 | CLI, automation, integrations |
+| Web UI | 9000 | Browser-based management |
 | gRPC | 9001 | Agent communication |
-| Webhooks | 8080 | Git provider callbacks |
+| Webhooks | 9000 | Git provider callbacks |
 
 ### Security Middleware Stack
 

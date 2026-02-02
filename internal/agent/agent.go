@@ -1277,7 +1277,7 @@ func (a *Agent) performSelfUpdate(notification *pb.UpdateNotification) {
 	}
 
 	// Verify new binary can run
-	cmd := exec.Command(newBinaryPath, "version")
+	cmd := exec.Command(newBinaryPath, "version") //nolint:gosec // G204: newBinaryPath is internally constructed from version/OS/arch, not user input
 	if output, err := cmd.CombinedOutput(); err != nil {
 		a.logger.Error("New binary failed verification",
 			zap.Error(err),

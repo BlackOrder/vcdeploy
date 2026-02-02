@@ -2,9 +2,9 @@ package projects
 
 import (
 	"context"
-	"errors"
 	"testing"
 
+	"github.com/BlackOrder/vcdeploy/internal/services"
 	"github.com/BlackOrder/vcdeploy/internal/services/testutil"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 )
@@ -393,7 +393,7 @@ func TestService_DeleteWithCleanup_NotFound(t *testing.T) {
 		t.Error("DeleteWithCleanup() expected error for nonexistent project")
 	}
 	// Verify it's a not found error
-	if !errors.Is(err, storage.ErrNotFound) {
+	if !services.IsNotFound(err) {
 		// Check if wrapped
 		if err.Error() == "" || !containsStr(err.Error(), "not found") && !containsStr(err.Error(), "getting project") {
 			t.Errorf("DeleteWithCleanup() error = %v, expected not found related error", err)

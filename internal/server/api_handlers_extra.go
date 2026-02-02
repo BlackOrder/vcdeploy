@@ -34,10 +34,7 @@ func (s *MasterServer) handleHostKeys(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(keys); err != nil {
-			s.logger.Error("Failed to encode host keys", zap.Error(err))
-		}
+		s.jsonResponse(w, keys)
 
 	case http.MethodPost:
 		// Check admin access for creating host keys
@@ -101,11 +98,7 @@ func (s *MasterServer) handleHostKeys(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		if err := json.NewEncoder(w).Encode(key); err != nil {
-			s.logger.Error("Failed to encode host key", zap.Error(err))
-		}
+		s.writeJSON(w, http.StatusCreated, key)
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -155,10 +148,7 @@ func (s *MasterServer) handleHostKey(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(found); err != nil {
-			s.logger.Error("Failed to encode host key", zap.Error(err))
-		}
+		s.jsonResponse(w, found)
 
 	case http.MethodPut:
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
@@ -232,10 +222,7 @@ func (s *MasterServer) handleJumpServers(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(servers); err != nil {
-			s.logger.Error("Failed to encode jump servers", zap.Error(err))
-		}
+		s.jsonResponse(w, servers)
 
 	case http.MethodPost:
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
@@ -287,11 +274,7 @@ func (s *MasterServer) handleJumpServers(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		if err := json.NewEncoder(w).Encode(server); err != nil {
-			s.logger.Error("Failed to encode jump server", zap.Error(err))
-		}
+		s.writeJSON(w, http.StatusCreated, server)
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -328,10 +311,7 @@ func (s *MasterServer) handleJumpServer(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(server); err != nil {
-			s.logger.Error("Failed to encode jump server", zap.Error(err))
-		}
+		s.jsonResponse(w, server)
 
 	case http.MethodPut:
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
@@ -367,10 +347,7 @@ func (s *MasterServer) handleJumpServer(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(server); err != nil {
-			s.logger.Error("Failed to encode jump server", zap.Error(err))
-		}
+		s.jsonResponse(w, server)
 
 	case http.MethodDelete:
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
@@ -434,10 +411,7 @@ func (s *MasterServer) handleBlockedIPs(w http.ResponseWriter, r *http.Request) 
 			"offset": offset,
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(response); err != nil {
-			s.logger.Error("Failed to encode blocked IPs", zap.Error(err))
-		}
+		s.jsonResponse(w, response)
 
 	case http.MethodPost:
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
@@ -493,11 +467,7 @@ func (s *MasterServer) handleBlockedIPs(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		if err := json.NewEncoder(w).Encode(blocked); err != nil {
-			s.logger.Error("Failed to encode blocked IP", zap.Error(err))
-		}
+		s.writeJSON(w, http.StatusCreated, blocked)
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -533,10 +503,7 @@ func (s *MasterServer) handleBlockedIP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(blocked); err != nil {
-			s.logger.Error("Failed to encode blocked IP", zap.Error(err))
-		}
+		s.jsonResponse(w, blocked)
 
 	case http.MethodDelete:
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
@@ -579,10 +546,7 @@ func (s *MasterServer) handleProvisionJobs(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(jobs); err != nil {
-			s.logger.Error("Failed to encode provision jobs", zap.Error(err))
-		}
+		s.jsonResponse(w, jobs)
 
 	case http.MethodPost:
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
@@ -629,11 +593,7 @@ func (s *MasterServer) handleProvisionJobs(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		if err := json.NewEncoder(w).Encode(job); err != nil {
-			s.logger.Error("Failed to encode provision job", zap.Error(err))
-		}
+		s.writeJSON(w, http.StatusCreated, job)
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -665,10 +625,7 @@ func (s *MasterServer) handleProvisionJob(w http.ResponseWriter, r *http.Request
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(job); err != nil {
-			s.logger.Error("Failed to encode provision job", zap.Error(err))
-		}
+		s.jsonResponse(w, job)
 
 	case http.MethodDelete:
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {

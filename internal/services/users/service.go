@@ -71,7 +71,7 @@ func (s *Service) Create(ctx context.Context, username, password, email, role st
 // GetByID retrieves a user by ID.
 func (s *Service) GetByID(ctx context.Context, id int64) (*storage.User, error) {
 	user, err := s.store.GetUserByID(ctx, id)
-	if errors.Is(err, storage.ErrNotFound) {
+	if services.IsNotFound(err) {
 		return nil, services.NotFound("users.GetByID", "user", strconv.FormatInt(id, 10))
 	}
 	if err != nil {
@@ -83,7 +83,7 @@ func (s *Service) GetByID(ctx context.Context, id int64) (*storage.User, error) 
 // GetByUsername retrieves a user by username.
 func (s *Service) GetByUsername(ctx context.Context, username string) (*storage.User, error) {
 	user, err := s.store.GetUserByUsername(ctx, username)
-	if errors.Is(err, storage.ErrNotFound) {
+	if services.IsNotFound(err) {
 		return nil, services.NotFound("users.GetByUsername", "user", username)
 	}
 	if err != nil {
@@ -138,7 +138,7 @@ func (s *Service) Delete(ctx context.Context, id int64) error {
 // Returns the user if valid, services.ErrNotFound if user not found, or ErrInvalidPassword if password wrong.
 func (s *Service) VerifyPassword(ctx context.Context, username, password string) (*storage.User, error) {
 	user, err := s.store.GetUserByUsername(ctx, username)
-	if errors.Is(err, storage.ErrNotFound) {
+	if services.IsNotFound(err) {
 		return nil, services.NotFound("users.VerifyPassword", "user", username)
 	}
 	if err != nil {
