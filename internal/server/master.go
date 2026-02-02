@@ -782,6 +782,11 @@ func (s *MasterServer) buildMainHandler() (http.Handler, error) {
 	mux.HandleFunc("/api/v1/blocked", s.withAuth(s.handleBlockedIPs))
 	mux.HandleFunc("/api/v1/blocked/", s.withAuth(s.handleBlockedIP))
 
+	// Admin TOTP Management API
+	mux.HandleFunc("/api/v1/admin/totp/users", s.withAuth(s.handleAdminTOTPUsers))
+	mux.HandleFunc("/api/v1/admin/totp/status/", s.withAuth(s.handleAdminTOTPStatus))
+	mux.HandleFunc("/api/v1/admin/totp/disable", s.withAuth(s.handleAdminTOTPDisable))
+
 	// Provision API
 	mux.HandleFunc("/api/v1/provision", s.withAuth(s.handleProvisionJobs))
 	mux.HandleFunc("/api/v1/provision/", s.withAuth(s.handleProvisionJob))
