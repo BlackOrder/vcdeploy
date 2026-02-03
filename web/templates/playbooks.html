@@ -1,0 +1,361 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold">Playbooks</h1>
+        <button onclick="document.getElementById('new-playbook-modal').classList.remove('hidden')"
+            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-accent-600 hover:bg-accent-700">
+            <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+            </svg>
+            New Playbook
+        </button>
+    </div>
+
+    <!-- Namespace Tabs -->
+    <div class="border-b border-dark-border">
+        <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+            <button id="tab-user" onclick="switchTab('user')"
+                class="tab-btn border-accent-500 text-accent-400 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                My Playbooks
+            </button>
+            <button id="tab-seed" onclick="switchTab('seed')"
+                class="tab-btn border-transparent text-dark-muted hover:text-dark-text hover:border-dark-border whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                Built-in Playbooks
+            </button>
+        </nav>
+    </div>
+
+    <!-- Framework Filter -->
+    <div class="flex space-x-4">
+        <select id="framework-filter" onchange="filterByFramework(this.value)"
+            class="px-3 py-2 bg-dark-card border border-dark-border rounded-md text-dark-text focus:outline-none focus:ring-2 focus:ring-accent-500">
+            <option value="">All Frameworks</option>
+            <option value="laravel">Laravel</option>
+            <option value="nodejs">Node.js</option>
+            <option value="python">Python</option>
+            <option value="static">Static</option>
+            <option value="custom">Custom</option>
+        </select>
+    </div>
+
+    <!-- User Playbooks Tab Content -->
+    <div id="content-user" class="tab-content">
+        {{if .UserPlaybooks}}
+        <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {{range .UserPlaybooks}}
+            <div class="playbook-card bg-dark-card border border-dark-border rounded-lg p-4 hover:border-accent-500/50 transition-colors cursor-pointer"
+                data-framework="{{.FrameworkType}}"
+                onclick="showPlaybookDetail({{.ID}})">
+                <div class="flex items-start justify-between">
+                    <div class="flex-1 min-w-0">
+                        <h3 class="text-sm font-medium text-dark-text truncate">{{.Name}}</h3>
+                        <p class="text-xs text-dark-muted mt-1">{{.Slug}}</p>
+                    </div>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-accent-500/20 text-accent-400 ml-2">
+                        {{.Version}}
+                    </span>
+                </div>
+                <p class="mt-2 text-sm text-dark-muted line-clamp-2">{{if .Description}}{{.Description}}{{else}}No description{{end}}</p>
+                <div class="mt-3 flex items-center justify-between">
+                    <div class="flex items-center space-x-2">
+                        {{if .FrameworkType}}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-dark-bg text-dark-muted">
+                            {{.FrameworkType}}
+                        </span>
+                        {{end}}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-dark-bg text-dark-muted">
+                            {{len .Steps}} steps
+                        </span>
+                        {{if .IsDeprecated}}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-500/20 text-yellow-400">
+                            Deprecated
+                        </span>
+                        {{end}}
+                        {{if .ParentID}}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-500/20 text-blue-400" title="Customized from built-in">
+                            Customized
+                        </span>
+                        {{end}}
+                    </div>
+                    <button onclick="event.stopPropagation(); editPlaybook({{.ID}})"
+                        class="text-xs text-accent-400 hover:text-accent-300">
+                        Edit Steps
+                    </button>
+                </div>
+            </div>
+            {{end}}
+        </div>
+        {{else}}
+        <div class="text-center py-12 bg-dark-card border border-dark-border rounded-lg">
+            <svg class="mx-auto h-12 w-12 text-dark-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+            </svg>
+            <h3 class="mt-2 text-sm font-medium text-dark-text">{{.EmptyUserTitle}}</h3>
+            <p class="mt-1 text-sm text-dark-muted">{{.EmptyUserMessage}}</p>
+            <div class="mt-6">
+                <button onclick="document.getElementById('new-playbook-modal').classList.remove('hidden')"
+                    class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-accent-600 hover:bg-accent-700">
+                    <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                    </svg>
+                    Create Your First Playbook
+                </button>
+            </div>
+        </div>
+        {{end}}
+    </div>
+
+    <!-- Seed Playbooks Tab Content -->
+    <div id="content-seed" class="tab-content hidden">
+        {{if .SeedPlaybooks}}
+        <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {{range .SeedPlaybooks}}
+            <div class="playbook-card bg-dark-card border border-dark-border rounded-lg p-4 hover:border-accent-500/50 transition-colors cursor-pointer"
+                data-framework="{{.FrameworkType}}"
+                onclick="showPlaybookDetail({{.ID}})">
+                <div class="flex items-start justify-between">
+                    <div class="flex-1 min-w-0">
+                        <h3 class="text-sm font-medium text-dark-text truncate">{{.Name}}</h3>
+                        <p class="text-xs text-dark-muted mt-1">{{.Slug}}</p>
+                    </div>
+                    <div class="flex items-center space-x-1 ml-2">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-accent-500/20 text-accent-400">
+                            {{.Version}}
+                        </span>
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-500/20 text-blue-400">
+                            Built-in
+                        </span>
+                    </div>
+                </div>
+                <p class="mt-2 text-sm text-dark-muted line-clamp-2">{{if .Description}}{{.Description}}{{else}}No description{{end}}</p>
+                <div class="mt-3 flex items-center justify-between">
+                    <div class="flex items-center space-x-2">
+                        {{if .FrameworkType}}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-dark-bg text-dark-muted">
+                            {{.FrameworkType}}
+                        </span>
+                        {{end}}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-dark-bg text-dark-muted">
+                            {{len .Steps}} steps
+                        </span>
+                    </div>
+                    <button onclick="event.stopPropagation(); customizePlaybook({{.ID}})"
+                        class="text-xs text-accent-400 hover:text-accent-300">
+                        Customize
+                    </button>
+                </div>
+            </div>
+            {{end}}
+        </div>
+        {{else}}
+        <div class="text-center py-12 bg-dark-card border border-dark-border rounded-lg">
+            <svg class="mx-auto h-12 w-12 text-dark-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+            </svg>
+            <h3 class="mt-2 text-sm font-medium text-dark-text">{{.EmptySeedTitle}}</h3>
+            <p class="mt-1 text-sm text-dark-muted max-w-md mx-auto">{{.EmptySeedMessage}}</p>
+        </div>
+        {{end}}
+    </div>
+</div>
+
+<!-- New Playbook Modal -->
+<div id="new-playbook-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-dark-card border border-dark-border rounded-lg max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="px-6 py-4 border-b border-dark-border flex items-center justify-between">
+            <h3 class="text-lg font-medium">New Playbook</h3>
+            <button onclick="document.getElementById('new-playbook-modal').classList.add('hidden')" class="text-dark-muted hover:text-white">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        <form hx-post="/api/v1/recipes/playbooks" hx-ext="json-enc"
+            hx-on::after-request="if(event.detail.successful) { document.getElementById('new-playbook-modal').classList.add('hidden'); location.reload(); }">
+            <div class="p-6 space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-dark-muted mb-1">Name</label>
+                        <input type="text" name="name" required
+                            class="block w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text focus:outline-none focus:ring-2 focus:ring-accent-500"
+                            placeholder="Laravel Standard Deploy">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-dark-muted mb-1">Slug</label>
+                        <input type="text" name="slug" required pattern="[a-z0-9-]+"
+                            class="block w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text focus:outline-none focus:ring-2 focus:ring-accent-500"
+                            placeholder="laravel-standard">
+                        <p class="mt-1 text-xs text-dark-muted">Lowercase letters, numbers, and hyphens only</p>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-dark-muted mb-1">Version</label>
+                        <input type="text" name="version" required pattern="v?\d+\.\d+\.\d+"
+                            class="block w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text focus:outline-none focus:ring-2 focus:ring-accent-500"
+                            placeholder="v1.0.0" value="v1.0.0">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-dark-muted mb-1">Framework Type</label>
+                        <select name="framework_type"
+                            class="block w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text focus:outline-none focus:ring-2 focus:ring-accent-500">
+                            <option value="">None / Custom</option>
+                            <option value="laravel">Laravel</option>
+                            <option value="nodejs">Node.js</option>
+                            <option value="python">Python</option>
+                            <option value="static">Static</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-dark-muted mb-1">Description</label>
+                    <textarea name="description" rows="2"
+                        class="block w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text focus:outline-none focus:ring-2 focus:ring-accent-500"
+                        placeholder="What deployment workflow does this playbook define?"></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-dark-muted mb-1">Keep Releases</label>
+                    <input type="number" name="keep_releases" value="5" min="1" max="50"
+                        class="block w-32 px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text focus:outline-none focus:ring-2 focus:ring-accent-500">
+                    <p class="mt-1 text-xs text-dark-muted">Number of releases to keep for rollback</p>
+                </div>
+                
+                <div class="bg-dark-bg rounded-lg p-4 border border-dark-border">
+                    <p class="text-sm text-dark-muted">
+                        <svg class="inline h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        After creating the playbook, you can add steps using the playbook composer.
+                    </p>
+                </div>
+            </div>
+            <div class="px-6 py-4 border-t border-dark-border flex justify-end space-x-3">
+                <button type="button" onclick="document.getElementById('new-playbook-modal').classList.add('hidden')"
+                    class="px-4 py-2 text-sm font-medium text-dark-muted hover:text-white border border-dark-border rounded-md">
+                    Cancel
+                </button>
+                <button type="submit"
+                    class="px-4 py-2 text-sm font-medium text-white bg-accent-600 hover:bg-accent-700 rounded-md">
+                    Create Playbook
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Playbook Detail Modal -->
+<div id="playbook-detail-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-dark-card border border-dark-border rounded-lg max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="px-6 py-4 border-b border-dark-border flex items-center justify-between">
+            <h3 class="text-lg font-medium" id="playbook-detail-title">Playbook Details</h3>
+            <button onclick="document.getElementById('playbook-detail-modal').classList.add('hidden')" class="text-dark-muted hover:text-white">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        <div id="playbook-detail-content" class="p-6">
+            <!-- Content loaded via HTMX -->
+            <div class="flex items-center justify-center py-8">
+                <svg class="animate-spin h-8 w-8 text-accent-500" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Customize Playbook Modal -->
+<div id="customize-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-dark-card border border-dark-border rounded-lg max-w-md w-full mx-4">
+        <div class="px-6 py-4 border-b border-dark-border flex items-center justify-between">
+            <h3 class="text-lg font-medium">Customize Playbook</h3>
+            <button onclick="document.getElementById('customize-modal').classList.add('hidden')" class="text-dark-muted hover:text-white">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        <form id="customize-form" hx-post="/api/v1/recipes/playbooks/customize" hx-ext="json-enc"
+            hx-on::after-request="if(event.detail.successful) { document.getElementById('customize-modal').classList.add('hidden'); location.reload(); }">
+            <input type="hidden" name="source_id" id="customize-source-id">
+            <div class="p-6 space-y-4">
+                <p class="text-sm text-dark-muted">
+                    This will create a copy of the built-in playbook in your namespace. You can then modify it to suit your needs.
+                </p>
+                <div>
+                    <label class="block text-sm font-medium text-dark-muted mb-1">New Slug</label>
+                    <input type="text" name="new_slug" id="customize-slug" required pattern="[a-z0-9-]+"
+                        class="block w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text focus:outline-none focus:ring-2 focus:ring-accent-500"
+                        placeholder="my-custom-playbook">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-dark-muted mb-1">Initial Version</label>
+                    <input type="text" name="new_version" required pattern="v?\d+\.\d+\.\d+"
+                        class="block w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text focus:outline-none focus:ring-2 focus:ring-accent-500"
+                        value="v1.0.0">
+                </div>
+            </div>
+            <div class="px-6 py-4 border-t border-dark-border flex justify-end space-x-3">
+                <button type="button" onclick="document.getElementById('customize-modal').classList.add('hidden')"
+                    class="px-4 py-2 text-sm font-medium text-dark-muted hover:text-white border border-dark-border rounded-md">
+                    Cancel
+                </button>
+                <button type="submit"
+                    class="px-4 py-2 text-sm font-medium text-white bg-accent-600 hover:bg-accent-700 rounded-md">
+                    Create Customized Copy
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}>
+    function switchTab(tab) {
+        // Update tab buttons
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.remove('border-accent-500', 'text-accent-400');
+            btn.classList.add('border-transparent', 'text-dark-muted');
+        });
+        document.getElementById('tab-' + tab).classList.remove('border-transparent', 'text-dark-muted');
+        document.getElementById('tab-' + tab).classList.add('border-accent-500', 'text-accent-400');
+        
+        // Update content visibility
+        document.querySelectorAll('.tab-content').forEach(content => {
+            content.classList.add('hidden');
+        });
+        document.getElementById('content-' + tab).classList.remove('hidden');
+    }
+
+    function filterByFramework(framework) {
+        document.querySelectorAll('.playbook-card').forEach(card => {
+            if (!framework || card.dataset.framework === framework) {
+                card.classList.remove('hidden');
+            } else {
+                card.classList.add('hidden');
+            }
+        });
+    }
+
+    function showPlaybookDetail(id) {
+        document.getElementById('playbook-detail-modal').classList.remove('hidden');
+        htmx.ajax('GET', '/api/v1/recipes/playbooks/' + id + '/detail', {
+            target: '#playbook-detail-content',
+            swap: 'innerHTML'
+        });
+    }
+
+    function customizePlaybook(id) {
+        document.getElementById('customize-source-id').value = id;
+        document.getElementById('customize-slug').value = '';
+        document.getElementById('customize-modal').classList.remove('hidden');
+    }
+
+    function editPlaybook(id) {
+        window.location.href = '/playbooks/composer?id=' + id;
+    }
+</script>
+{{end}}
