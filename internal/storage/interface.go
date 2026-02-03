@@ -56,6 +56,13 @@ type Store interface {
 	SSHKeyStore
 	CertAuditStore
 	RecoveryCodeStore
+
+	// Recipe system interfaces
+	RecipeComponentStore
+	PlaybookStore
+	PlaybookActivationStore
+	PlaybookVariableBindingStore
+	RawCommandApprovalStore
 }
 
 // UserStore defines user-related operations.
@@ -457,6 +464,84 @@ type RecoveryCodeStore interface {
 	DeleteRecoveryCodes(ctx context.Context, userID int64) error
 	// CountUnusedRecoveryCodes returns the count of unused codes for a user.
 	CountUnusedRecoveryCodes(ctx context.Context, userID int64) (int, error)
+}
+
+// --- Recipe System Store Interfaces ---
+
+// RecipeComponentStore defines recipe component operations.
+type RecipeComponentStore interface {
+	// CreateRecipeComponent creates a new recipe component.
+	CreateRecipeComponent(ctx context.Context, component *RecipeComponent) error
+	// GetRecipeComponent returns a component by namespace, slug, and version.
+	GetRecipeComponent(ctx context.Context, namespace, slug, version string) (*RecipeComponent, error)
+	// GetRecipeComponentByID returns a component by ID.
+	GetRecipeComponentByID(ctx context.Context, id int64) (*RecipeComponent, error)
+	// ListRecipeComponents returns all components in a namespace.
+	ListRecipeComponents(ctx context.Context, namespace string, includeDeprecated bool) ([]*RecipeComponent, error)
+	// ListRecipeComponentVersions returns all versions of a component.
+	ListRecipeComponentVersions(ctx context.Context, namespace, slug string) ([]*RecipeComponent, error)
+	// UpdateRecipeComponent updates an existing component.
+	UpdateRecipeComponent(ctx context.Context, component *RecipeComponent) error
+	// DeleteRecipeComponent deletes a component by ID.
+	DeleteRecipeComponent(ctx context.Context, id int64) error
+}
+
+// PlaybookStore defines playbook operations.
+type PlaybookStore interface {
+	// CreatePlaybook creates a new playbook.
+	CreatePlaybook(ctx context.Context, playbook *Playbook) error
+	// GetPlaybook returns a playbook by namespace, slug, and version.
+	GetPlaybook(ctx context.Context, namespace, slug, version string) (*Playbook, error)
+	// GetPlaybookByID returns a playbook by ID.
+	GetPlaybookByID(ctx context.Context, id int64) (*Playbook, error)
+	// ListPlaybooks returns playbooks filtered by namespace and/or framework type.
+	ListPlaybooks(ctx context.Context, namespace, frameworkType string, includeDeprecated bool) ([]*Playbook, error)
+	// ListPlaybookVersions returns all versions of a playbook.
+	ListPlaybookVersions(ctx context.Context, namespace, slug string) ([]*Playbook, error)
+	// UpdatePlaybook updates an existing playbook.
+	UpdatePlaybook(ctx context.Context, playbook *Playbook) error
+	// DeletePlaybook deletes a playbook by ID.
+	DeletePlaybook(ctx context.Context, id int64) error
+}
+
+// PlaybookActivationStore defines playbook activation operations.
+type PlaybookActivationStore interface {
+	// CreatePlaybookActivation creates a new activation linking a project to a playbook.
+	CreatePlaybookActivation(ctx context.Context, activation *PlaybookActivation) error
+	// GetPlaybookActivation returns the activation for a project.
+	GetPlaybookActivation(ctx context.Context, projectID int64) (*PlaybookActivation, error)
+	// GetPlaybookActivationByID returns an activation by ID.
+	GetPlaybookActivationByID(ctx context.Context, id int64) (*PlaybookActivation, error)
+	// ListActivationsByPlaybook returns all activations using a specific playbook.
+	ListActivationsByPlaybook(ctx context.Context, playbookID int64) ([]*PlaybookActivation, error)
+	// DeletePlaybookActivation deletes an activation by ID.
+	DeletePlaybookActivation(ctx context.Context, id int64) error
+}
+
+// PlaybookVariableBindingStore defines variable binding operations.
+type PlaybookVariableBindingStore interface {
+	// CreateVariableBinding creates a new variable binding.
+	CreateVariableBinding(ctx context.Context, binding *PlaybookVariableBinding) error
+	// GetVariableBindings returns all bindings for an activation.
+	GetVariableBindings(ctx context.Context, activationID int64) ([]*PlaybookVariableBinding, error)
+	// UpdateVariableBinding updates an existing binding.
+	UpdateVariableBinding(ctx context.Context, binding *PlaybookVariableBinding) error
+	// DeleteVariableBinding deletes a binding by ID.
+	DeleteVariableBinding(ctx context.Context, id int64) error
+	// FindBindingsBySourceRef finds bindings that reference a specific source (env key or secret).
+	FindBindingsBySourceRef(ctx context.Context, sourceType, sourceRef string) ([]*PlaybookVariableBinding, error)
+}
+
+// RawCommandApprovalStore defines RAW command approval operations.
+type RawCommandApprovalStore interface {
+	// CreateRawApproval creates an approval record for a RAW component.
+	CreateRawApproval(ctx context.Context, approval *RawCommandApproval) error
+	// GetRawApproval returns the approval for a component.
+	GetRawApproval(ctx context.Context, componentID int64) (*RawCommandApproval, error)
+	// DeleteRawApproval deletes an approval by component ID.
+	DeleteRawApproval(ctx context.Context, componentID int64) error
+	// ListRawApprovals returns all RAW command approvals.
+	ListRawApprovals(ctx context.Context) ([]*RawCommandApproval, error)
 }
 
 // Ensure DB implements Store at compile time.

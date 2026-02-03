@@ -1157,6 +1157,113 @@ var migrations = []Migration{
 			return err
 		},
 	},
+	{
+		Version:     21,
+		Description: "Add recipe system tables for components, playbooks, activations, and approvals",
+		Up: func(tx *sql.Tx) error {
+			_, err := tx.Exec(`
+				-- Recipe Components: Reusable deployment building blocks
+				CREATE TABLE IF NOT EXISTS recipe_components (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					namespace TEXT NOT NULL CHECK(namespace IN ('seed', 'user')),
+					slug TEXT NOT NULL,
+					version TEXT NOT NULL,
+					name TEXT NOT NULL,
+					description TEXT,
+					component_type TEXT NOT NULL CHECK(component_type IN ('hook', 'command', 'service_reload', 'file_op')),
+					content JSON NOT NULL,
+					variables JSON,
+					is_seed BOOLEAN NOT NULL DEFAULT 0,
+					is_raw BOOLEAN NOT NULL DEFAULT 0,
+					is_deprecated BOOLEAN NOT NULL DEFAULT 0,
+					created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+					UNIQUE(namespace, slug, version)
+				);
+				CREATE INDEX IF NOT EXISTS idx_recipe_components_namespace ON recipe_components(namespace);
+				CREATE INDEX IF NOT EXISTS idx_recipe_components_slug ON recipe_components(namespace, slug);
+				CREATE INDEX IF NOT EXISTS idx_recipe_components_type ON recipe_components(component_type);
+
+				-- Playbooks: Compositions of components
+				CREATE TABLE IF NOT EXISTS playbooks (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					namespace TEXT NOT NULL CHECK(namespace IN ('seed', 'user')),
+					slug TEXT NOT NULL,
+					version TEXT NOT NULL,
+					name TEXT NOT NULL,
+					description TEXT,
+					framework_type TEXT,
+					steps JSON NOT NULL,
+					shared_dirs JSON,
+					shared_files JSON,
+					writable_dirs JSON,
+					keep_releases INTEGER NOT NULL DEFAULT 5,
+					validation_rules JSON,
+					is_seed BOOLEAN NOT NULL DEFAULT 0,
+					is_deprecated BOOLEAN NOT NULL DEFAULT 0,
+					parent_id INTEGER,
+					parent_version TEXT,
+					created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+					UNIQUE(namespace, slug, version),
+					FOREIGN KEY (parent_id) REFERENCES playbooks(id) ON DELETE SET NULL
+				);
+				CREATE INDEX IF NOT EXISTS idx_playbooks_namespace ON playbooks(namespace);
+				CREATE INDEX IF NOT EXISTS idx_playbooks_slug ON playbooks(namespace, slug);
+				CREATE INDEX IF NOT EXISTS idx_playbooks_framework ON playbooks(framework_type);
+				CREATE INDEX IF NOT EXISTS idx_playbooks_parent ON playbooks(parent_id);
+
+				-- Playbook Activations: Links projects to specific playbook versions
+				CREATE TABLE IF NOT EXISTS playbook_activations (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					project_id INTEGER NOT NULL,
+					playbook_id INTEGER NOT NULL,
+					activated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+					activated_by INTEGER,
+					FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+					FOREIGN KEY (playbook_id) REFERENCES playbooks(id) ON DELETE RESTRICT,
+					FOREIGN KEY (activated_by) REFERENCES users(id) ON DELETE SET NULL
+				);
+				CREATE UNIQUE INDEX IF NOT EXISTS idx_playbook_activations_project ON playbook_activations(project_id);
+				CREATE INDEX IF NOT EXISTS idx_playbook_activations_playbook ON playbook_activations(playbook_id);
+
+				-- Playbook Variable Bindings: Maps variables to values/secrets/env
+				CREATE TABLE IF NOT EXISTS playbook_variable_bindings (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					activation_id INTEGER NOT NULL,
+					variable_name TEXT NOT NULL,
+					source_type TEXT NOT NULL CHECK(source_type IN ('literal', 'env', 'secret')),
+					source_ref TEXT,
+					literal_value TEXT,
+					FOREIGN KEY (activation_id) REFERENCES playbook_activations(id) ON DELETE CASCADE,
+					UNIQUE(activation_id, variable_name)
+				);
+				CREATE INDEX IF NOT EXISTS idx_variable_bindings_activation ON playbook_variable_bindings(activation_id);
+				CREATE INDEX IF NOT EXISTS idx_variable_bindings_source ON playbook_variable_bindings(source_type, source_ref);
+
+				-- RAW Command Approvals: Admin approval audit trail
+				CREATE TABLE IF NOT EXISTS raw_command_approvals (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					component_id INTEGER NOT NULL,
+					approved_by INTEGER NOT NULL,
+					approved_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+					approval_note TEXT,
+					FOREIGN KEY (component_id) REFERENCES recipe_components(id) ON DELETE CASCADE,
+					FOREIGN KEY (approved_by) REFERENCES users(id) ON DELETE RESTRICT
+				);
+				CREATE UNIQUE INDEX IF NOT EXISTS idx_raw_approvals_component ON raw_command_approvals(component_id);
+			`)
+			return err
+		},
+		Down: func(tx *sql.Tx) error {
+			_, err := tx.Exec(`
+				DROP TABLE IF EXISTS raw_command_approvals;
+				DROP TABLE IF EXISTS playbook_variable_bindings;
+				DROP TABLE IF EXISTS playbook_activations;
+				DROP TABLE IF EXISTS playbooks;
+				DROP TABLE IF EXISTS recipe_components;
+			`)
+			return err
+		},
+	},
 }
 
 // MigrateUp runs all pending migrations.
