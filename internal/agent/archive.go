@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -28,6 +29,8 @@ const (
 
 // receiveRepoArchive streams a repository archive from the master and extracts it.
 // Returns the path to the extracted directory.
+//
+//nolint:unused // Reserved for future deployment method using gRPC streaming
 func (a *Agent) receiveRepoArchive(ctx context.Context, deploymentID, repoURL, ref string) (string, error) {
 	a.mu.RLock()
 	client := a.client
@@ -48,7 +51,7 @@ func (a *Agent) receiveRepoArchive(ctx context.Context, deploymentID, repoURL, r
 
 	// Create temp file for archive
 	tmpDir := filepath.Join(a.config.Paths.Data, "tmp")
-	if err := os.MkdirAll(tmpDir, 0750); err != nil {
+	if err := os.MkdirAll(tmpDir, 0o750); err != nil {
 		return "", fmt.Errorf("create temp dir: %w", err)
 	}
 
@@ -76,7 +79,7 @@ func (a *Agent) receiveRepoArchive(ctx context.Context, deploymentID, repoURL, r
 
 	for {
 		chunk, err := stream.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -117,7 +120,7 @@ func (a *Agent) receiveRepoArchive(ctx context.Context, deploymentID, repoURL, r
 	if err := os.RemoveAll(extractDir); err != nil {
 		a.logger.Warn("Failed to clean existing extract dir", zap.Error(err))
 	}
-	if err := os.MkdirAll(extractDir, 0750); err != nil {
+	if err := os.MkdirAll(extractDir, 0o750); err != nil {
 		return "", fmt.Errorf("create extract dir: %w", err)
 	}
 
@@ -160,7 +163,7 @@ func (a *Agent) extractArchive(archivePath, destDir string) error {
 
 	for {
 		header, err := tr.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -203,7 +206,7 @@ func (a *Agent) extractArchive(archivePath, destDir string) error {
 
 		switch header.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(target, 0750); err != nil {
+			if err := os.MkdirAll(target, 0o750); err != nil {
 				return fmt.Errorf("create directory %s: %w", cleanName, err)
 			}
 
@@ -245,16 +248,16 @@ func (a *Agent) extractArchive(archivePath, destDir string) error {
 // extractFile extracts a single regular file from the tar reader.
 func (a *Agent) extractFile(tr *tar.Reader, target string, header *tar.Header) error {
 	// Ensure parent directory exists
-	if err := os.MkdirAll(filepath.Dir(target), 0750); err != nil {
+	if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
 		return fmt.Errorf("create parent dir: %w", err)
 	}
 
 	// Sanitize file mode (remove setuid, setgid, sticky bits)
 	// Mask to 12-bit mode value (0o7777) before uint32 conversion to avoid G115 overflow warning
 	// #nosec G115 - header.Mode is masked to only mode bits (0o7777 max = 4095, fits in uint32)
-	mode := os.FileMode(header.Mode&0o7777) & 0755
+	mode := os.FileMode(header.Mode&0o7777) & 0o755
 	if mode == 0 {
-		mode = 0644
+		mode = 0o644
 	}
 
 	f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
