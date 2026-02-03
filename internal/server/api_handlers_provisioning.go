@@ -208,13 +208,19 @@ func (s *MasterServer) handleGetProvisionLogs(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// For now, return basic job info
-	// In a full implementation, logs would be stored separately with streaming support
+	// Get the actual logs from storage
+	logs, err := s.store.GetProvisionLogs(ctx, jobID)
+	if err != nil {
+		s.logger.Error("Failed to get provision logs", zap.Error(err), zap.String("job_id", jobID))
+		s.jsonError(w, http.StatusInternalServerError, "Failed to retrieve logs")
+		return
+	}
+
 	s.jsonResponse(w, map[string]interface{}{
 		"job_id": job.ID,
 		"status": job.Status,
 		"stage":  job.Stage,
-		"logs":   []string{}, // TODO: Implement detailed log storage
+		"logs":   logs,
 	})
 }
 
