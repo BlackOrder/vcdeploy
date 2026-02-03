@@ -4,6 +4,8 @@ package server
 import (
 	"context"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -129,6 +131,140 @@ func (s *MasterServer) handleProjectsUI(w http.ResponseWriter, r *http.Request) 
 		"Title":    "Projects",
 		"Active":   "projects",
 		"Projects": projectsList,
+	}))
+}
+
+// handleProjectDetailUI renders the project detail page with playbook integration.
+func (s *MasterServer) handleProjectDetailUI(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	// Parse project ID from path: /projects/{id}
+	path := strings.TrimPrefix(r.URL.Path, "/projects/")
+	if path == "" || strings.Contains(path, "/") {
+		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		return
+	}
+
+	id, err := strconv.ParseInt(path, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		return
+	}
+
+	// Get project
+	project, err := s.projectService.GetByID(ctx, id)
+	if err != nil {
+		s.logger.Error("Failed to get project", zap.Error(err), zap.Int64("id", id))
+		http.Error(w, "Project not found", http.StatusNotFound)
+		return
+	}
+
+	data := map[string]interface{}{
+		"Project": map[string]interface{}{
+			"ID":         project.ID,
+			"Name":       project.Name,
+			"Type":       project.Type,
+			"Repository": project.Repository,
+			"Branch":     project.Branch,
+			"DeployPath": project.DeployPath,
+		},
+	}
+
+	// Get activation if exists
+	if s.activationService != nil {
+		activation, err := s.activationService.GetActive(ctx, id)
+		if err == nil && activation != nil {
+			// Get playbook details for display
+			var playbookName, playbookSlug, playbookVersion string
+			if s.playbookService != nil {
+				playbook, pbErr := s.playbookService.GetByID(ctx, activation.PlaybookID)
+				if pbErr == nil {
+					playbookName = playbook.Name
+					playbookSlug = playbook.Slug
+					playbookVersion = playbook.Version
+				}
+			}
+
+			// Get variable bindings
+			bindings, _ := s.store.GetVariableBindings(ctx, activation.ID)
+			bindingMap := make(map[string]string)
+			for _, b := range bindings {
+				bindingMap[b.VariableName] = b.SourceType + ":" + b.SourceRef
+			}
+
+			data["Activation"] = map[string]interface{}{
+				"ID":               activation.ID,
+				"PlaybookID":       activation.PlaybookID,
+				"PlaybookName":     playbookName,
+				"PlaybookSlug":     playbookSlug,
+				"PlaybookVersion":  playbookVersion,
+				"VariableBindings": bindingMap,
+				"ActivatedAt":      activation.ActivatedAt,
+			}
+
+			// Get resolved steps for preview
+			if s.playbookService != nil {
+				playbook, err := s.playbookService.GetByID(ctx, activation.PlaybookID)
+				if err == nil {
+					var resolvedSteps []map[string]interface{}
+					for _, step := range playbook.Steps {
+						resolvedSteps = append(resolvedSteps, map[string]interface{}{
+							"Order":         step.Order,
+							"ComponentRef":  step.ComponentRef,
+							"ComponentName": step.ComponentRef, // Could resolve to actual name
+							"Phase":         step.Phase,
+							"IsRaw":         false, // Would need to check component
+						})
+					}
+					data["ResolvedSteps"] = resolvedSteps
+				}
+			}
+		}
+	}
+
+	// Get available playbooks for activation modal
+	if s.playbookService != nil {
+		var availablePlaybooks []map[string]interface{}
+
+		// Get seed playbooks
+		seedPlaybooks, err := s.playbookService.List(ctx, "seed", "", false)
+		if err == nil {
+			for _, p := range seedPlaybooks {
+				availablePlaybooks = append(availablePlaybooks, map[string]interface{}{
+					"ID":        p.ID,
+					"Namespace": p.Namespace,
+					"Slug":      p.Slug,
+					"Name":      p.Name,
+					"Version":   p.Version,
+				})
+			}
+		}
+
+		// Get user playbooks
+		userPlaybooks, err := s.playbookService.List(ctx, "user", "", false)
+		if err == nil {
+			for _, p := range userPlaybooks {
+				availablePlaybooks = append(availablePlaybooks, map[string]interface{}{
+					"ID":        p.ID,
+					"Namespace": p.Namespace,
+					"Slug":      p.Slug,
+					"Name":      p.Name,
+					"Version":   p.Version,
+				})
+			}
+		}
+
+		data["AvailablePlaybooks"] = availablePlaybooks
+	}
+
+	s.renderTemplate(w, "project-detail", s.withCommonData(r, map[string]interface{}{
+		"Title":              project.Name,
+		"Active":             "projects",
+		"Project":            data["Project"],
+		"Activation":         data["Activation"],
+		"DependencyWarnings": data["DependencyWarnings"],
+		"ResolvedSteps":      data["ResolvedSteps"],
+		"AvailablePlaybooks": data["AvailablePlaybooks"],
 	}))
 }
 
