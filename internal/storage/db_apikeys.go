@@ -149,5 +149,3 @@ func (db *DB) ListAPIKeys(ctx context.Context, userID int64) ([]*APIKey, error) 
 	}
 	return keys, rows.Err()
 }
-
-

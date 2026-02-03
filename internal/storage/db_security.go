@@ -4,8 +4,8 @@ package storage
 import (
 	"context"
 	"database/sql"
-	"time"
 	"fmt"
+	"time"
 )
 
 // --- SSH Host Key operations ---
@@ -155,7 +155,6 @@ func (db *DB) DeleteSSHHostKeysByHost(ctx context.Context, hostname string, port
 	return result.RowsAffected()
 }
 
-
 // --- SSH Jump Server operations ---
 
 // CreateJumpServer creates a new SSH jump server.
@@ -273,7 +272,6 @@ func (db *DB) DeleteJumpServer(ctx context.Context, id int64) error {
 	}
 	return nil
 }
-
 
 // --- Blocked IP Methods ---
 
@@ -414,7 +412,6 @@ func (db *DB) CleanupRateLimitRecords(ctx context.Context, before time.Time) (in
 	return result.RowsAffected()
 }
 
-
 // --- ACME Certificate operations ---
 
 // GetACMECertificate retrieves an ACME certificate by domain.
@@ -521,7 +518,6 @@ func (db *DB) ListACMECertificates(ctx context.Context) ([]*ACMECertificate, err
 	return certs, rows.Err()
 }
 
-
 // --- ACME Account operations ---
 
 // GetACMEAccount retrieves an ACME account by email.
@@ -597,5 +593,3 @@ func (db *DB) DeleteACMEAccount(ctx context.Context, email string) error {
 	}
 	return nil
 }
-
-

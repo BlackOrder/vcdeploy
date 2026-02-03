@@ -149,5 +149,3 @@ func (db *DB) ListAllSecretsCtx(ctx context.Context) ([]*Secret, error) {
 	}
 	return secrets, rows.Err()
 }
-
-

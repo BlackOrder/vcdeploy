@@ -85,5 +85,3 @@ func (db *DB) ListAuditLogsSince(ctx context.Context, since time.Time) ([]*Audit
 
 	return entries, rows.Err()
 }
-
-

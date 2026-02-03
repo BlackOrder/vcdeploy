@@ -71,7 +71,6 @@ func (db *DB) GetDeployment(ctx context.Context, id string) (*DeploymentRecord, 
 	return &d, nil
 }
 
-
 // --- Deployment log operations ---
 
 // CreateDeploymentLog creates a deployment log entry.
@@ -164,7 +163,6 @@ func (db *DB) CountDeploymentLogs(ctx context.Context, deploymentID string) (int
 	return count, nil
 }
 
-
 // --- Scheduled Deployment operations ---
 
 // CreateScheduledDeployment creates a scheduled deployment.
@@ -223,7 +221,6 @@ func (db *DB) CancelScheduledDeployment(ctx context.Context, id string) error {
 	}
 	return nil
 }
-
 
 // --- Additional Deployment operations ---
 
@@ -342,7 +339,6 @@ func (db *DB) CountDeployments(ctx context.Context) (int64, error) {
 	}
 	return count, nil
 }
-
 
 // --- Deployment Rollback Operations ---
 
@@ -493,5 +489,3 @@ func (db *DB) UpdateProjectHealthCheck(ctx context.Context, projectID int64, hea
 	}
 	return nil
 }
-
-

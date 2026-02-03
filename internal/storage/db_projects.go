@@ -174,7 +174,6 @@ func (db *DB) DeleteProjectByID(ctx context.Context, id int64) error {
 	return nil
 }
 
-
 // --- Project Type operations ---
 
 // CreateProjectType creates a new project type.
@@ -281,7 +280,6 @@ func (db *DB) ExportAllSecrets() (map[string]map[string]string, error) {
 	return result, rows.Err()
 }
 
-
 // --- Project Webhook operations ---
 
 // GetProjectWebhook retrieves a webhook config for a project and provider.
@@ -364,7 +362,6 @@ func (db *DB) DeleteProjectWebhook(ctx context.Context, projectID int64, provide
 	return nil
 }
 
-
 // --- Additional Project operations ---
 
 // UpdateProjectByName updates a project by name.
@@ -378,5 +375,3 @@ func (db *DB) UpdateProjectByName(ctx context.Context, p *Project) error {
 	}
 	return nil
 }
-
-
