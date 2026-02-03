@@ -339,12 +339,16 @@ func (a *Agent) Register(ctx context.Context, token string) (cert []byte, caCert
 	resp, err := client.Register(ctx, req)
 	if err != nil {
 		// Log audit event for failed registration
-		a.store.LogAuditEvent(ctx, AuditEventConnect, fmt.Sprintf("registration failed: %v", err), false)
+		if logErr := a.store.LogAuditEvent(ctx, AuditEventConnect, fmt.Sprintf("registration failed: %v", err), false); logErr != nil {
+			a.logger.Warn("Failed to log audit event", zap.Error(logErr))
+		}
 		return nil, nil, fmt.Errorf("registration RPC failed: %w", err)
 	}
 
 	if !resp.Success {
-		a.store.LogAuditEvent(ctx, AuditEventConnect, fmt.Sprintf("registration rejected: %s", resp.Error), false)
+		if logErr := a.store.LogAuditEvent(ctx, AuditEventConnect, fmt.Sprintf("registration rejected: %s", resp.Error), false); logErr != nil {
+			a.logger.Warn("Failed to log audit event", zap.Error(logErr))
+		}
 		return nil, nil, fmt.Errorf("registration rejected: %s", resp.Error)
 	}
 
@@ -394,7 +398,9 @@ func (a *Agent) Register(ctx context.Context, token string) (cert []byte, caCert
 	}
 
 	// Log successful registration
-	a.store.LogAuditEvent(ctx, AuditEventCertIssued, "agent registered successfully", true)
+	if logErr := a.store.LogAuditEvent(ctx, AuditEventCertIssued, "agent registered successfully", true); logErr != nil {
+		a.logger.Warn("Failed to log audit event", zap.Error(logErr))
+	}
 
 	a.logger.Info("Registration successful")
 
@@ -420,7 +426,7 @@ func (a *Agent) reauthenticate(ctx context.Context) error {
 	// Compute HMAC signature: HMAC-SHA256(agent_id + ":" + timestamp + ":" + nonce)
 	timestamp := time.Now().Unix()
 	message := fmt.Sprintf("%s:%d:", a.config.Agent.ID, timestamp)
-	message = message + string(nonce)
+	message += string(nonce)
 
 	mac := hmac.New(sha256.New, hmacRecord.Secret)
 	mac.Write([]byte(message))
@@ -451,6 +457,7 @@ func (a *Agent) reauthenticate(ctx context.Context) error {
 
 	a.logger.Info("Connecting to re-auth server", zap.String("address", reauthAddress))
 
+	//nolint:staticcheck // SA1019: grpc.DialContext is deprecated but still supported in 1.x
 	conn, err := grpc.DialContext(ctx, reauthAddress,
 		grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
 	if err != nil {
@@ -499,7 +506,9 @@ func (a *Agent) reauthenticate(ctx context.Context) error {
 		}
 	}
 
-	a.store.LogAuditEvent(ctx, AuditEventCertRenewed, "certificate renewed via HMAC re-auth", true)
+	if logErr := a.store.LogAuditEvent(ctx, AuditEventCertRenewed, "certificate renewed via HMAC re-auth", true); logErr != nil {
+		a.logger.Warn("Failed to log audit event", zap.Error(logErr))
+	}
 	a.logger.Info("Successfully reauthenticated and obtained new certificate",
 		zap.Time("expires", parsedCert.NotAfter))
 
