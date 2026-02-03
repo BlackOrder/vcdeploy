@@ -38,7 +38,8 @@ func (s *MasterServer) handleCertificatesUI(w http.ResponseWriter, r *http.Reque
 	now := time.Now()
 	thirtyDays := 30 * 24 * time.Hour
 
-	for _, cert := range certs {
+	for i := range certs {
+		cert := &certs[i]
 		if cert.RevokedAt != nil {
 			stats.Revoked++
 		} else if cert.NotAfter.Before(now) {
@@ -118,9 +119,10 @@ func (s *MasterServer) handleAgentCertsPartial(w http.ResponseWriter, r *http.Re
 	}
 
 	enrichedCerts := make([]CertWithStatus, 0, len(certs))
-	for _, cert := range certs {
+	for i := range certs {
+		cert := &certs[i]
 		enriched := CertWithStatus{
-			AgentCertificateInfo: cert,
+			AgentCertificateInfo: *cert,
 			IsExpired:            cert.NotAfter.Before(now),
 			IsExpiringSoon:       !cert.NotAfter.Before(now) && cert.NotAfter.Sub(now) < thirtyDays,
 		}

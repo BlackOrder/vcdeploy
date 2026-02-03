@@ -359,7 +359,8 @@ func runProvisionList(cmd *cobra.Command, args []string) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "ID\tHOST\tSTATUS\tAGENT ID\tSTARTED\tDURATION")
 
-	for _, job := range result.Jobs {
+	for i := range result.Jobs {
+		job := &result.Jobs[i]
 		started := ""
 		if !job.StartedAt.IsZero() {
 			started = job.StartedAt.Format("01-02 15:04")

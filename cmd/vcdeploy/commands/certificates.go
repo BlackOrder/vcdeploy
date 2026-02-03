@@ -158,7 +158,8 @@ func runCertsList(cmd *cobra.Command, args []string) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "AGENT ID\tSTATUS\tISSUED\tEXPIRES\tEXPIRES IN")
 
-	for _, cert := range result.Certificates {
+	for i := range result.Certificates {
+		cert := &result.Certificates[i]
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
 			cert.AgentID,
 			cert.Status,

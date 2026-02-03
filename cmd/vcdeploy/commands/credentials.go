@@ -165,7 +165,8 @@ func runCredsList(cmd *cobra.Command, args []string) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "ID\tNAME\tTYPE\tURL PATTERN\tUSAGE")
 
-	for _, cred := range result.Credentials {
+	for i := range result.Credentials {
+		cred := &result.Credentials[i]
 		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%d\n",
 			cred.ID,
 			cred.Name,
