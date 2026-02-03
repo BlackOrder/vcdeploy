@@ -40,7 +40,7 @@ func (s *MasterServer) handleAuditLogs(w http.ResponseWriter, r *http.Request) {
 
 	// Note: totalCount is approximate - we return number of items fetched
 	// For a proper total, the storage layer would need a Count method
-	totalCount := len(entries)
+	var totalCount int
 	if len(entries) == p.Limit {
 		// If we got exactly limit items, there are likely more
 		// This is an approximation; proper totalCount would require a COUNT query

@@ -625,9 +625,7 @@ func (s *MasterServer) templateFuncs() template.FuncMap {
 			}
 			return string(b)
 		},
-		"hasPrefix": func(s, prefix string) bool {
-			return strings.HasPrefix(s, prefix)
-		},
+		"hasPrefix": strings.HasPrefix,
 		"formatBytes": func(bytes int64) string {
 			const unit = 1024
 			if bytes < unit {

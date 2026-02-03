@@ -205,26 +205,27 @@ func (s *MemoryStore) RevokeAgentCert(ctx context.Context, agentID, reason, revo
 	found := false
 
 	for _, cert := range s.agentCertificates {
-		if cert.AgentID == agentID && cert.Status == CertStatusActive {
-			cert.Status = CertStatusRevoked
-			cert.RevokedAt = &now
-			cert.RevocationReason = reason
-			s.queueWrite(s.coreWrites, NewWriteOp(WriteOpUpdate, "agent_certificates", cert))
-
-			// Add to revocation list
-			revoked := &RevokedCertificate{
-				ID:           s.nextRevokedCertID.Add(1),
-				SerialNumber: cert.SerialNumber,
-				AgentID:      agentID,
-				Reason:       reason,
-				RevokedAt:    now,
-				RevokedBy:    revokedBy,
-			}
-			s.revokedCertificates[cert.SerialNumber] = revoked
-			s.queueWrite(s.coreWrites, NewWriteOp(WriteOpInsert, "revoked_certificates", revoked))
-
-			found = true
+		if cert.AgentID != agentID || cert.Status != CertStatusActive {
+			continue
 		}
+		cert.Status = CertStatusRevoked
+		cert.RevokedAt = &now
+		cert.RevocationReason = reason
+		s.queueWrite(s.coreWrites, NewWriteOp(WriteOpUpdate, "agent_certificates", cert))
+
+		// Add to revocation list
+		revoked := &RevokedCertificate{
+			ID:           s.nextRevokedCertID.Add(1),
+			SerialNumber: cert.SerialNumber,
+			AgentID:      agentID,
+			Reason:       reason,
+			RevokedAt:    now,
+			RevokedBy:    revokedBy,
+		}
+		s.revokedCertificates[cert.SerialNumber] = revoked
+		s.queueWrite(s.coreWrites, NewWriteOp(WriteOpInsert, "revoked_certificates", revoked))
+
+		found = true
 	}
 
 	if !found {
@@ -2098,15 +2099,16 @@ func (s *MemoryStore) UseRecoveryCode(ctx context.Context, codeID int64) error {
 	// Find the code across all users
 	for userID, codes := range s.recoveryCodes {
 		for i, code := range codes {
-			if code.ID == codeID {
-				if code.UsedAt != nil {
-					return fmt.Errorf("recovery code already used")
-				}
-				code.UsedAt = &now
-				s.recoveryCodes[userID][i] = code
-				s.queueWrite(s.coreWrites, NewWriteOp(WriteOpUpdate, "recovery_codes", code))
-				return nil
+			if code.ID != codeID {
+				continue
 			}
+			if code.UsedAt != nil {
+				return fmt.Errorf("recovery code already used")
+			}
+			code.UsedAt = &now
+			s.recoveryCodes[userID][i] = code
+			s.queueWrite(s.coreWrites, NewWriteOp(WriteOpUpdate, "recovery_codes", code))
+			return nil
 		}
 	}
 
