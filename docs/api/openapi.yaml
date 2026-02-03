@@ -53,6 +53,10 @@ tags:
     description: System settings
   - name: Webhooks
     description: Webhook endpoints
+  - name: Security
+    description: SSH keys, credentials, and certificates management
+  - name: Certificates
+    description: Certificate management for mTLS
 
 paths:
   /healthz:
@@ -435,8 +439,8 @@ paths:
       description: Returns a paginated list of all users (admin only).
       operationId: listUsers
       parameters:
-        - $ref: '#/components/parameters/PageParam'
-        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/OffsetParam'
+        - $ref: '#/components/parameters/LimitParam'
       responses:
         '200':
           description: Paginated list of users
@@ -508,8 +512,8 @@ paths:
       description: Returns a paginated list of all projects.
       operationId: listProjects
       parameters:
-        - $ref: '#/components/parameters/PageParam'
-        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/OffsetParam'
+        - $ref: '#/components/parameters/LimitParam'
       responses:
         '200':
           description: Paginated list of projects
@@ -525,9 +529,9 @@ paths:
                     branch: "main"
                     deployPath: "/var/www/app"
                     createdAt: "2024-01-15T10:30:00Z"
-                total: 1
-                page: 1
-                pageSize: 20
+                totalCount: 1
+                offset: 0
+                limit: 20
                 hasMore: false
     post:
       tags: [Projects]
@@ -793,8 +797,8 @@ paths:
       description: Returns a paginated list of all registered agents.
       operationId: listAgents
       parameters:
-        - $ref: '#/components/parameters/PageParam'
-        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/OffsetParam'
+        - $ref: '#/components/parameters/LimitParam'
       responses:
         '200':
           description: Paginated list of agents
@@ -809,10 +813,9 @@ paths:
                     host: "192.168.1.100"
                     status: "connected"
                     lastSeen: "2024-01-15T10:30:00Z"
-                total: 1
-                page: 1
-                pageSize: 20
-                hasMore: false
+                totalCount: 1
+                offset: 0
+                limit: 20
 
   /api/v1/agents/{agentId}:
     parameters:
@@ -1688,6 +1691,520 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+
+  # --- SSH Keys ---
+  /api/v1/ssh-keys:
+    get:
+      tags: [Security]
+      summary: List SSH keys
+      description: Returns all managed SSH keys.
+      operationId: listSSHKeys
+      responses:
+        '200':
+          description: List of SSH keys
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SSHKey'
+                  count:
+                    type: integer
+    post:
+      tags: [Security]
+      summary: Generate SSH key
+      description: Generate a new SSH key pair.
+      operationId: generateSSHKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, type]
+              properties:
+                name:
+                  type: string
+                  description: Display name for the key
+                type:
+                  type: string
+                  enum: [ed25519, rsa]
+                  description: Key type (ed25519 recommended)
+                bits:
+                  type: integer
+                  default: 4096
+                  description: Key size for RSA (ignored for ed25519)
+      responses:
+        '201':
+          description: SSH key generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SSHKey'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/ssh-keys/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: SSH key ID
+    get:
+      tags: [Security]
+      summary: Get SSH key
+      description: Get details of a specific SSH key.
+      operationId: getSSHKey
+      responses:
+        '200':
+          description: SSH key details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SSHKey'
+        '404':
+          description: SSH key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Security]
+      summary: Delete SSH key
+      description: Delete an SSH key.
+      operationId: deleteSSHKey
+      responses:
+        '204':
+          description: SSH key deleted
+        '404':
+          description: SSH key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/ssh-keys/{id}/public:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: SSH key ID
+    get:
+      tags: [Security]
+      summary: Get SSH public key
+      description: Returns the public key in OpenSSH format.
+      operationId: getSSHKeyPublic
+      responses:
+        '200':
+          description: Public key in OpenSSH format
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: SSH key not found
+
+  # --- Source Credentials ---
+  /api/v1/credentials:
+    get:
+      tags: [Security]
+      summary: List source credentials
+      description: Returns all source credentials (for private repositories).
+      operationId: listCredentials
+      responses:
+        '200':
+          description: List of credentials
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Credential'
+                  count:
+                    type: integer
+    post:
+      tags: [Security]
+      summary: Create credential
+      description: Create a new source credential.
+      operationId: createCredential
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, type]
+              properties:
+                name:
+                  type: string
+                  description: Display name for the credential
+                type:
+                  type: string
+                  enum: [ssh_key, token, basic]
+                  description: Credential type
+                urlPattern:
+                  type: string
+                  description: URL pattern to match (e.g., github.com/*)
+                sshKeyId:
+                  type: integer
+                  format: int64
+                  description: Reference to SSH key (for ssh_key type)
+                token:
+                  type: string
+                  description: Access token (for token type)
+                username:
+                  type: string
+                  description: Username (for basic type)
+                password:
+                  type: string
+                  description: Password (for basic type)
+      responses:
+        '201':
+          description: Credential created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Credential'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/credentials/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: Credential ID
+    get:
+      tags: [Security]
+      summary: Get credential
+      description: Get details of a specific credential.
+      operationId: getCredential
+      responses:
+        '200':
+          description: Credential details (secrets not included)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Credential'
+        '404':
+          description: Credential not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags: [Security]
+      summary: Update credential
+      description: Update a source credential.
+      operationId: updateCredential
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                urlPattern:
+                  type: string
+                token:
+                  type: string
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Credential updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Credential'
+        '404':
+          description: Credential not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Security]
+      summary: Delete credential
+      description: Delete a source credential.
+      operationId: deleteCredential
+      responses:
+        '204':
+          description: Credential deleted
+        '404':
+          description: Credential not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/credentials/{id}/test:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: Credential ID
+    post:
+      tags: [Security]
+      summary: Test credential
+      description: Test if a credential is working correctly.
+      operationId: testCredential
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url:
+                  type: string
+                  description: URL to test against (optional)
+      responses:
+        '200':
+          description: Test result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        '404':
+          description: Credential not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # --- Certificates ---
+  /api/v1/certificates/agents:
+    get:
+      tags: [Certificates]
+      summary: List agent certificates
+      description: Returns all agent mTLS certificates.
+      operationId: listAgentCertificates
+      responses:
+        '200':
+          description: List of agent certificates
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AgentCertificate'
+                  count:
+                    type: integer
+
+  /api/v1/certificates/agents/{agentId}:
+    parameters:
+      - name: agentId
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Agent ID
+    get:
+      tags: [Certificates]
+      summary: Get agent certificate
+      description: Get certificate details for a specific agent.
+      operationId: getAgentCertificate
+      responses:
+        '200':
+          description: Agent certificate details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentCertificate'
+        '404':
+          description: Certificate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/certificates/agents/{agentId}/revoke:
+    parameters:
+      - name: agentId
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Agent ID
+    post:
+      tags: [Certificates]
+      summary: Revoke agent certificate
+      description: Revoke an agent's mTLS certificate.
+      operationId: revokeAgentCertificate
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: Revocation reason
+      responses:
+        '200':
+          description: Certificate revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+        '404':
+          description: Certificate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/certificates/ca:
+    get:
+      tags: [Certificates]
+      summary: List certificate authorities
+      description: Returns all certificate authorities.
+      operationId: listCAs
+      responses:
+        '200':
+          description: List of CAs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CertificateAuthority'
+                  count:
+                    type: integer
+
+  /api/v1/certificates/ca/rotate:
+    post:
+      tags: [Certificates]
+      summary: Rotate certificate authority
+      description: Initiate CA rotation (admin only).
+      operationId: rotateCA
+      responses:
+        '200':
+          description: CA rotation initiated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+        '403':
+          description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/certificates/server:
+    get:
+      tags: [Certificates]
+      summary: Get server certificate
+      description: Get the current server TLS certificate.
+      operationId: getServerCertificate
+      responses:
+        '200':
+          description: Server certificate details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ServerCertificate'
+                  count:
+                    type: integer
+
+  /api/v1/certificates/audit:
+    get:
+      tags: [Certificates]
+      summary: List certificate audit events
+      description: Returns certificate lifecycle audit events.
+      operationId: listCertAuditEvents
+      parameters:
+        - name: agent_id
+          in: query
+          schema:
+            type: string
+          description: Filter by agent ID
+        - name: event_type
+          in: query
+          schema:
+            type: string
+          description: Filter by event type
+        - name: since
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Events since timestamp
+        - name: until
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Events until timestamp
+        - $ref: '#/components/parameters/OffsetParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: List of certificate audit events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CertAuditEvent'
+                  count:
+                    type: integer
 
   /api/v1/blocked:
     get:
@@ -2955,6 +3472,231 @@ components:
         autoRollbackReleases:
           type: integer
           default: 1
+
+    # SSH Keys schemas
+    SSHKey:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        fingerprint:
+          type: string
+          description: SSH key fingerprint (SHA256)
+        keyType:
+          type: string
+          enum: [rsa, ed25519, ecdsa]
+        publicKey:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: string
+          format: date-time
+
+    SSHKeyCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        keyType:
+          type: string
+          enum: [rsa, ed25519, ecdsa]
+          default: ed25519
+        keySize:
+          type: integer
+          description: Key size (2048 or 4096 for RSA)
+          default: 4096
+
+    SSHKeyWithPrivate:
+      allOf:
+        - $ref: '#/components/schemas/SSHKey'
+        - type: object
+          properties:
+            privateKey:
+              type: string
+              description: Private key (only shown once at creation)
+
+    # Credentials schemas
+    Credential:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        type:
+          type: string
+          enum: [password, ssh_key, token]
+        username:
+          type: string
+        host:
+          type: string
+          description: Optional host pattern this credential applies to
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CredentialCreate:
+      type: object
+      required: [name, type]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [password, ssh_key, token]
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+        sshKeyId:
+          type: integer
+          description: Reference to SSH key (for ssh_key type)
+        token:
+          type: string
+          format: password
+        host:
+          type: string
+          description: Optional host pattern this credential applies to
+
+    CredentialUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+        sshKeyId:
+          type: integer
+        token:
+          type: string
+          format: password
+        host:
+          type: string
+
+    CredentialTestResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        testedAt:
+          type: string
+          format: date-time
+
+    # Certificate schemas
+    AgentCertificate:
+      type: object
+      properties:
+        agentId:
+          type: string
+        serialNumber:
+          type: string
+        subject:
+          type: string
+        issuer:
+          type: string
+        notBefore:
+          type: string
+          format: date-time
+        notAfter:
+          type: string
+          format: date-time
+        fingerprint:
+          type: string
+        status:
+          type: string
+          enum: [valid, expired, revoked]
+        issuedAt:
+          type: string
+          format: date-time
+        revokedAt:
+          type: string
+          format: date-time
+
+    CertificateAuthority:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        subject:
+          type: string
+        serialNumber:
+          type: string
+        notBefore:
+          type: string
+          format: date-time
+        notAfter:
+          type: string
+          format: date-time
+        fingerprint:
+          type: string
+        isRoot:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    ServerCertificate:
+      type: object
+      properties:
+        subject:
+          type: string
+        issuer:
+          type: string
+        serialNumber:
+          type: string
+        notBefore:
+          type: string
+          format: date-time
+        notAfter:
+          type: string
+          format: date-time
+        fingerprint:
+          type: string
+        domains:
+          type: array
+          items:
+            type: string
+        autoRenew:
+          type: boolean
+
+    CertAuditEvent:
+      type: object
+      properties:
+        id:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+        action:
+          type: string
+          enum: [issued, revoked, renewed, rotated]
+        subjectType:
+          type: string
+          enum: [agent, ca, server]
+        subjectId:
+          type: string
+        actor:
+          type: string
+        details:
+          type: string
+        ipAddress:
+          type: string
 
 security:
   - bearerAuth: []
