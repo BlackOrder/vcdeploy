@@ -99,11 +99,11 @@ func (s *MasterServer) handleForceACMERenewal(w http.ResponseWriter, r *http.Req
 	// We can trigger a status check which helps ensure renewal happens
 	status := s.acmeClient.GetStatus()
 
-	s.jsonResponse(w, map[string]interface{}{
-		"status":         "renewal_check_initiated",
-		"needs_renewal":  status.NeedsRenewal,
-		"days_remaining": status.DaysRemaining,
-		"message":        "ACME certificates are renewed automatically when needed",
+	s.jsonResponse(w, ACMERenewalResponse{
+		Status:        "renewal_check_initiated",
+		NeedsRenewal:  status.NeedsRenewal,
+		DaysRemaining: status.DaysRemaining,
+		Message:       "ACME certificates are renewed automatically when needed",
 	})
 }
 
@@ -178,12 +178,12 @@ func (s *MasterServer) handleUpdateTLSSettings(w http.ResponseWriter, r *http.Re
 
 	// TLS settings are typically managed via config file and require restart.
 	// This endpoint returns an informational message.
-	s.jsonResponse(w, map[string]interface{}{
-		"status":  "info",
-		"message": "TLS settings are managed via configuration file. Changes require server restart.",
-		"current": map[string]interface{}{
-			"mode":        string(s.config.Server.TLS.Mode),
-			"force_https": s.config.Server.TLS.ForceHTTPS,
+	s.jsonResponse(w, TLSSettingsInfoResponse{
+		Status:  "info",
+		Message: "TLS settings are managed via configuration file. Changes require server restart.",
+		Current: TLSConfigInfo{
+			Mode:       string(s.config.Server.TLS.Mode),
+			ForceHTTPS: s.config.Server.TLS.ForceHTTPS,
 		},
 	})
 }

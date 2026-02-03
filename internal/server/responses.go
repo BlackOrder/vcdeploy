@@ -37,6 +37,20 @@ type UserCreateResponse struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
+// UserInfoResponse represents basic user information (without sensitive fields).
+type UserInfoResponse struct {
+	ID       int64  `json:"id"`
+	Username string `json:"username"`
+	Email    string `json:"email"`
+	Role     string `json:"role"`
+}
+
+// LoginResponse represents a successful login response.
+type LoginResponse struct {
+	Token string           `json:"token"`
+	User  UserInfoResponse `json:"user"`
+}
+
 // --- Project Responses ---
 
 // ProjectResponse represents a project in API responses.
@@ -128,6 +142,53 @@ type StatsResponse struct {
 	Users       int64 `json:"users"`
 }
 
+// DashboardStatsResponse represents the full dashboard statistics.
+type DashboardStatsResponse struct {
+	Projects    ProjectStats    `json:"projects"`
+	Agents      AgentStats      `json:"agents"`
+	Deployments DeploymentStats `json:"deployments"`
+	Timestamp   time.Time       `json:"timestamp"`
+}
+
+// ProjectStats represents project statistics.
+type ProjectStats struct {
+	Total int `json:"total"`
+}
+
+// AgentStats represents agent statistics.
+type AgentStats struct {
+	Total     int `json:"total"`
+	Connected int `json:"connected"`
+}
+
+// DeploymentStats represents deployment statistics.
+type DeploymentStats struct {
+	Success int `json:"success"`
+	Failed  int `json:"failed"`
+	Running int `json:"running"`
+	Total   int `json:"total"`
+}
+
+// --- User Response with TOTP ---
+
+// UserListResponse represents a user in list responses (includes TOTP status).
+type UserListResponse struct {
+	ID          int64     `json:"id"`
+	Username    string    `json:"username"`
+	Email       string    `json:"email"`
+	Role        string    `json:"role"`
+	TOTPEnabled bool      `json:"totpEnabled"`
+	CreatedAt   time.Time `json:"createdAt"`
+}
+
+// --- Simple Count Response ---
+
+// ListCountResponse represents a simple list with count (for non-paginated endpoints).
+type ListCountResponse struct {
+	Items interface{} `json:"items"`
+	Count int         `json:"count"`
+}
+
 // --- Agent Token Response ---
 
 // AgentTokenResponse represents a newly generated agent registration token.
@@ -143,8 +204,8 @@ type AgentTokenResponse struct {
 type PaginatedResponse struct {
 	Items      interface{} `json:"items"`
 	TotalCount int64       `json:"totalCount"`
-	Limit      int         `json:"limit,omitempty"`
-	Offset     int         `json:"offset,omitempty"`
+	Limit      int         `json:"limit"`
+	Offset     int         `json:"offset"`
 }
 
 // --- SSH Key Responses ---
@@ -203,6 +264,15 @@ type ProvisionLogEntry struct {
 	Message   string    `json:"message"`
 }
 
+// ProvisionJobCreateResponse represents the response when creating a provision job.
+type ProvisionJobCreateResponse struct {
+	JobID      string `json:"job_id"`
+	AgentID    string `json:"agent_id"`
+	TargetHost string `json:"target_host"`
+	Status     string `json:"status"`
+	Message    string `json:"message"`
+}
+
 // --- Host Key Responses ---
 
 // HostKeyResponse represents an SSH host key in API responses.
@@ -249,6 +319,23 @@ type HealthCheckConfigResponse struct {
 	IsGlobal          bool   `json:"isGlobal"`
 }
 
+// ProjectHealthConfigResponse represents project health check configuration.
+type ProjectHealthConfigResponse struct {
+	HealthCheckID        *int64 `json:"health_check_id"`
+	AutoRollbackEnabled  bool   `json:"auto_rollback_enabled"`
+	RollbackOnHealthFail bool   `json:"rollback_on_health_fail"`
+}
+
+// --- Rollback Responses ---
+
+// RollbackListResponse represents a paginated list of rollbacks.
+type RollbackListResponse struct {
+	Items  interface{} `json:"items"`
+	Total  int64       `json:"total"`
+	Limit  int         `json:"limit"`
+	Offset int         `json:"offset"`
+}
+
 // --- Agent Binary Responses ---
 
 // AgentBinaryResponse represents an agent binary in API responses.
@@ -263,6 +350,22 @@ type AgentBinaryResponse struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
+// AgentUpdateTriggerResponse represents the response when triggering an agent update.
+type AgentUpdateTriggerResponse struct {
+	Status      string `json:"status"`
+	FromVersion string `json:"from_version,omitempty"`
+	ToVersion   string `json:"to_version,omitempty"`
+	Force       bool   `json:"force,omitempty"`
+	UpdateID    int64  `json:"update_id,omitempty"`
+	Delivery    string `json:"delivery,omitempty"`
+}
+
+// AgentUpToDateResponse represents the response when an agent is already up to date.
+type AgentUpToDateResponse struct {
+	Status         string `json:"status"`
+	CurrentVersion string `json:"current_version"`
+}
+
 // --- Certificate Responses ---
 
 // CertificateResponse represents a certificate in API responses.
@@ -273,6 +376,29 @@ type CertificateResponse struct {
 	NotBefore    time.Time `json:"notBefore"`
 	NotAfter     time.Time `json:"notAfter"`
 	Status       string    `json:"status"`
+}
+
+// --- TLS Responses ---
+
+// ACMERenewalResponse represents the response from ACME renewal check.
+type ACMERenewalResponse struct {
+	Status        string `json:"status"`
+	NeedsRenewal  bool   `json:"needs_renewal"`
+	DaysRemaining int    `json:"days_remaining"`
+	Message       string `json:"message"`
+}
+
+// TLSConfigInfo represents current TLS configuration info.
+type TLSConfigInfo struct {
+	Mode       string `json:"mode"`
+	ForceHTTPS bool   `json:"force_https"`
+}
+
+// TLSSettingsInfoResponse represents TLS settings info response.
+type TLSSettingsInfoResponse struct {
+	Status  string        `json:"status"`
+	Message string        `json:"message"`
+	Current TLSConfigInfo `json:"current"`
 }
 
 // --- Project Type Responses ---
@@ -287,4 +413,12 @@ type ProjectTypeResponse struct {
 	RollbackCmd string    `json:"rollbackCmd,omitempty"`
 	CleanupCmd  string    `json:"cleanupCmd,omitempty"`
 	CreatedAt   time.Time `json:"createdAt,omitempty"`
+}
+
+// --- Webhook Responses ---
+
+// WebhookResponse represents a webhook configuration in API responses.
+type WebhookResponse struct {
+	Provider string `json:"provider"`
+	Enabled  bool   `json:"enabled"`
 }

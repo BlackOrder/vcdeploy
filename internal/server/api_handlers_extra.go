@@ -49,11 +49,11 @@ func (s *MasterServer) handleHostKeys(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		s.jsonResponse(w, map[string]interface{}{
-			"items":      keys,
-			"totalCount": totalCount,
-			"limit":      p.Limit,
-			"offset":     p.Offset,
+		s.jsonResponse(w, PaginatedResponse{
+			Items:      keys,
+			TotalCount: int64(totalCount),
+			Limit:      p.Limit,
+			Offset:     p.Offset,
 		})
 
 	case http.MethodPost:
@@ -256,11 +256,11 @@ func (s *MasterServer) handleJumpServers(w http.ResponseWriter, r *http.Request)
 			}
 		}
 
-		s.jsonResponse(w, map[string]interface{}{
-			"items":      servers,
-			"totalCount": totalCount,
-			"limit":      p.Limit,
-			"offset":     p.Offset,
+		s.jsonResponse(w, PaginatedResponse{
+			Items:      servers,
+			TotalCount: int64(totalCount),
+			Limit:      p.Limit,
+			Offset:     p.Offset,
 		})
 
 	case http.MethodPost:
@@ -599,11 +599,11 @@ func (s *MasterServer) handleProvisionJobs(w http.ResponseWriter, r *http.Reques
 			}
 		}
 
-		s.jsonResponse(w, map[string]interface{}{
-			"items":      jobs,
-			"totalCount": totalCount,
-			"limit":      p.Limit,
-			"offset":     p.Offset,
+		s.jsonResponse(w, PaginatedResponse{
+			Items:      jobs,
+			TotalCount: int64(totalCount),
+			Limit:      p.Limit,
+			Offset:     p.Offset,
 		})
 
 	case http.MethodPost:

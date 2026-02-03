@@ -86,11 +86,11 @@ func (s *MasterServer) handleListHealthCheckConfigs(w http.ResponseWriter, r *ht
 		}
 	}
 
-	s.jsonResponse(w, map[string]interface{}{
-		"items":      configs,
-		"totalCount": totalCount,
-		"limit":      p.Limit,
-		"offset":     p.Offset,
+	s.jsonResponse(w, PaginatedResponse{
+		Items:      configs,
+		TotalCount: int64(totalCount),
+		Limit:      p.Limit,
+		Offset:     p.Offset,
 	})
 }
 
@@ -376,10 +376,10 @@ func (s *MasterServer) handleProjectHealthConfig(w http.ResponseWriter, r *http.
 			return
 		}
 
-		s.jsonResponse(w, map[string]interface{}{
-			"health_check_id":         req.HealthCheckID,
-			"auto_rollback_enabled":   autoRollback,
-			"rollback_on_health_fail": rollbackOnHealthFail,
+		s.jsonResponse(w, ProjectHealthConfigResponse{
+			HealthCheckID:        req.HealthCheckID,
+			AutoRollbackEnabled:  autoRollback,
+			RollbackOnHealthFail: rollbackOnHealthFail,
 		})
 
 	default:
@@ -402,11 +402,11 @@ func (s *MasterServer) handleRollbackRecords(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	s.jsonResponse(w, map[string]interface{}{
-		"items":  rollbacks,
-		"total":  total,
-		"limit":  p.Limit,
-		"offset": p.Offset,
+	s.jsonResponse(w, RollbackListResponse{
+		Items:  rollbacks,
+		Total:  total,
+		Limit:  p.Limit,
+		Offset: p.Offset,
 	})
 }
 

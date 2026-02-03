@@ -82,21 +82,21 @@ func (s *MasterServer) handleStats(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	s.jsonResponse(w, map[string]interface{}{
-		"projects": map[string]interface{}{
-			"total": len(projects),
+	s.jsonResponse(w, DashboardStatsResponse{
+		Projects: ProjectStats{
+			Total: len(projects),
 		},
-		"agents": map[string]interface{}{
-			"total":     len(agents),
-			"connected": connectedAgents,
+		Agents: AgentStats{
+			Total:     len(agents),
+			Connected: connectedAgents,
 		},
-		"deployments": map[string]interface{}{
-			"success": successCount,
-			"failed":  failedCount,
-			"running": runningCount,
-			"total":   len(deployments),
+		Deployments: DeploymentStats{
+			Success: successCount,
+			Failed:  failedCount,
+			Running: runningCount,
+			Total:   len(deployments),
 		},
-		"timestamp": time.Now().UTC(),
+		Timestamp: time.Now().UTC(),
 	})
 }
 
@@ -125,23 +125,23 @@ func (s *MasterServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Sanitize - remove password hashes
-		users := make([]map[string]interface{}, 0, len(result.Items))
+		users := make([]UserListResponse, 0, len(result.Items))
 		for _, u := range result.Items {
-			users = append(users, map[string]interface{}{
-				"id":          u.ID,
-				"username":    u.Username,
-				"email":       u.Email,
-				"role":        u.Role,
-				"totpEnabled": u.TOTPEnabled,
-				"createdAt":   u.CreatedAt,
+			users = append(users, UserListResponse{
+				ID:          u.ID,
+				Username:    u.Username,
+				Email:       u.Email,
+				Role:        u.Role,
+				TOTPEnabled: u.TOTPEnabled,
+				CreatedAt:   u.CreatedAt,
 			})
 		}
 		// Return paginated response with metadata
-		s.jsonResponse(w, map[string]interface{}{
-			"items":      users,
-			"totalCount": result.TotalCount,
-			"limit":      result.Pagination.Limit,
-			"offset":     result.Pagination.Offset,
+		s.jsonResponse(w, PaginatedResponse{
+			Items:      users,
+			TotalCount: result.TotalCount,
+			Limit:      result.Pagination.Limit,
+			Offset:     result.Pagination.Offset,
 		})
 
 	case http.MethodPost:
@@ -655,11 +655,11 @@ func (s *MasterServer) handleProjectsAPI(w http.ResponseWriter, r *http.Request)
 			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
-		s.jsonResponse(w, map[string]interface{}{
-			"items":      result.Items,
-			"totalCount": result.TotalCount,
-			"limit":      result.Pagination.Limit,
-			"offset":     result.Pagination.Offset,
+		s.jsonResponse(w, PaginatedResponse{
+			Items:      result.Items,
+			TotalCount: result.TotalCount,
+			Limit:      result.Pagination.Limit,
+			Offset:     result.Pagination.Offset,
 		})
 
 	case http.MethodPost:
@@ -892,13 +892,13 @@ func (s *MasterServer) handleProjectWebhooksInternal(ctx context.Context, w http
 		}
 
 		// Get all webhooks for this project
-		webhooksList := make([]map[string]interface{}, 0)
+		webhooksList := make([]WebhookResponse, 0)
 		for _, provider := range []string{"github", "gitlab", "bitbucket"} {
 			wh, err := s.webhookService.Get(ctx, project.ID, provider)
 			if err == nil && wh != nil {
-				webhooksList = append(webhooksList, map[string]interface{}{
-					"provider": provider,
-					"enabled":  wh.Enabled,
+				webhooksList = append(webhooksList, WebhookResponse{
+					Provider: provider,
+					Enabled:  wh.Enabled,
 				})
 			}
 		}
@@ -1100,11 +1100,11 @@ func (s *MasterServer) handleAgentsAPI(w http.ResponseWriter, r *http.Request) {
 		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
-	s.jsonResponse(w, map[string]interface{}{
-		"items":      result.Items,
-		"totalCount": result.TotalCount,
-		"limit":      result.Pagination.Limit,
-		"offset":     result.Pagination.Offset,
+	s.jsonResponse(w, PaginatedResponse{
+		Items:      result.Items,
+		TotalCount: result.TotalCount,
+		Limit:      result.Pagination.Limit,
+		Offset:     result.Pagination.Offset,
 	})
 }
 
@@ -1324,11 +1324,11 @@ func (s *MasterServer) handleDeploymentsAPI(w http.ResponseWriter, r *http.Reque
 			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
-		s.jsonResponse(w, map[string]interface{}{
-			"items":      result.Items,
-			"totalCount": result.TotalCount,
-			"limit":      result.Pagination.Limit,
-			"offset":     result.Pagination.Offset,
+		s.jsonResponse(w, PaginatedResponse{
+			Items:      result.Items,
+			TotalCount: result.TotalCount,
+			Limit:      result.Pagination.Limit,
+			Offset:     result.Pagination.Offset,
 		})
 
 	case http.MethodPost:
@@ -1625,11 +1625,11 @@ func (s *MasterServer) handleDeploymentLogs(w http.ResponseWriter, r *http.Reque
 		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
-	s.jsonResponse(w, map[string]interface{}{
-		"items":      result.Items,
-		"totalCount": result.TotalCount,
-		"limit":      result.Pagination.Limit,
-		"offset":     result.Pagination.Offset,
+	s.jsonResponse(w, PaginatedResponse{
+		Items:      result.Items,
+		TotalCount: result.TotalCount,
+		Limit:      result.Pagination.Limit,
+		Offset:     result.Pagination.Offset,
 	})
 }
 
@@ -1761,14 +1761,14 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Sanitize - don't return the hash
-		allResults := make([]map[string]interface{}, 0, len(keys))
+		allResults := make([]APIKeyResponse, 0, len(keys))
 		for _, k := range keys {
-			allResults = append(allResults, map[string]interface{}{
-				"id":         k.ID,
-				"name":       k.Name,
-				"createdAt":  k.CreatedAt,
-				"expiresAt":  k.ExpiresAt,
-				"lastUsedAt": k.LastUsedAt,
+			allResults = append(allResults, APIKeyResponse{
+				ID:         k.ID,
+				Name:       k.Name,
+				CreatedAt:  k.CreatedAt,
+				ExpiresAt:  k.ExpiresAt,
+				LastUsedAt: k.LastUsedAt,
 			})
 		}
 
@@ -1777,21 +1777,22 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 		totalCount := len(allResults)
 
 		// Apply offset
+		var paginatedResults []APIKeyResponse
 		if p.Offset >= totalCount {
-			allResults = []map[string]interface{}{}
+			paginatedResults = []APIKeyResponse{}
 		} else {
-			allResults = allResults[p.Offset:]
+			paginatedResults = allResults[p.Offset:]
 			// Apply limit
-			if p.Limit > 0 && p.Limit < len(allResults) {
-				allResults = allResults[:p.Limit]
+			if p.Limit > 0 && p.Limit < len(paginatedResults) {
+				paginatedResults = paginatedResults[:p.Limit]
 			}
 		}
 
-		s.jsonResponse(w, map[string]interface{}{
-			"items":      allResults,
-			"totalCount": totalCount,
-			"limit":      p.Limit,
-			"offset":     p.Offset,
+		s.jsonResponse(w, PaginatedResponse{
+			Items:      paginatedResults,
+			TotalCount: int64(totalCount),
+			Limit:      p.Limit,
+			Offset:     p.Offset,
 		})
 
 	case http.MethodPost:

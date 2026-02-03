@@ -259,13 +259,13 @@ func (s *MasterServer) handleAPILogin(w http.ResponseWriter, r *http.Request) {
 		zap.String("username", req.Username),
 		zap.String("ip", session.IPAddress))
 
-	s.jsonResponse(w, map[string]interface{}{
-		"token": session.ID,
-		"user": map[string]interface{}{
-			"id":       user.ID,
-			"username": user.Username,
-			"email":    user.Email,
-			"role":     user.Role,
+	s.jsonResponse(w, LoginResponse{
+		Token: session.ID,
+		User: UserInfoResponse{
+			ID:       user.ID,
+			Username: user.Username,
+			Email:    user.Email,
+			Role:     user.Role,
 		},
 	})
 }
@@ -297,11 +297,11 @@ func (s *MasterServer) handleAPICurrentUser(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	s.jsonResponse(w, map[string]interface{}{
-		"id":       user.ID,
-		"username": user.Username,
-		"email":    user.Email,
-		"role":     user.Role,
+	s.jsonResponse(w, UserInfoResponse{
+		ID:       user.ID,
+		Username: user.Username,
+		Email:    user.Email,
+		Role:     user.Role,
 	})
 }
 
