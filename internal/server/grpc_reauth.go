@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"time"
 
@@ -55,7 +56,7 @@ func (s *ReauthOnlyServer) Reauthenticate(ctx context.Context, req *proto.Reauth
 	// Get agent from database
 	agent, err := s.store.GetAgent(ctx, req.AgentId)
 	if err != nil {
-		if err == storage.ErrNotFound {
+		if errors.Is(err, storage.ErrNotFound) {
 			s.logger.Warn("Reauthenticate: agent not found", zap.String("agent_id", req.AgentId))
 			return nil, status.Errorf(codes.NotFound, "agent not found")
 		}
@@ -82,7 +83,7 @@ func (s *ReauthOnlyServer) Reauthenticate(ctx context.Context, req *proto.Reauth
 
 	// Verify HMAC signature: HMAC-SHA256(agent_id + ":" + timestamp + ":" + nonce)
 	message := fmt.Sprintf("%s:%d:", req.AgentId, req.Timestamp)
-	message = message + string(req.Nonce)
+	message += string(req.Nonce)
 
 	mac := hmac.New(sha256.New, agent.HMACSecret)
 	mac.Write([]byte(message))
