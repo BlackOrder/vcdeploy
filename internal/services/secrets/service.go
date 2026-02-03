@@ -10,6 +10,7 @@ import (
 
 	"github.com/BlackOrder/vcdeploy/internal/security"
 	"github.com/BlackOrder/vcdeploy/internal/services"
+	"github.com/BlackOrder/vcdeploy/internal/services/recipes"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 )
 
@@ -114,7 +115,16 @@ func (s *Service) GetEntry(ctx context.Context, project, scope, key string) (*En
 }
 
 // Delete removes a secret.
+// Returns an error if the secret is used by any playbook activation.
 func (s *Service) Delete(ctx context.Context, project, scope, key string) error {
+	// Check if secret is used by any playbook activation
+	// Secret names are scoped: project/scope/key
+	secretRef := fmt.Sprintf("%s/%s/%s", project, scope, key)
+	depService := recipes.NewDependencyService(s.store)
+	if err := depService.CheckSecretDeletionSafe(ctx, secretRef); err != nil {
+		return err
+	}
+
 	return s.store.DeleteSecretCtx(ctx, project, scope, key)
 }
 

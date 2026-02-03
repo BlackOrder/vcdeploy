@@ -89,6 +89,7 @@ func getMachineID() ([]byte, error) {
 // It tries ioreg first, then falls back to sysctl.
 func getMacOSMachineID() ([]byte, error) {
 	// Primary: IOPlatformUUID via ioreg
+	// #nosec G204 - hardcoded system command with literal arguments, no user input
 	cmd := exec.Command("ioreg", "-rd1", "-c", "IOPlatformExpertDevice")
 	output, err := cmd.Output()
 	if err == nil {
@@ -99,6 +100,7 @@ func getMacOSMachineID() ([]byte, error) {
 	}
 
 	// Fallback: sysctl hw.uuid
+	// #nosec G204 - hardcoded system command with literal arguments, no user input
 	cmd = exec.Command("sysctl", "-n", "hw.uuid")
 	output, err = cmd.Output()
 	if err == nil && len(output) > 0 {

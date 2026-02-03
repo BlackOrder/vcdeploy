@@ -114,6 +114,23 @@ test-bench: ## Run benchmarks (mirrors CI 'benchmarks' job)
 	go test -bench=. -benchmem -run=^$$ ./...
 
 # ============================================================================
+# Fuzzing - Security Testing (Manual)
+# ============================================================================
+
+.PHONY: fuzz
+fuzz: ## Run fuzz tests for security validators (manual, not in CI)
+	@echo "Running fuzz tests for 60 seconds each..."
+	go test -fuzz=FuzzCommandValidator -fuzztime=60s ./internal/security/...
+	go test -fuzz=FuzzValidateAgentID -fuzztime=60s ./internal/security/...
+	go test -fuzz=FuzzValidateHostname -fuzztime=60s ./internal/security/...
+
+.PHONY: fuzz-quick
+fuzz-quick: ## Run quick fuzz tests (10 seconds each)
+	go test -fuzz=FuzzCommandValidator -fuzztime=10s ./internal/security/...
+	go test -fuzz=FuzzValidateAgentID -fuzztime=10s ./internal/security/...
+	go test -fuzz=FuzzValidateHostname -fuzztime=10s ./internal/security/...
+
+# ============================================================================
 # Testing - Integration Tests (Starts own SSH container)
 # ============================================================================
 
