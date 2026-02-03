@@ -181,7 +181,7 @@ func runTOTPDisable(cmd *cobra.Command, args []string) error {
 	confirm, _ := cmd.Flags().GetBool("confirm")
 
 	if !confirm {
-		return fmt.Errorf("this action requires --confirm flag\n\nThis will disable TOTP for the user, removing 2FA protection.\nThe user will need to re-enable TOTP after logging in.")
+		return fmt.Errorf("this action requires --confirm flag; this will disable TOTP for the user, removing 2FA protection; the user will need to re-enable TOTP after logging in")
 	}
 
 	if len(reason) < 10 {
