@@ -357,7 +357,7 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 			"role":     user.Role,
 		}
 		s.logAuditWithSnapshot(r, "delete", "user", fmt.Sprintf("%d", user.ID), userSnapshot, fmt.Sprintf("Deleted user: %s", user.Username), "success")
-		s.jsonResponse(w, StatusResponse{Status: "deleted"})
+		w.WriteHeader(http.StatusNoContent)
 
 	case http.MethodPatch:
 		// Admin-only: partial updates (e.g., password change)
@@ -846,7 +846,7 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 
 		// Log with snapshot of deleted resource
 		s.logAuditWithSnapshot(r, "delete", "project", fmt.Sprintf("%d", project.ID), project, fmt.Sprintf("Deleted project: %s (ID: %d)", project.Name, projectID), "success")
-		s.jsonResponse(w, StatusResponse{Status: "deleted"})
+		w.WriteHeader(http.StatusNoContent)
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -1263,7 +1263,7 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 			"lastSeenAt": agent.LastSeenAt,
 		}
 		s.logAuditWithSnapshot(r, "delete", "agent", agentID, agentSnapshot, fmt.Sprintf("Deleted agent: %s", agentID), "success")
-		s.jsonResponse(w, StatusResponse{Status: "deleted"})
+		w.WriteHeader(http.StatusNoContent)
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")

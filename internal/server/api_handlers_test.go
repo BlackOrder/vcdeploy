@@ -852,8 +852,8 @@ func TestHandleProjectAPI_Delete(t *testing.T) {
 	req = requestWithUserContext(req, userID)
 	server.handleProjectAPI(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	if w.Code != http.StatusNoContent {
+		t.Errorf("expected status %d, got %d: %s", http.StatusNoContent, w.Code, w.Body.String())
 	}
 }
 
@@ -978,8 +978,8 @@ func TestHandleAgentAPI_Delete(t *testing.T) {
 	req = requestWithUserContext(req, userID)
 	server.handleAgentAPI(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	if w.Code != http.StatusNoContent {
+		t.Errorf("expected status %d, got %d: %s", http.StatusNoContent, w.Code, w.Body.String())
 	}
 }
 
@@ -2088,8 +2088,8 @@ func TestHandleUser_DeleteSuccess(t *testing.T) {
 	req = requestWithUserContext(req, userID)
 	server.handleUser(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	if w.Code != http.StatusNoContent {
+		t.Errorf("expected status %d, got %d: %s", http.StatusNoContent, w.Code, w.Body.String())
 	}
 }
 

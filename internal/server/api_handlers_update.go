@@ -277,7 +277,7 @@ func (s *MasterServer) handleAgentBinary(w http.ResponseWriter, r *http.Request)
 		s.logAudit(r, "delete", "agent_binary", fmt.Sprintf("Deleted agent binary %s for %s/%s",
 			binary.Version, binary.OS, binary.Arch), "success")
 
-		s.jsonResponse(w, map[string]string{"status": "deleted"})
+		w.WriteHeader(http.StatusNoContent)
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")

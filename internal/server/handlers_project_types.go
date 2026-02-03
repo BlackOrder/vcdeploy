@@ -169,7 +169,7 @@ func (s *MasterServer) handleProjectType(w http.ResponseWriter, r *http.Request)
 		}
 
 		s.logAudit(r, "delete", "project_type", fmt.Sprintf("name=%s", name), "success")
-		s.jsonResponse(w, map[string]string{"status": "deleted"})
+		w.WriteHeader(http.StatusNoContent)
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")

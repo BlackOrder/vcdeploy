@@ -319,8 +319,7 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 	mux.HandleFunc("/api/v1/users/", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodDelete:
-			w.WriteHeader(http.StatusOK)
-			_ = json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
+			w.WriteHeader(http.StatusNoContent)
 		case http.MethodPatch:
 			w.WriteHeader(http.StatusOK)
 			_ = json.NewEncoder(w).Encode(map[string]string{"status": "updated"})

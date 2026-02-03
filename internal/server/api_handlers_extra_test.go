@@ -280,8 +280,8 @@ func TestHandleHostKey_Delete(t *testing.T) {
 
 	server.handleHostKey(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	if rec.Code != http.StatusNoContent {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusNoContent, rec.Body.String())
 	}
 }
 
@@ -567,8 +567,8 @@ func TestHandleJumpServer_Delete(t *testing.T) {
 
 	server.handleJumpServer(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	if rec.Code != http.StatusNoContent {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusNoContent, rec.Body.String())
 	}
 }
 
@@ -890,6 +890,59 @@ func TestHandleProvisionJob_Cancel(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+}
+
+func TestHandleProvisionJob_Logs(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+	ctx := context.Background()
+
+	// Create a provision job
+	job := &storage.ProvisionJob{
+		TargetHost: "logstarget.example.com",
+		TargetPort: 22,
+		TargetUser: "root",
+		Status:     "running",
+		Stage:      "provisioning",
+	}
+	_ = server.provisionService.CreateJob(ctx, job)
+
+	// Add some logs
+	_ = server.store.SaveProvisionLog(ctx, job.ID, "info", "Starting provisioning")
+	_ = server.store.SaveProvisionLog(ctx, job.ID, "info", "Connecting via SSH")
+	_ = server.store.SaveProvisionLog(ctx, job.ID, "error", "Connection failed")
+
+	// Request logs via handleProvisionAgent
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/provision/"+job.ID+"/logs", http.NoBody)
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleProvisionAgent(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+
+	// Check logs are returned
+	logs, ok := result["logs"].([]interface{})
+	if !ok {
+		t.Fatalf("logs not an array: %T", result["logs"])
+	}
+	if len(logs) != 3 {
+		t.Errorf("expected 3 logs, got %d", len(logs))
+	}
+
+	// Verify job_id is included
+	if result["job_id"] != job.ID {
+		t.Errorf("job_id = %v, want %v", result["job_id"], job.ID)
 	}
 }
 

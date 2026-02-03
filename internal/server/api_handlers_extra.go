@@ -214,8 +214,7 @@ func (s *MasterServer) handleHostKey(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"deleted"}`))
+		w.WriteHeader(http.StatusNoContent)
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -401,8 +400,7 @@ func (s *MasterServer) handleJumpServer(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"deleted"}`))
+		w.WriteHeader(http.StatusNoContent)
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")

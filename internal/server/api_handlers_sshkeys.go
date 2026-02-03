@@ -201,7 +201,7 @@ func (s *MasterServer) handleDeleteSSHKey(w http.ResponseWriter, r *http.Request
 	}
 
 	s.logAudit(r, "delete", "ssh_key", "Deleted SSH key ID: "+strconv.FormatInt(id, 10), "success")
-	s.jsonResponse(w, StatusResponse{Status: "deleted"})
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // handleGetSSHKeyPublic returns just the public key (for authorized_keys).

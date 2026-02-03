@@ -178,7 +178,7 @@ func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
 
 		s.logAudit(r, "delete", "secret", fmt.Sprintf("project=%s scope=%s key=%s", project, scope, key), "success")
 
-		s.jsonResponse(w, map[string]string{"status": "deleted"})
+		w.WriteHeader(http.StatusNoContent)
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
