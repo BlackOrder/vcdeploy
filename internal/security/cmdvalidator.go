@@ -154,16 +154,16 @@ func (v *CommandValidator) BlockSubstring(s string) *CommandValidator {
 // Validate checks if a command is allowed to execute.
 // Returns nil if the command is safe, or an error describing why it was blocked.
 func (v *CommandValidator) Validate(cmd string) error {
-	cmd = strings.TrimSpace(cmd)
-	if cmd == "" {
-		return fmt.Errorf("%w: empty command", ErrCommandBlocked)
-	}
-
-	// Check for blocked substrings first (fast path for injection attempts)
+	// Check for blocked substrings BEFORE trimming (to catch \n, \r at boundaries)
 	for _, blocked := range v.BlockedSubstrings {
 		if strings.Contains(cmd, blocked) {
 			return fmt.Errorf("%w: contains blocked pattern %q", ErrCommandBlocked, blocked)
 		}
+	}
+
+	cmd = strings.TrimSpace(cmd)
+	if cmd == "" {
+		return fmt.Errorf("%w: empty command", ErrCommandBlocked)
 	}
 
 	// Extract the binary name from the command
