@@ -15,9 +15,6 @@ import (
 	_ "modernc.org/sqlite" // sqlite driver for database/sql
 )
 
-// ErrNotFound is returned when a requested record does not exist.
-var ErrNotFound = errors.New("not found")
-
 // DB wraps the SQLite database connection.
 type DB struct {
 	conn   *sql.DB

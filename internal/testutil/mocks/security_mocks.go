@@ -4,15 +4,12 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
 	"sync"
 	"time"
 
+	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"golang.org/x/crypto/ssh"
 )
-
-// ErrNotFound is returned when a resource is not found in mock stores.
-var ErrNotFound = errors.New("not found")
 
 // MockKMS implements a mock Key Management Service for testing.
 type MockKMS struct {
@@ -52,7 +49,7 @@ func NewMockKMS() *MockKMS {
 		if data, ok := m.encryptedData[ciphertext]; ok {
 			return append([]byte(nil), data...), nil // copy
 		}
-		return nil, ErrNotFound
+		return nil, storage.ErrNotFound
 	}
 
 	return m
@@ -231,7 +228,7 @@ func NewMockSSHKeyStore() *MockSSHKeyStore {
 		if key, ok := m.Keys[id]; ok {
 			return key, nil
 		}
-		return nil, ErrNotFound
+		return nil, storage.ErrNotFound
 	}
 
 	m.ListKeysFunc = func() ([]*SSHKeyInfo, error) {
@@ -340,7 +337,7 @@ func NewMockCredentialStore() *MockCredentialStore {
 		if cred, ok := m.Credentials[id]; ok {
 			return cred, nil
 		}
-		return nil, ErrNotFound
+		return nil, storage.ErrNotFound
 	}
 
 	m.ListCredentialsFunc = func() ([]*CredentialInfo, error) {
@@ -364,7 +361,7 @@ func NewMockCredentialStore() *MockCredentialStore {
 		m.mu.Lock()
 		defer m.mu.Unlock()
 		if _, ok := m.Credentials[cred.ID]; !ok {
-			return ErrNotFound
+			return storage.ErrNotFound
 		}
 		m.Credentials[cred.ID] = cred
 		return nil
