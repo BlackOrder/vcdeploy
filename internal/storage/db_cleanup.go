@@ -92,5 +92,3 @@ func (db *DB) CleanupOrphanedWebhooks(ctx context.Context) (int64, error) {
 	}
 	return result.RowsAffected()
 }
-
-

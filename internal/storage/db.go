@@ -143,4 +143,3 @@ func (db *DB) Backup(destPath string) error {
 	}
 	return nil
 }
-

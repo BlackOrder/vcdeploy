@@ -4,8 +4,8 @@ package storage
 import (
 	"context"
 	"database/sql"
-	"time"
 	"fmt"
+	"time"
 )
 
 // --- Provision Job Methods ---
@@ -204,5 +204,3 @@ func scanProvisionJobs(rows *sql.Rows) ([]*ProvisionJob, error) {
 	}
 	return jobs, rows.Err()
 }
-
-

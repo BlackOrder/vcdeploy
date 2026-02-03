@@ -222,7 +222,6 @@ func (db *DB) DeleteAgent(ctx context.Context, id string) error {
 	return nil
 }
 
-
 // --- Agent Binary operations ---
 
 // CreateAgentBinary creates a new agent binary record.
@@ -364,7 +363,6 @@ func (db *DB) DeleteAgentBinary(ctx context.Context, id int64) error {
 	}
 	return nil
 }
-
 
 // --- Agent Update History operations ---
 
@@ -618,5 +616,3 @@ func (db *DB) ListAgentsNeedingUpdate(ctx context.Context) ([]*Agent, error) {
 	}
 	return agents, rows.Err()
 }
-
-

@@ -4,9 +4,9 @@ package storage
 import (
 	"context"
 	"database/sql"
-	"time"
 	"fmt"
 	"go.uber.org/zap"
+	"time"
 )
 
 // --- User operations ---
@@ -54,7 +54,6 @@ func (db *DB) GetUserByUsername(ctx context.Context, username string) (*User, er
 	user.TOTPSecret = totpSecret.String
 	return &user, nil
 }
-
 
 // --- Session Management ---
 
@@ -149,7 +148,6 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64) ([]*Session, e
 	}
 	return sessions, rows.Err()
 }
-
 
 // --- Additional User operations ---
 
@@ -276,7 +274,6 @@ func (db *DB) DeleteUser(ctx context.Context, id int64) error {
 	return nil
 }
 
-
 // --- Recovery Code Operations ---
 
 // SaveRecoveryCodes saves a set of recovery codes for a user (replaces any existing).
@@ -378,4 +375,3 @@ func (db *DB) CountUnusedRecoveryCodes(ctx context.Context, userID int64) (int, 
 	}
 	return count, nil
 }
-

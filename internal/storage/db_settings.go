@@ -122,5 +122,3 @@ func (db *DB) HasSettings(ctx context.Context) (bool, error) {
 	}
 	return count > 0, nil
 }
-
-
