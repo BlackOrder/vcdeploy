@@ -100,6 +100,9 @@ All error responses follow this format:
 | Agent Binaries | `/api/v1/binaries`, `/api/v1/binaries/latest` | Yes |
 | Health Checks | `/api/v1/health-checks`, `/api/v1/health-checks/global` | Yes |
 | Rollbacks | `/api/v1/rollbacks`, `/api/v1/rollbacks/{id}` | Yes |
+| Recipes | `/api/v1/recipes/components`, `/api/v1/recipes/playbooks` | Yes |
+| Activations | `/api/v1/recipes/activations` | Yes |
+| RAW Approvals | `/api/v1/recipes/raw-approvals` | Admin |
 | Webhooks | `/webhook/github/{project}`, `/webhook/gitlab/{project}`, `/webhook/bitbucket/{project}` | Signature |
 
 ---
@@ -977,6 +980,263 @@ POST /webhook/bitbucket/{project}
 |--------|-------------|
 | X-Hub-Signature | HMAC signature |
 | X-Event-Key | Event type (repo:push, etc.) |
+
+---
+
+## Recipe Endpoints
+
+The Recipe API manages deployment components, playbooks, and activations.
+
+### List Components
+
+```
+GET /api/v1/recipes/components
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| namespace | string | Filter by namespace (seed/user) |
+| type | string | Filter by component type |
+| search | string | Search by name or description |
+
+**Response:**
+```json
+{
+  "components": [
+    {
+      "id": 1,
+      "namespace": "seed",
+      "slug": "composer-install",
+      "version": "v1.0.0",
+      "name": "Composer Install",
+      "type": "shell",
+      "content": { "command": "composer install --no-dev" }
+    }
+  ],
+  "total": 1
+}
+```
+
+### Create Component
+
+```
+POST /api/v1/recipes/components
+```
+
+**Request Body:**
+```json
+{
+  "name": "NPM Install",
+  "slug": "npm-install",
+  "type": "shell",
+  "content": {
+    "command": "npm ci --production"
+  },
+  "variables": [
+    {
+      "name": "node_env",
+      "type": "string",
+      "default": "production"
+    }
+  ]
+}
+```
+
+### Get Component
+
+```
+GET /api/v1/recipes/components/{id}
+```
+
+### Update Component
+
+```
+PUT /api/v1/recipes/components/{id}
+```
+
+### Delete Component
+
+```
+DELETE /api/v1/recipes/components/{id}
+```
+
+### List Playbooks
+
+```
+GET /api/v1/recipes/playbooks
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| namespace | string | Filter by namespace |
+| framework_type | string | Filter by framework |
+
+### Create Playbook
+
+```
+POST /api/v1/recipes/playbooks
+```
+
+**Request Body:**
+```json
+{
+  "name": "Laravel Deployment",
+  "slug": "laravel-deploy",
+  "version": "v1.0.0",
+  "framework_type": "laravel",
+  "steps": [
+    {
+      "order": 1,
+      "phase": "pre_deploy",
+      "component_ref": "seed:composer-install:v1.0.0"
+    },
+    {
+      "order": 2,
+      "phase": "post_deploy",
+      "component_ref": "seed:artisan-migrate:v1.0.0"
+    }
+  ]
+}
+```
+
+### Get Playbook
+
+```
+GET /api/v1/recipes/playbooks/{id}
+```
+
+### Update Playbook
+
+```
+PUT /api/v1/recipes/playbooks/{id}
+```
+
+### Delete Playbook
+
+```
+DELETE /api/v1/recipes/playbooks/{id}
+```
+
+### Activate Playbook
+
+```
+POST /api/v1/recipes/activations
+```
+
+**Request Body:**
+```json
+{
+  "project_id": 123,
+  "playbook_id": 1,
+  "bindings": [
+    {
+      "variable_name": "deploy_user",
+      "source_type": "literal",
+      "literal_value": "www-data"
+    },
+    {
+      "variable_name": "db_password",
+      "source_type": "secret",
+      "source_ref": "db-password"
+    }
+  ]
+}
+```
+
+### Get Activation
+
+```
+GET /api/v1/recipes/activations/{project_id}
+```
+
+### Deactivate Playbook
+
+```
+DELETE /api/v1/recipes/activations/{project_id}
+```
+
+### RAW Approvals (Admin Only)
+
+#### List Pending Approvals
+
+```
+GET /api/v1/recipes/raw-approvals
+```
+
+#### Approve RAW Component
+
+```
+POST /api/v1/recipes/raw-approvals
+```
+
+**Request Body:**
+```json
+{
+  "component_id": 42,
+  "approval_note": "Reviewed and safe for production use"
+}
+```
+
+#### Revoke Approval
+
+```
+DELETE /api/v1/recipes/raw-approvals/{component_id}
+```
+
+### Export Recipes
+
+```
+GET /api/v1/recipes/export
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| include_versions | boolean | Include version history |
+| namespace | string | Filter by namespace |
+
+### Import Recipes
+
+```
+POST /api/v1/recipes/import
+```
+
+**Request Body:** multipart/form-data with recipe JSON file
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| dry_run | boolean | Preview import without changes |
+
+### Migration Preview
+
+```
+GET /api/v1/recipes/migration/preview/{project_id}
+```
+
+Returns estimated migration details for converting a project's YAML config to a playbook.
+
+### Migrate Project
+
+```
+POST /api/v1/recipes/migration/{project_id}
+```
+
+**Request Body:**
+```json
+{
+  "name": "My Playbook",
+  "version": "v1.0.0",
+  "createComponents": true,
+  "activate": true
+}
+```
 
 ---
 

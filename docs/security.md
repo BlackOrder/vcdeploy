@@ -473,9 +473,80 @@ security:
   ca_file: "/var/lib/vcdeploy/ca.crt"
 ```
 
+## Command Validation
+
+vcdeploy validates all commands before execution to prevent shell injection attacks.
+
+### Validated Command Types
+
+| Type | Description | Validation |
+|------|-------------|------------|
+| `shell` | Pre-defined shell commands | Strict allowlist |
+| `reload` | Service reload operations | Service name validation |
+| `file_operation` | File system operations | Path traversal prevention |
+| `raw` | Arbitrary commands | Requires admin approval |
+
+### Validation Rules
+
+1. **No Shell Metacharacters**: Commands are validated to prevent injection
+2. **Path Sanitization**: All file paths are validated against traversal attacks
+3. **Agent ID Validation**: Agent identifiers follow strict alphanumeric patterns
+4. **Hostname Validation**: Hostnames must be valid RFC 1123 format
+
+### RAW Command Security
+
+RAW commands bypass normal validation and require special handling:
+
+1. **Admin Approval Required**: No RAW command executes without admin approval
+2. **Approval Audit**: All approvals are logged with admin ID and timestamp
+3. **Approval Notes**: Admins can document why the RAW command is safe
+4. **One-Time Review**: Re-approval needed if RAW content changes
+
+### Best Practices
+
+1. **Prefer Typed Commands**: Use `shell`, `reload`, or `file_operation` over `raw`
+2. **Variable Injection Safety**: Variables are escaped before command substitution
+3. **Audit RAW Usage**: Regularly review RAW commands and their approvals
+4. **Principle of Least Privilege**: Only grant RAW approval authority to trusted admins
+
+## Recipe System Security
+
+The recipe system includes security features for deployment composition.
+
+### Namespace Isolation
+
+- **Seed Components**: Read-only, system-provided, audited
+- **User Components**: Fully editable, project-specific
+
+### Variable Binding Security
+
+Variable bindings support secure value sources:
+
+| Source | Description | Security |
+|--------|-------------|----------|
+| `literal` | Static value | Visible in config |
+| `env` | Environment variable | Server-side only |
+| `secret` | Encrypted secret | KMS-protected |
+
+### Dependency Tracking
+
+The system prevents accidental credential deletion:
+
+1. **Pre-Delete Checks**: Warnings before deleting secrets used by playbooks
+2. **Dependency Reports**: View all playbooks using a specific secret
+3. **Cascade Prevention**: Deleting in-use secrets requires acknowledgment
+
+### Export/Import Security
+
+- **Sensitive Data Exclusion**: Exports don't include secret values
+- **Import Validation**: Imported recipes are validated before activation
+- **Dry-Run Mode**: Preview import effects without changes
+
 ## See Also
 
+- [Recipe System Guide](recipes.md) - Full recipe system documentation
 - [Provisioning Guide](provisioning.md) - SSH-based agent provisioning
 - [Private Repos Guide](private-repos.md) - Source credential management
 - [API Reference](api/) - Security API endpoints
 - [CLI Reference](cli/) - Security CLI commands
+
