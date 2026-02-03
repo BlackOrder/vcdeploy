@@ -73,6 +73,7 @@ func init() {
 	rootCmd.AddCommand(typeCmd)
 	rootCmd.AddCommand(secretCmd)
 	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(RecipesCmd)
 }
 
 var versionCmd = &cobra.Command{
