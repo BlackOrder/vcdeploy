@@ -167,7 +167,8 @@ func runSSHKeysList(cmd *cobra.Command, args []string) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "ID\tNAME\tTYPE\tFINGERPRINT\tCREATED")
 
-	for _, key := range result.Keys {
+	for i := range result.Keys {
+		key := &result.Keys[i]
 		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\n",
 			key.ID,
 			key.Name,
