@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/BlackOrder/vcdeploy/internal/storage"
 )
 
 func TestAgentStoreInit(t *testing.T) {
@@ -62,7 +64,7 @@ func TestAgentStoreState(t *testing.T) {
 
 	// Test GetState for non-existent key
 	_, err = store.GetState(ctx, "non-existent")
-	if err != ErrNotFound {
+	if err != storage.ErrNotFound {
 		t.Errorf("GetState for non-existent key: got %v, want ErrNotFound", err)
 	}
 
@@ -72,7 +74,7 @@ func TestAgentStoreState(t *testing.T) {
 	}
 
 	_, err = store.GetState(ctx, key)
-	if err != ErrNotFound {
+	if err != storage.ErrNotFound {
 		t.Errorf("GetState after delete: got %v, want ErrNotFound", err)
 	}
 }
@@ -180,7 +182,7 @@ func TestAgentStoreCertificate(t *testing.T) {
 	}
 
 	_, err = store.GetCertificate(ctx, certType)
-	if err != ErrNotFound {
+	if err != storage.ErrNotFound {
 		t.Errorf("GetCertificate after delete: got %v, want ErrNotFound", err)
 	}
 }
@@ -220,7 +222,7 @@ func TestAgentStoreHMACSecret(t *testing.T) {
 
 	// Test GetHMACSecret for non-existent host
 	_, err = store.GetHMACSecret(ctx, "unknown.host")
-	if err != ErrNotFound {
+	if err != storage.ErrNotFound {
 		t.Errorf("GetHMACSecret for non-existent: got %v, want ErrNotFound", err)
 	}
 
@@ -230,7 +232,7 @@ func TestAgentStoreHMACSecret(t *testing.T) {
 	}
 
 	_, err = store.GetHMACSecret(ctx, masterHost)
-	if err != ErrNotFound {
+	if err != storage.ErrNotFound {
 		t.Errorf("GetHMACSecret after delete: got %v, want ErrNotFound", err)
 	}
 }
@@ -420,7 +422,7 @@ func TestAgentStoreRepoCache(t *testing.T) {
 	}
 
 	_, err = store.GetRepoCache(ctx, repoURL)
-	if err != ErrNotFound {
+	if err != storage.ErrNotFound {
 		t.Errorf("GetRepoCache after delete: got %v, want ErrNotFound", err)
 	}
 }
@@ -484,5 +486,114 @@ func TestEncryptionNilHandling(t *testing.T) {
 	}
 	if decrypted != nil {
 		t.Errorf("decrypt(nil) should return nil, got %v", decrypted)
+	}
+}
+
+func TestAuditLogWithMetadata(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := NewAgentStore(tmpDir)
+	if err != nil {
+		t.Fatalf("NewAgentStore: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+	if err := store.InitSchema(ctx); err != nil {
+		t.Fatalf("InitSchema: %v", err)
+	}
+
+	// Test logging with metadata
+	metadata := map[string]interface{}{
+		"project":  "test-project",
+		"revision": "abc123",
+		"duration": 1.5,
+	}
+	if err := store.LogAuditEventWithMetadata(ctx, AuditEventDeployComplete, "Deploy succeeded", true, metadata); err != nil {
+		t.Fatalf("LogAuditEventWithMetadata: %v", err)
+	}
+
+	// Test logging without metadata (should work with nil)
+	if err := store.LogAuditEventWithMetadata(ctx, AuditEventConnect, "Connected to master", true, nil); err != nil {
+		t.Fatalf("LogAuditEventWithMetadata(nil metadata): %v", err)
+	}
+
+	// Retrieve events and verify metadata
+	events, err := store.GetAuditEvents(ctx, "", 10)
+	if err != nil {
+		t.Fatalf("GetAuditEvents: %v", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("Expected 2 events, got %d", len(events))
+	}
+
+	// Events are returned in descending order, so connect is first
+	if events[0].EventType != AuditEventConnect {
+		t.Errorf("Expected first event type %s, got %s", AuditEventConnect, events[0].EventType)
+	}
+	if events[1].EventType != AuditEventDeployComplete {
+		t.Errorf("Expected second event type %s, got %s", AuditEventDeployComplete, events[1].EventType)
+	}
+
+	// Check metadata on deploy event
+	if events[1].Metadata == nil {
+		t.Error("Expected metadata on deploy event")
+	} else {
+		if events[1].Metadata["project"] != "test-project" {
+			t.Errorf("Expected project=test-project, got %v", events[1].Metadata["project"])
+		}
+	}
+}
+
+func TestQueryAuditLogs(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := NewAgentStore(tmpDir)
+	if err != nil {
+		t.Fatalf("NewAgentStore: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+	if err := store.InitSchema(ctx); err != nil {
+		t.Fatalf("InitSchema: %v", err)
+	}
+
+	// Log some events
+	_ = store.LogAuditEvent(ctx, AuditEventConnect, "Connected", true)
+	_ = store.LogAuditEvent(ctx, AuditEventDeployStart, "Starting deploy", true)
+	_ = store.LogAuditEvent(ctx, AuditEventDeployFailed, "Deploy failed", false)
+	_ = store.LogAuditEvent(ctx, AuditEventConnect, "Reconnected", true)
+
+	// Test filtering by event type
+	filter := AuditLogFilter{EventTypes: []string{AuditEventConnect}}
+	events, err := store.QueryAuditLogs(ctx, filter)
+	if err != nil {
+		t.Fatalf("QueryAuditLogs (by type): %v", err)
+	}
+	if len(events) != 2 {
+		t.Errorf("Expected 2 connect events, got %d", len(events))
+	}
+
+	// Test filtering by success
+	success := false
+	filter = AuditLogFilter{Success: &success}
+	events, err = store.QueryAuditLogs(ctx, filter)
+	if err != nil {
+		t.Fatalf("QueryAuditLogs (by success): %v", err)
+	}
+	if len(events) != 1 {
+		t.Errorf("Expected 1 failed event, got %d", len(events))
+	}
+	if events[0].EventType != AuditEventDeployFailed {
+		t.Errorf("Expected failed event type %s, got %s", AuditEventDeployFailed, events[0].EventType)
+	}
+
+	// Test limit and offset
+	filter = AuditLogFilter{Limit: 2, Offset: 1}
+	events, err = store.QueryAuditLogs(ctx, filter)
+	if err != nil {
+		t.Fatalf("QueryAuditLogs (limit/offset): %v", err)
+	}
+	if len(events) != 2 {
+		t.Errorf("Expected 2 events with limit/offset, got %d", len(events))
 	}
 }

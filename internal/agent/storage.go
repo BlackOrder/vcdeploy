@@ -12,14 +12,16 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
+	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3" // SQLite driver
+	"github.com/BlackOrder/vcdeploy/internal/storage"
+	_ "modernc.org/sqlite" // SQLite driver (pure Go, no CGO)
 )
-
-// ErrNotFound is returned when a record is not found.
-var ErrNotFound = errors.New("not found")
 
 // AgentStore provides encrypted SQLite storage for the agent.
 // All sensitive data is encrypted using a machine-derived key.
@@ -58,18 +60,28 @@ type AuditEvent struct {
 	Timestamp time.Time
 	EventType string
 	Details   string
+	Metadata  map[string]interface{}
 	Success   bool
 }
 
 // Audit event types.
 const (
 	AuditEventConnect        = "connect"
+	AuditEventDisconnect     = "disconnect"
 	AuditEventCertIssued     = "cert_issued"
 	AuditEventCertRenewed    = "cert_renewed"
+	AuditEventCertExpiring   = "cert_expiring"
 	AuditEventReauth         = "reauth"
+	AuditEventReauthFailed   = "reauth_failed"
 	AuditEventDeployStart    = "deploy_start"
 	AuditEventDeployComplete = "deploy_complete"
 	AuditEventDeployFailed   = "deploy_failed"
+	AuditEventDeployRollback = "deploy_rollback"
+	AuditEventUpdateStart    = "update_start"
+	AuditEventUpdateComplete = "update_complete"
+	AuditEventUpdateFailed   = "update_failed"
+	AuditEventConfigReload   = "config_reload"
+	AuditEventHealthCheck    = "health_check"
 )
 
 // RepoCacheRecord represents a cached repository.
@@ -81,6 +93,10 @@ type RepoCacheRecord struct {
 	LastUsed    time.Time
 }
 
+// dbSchemaVersion is incremented when the agent database schema changes incompatibly.
+// When a version mismatch is detected, the old database is archived and a fresh one created.
+const dbSchemaVersion = 1
+
 // NewAgentStore creates a new agent store at the specified data directory.
 func NewAgentStore(dataDir string) (*AgentStore, error) {
 	dbPath := filepath.Join(dataDir, "agent.db")
@@ -91,9 +107,15 @@ func NewAgentStore(dataDir string) (*AgentStore, error) {
 	}
 
 	// Open database with WAL mode and busy timeout
-	db, err := sql.Open("sqlite3", dbPath+"?_busy_timeout=5000&_journal_mode=WAL&_foreign_keys=ON")
+	db, err := sql.Open("sqlite", dbPath+"?_busy_timeout=5000&_journal_mode=WAL&_foreign_keys=ON")
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
+	}
+
+	// Check database compatibility and archive if needed
+	db, err = checkAndArchiveIncompatible(db, dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("database compatibility check: %w", err)
 	}
 
 	// Derive machine key
@@ -123,6 +145,106 @@ func NewAgentStore(dataDir string) (*AgentStore, error) {
 	}
 
 	return store, nil
+}
+
+// checkAndArchiveIncompatible checks the database schema version and archives
+// the database if it's incompatible. Returns a fresh database connection.
+func checkAndArchiveIncompatible(db *sql.DB, dbPath string) (*sql.DB, error) {
+	var version int
+	err := db.QueryRow("PRAGMA user_version").Scan(&version)
+	if err != nil {
+		return nil, fmt.Errorf("read schema version: %w", err)
+	}
+
+	// New database or compatible version - set version and return
+	if version == 0 || version == dbSchemaVersion {
+		_, err = db.Exec(fmt.Sprintf("PRAGMA user_version = %d", dbSchemaVersion))
+		if err != nil {
+			return nil, fmt.Errorf("set schema version: %w", err)
+		}
+		return db, nil
+	}
+
+	// Incompatible version - archive and recreate
+	log.Printf("Database version mismatch (have %d, need %d), archiving old database", version, dbSchemaVersion)
+	db.Close()
+
+	archivePath := fmt.Sprintf("%s.archived.%d", dbPath, time.Now().Unix())
+	if err := os.Rename(dbPath, archivePath); err != nil {
+		return nil, fmt.Errorf("archive old database: %w", err)
+	}
+
+	// Also archive WAL and SHM files if they exist
+	for _, suffix := range []string{"-wal", "-shm"} {
+		walPath := dbPath + suffix
+		if _, err := os.Stat(walPath); err == nil {
+			os.Rename(walPath, archivePath+suffix)
+		}
+	}
+
+	// Clean old archives (keep last 3)
+	if err := cleanOldArchives(filepath.Dir(dbPath), 3); err != nil {
+		// Log but don't fail - cleanup is best-effort
+		log.Printf("Warning: failed to clean old archives: %v", err)
+	}
+
+	// Reopen with fresh database
+	newDB, err := sql.Open("sqlite", dbPath+"?_busy_timeout=5000&_journal_mode=WAL&_foreign_keys=ON")
+	if err != nil {
+		return nil, fmt.Errorf("reopen database: %w", err)
+	}
+
+	_, err = newDB.Exec(fmt.Sprintf("PRAGMA user_version = %d", dbSchemaVersion))
+	if err != nil {
+		newDB.Close()
+		return nil, fmt.Errorf("set schema version: %w", err)
+	}
+
+	return newDB, nil
+}
+
+// cleanOldArchives removes old database archives, keeping only the most recent ones.
+func cleanOldArchives(dir string, keep int) error {
+	pattern := filepath.Join(dir, "agent.db.archived.*")
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return err
+	}
+
+	// Filter out WAL and SHM files from the count
+	var dbFiles []string
+	for _, m := range matches {
+		if !isWALOrSHM(m) {
+			dbFiles = append(dbFiles, m)
+		}
+	}
+
+	if len(dbFiles) <= keep {
+		return nil
+	}
+
+	// Sort by filename (timestamp embedded) - oldest first
+	sort.Strings(dbFiles)
+
+	// Remove oldest, keep newest `keep` files
+	for _, path := range dbFiles[:len(dbFiles)-keep] {
+		// Remove main DB file
+		if err := os.Remove(path); err != nil {
+			return fmt.Errorf("remove %s: %w", path, err)
+		}
+		// Remove associated WAL and SHM files
+		for _, suffix := range []string{"-wal", "-shm"} {
+			os.Remove(path + suffix) // Ignore errors - files may not exist
+		}
+	}
+
+	return nil
+}
+
+// isWALOrSHM checks if a path is a WAL or SHM file.
+func isWALOrSHM(path string) bool {
+	return filepath.Ext(path) == "-wal" || filepath.Ext(path) == "-shm" ||
+		len(path) > 4 && (path[len(path)-4:] == "-wal" || path[len(path)-4:] == "-shm")
 }
 
 // InitSchema creates the database tables.
@@ -164,6 +286,7 @@ func (s *AgentStore) InitSchema(ctx context.Context) error {
 		timestamp TEXT NOT NULL DEFAULT (datetime('now')),
 		event_type TEXT NOT NULL,
 		details TEXT,
+		metadata TEXT,
 		success INTEGER NOT NULL DEFAULT 1
 	);
 
@@ -228,7 +351,7 @@ func (s *AgentStore) GetState(ctx context.Context, key string) ([]byte, error) {
 	err := s.db.QueryRowContext(ctx,
 		`SELECT value FROM agent_state WHERE key = ?`, key).Scan(&encrypted)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
+		return nil, storage.ErrNotFound
 	}
 	if err != nil {
 		return nil, err
@@ -289,7 +412,7 @@ func (s *AgentStore) GetCertificate(ctx context.Context, certType string) (*Cert
 		`SELECT certificate, private_key, not_after, updated_at FROM certificates WHERE type = ?`,
 		certType).Scan(&encryptedCert, &encryptedKey, &notAfterStr, &updatedAtStr)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
+		return nil, storage.ErrNotFound
 	}
 	if err != nil {
 		return nil, err
@@ -416,7 +539,7 @@ func (s *AgentStore) GetHMACSecret(ctx context.Context, masterHost string) (*HMA
 		`SELECT secret, created_at FROM hmac_secrets WHERE master_host = ?`,
 		masterHost).Scan(&encrypted, &createdAtStr)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
+		return nil, storage.ErrNotFound
 	}
 	if err != nil {
 		return nil, err
@@ -531,15 +654,29 @@ func (s *AgentStore) SyncRevokedCerts(ctx context.Context, certs []*RevokedCertR
 
 // LogAuditEvent records an audit event.
 func (s *AgentStore) LogAuditEvent(ctx context.Context, eventType, details string, success bool) error {
+	return s.LogAuditEventWithMetadata(ctx, eventType, details, success, nil)
+}
+
+// LogAuditEventWithMetadata records an audit event with structured metadata.
+func (s *AgentStore) LogAuditEventWithMetadata(ctx context.Context, eventType, details string, success bool, metadata map[string]interface{}) error {
 	successInt := 0
 	if success {
 		successInt = 1
 	}
 
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO audit_log (timestamp, event_type, details, success) 
-		 VALUES (datetime('now'), ?, ?, ?)`,
-		eventType, details, successInt)
+	var metadataJSON []byte
+	var err error
+	if metadata != nil {
+		metadataJSON, err = json.Marshal(metadata)
+		if err != nil {
+			return fmt.Errorf("marshal metadata: %w", err)
+		}
+	}
+
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO audit_log (timestamp, event_type, details, metadata, success) 
+		 VALUES (datetime('now'), ?, ?, ?, ?)`,
+		eventType, details, metadataJSON, successInt)
 	return err
 }
 
@@ -549,11 +686,11 @@ func (s *AgentStore) GetAuditEvents(ctx context.Context, eventType string, limit
 	var args []any
 
 	if eventType != "" {
-		query = `SELECT id, timestamp, event_type, details, success FROM audit_log 
+		query = `SELECT id, timestamp, event_type, details, metadata, success FROM audit_log 
 		         WHERE event_type = ? ORDER BY timestamp DESC LIMIT ?`
 		args = []any{eventType, limit}
 	} else {
-		query = `SELECT id, timestamp, event_type, details, success FROM audit_log 
+		query = `SELECT id, timestamp, event_type, details, metadata, success FROM audit_log 
 		         ORDER BY timestamp DESC LIMIT ?`
 		args = []any{limit}
 	}
@@ -568,21 +705,128 @@ func (s *AgentStore) GetAuditEvents(ctx context.Context, eventType string, limit
 	for rows.Next() {
 		var id int64
 		var timestampStr, evType, details string
+		var metadataJSON sql.NullString
 		var success int
 
-		if err := rows.Scan(&id, &timestampStr, &evType, &details, &success); err != nil {
+		if err := rows.Scan(&id, &timestampStr, &evType, &details, &metadataJSON, &success); err != nil {
 			return nil, err
 		}
 
 		timestamp, _ := time.Parse("2006-01-02 15:04:05", timestampStr)
 
-		events = append(events, &AuditEvent{
+		event := &AuditEvent{
 			ID:        id,
 			Timestamp: timestamp,
 			EventType: evType,
 			Details:   details,
 			Success:   success == 1,
-		})
+		}
+
+		// Parse metadata if present
+		if metadataJSON.Valid && metadataJSON.String != "" {
+			if err := json.Unmarshal([]byte(metadataJSON.String), &event.Metadata); err != nil {
+				// Log but don't fail - metadata may be malformed
+				event.Metadata = map[string]interface{}{"_parse_error": err.Error()}
+			}
+		}
+
+		events = append(events, event)
+	}
+
+	return events, rows.Err()
+}
+
+// AuditLogFilter specifies criteria for querying audit logs.
+type AuditLogFilter struct {
+	EventTypes []string
+	StartTime  *time.Time
+	EndTime    *time.Time
+	Success    *bool
+	Limit      int
+	Offset     int
+}
+
+// QueryAuditLogs retrieves audit logs matching the filter with advanced filtering.
+func (s *AgentStore) QueryAuditLogs(ctx context.Context, filter AuditLogFilter) ([]*AuditEvent, error) {
+	query := `SELECT id, timestamp, event_type, details, metadata, success FROM audit_log WHERE 1=1`
+	args := []interface{}{}
+
+	if len(filter.EventTypes) > 0 {
+		placeholders := make([]string, len(filter.EventTypes))
+		for i := range placeholders {
+			placeholders[i] = "?"
+		}
+		query += " AND event_type IN (" + strings.Join(placeholders, ",") + ")"
+		for _, et := range filter.EventTypes {
+			args = append(args, et)
+		}
+	}
+
+	if filter.StartTime != nil {
+		query += " AND timestamp >= ?"
+		args = append(args, filter.StartTime.Format("2006-01-02 15:04:05"))
+	}
+
+	if filter.EndTime != nil {
+		query += " AND timestamp <= ?"
+		args = append(args, filter.EndTime.Format("2006-01-02 15:04:05"))
+	}
+
+	if filter.Success != nil {
+		query += " AND success = ?"
+		if *filter.Success {
+			args = append(args, 1)
+		} else {
+			args = append(args, 0)
+		}
+	}
+
+	query += " ORDER BY timestamp DESC"
+
+	if filter.Limit > 0 {
+		query += " LIMIT ?"
+		args = append(args, filter.Limit)
+	}
+
+	if filter.Offset > 0 {
+		query += " OFFSET ?"
+		args = append(args, filter.Offset)
+	}
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []*AuditEvent
+	for rows.Next() {
+		var id int64
+		var timestampStr, evType, details string
+		var metadataJSON sql.NullString
+		var success int
+
+		if err := rows.Scan(&id, &timestampStr, &evType, &details, &metadataJSON, &success); err != nil {
+			return nil, err
+		}
+
+		timestamp, _ := time.Parse("2006-01-02 15:04:05", timestampStr)
+
+		event := &AuditEvent{
+			ID:        id,
+			Timestamp: timestamp,
+			EventType: evType,
+			Details:   details,
+			Success:   success == 1,
+		}
+
+		if metadataJSON.Valid && metadataJSON.String != "" {
+			if err := json.Unmarshal([]byte(metadataJSON.String), &event.Metadata); err != nil {
+				event.Metadata = map[string]interface{}{"_parse_error": err.Error()}
+			}
+		}
+
+		events = append(events, event)
 	}
 
 	return events, rows.Err()
@@ -618,7 +862,7 @@ func (s *AgentStore) GetRepoCache(ctx context.Context, repoURL string) (*RepoCac
 		`SELECT archive_path, checksum, cached_at, last_used FROM repo_cache WHERE repo_url = ?`,
 		repoURL).Scan(&archivePath, &checksum, &cachedAtStr, &lastUsedStr)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
+		return nil, storage.ErrNotFound
 	}
 	if err != nil {
 		return nil, err
