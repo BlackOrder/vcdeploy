@@ -234,19 +234,19 @@ type JumpServerResponse struct {
 
 // HealthCheckConfigResponse represents a health check config in API responses.
 type HealthCheckConfigResponse struct {
-	ID                int64   `json:"id"`
-	Name              string  `json:"name"`
-	URL               string  `json:"url"`
-	Method            string  `json:"method"`
-	ExpectedStatus    int     `json:"expectedStatus"`
-	TimeoutSeconds    int     `json:"timeoutSeconds"`
-	Retries           int     `json:"retries"`
-	RetryDelaySeconds int     `json:"retryDelaySeconds"`
-	Headers           string  `json:"headers,omitempty"`
-	Body              string  `json:"body,omitempty"`
-	ProjectID         *int64  `json:"projectId,omitempty"`
-	Enabled           bool    `json:"enabled"`
-	IsGlobal          bool    `json:"isGlobal"`
+	ID                int64  `json:"id"`
+	Name              string `json:"name"`
+	URL               string `json:"url"`
+	Method            string `json:"method"`
+	ExpectedStatus    int    `json:"expectedStatus"`
+	TimeoutSeconds    int    `json:"timeoutSeconds"`
+	Retries           int    `json:"retries"`
+	RetryDelaySeconds int    `json:"retryDelaySeconds"`
+	Headers           string `json:"headers,omitempty"`
+	Body              string `json:"body,omitempty"`
+	ProjectID         *int64 `json:"projectId,omitempty"`
+	Enabled           bool   `json:"enabled"`
+	IsGlobal          bool   `json:"isGlobal"`
 }
 
 // --- Agent Binary Responses ---
