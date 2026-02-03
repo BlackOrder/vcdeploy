@@ -3,6 +3,7 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -84,7 +85,8 @@ func (s *MasterServer) handleStartProvisioning(w http.ResponseWriter, r *http.Re
 	}
 
 	if err := req.Validate(); err != nil {
-		if inputErr, ok := err.(*services.InputError); ok {
+		var inputErr *services.InputError
+		if errors.As(err, &inputErr) {
 			s.jsonError(w, http.StatusBadRequest, inputErr.Message)
 			return
 		}
@@ -237,6 +239,8 @@ func (s *MasterServer) handleGetProvisionLogs(w http.ResponseWriter, r *http.Req
 }
 
 // handleProvisionJobsList lists provisioning jobs.
+//
+//nolint:unused // Reserved for future provision job listing endpoint
 func (s *MasterServer) handleProvisionJobsList(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")

@@ -3,6 +3,7 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -126,7 +127,8 @@ func (s *MasterServer) handleCreateCredential(w http.ResponseWriter, r *http.Req
 	credService := security.NewCredentialService(s.store, s.kms, s.logger)
 	cred, err := credService.CreateCredential(ctx, req)
 	if err != nil {
-		if inputErr, ok := err.(*services.InputError); ok {
+		var inputErr *services.InputError
+		if errors.As(err, &inputErr) {
 			s.jsonError(w, http.StatusBadRequest, inputErr.Message)
 			return
 		}
@@ -156,7 +158,8 @@ func (s *MasterServer) handleUpdateCredential(w http.ResponseWriter, r *http.Req
 			s.jsonError(w, http.StatusNotFound, "Credential not found")
 			return
 		}
-		if inputErr, ok := err.(*services.InputError); ok {
+		var inputErr *services.InputError
+		if errors.As(err, &inputErr) {
 			s.jsonError(w, http.StatusBadRequest, inputErr.Message)
 			return
 		}

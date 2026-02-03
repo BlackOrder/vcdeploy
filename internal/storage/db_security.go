@@ -4,6 +4,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -547,7 +548,7 @@ func (db *DB) SaveACMEAccount(ctx context.Context, account *ACMEAccount) error {
 	var existingID int64
 	err := db.conn.QueryRowContext(ctx, `SELECT id FROM acme_accounts WHERE email = ?`, account.Email).Scan(&existingID)
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		// Insert new
 		result, err := db.conn.ExecContext(ctx, `
 			INSERT INTO acme_accounts (email, account_url, private_key_encrypted, directory_url, created_at)

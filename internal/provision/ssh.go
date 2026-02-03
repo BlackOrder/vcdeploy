@@ -187,7 +187,7 @@ func (p *SSHProvisioner) SSHProvision(ctx context.Context, req *SSHProvisionRequ
 	client, err := ssh.Dial("tcp", addr, config)
 	if err != nil {
 		p.logger.Error("SSH connection failed", zap.Error(err))
-		return nil, fmt.Errorf("%w: %v", ErrSSHConnectionFailed, err)
+		return nil, fmt.Errorf("%w: %w", ErrSSHConnectionFailed, err)
 	}
 	defer client.Close()
 
@@ -249,7 +249,7 @@ func (p *SSHProvisioner) SSHProvision(ctx context.Context, req *SSHProvisionRequ
 			zap.String("agent_id", req.AgentID),
 			zap.Error(err),
 		)
-		return result, fmt.Errorf("%w: %v", ErrInstallationFailed, err)
+		return result, fmt.Errorf("%w: %w", ErrInstallationFailed, err)
 	}
 
 	// Step 5: Verify agent is running
@@ -432,7 +432,7 @@ func (p *SSHProvisioner) SSHDeprovision(ctx context.Context, agentID, targetHost
 
 	client, err := ssh.Dial("tcp", net.JoinHostPort(targetHost, fmt.Sprintf("%d", targetPort)), config)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrSSHConnectionFailed, err)
+		return fmt.Errorf("%w: %w", ErrSSHConnectionFailed, err)
 	}
 	defer client.Close()
 
@@ -505,7 +505,7 @@ func (p *SSHProvisioner) TestSSHConnection(ctx context.Context, targetHost strin
 
 	client, err := ssh.Dial("tcp", net.JoinHostPort(targetHost, fmt.Sprintf("%d", targetPort)), config)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrSSHConnectionFailed, err)
+		return fmt.Errorf("%w: %w", ErrSSHConnectionFailed, err)
 	}
 	defer client.Close()
 

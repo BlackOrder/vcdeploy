@@ -3,6 +3,7 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -130,7 +131,8 @@ func (s *MasterServer) handleGenerateSSHKey(w http.ResponseWriter, r *http.Reque
 	sshKeyService := security.NewSSHKeyService(s.store, s.kms, s.logger)
 	key, err := sshKeyService.GenerateSSHKey(ctx, req)
 	if err != nil {
-		if inputErr, ok := err.(*services.InputError); ok {
+		var inputErr *services.InputError
+		if errors.As(err, &inputErr) {
 			s.jsonError(w, http.StatusBadRequest, inputErr.Message)
 			return
 		}
@@ -172,7 +174,8 @@ func (s *MasterServer) handleImportSSHKey(w http.ResponseWriter, r *http.Request
 	sshKeyService := security.NewSSHKeyService(s.store, s.kms, s.logger)
 	key, err := sshKeyService.ImportSSHKey(ctx, req)
 	if err != nil {
-		if inputErr, ok := err.(*services.InputError); ok {
+		var inputErr *services.InputError
+		if errors.As(err, &inputErr) {
 			s.jsonError(w, http.StatusBadRequest, inputErr.Message)
 			return
 		}
