@@ -355,7 +355,7 @@ func (s *CredentialService) TestCredential(ctx context.Context, id int64, repoUR
 	re, err := regexp.Compile(cred.URLPattern)
 	if err != nil {
 		result.Message = "Invalid URL pattern in credential"
-		return result, nil
+		return result, nil //nolint:nilerr // Intentional: return result with failure message, not error
 	}
 
 	result.URLMatches = re.MatchString(repoURL)
