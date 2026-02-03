@@ -2157,12 +2157,33 @@ components:
       in: header
       name: X-API-Key
 
-  # H8 FIX: Reusable pagination parameters
+  # Pagination parameters - standardized on offset/limit
   parameters:
+    OffsetParam:
+      name: offset
+      in: query
+      description: Number of items to skip for pagination
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+      example: 0
+    LimitParam:
+      name: limit
+      in: query
+      description: Maximum number of items to return
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+      example: 20
+    # Deprecated aliases for backward compatibility during transition
     PageParam:
       name: page
       in: query
-      description: Page number (1-indexed)
+      deprecated: true
+      description: "(Deprecated, use offset) Page number (1-indexed)"
       schema:
         type: integer
         minimum: 1
@@ -2171,7 +2192,8 @@ components:
     PageSizeParam:
       name: pageSize
       in: query
-      description: Number of items per page
+      deprecated: true
+      description: "(Deprecated, use limit) Number of items per page"
       schema:
         type: integer
         minimum: 1
@@ -2197,10 +2219,34 @@ components:
           description: Human-readable error message
           example: "Invalid request parameters"
 
-    # H8 FIX: Add pagination metadata schema
+    # Standardized pagination response schema using offset/limit
+    PaginatedResponse:
+      type: object
+      description: Standard pagination response format
+      properties:
+        items:
+          type: array
+          description: List of items for current page
+          items: {}
+        totalCount:
+          type: integer
+          format: int64
+          description: Total number of items across all results
+          example: 100
+        offset:
+          type: integer
+          description: Number of items skipped
+          example: 0
+        limit:
+          type: integer
+          description: Maximum items returned per request
+          example: 20
+
+    # Deprecated - kept for documentation reference
     PaginationMeta:
       type: object
-      description: Pagination metadata for list responses
+      deprecated: true
+      description: "(Deprecated) Use PaginatedResponse instead"
       properties:
         total:
           type: integer
