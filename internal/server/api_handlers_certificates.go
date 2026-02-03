@@ -67,9 +67,9 @@ func (s *MasterServer) handleListAgentCertificates(w http.ResponseWriter, r *htt
 		return
 	}
 
-	s.jsonResponse(w, map[string]interface{}{
-		"items": certs,
-		"count": len(certs),
+	s.jsonResponse(w, ListCountResponse{
+		Items: certs,
+		Count: len(certs),
 	})
 }
 
@@ -178,9 +178,9 @@ func (s *MasterServer) handleListCAs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.jsonResponse(w, map[string]interface{}{
-		"items": cas,
-		"count": len(cas),
+	s.jsonResponse(w, ListCountResponse{
+		Items: cas,
+		Count: len(cas),
 	})
 }
 
@@ -250,9 +250,9 @@ func (s *MasterServer) handleGetServerCertificate(w http.ResponseWriter, r *http
 		return
 	}
 
-	s.jsonResponse(w, map[string]interface{}{
-		"items": certs,
-		"count": len(certs),
+	s.jsonResponse(w, ListCountResponse{
+		Items: certs,
+		Count: len(certs),
 	})
 }
 
@@ -334,8 +334,8 @@ func (s *MasterServer) handleCertAudit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.jsonResponse(w, map[string]interface{}{
-		"items": events,
-		"count": len(events),
+	s.jsonResponse(w, ListCountResponse{
+		Items: events,
+		Count: len(events),
 	})
 }

@@ -77,9 +77,9 @@ func (s *MasterServer) handleListCredentials(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	s.jsonResponse(w, map[string]interface{}{
-		"items": creds,
-		"count": len(creds),
+	s.jsonResponse(w, ListCountResponse{
+		Items: creds,
+		Count: len(creds),
 	})
 }
 

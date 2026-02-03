@@ -144,12 +144,12 @@ func (s *MasterServer) handleStartProvisioning(w http.ResponseWriter, r *http.Re
 
 	s.logAudit(r, "provision", "agent", "Started provisioning agent: "+req.AgentID+" on "+req.TargetHost+" by "+initiatedBy, "success")
 
-	s.jsonResponse(w, map[string]interface{}{
-		"job_id":      jobID,
-		"agent_id":    req.AgentID,
-		"target_host": req.TargetHost,
-		"status":      "pending",
-		"message":     "Provisioning job created",
+	s.jsonResponse(w, ProvisionJobCreateResponse{
+		JobID:      jobID,
+		AgentID:    req.AgentID,
+		TargetHost: req.TargetHost,
+		Status:     "pending",
+		Message:    "Provisioning job created",
 	})
 }
 
@@ -173,17 +173,17 @@ func (s *MasterServer) handleGetProvisionStatus(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	s.jsonResponse(w, map[string]interface{}{
-		"id":            job.ID,
-		"target_host":   job.TargetHost,
-		"target_port":   job.TargetPort,
-		"target_user":   job.TargetUser,
-		"status":        job.Status,
-		"stage":         job.Stage,
-		"progress":      job.Progress,
-		"error_message": job.ErrorMessage,
-		"started_at":    job.StartedAt,
-		"completed_at":  job.CompletedAt,
+	s.jsonResponse(w, ProvisionJobResponse{
+		ID:           job.ID,
+		TargetHost:   job.TargetHost,
+		TargetPort:   job.TargetPort,
+		TargetUser:   job.TargetUser,
+		Status:       job.Status,
+		Stage:        job.Stage,
+		Progress:     job.Progress,
+		ErrorMessage: job.ErrorMessage,
+		StartedAt:    job.StartedAt,
+		CompletedAt:  job.CompletedAt,
 	})
 }
 
@@ -216,11 +216,23 @@ func (s *MasterServer) handleGetProvisionLogs(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	s.jsonResponse(w, map[string]interface{}{
-		"job_id": job.ID,
-		"status": job.Status,
-		"stage":  job.Stage,
-		"logs":   logs,
+	// Convert logs to response type
+	logEntries := make([]*ProvisionLogEntry, 0, len(logs))
+	for _, l := range logs {
+		logEntries = append(logEntries, &ProvisionLogEntry{
+			ID:        l.ID,
+			JobID:     l.JobID,
+			Timestamp: l.Timestamp,
+			Level:     l.Level,
+			Message:   l.Message,
+		})
+	}
+
+	s.jsonResponse(w, ProvisionLogsResponse{
+		JobID:  job.ID,
+		Status: job.Status,
+		Stage:  job.Stage,
+		Logs:   logEntries,
 	})
 }
 
@@ -245,11 +257,11 @@ func (s *MasterServer) handleProvisionJobsList(w http.ResponseWriter, r *http.Re
 			return
 		}
 
-		s.jsonResponse(w, map[string]interface{}{
-			"items":      result.Items,
-			"totalCount": result.TotalCount,
-			"limit":      result.Pagination.Limit,
-			"offset":     result.Pagination.Offset,
+		s.jsonResponse(w, PaginatedResponse{
+			Items:      result.Items,
+			TotalCount: result.TotalCount,
+			Limit:      result.Pagination.Limit,
+			Offset:     result.Pagination.Offset,
 		})
 		return
 	}
@@ -262,8 +274,8 @@ func (s *MasterServer) handleProvisionJobsList(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	s.jsonResponse(w, map[string]interface{}{
-		"items": jobs,
-		"count": len(jobs),
+	s.jsonResponse(w, ListCountResponse{
+		Items: jobs,
+		Count: len(jobs),
 	})
 }

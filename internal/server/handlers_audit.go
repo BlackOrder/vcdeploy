@@ -49,11 +49,11 @@ func (s *MasterServer) handleAuditLogs(w http.ResponseWriter, r *http.Request) {
 		totalCount = p.Offset + len(entries)
 	}
 
-	s.jsonResponse(w, map[string]interface{}{
-		"items":      entries,
-		"totalCount": totalCount,
-		"limit":      p.Limit,
-		"offset":     p.Offset,
+	s.jsonResponse(w, PaginatedResponse{
+		Items:      entries,
+		TotalCount: int64(totalCount),
+		Limit:      p.Limit,
+		Offset:     p.Offset,
 	})
 }
 

@@ -45,11 +45,11 @@ func (s *MasterServer) handleProjectTypes(w http.ResponseWriter, r *http.Request
 			}
 		}
 
-		s.jsonResponse(w, map[string]interface{}{
-			"items":      types,
-			"totalCount": totalCount,
-			"limit":      p.Limit,
-			"offset":     p.Offset,
+		s.jsonResponse(w, PaginatedResponse{
+			Items:      types,
+			TotalCount: int64(totalCount),
+			Limit:      p.Limit,
+			Offset:     p.Offset,
 		})
 
 	case http.MethodPost:

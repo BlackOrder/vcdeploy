@@ -91,11 +91,11 @@ func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		s.jsonResponse(w, map[string]interface{}{
-			"items":      allResults,
-			"totalCount": totalCount,
-			"limit":      p.Limit,
-			"offset":     p.Offset,
+		s.jsonResponse(w, PaginatedResponse{
+			Items:      allResults,
+			TotalCount: int64(totalCount),
+			Limit:      p.Limit,
+			Offset:     p.Offset,
 		})
 
 	case http.MethodPost:

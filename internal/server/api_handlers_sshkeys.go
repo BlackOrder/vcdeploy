@@ -81,9 +81,9 @@ func (s *MasterServer) handleListSSHKeys(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	s.jsonResponse(w, map[string]interface{}{
-		"items": keys,
-		"count": len(keys),
+	s.jsonResponse(w, ListCountResponse{
+		Items: keys,
+		Count: len(keys),
 	})
 }
 

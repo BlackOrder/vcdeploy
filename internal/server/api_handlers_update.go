@@ -60,11 +60,11 @@ func (s *MasterServer) handleAgentBinaries(w http.ResponseWriter, r *http.Reques
 			}
 		}
 
-		s.jsonResponse(w, map[string]interface{}{
-			"items":      binaries,
-			"totalCount": totalCount,
-			"limit":      p.Limit,
-			"offset":     p.Offset,
+		s.jsonResponse(w, PaginatedResponse{
+			Items:      binaries,
+			TotalCount: int64(totalCount),
+			Limit:      p.Limit,
+			Offset:     p.Offset,
 		})
 
 	case http.MethodPost:
@@ -530,11 +530,11 @@ func (s *MasterServer) handleAgentUpdateHistory(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	s.jsonResponse(w, map[string]interface{}{
-		"items":  history,
-		"total":  total,
-		"limit":  p.Limit,
-		"offset": p.Offset,
+	s.jsonResponse(w, RollbackListResponse{
+		Items:  history,
+		Total:  total,
+		Limit:  p.Limit,
+		Offset: p.Offset,
 	})
 }
 
@@ -600,9 +600,9 @@ func (s *MasterServer) handleTriggerAgentUpdate(w http.ResponseWriter, r *http.R
 
 	// Check if already up to date
 	if agent.Version == binary.Version && !req.Force {
-		s.jsonResponse(w, map[string]interface{}{
-			"status":          "up_to_date",
-			"current_version": agent.Version,
+		s.jsonResponse(w, AgentUpToDateResponse{
+			Status:         "up_to_date",
+			CurrentVersion: agent.Version,
 		})
 		return
 	}
@@ -656,13 +656,13 @@ func (s *MasterServer) handleTriggerAgentUpdate(w http.ResponseWriter, r *http.R
 	s.logAudit(r, "trigger", "agent_update", fmt.Sprintf("Triggered update for agent %s from %s to %s (delivery: %s)",
 		agentID, agent.Version, binary.Version, updateDelivery), "success")
 
-	s.jsonResponse(w, map[string]interface{}{
-		"status":       "pending",
-		"from_version": agent.Version,
-		"to_version":   binary.Version,
-		"force":        req.Force,
-		"update_id":    history.ID,
-		"delivery":     updateDelivery,
+	s.jsonResponse(w, AgentUpdateTriggerResponse{
+		Status:      "pending",
+		FromVersion: agent.Version,
+		ToVersion:   binary.Version,
+		Force:       req.Force,
+		UpdateID:    history.ID,
+		Delivery:    updateDelivery,
 	})
 }
 
@@ -722,11 +722,11 @@ func (s *MasterServer) handleAgentsNeedingUpdate(w http.ResponseWriter, r *http.
 		}
 	}
 
-	s.jsonResponse(w, map[string]interface{}{
-		"items":      results,
-		"totalCount": totalCount,
-		"limit":      p.Limit,
-		"offset":     p.Offset,
+	s.jsonResponse(w, PaginatedResponse{
+		Items:      results,
+		TotalCount: int64(totalCount),
+		Limit:      p.Limit,
+		Offset:     p.Offset,
 	})
 }
 
@@ -756,10 +756,10 @@ func (s *MasterServer) handleAllAgentUpdateHistory(w http.ResponseWriter, r *htt
 		return
 	}
 
-	s.jsonResponse(w, map[string]interface{}{
-		"items":  history,
-		"total":  total,
-		"limit":  p.Limit,
-		"offset": p.Offset,
+	s.jsonResponse(w, RollbackListResponse{
+		Items:  history,
+		Total:  total,
+		Limit:  p.Limit,
+		Offset: p.Offset,
 	})
 }
