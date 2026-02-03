@@ -25,6 +25,8 @@ import (
 
 // AgentStore provides encrypted SQLite storage for the agent.
 // All sensitive data is encrypted using a machine-derived key.
+//
+//nolint:revive // Type name stutters (agent.AgentStore) but is clearer than agent.Store
 type AgentStore struct {
 	db         *sql.DB
 	machineKey []byte
@@ -178,7 +180,9 @@ func checkAndArchiveIncompatible(db *sql.DB, dbPath string) (*sql.DB, error) {
 	for _, suffix := range []string{"-wal", "-shm"} {
 		walPath := dbPath + suffix
 		if _, err := os.Stat(walPath); err == nil {
-			os.Rename(walPath, archivePath+suffix)
+			if renameErr := os.Rename(walPath, archivePath+suffix); renameErr != nil {
+				log.Printf("Warning: failed to archive %s: %v", walPath, renameErr)
+			}
 		}
 	}
 
@@ -626,7 +630,9 @@ func (s *AgentStore) SyncRevokedCerts(ctx context.Context, certs []*RevokedCertR
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() {
+		_ = tx.Rollback() // Rollback is a no-op if already committed
+	}()
 
 	// Clear existing cache
 	if _, err := tx.ExecContext(ctx, `DELETE FROM revoked_certs`); err != nil {
@@ -980,5 +986,5 @@ func (s *AgentStore) SetStateJSON(ctx context.Context, key string, v any) error 
 
 // ensureDir creates a directory if it doesn't exist.
 func ensureDir(dir string) error {
-	return makeDir(dir, 0700)
+	return makeDir(dir, 0o700)
 }

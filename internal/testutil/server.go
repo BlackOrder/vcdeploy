@@ -234,7 +234,7 @@ func MustGet(t *testing.T, client *http.Client, url string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		t.Fatalf("MustGet: create request: %v", err)
 	}
@@ -265,7 +265,7 @@ func MustGetStatus(t *testing.T, client *http.Client, url string) int {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		t.Fatalf("MustGetStatus: create request: %v", err)
 	}
@@ -275,7 +275,7 @@ func MustGetStatus(t *testing.T, client *http.Client, url string) int {
 		t.Fatalf("MustGetStatus %s: %v", url, err)
 	}
 	defer resp.Body.Close()
-	io.Copy(io.Discard, resp.Body)
+	_, _ = io.Copy(io.Discard, resp.Body) // Drain body; ignore errors
 
 	return resp.StatusCode
 }
@@ -300,12 +300,12 @@ func AssertMTLSRequired(t *testing.T, serverURL string, trustPool *x509.CertPool
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, serverURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, serverURL, http.NoBody)
 	if err != nil {
 		t.Fatalf("AssertMTLSRequired: create request: %v", err)
 	}
 
-	_, err = client.Do(req)
+	_, err = client.Do(req) //nolint:bodyclose // Response not needed, just checking if request fails
 	if err == nil {
 		t.Fatal("AssertMTLSRequired: request succeeded without client cert, mTLS not enforced")
 	}
@@ -332,7 +332,7 @@ func WaitForServer(url string, timeout time.Duration) error {
 
 	for time.Now().Before(deadline) {
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 		if err == nil {
 			resp, err := client.Do(req)
 			if err == nil {
