@@ -4,10 +4,12 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/BlackOrder/vcdeploy/internal/security"
 	"github.com/BlackOrder/vcdeploy/internal/services"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"github.com/google/uuid"
@@ -30,8 +32,14 @@ func (r *ProvisionAgentRequest) Validate() error {
 	if r.AgentID == "" {
 		return services.NewInputError("agent_id is required", "agent_id")
 	}
+	if err := security.ValidateAgentID(r.AgentID); err != nil {
+		return services.NewInputError(fmt.Sprintf("invalid agent_id: %v", err), "agent_id")
+	}
 	if r.TargetHost == "" {
 		return services.NewInputError("target_host is required", "target_host")
+	}
+	if err := security.ValidateHostname(r.TargetHost); err != nil {
+		return services.NewInputError(fmt.Sprintf("invalid target_host: %v", err), "target_host")
 	}
 	if r.SSHUser == "" {
 		return services.NewInputError("ssh_user is required", "ssh_user")

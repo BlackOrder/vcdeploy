@@ -34,12 +34,14 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/services/projects"
 	"github.com/BlackOrder/vcdeploy/internal/services/projecttypes"
 	"github.com/BlackOrder/vcdeploy/internal/services/provision"
+	"github.com/BlackOrder/vcdeploy/internal/services/recipes"
 	"github.com/BlackOrder/vcdeploy/internal/services/secrets"
 	"github.com/BlackOrder/vcdeploy/internal/services/sessions"
 	"github.com/BlackOrder/vcdeploy/internal/services/settings"
 	"github.com/BlackOrder/vcdeploy/internal/services/users"
 	"github.com/BlackOrder/vcdeploy/internal/services/webhooks"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
+	"github.com/BlackOrder/vcdeploy/internal/storage/seeds"
 	webhookshandler "github.com/BlackOrder/vcdeploy/internal/webhooks"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
@@ -166,6 +168,12 @@ type MasterServer struct {
 	auditService       services.AuditServicer
 	hostKeyService     services.HostKeyServicer
 	provisionService   services.ProvisionServicer
+
+	// Recipe services
+	componentService   *recipes.ComponentService
+	playbookService    *recipes.PlaybookService
+	activationService  *recipes.ActivationService
+	rawApprovalService *recipes.RawApprovalService
 
 	// Webhook handling
 	webhookHandler *webhookHandlerAdapter
@@ -330,6 +338,12 @@ func NewMasterServer(cfg *config.MasterConfig, store storage.Store, logger *zap.
 	s.auditService = audit.New(s.store)
 	s.hostKeyService = hostkeys.New(s.store)
 	s.provisionService = provision.New(s.store)
+
+	// Initialize recipe services
+	s.componentService = recipes.NewComponentService(s.store)
+	s.playbookService = recipes.NewPlaybookService(s.store)
+	s.activationService = recipes.NewActivationService(s.store)
+	s.rawApprovalService = recipes.NewRawApprovalService(s.store)
 
 	// Initialize KMS-dependent services
 	if s.kms != nil {
@@ -655,6 +669,12 @@ func (s *MasterServer) templateFuncs() template.FuncMap {
 
 // Start starts the master server.
 func (s *MasterServer) Start(ctx context.Context) error {
+	// Load seed data (non-fatal if it fails)
+	seedLoader := seeds.NewLoader(s.store)
+	if err := seedLoader.LoadSeeds(ctx, s.logger); err != nil {
+		s.logger.Warn("failed to load seed data, continuing without seeds", zap.Error(err))
+	}
+
 	// Setup TLS first
 	if err := s.setupServerTLS(ctx); err != nil {
 		return fmt.Errorf("setup TLS: %w", err)
@@ -757,6 +777,26 @@ func (s *MasterServer) buildMainHandler() (http.Handler, error) {
 	// Secrets API
 	mux.HandleFunc("/api/v1/secrets", s.withAuth(s.handleSecrets))
 
+	// Recipes API - Components
+	mux.HandleFunc("/api/v1/recipes/components", s.withAuth(s.handleRecipeComponents))
+	mux.HandleFunc("/api/v1/recipes/components/", s.withAuth(s.handleRecipeComponent))
+
+	// Recipes API - Playbooks
+	mux.HandleFunc("/api/v1/recipes/playbooks", s.withAuth(s.handleRecipePlaybooks))
+	mux.HandleFunc("/api/v1/recipes/playbooks/", s.withAuth(s.handleRecipePlaybook))
+
+	// Recipes API - RAW Approvals (Admin only)
+	mux.HandleFunc("/api/v1/recipes/raw-approvals", s.withAuth(s.handleRawApprovals))
+	mux.HandleFunc("/api/v1/recipes/raw-approvals/", s.withAuth(s.handleRawApproval))
+
+	// Recipes API - Export/Import
+	mux.HandleFunc("/api/v1/recipes/export", s.withAuth(s.handleRecipeExport))
+	mux.HandleFunc("/api/v1/recipes/import", s.withAuth(s.handleRecipeImport))
+
+	// Recipes API - Migration
+	mux.HandleFunc("/api/v1/recipes/migration/preview/", s.withAuth(s.handleMigrationPreview))
+	mux.HandleFunc("/api/v1/recipes/migration/", s.withAuth(s.handleMigration))
+
 	// Project Types API
 	mux.HandleFunc("/api/v1/project-types", s.withAuth(s.handleProjectTypes))
 	mux.HandleFunc("/api/v1/project-types/", s.withAuth(s.handleProjectType))
@@ -853,6 +893,7 @@ func (s *MasterServer) buildMainHandler() (http.Handler, error) {
 	mux.HandleFunc("/change-password", s.withUIAuth(s.handleChangePassword))
 	mux.HandleFunc("/dashboard", s.withUIAuth(s.handleDashboard))
 	mux.HandleFunc("/projects", s.withUIAuth(s.handleProjectsUI))
+	mux.HandleFunc("/projects/", s.withUIAuth(s.handleProjectDetailUI))
 	mux.HandleFunc("/deployments", s.withUIAuth(s.handleDeploymentsUI))
 	mux.HandleFunc("/agents", s.withUIAuth(s.handleAgentsUI))
 	mux.HandleFunc("/secrets", s.withUIAuth(s.handleSecretsUI))
@@ -871,6 +912,13 @@ func (s *MasterServer) buildMainHandler() (http.Handler, error) {
 	mux.HandleFunc("/settings/tls", s.withUIAuth(s.handleTLSSettingsUI))
 	mux.HandleFunc("/partials/certificates/cas", s.withUIAuth(s.handleCAsPartial))
 	mux.HandleFunc("/partials/certificates/agents", s.withUIAuth(s.handleAgentCertsPartial))
+
+	// Recipe management UI
+	mux.HandleFunc("/recipes", s.withUIAuth(s.handleRecipesUI))
+	mux.HandleFunc("/recipes/components", s.withUIAuth(s.handleRecipesUI))
+	mux.HandleFunc("/playbooks", s.withUIAuth(s.handlePlaybooksUI))
+	mux.HandleFunc("/playbooks/composer", s.withUIAuth(s.handlePlaybookComposerUI))
+	mux.HandleFunc("/recipes/raw-approvals", s.withUIAuth(s.handleRawApprovalsUI))
 
 	// Build middleware chain: otel -> request ID -> logging -> CSP -> security headers -> rate limiting -> handler
 	var handler http.Handler = mux

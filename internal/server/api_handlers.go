@@ -747,6 +747,9 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 		case "health-config":
 			s.handleProjectHealthConfig(w, r, projectID)
 			return
+		case "playbook":
+			s.handleProjectPlaybookByID(w, r, projectID)
+			return
 		}
 	}
 
