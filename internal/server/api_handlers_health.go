@@ -294,8 +294,7 @@ func (s *MasterServer) handleDeleteHealthCheckConfig(w http.ResponseWriter, r *h
 		return
 	}
 
-	// H3 FIX: Standardize DELETE to return 200 with JSON body for consistency
-	s.jsonResponse(w, StatusResponse{Status: "deleted"})
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // handleGlobalHealthCheck handles /api/v1/health-checks/global

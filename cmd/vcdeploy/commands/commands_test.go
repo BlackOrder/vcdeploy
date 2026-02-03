@@ -722,8 +722,7 @@ func mockAPIServer(t *testing.T) *httptest.Server {
 
 	mux.HandleFunc("/api/v1/users/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodDelete {
-			w.WriteHeader(http.StatusOK)
-			fmt.Fprint(w, `{"status":"deleted"}`)
+			w.WriteHeader(http.StatusNoContent)
 		}
 	})
 

@@ -185,7 +185,7 @@ func (s *MasterServer) handleDeleteCredential(w http.ResponseWriter, r *http.Req
 	}
 
 	s.logAudit(r, "delete", "credential", "Deleted credential ID: "+strconv.FormatInt(id, 10), "success")
-	s.jsonResponse(w, StatusResponse{Status: "deleted"})
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // TestCredentialRequestBody represents the request body for testing a credential.

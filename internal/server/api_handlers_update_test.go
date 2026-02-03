@@ -631,17 +631,13 @@ func TestHandleAgentBinary(t *testing.T) {
 		rr := httptest.NewRecorder()
 		s.handleAgentBinary(rr, req)
 
-		if rr.Code != http.StatusOK {
-			t.Errorf("Expected status %d, got %d: %s", http.StatusOK, rr.Code, rr.Body.String())
+		if rr.Code != http.StatusNoContent {
+			t.Errorf("Expected status %d, got %d: %s", http.StatusNoContent, rr.Code, rr.Body.String())
 		}
 
-		var result map[string]string
-		if err := json.NewDecoder(rr.Body).Decode(&result); err != nil {
-			t.Fatalf("Failed to decode response: %v", err)
-		}
-
-		if result["status"] != "deleted" {
-			t.Errorf("Expected status 'deleted', got %s", result["status"])
+		// 204 No Content should have empty body
+		if rr.Body.Len() != 0 {
+			t.Errorf("Expected empty body for 204, got %s", rr.Body.String())
 		}
 
 		// Verify deletion

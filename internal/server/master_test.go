@@ -805,8 +805,8 @@ func TestHandleSecretsDelete(t *testing.T) {
 
 	server.handleSecrets(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	if rec.Code != http.StatusNoContent {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNoContent)
 	}
 }
 
@@ -950,8 +950,8 @@ func TestHandleProjectTypeDelete(t *testing.T) {
 
 	server.handleProjectType(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	if rec.Code != http.StatusNoContent {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNoContent)
 	}
 
 	// Verify it was deleted

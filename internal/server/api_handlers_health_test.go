@@ -193,9 +193,9 @@ func TestHandleHealthCheckConfig(t *testing.T) {
 		rr := httptest.NewRecorder()
 		s.handleHealthCheckConfig(rr, req)
 
-		// H3 FIX: DELETE now returns 200 with JSON body instead of 204 No Content
-		if rr.Code != http.StatusOK {
-			t.Errorf("Expected status %d, got %d: %s", http.StatusOK, rr.Code, rr.Body.String())
+		// DELETE returns 204 No Content
+		if rr.Code != http.StatusNoContent {
+			t.Errorf("Expected status %d, got %d: %s", http.StatusNoContent, rr.Code, rr.Body.String())
 		}
 
 		// Verify deletion
