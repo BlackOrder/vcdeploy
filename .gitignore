@@ -95,3 +95,5 @@ cpu.out
 mem.out
 *.sarif
 *.prompt.md
+*.report.md
+plan-template.md
