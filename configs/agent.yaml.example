@@ -34,6 +34,7 @@ execution:
     - LANG
 
 health:
+  check_path: "/health"  # Endpoint for health checks
   disk_warning_threshold: 90  # percent
   report_interval: 30s
 
