@@ -110,6 +110,89 @@ func (c *apiClient) delete(path string) (*http.Response, error) {
 	return c.do("DELETE", path, nil)
 }
 
+// Get performs a GET request and decodes the JSON response.
+func (c *apiClient) Get(path string) (map[string]interface{}, error) {
+	resp, err := c.get(path)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("request failed with status %d", resp.StatusCode)
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	return result, nil
+}
+
+// Post performs a POST request with JSON body and decodes the response.
+func (c *apiClient) Post(path string, payload interface{}) (map[string]interface{}, error) {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	resp, err := c.post(path, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("request failed with status %d", resp.StatusCode)
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		// Some endpoints may return empty body on success
+		return nil, nil
+	}
+	return result, nil
+}
+
+// Put performs a PUT request with JSON body and decodes the response.
+func (c *apiClient) Put(path string, payload interface{}) (map[string]interface{}, error) {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	resp, err := c.do("PUT", path, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("request failed with status %d", resp.StatusCode)
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		// Some endpoints may return empty body on success
+		return nil, nil
+	}
+	return result, nil
+}
+
+// Delete performs a DELETE request.
+func (c *apiClient) Delete(path string) error {
+	resp, err := c.delete(path)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("request failed with status %d", resp.StatusCode)
+	}
+	return nil
+}
+
 // --- Admin Command ---
 
 func runAdmin(cmd *cobra.Command, args []string) error {

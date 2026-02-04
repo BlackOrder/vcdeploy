@@ -1402,21 +1402,6 @@ func runProjectRollback(cmd *cobra.Command, args []string) error {
 	target, _ := cmd.Flags().GetString("target")
 	release, _ := cmd.Flags().GetInt("release")
 
-	// Get master address
-	masterAddr, _ := cmd.Flags().GetString("master")
-	if masterAddr == "" {
-		masterAddr = os.Getenv("VCDEPLOY_MASTER")
-	}
-	if masterAddr == "" {
-		masterAddr = "localhost:9000"
-	}
-
-	// Get API token
-	apiToken, _ := cmd.Flags().GetString("token")
-	if apiToken == "" {
-		apiToken = os.Getenv("VCDEPLOY_TOKEN")
-	}
-
 	fmt.Printf("🔙 Rolling back project: %s\n", projectName)
 	if target != "" {
 		fmt.Printf("   Target: %s\n", target)
@@ -1438,83 +1423,120 @@ func runProjectRollback(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// First, get the latest deployment for this project to rollback
-	client := &http.Client{Timeout: 30 * time.Second}
-	baseURL := "http://" + masterAddr
-
-	// Get latest deployment for this project
-	listCtx, listCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer listCancel()
-	listReq, _ := http.NewRequestWithContext(listCtx, "GET", baseURL+"/api/v1/deployments?project="+projectName+"&limit=1", http.NoBody)
-	if apiToken != "" {
-		listReq.Header.Set("Authorization", "Bearer "+apiToken)
-	}
-
-	listResp, err := client.Do(listReq)
+	exec, cleanup, err := NewExecutor(cmd)
 	if err != nil {
-		return fmt.Errorf("master not reachable at %s: %w\nStart the master with: vcdeploy master start", masterAddr, err)
+		return err
 	}
-	defer listResp.Body.Close()
+	defer cleanup()
 
-	if listResp.StatusCode == http.StatusUnauthorized {
-		return fmt.Errorf("authentication required. Provide --token or set VCDEPLOY_TOKEN")
+	if exec.IsRemote() {
+		// Use API mode
+		reqBody := map[string]interface{}{
+			"project": projectName,
+		}
+		if release > 0 {
+			reqBody["release"] = release
+		}
+		if target != "" {
+			reqBody["target"] = target
+		}
+
+		fmt.Println("\n🔄 Triggering rollback via master...")
+		resp, err := exec.API().Post("/api/v1/projects/"+projectName+"/rollback", reqBody)
+		if err != nil {
+			return fmt.Errorf("rollback failed: %w", err)
+		}
+
+		fmt.Println("✅ Rollback triggered successfully!")
+		if resp != nil {
+			if rollbackID, ok := resp["rollback_id"].(string); ok && rollbackID != "" {
+				fmt.Printf("   Rollback ID: %s\n", rollbackID)
+			}
+			if deploymentID, ok := resp["deployment_id"].(string); ok && deploymentID != "" {
+				fmt.Printf("   Deployment ID: %s\n", deploymentID)
+			}
+		}
+		return nil
 	}
 
-	var deploymentsResp struct {
-		Items []struct {
-			ID     string `json:"id"`
-			Status string `json:"status"`
-		} `json:"items"`
+	// Direct mode - find previous successful deployment and create rollback
+	ctx := context.Background()
+	project, err := exec.Services().Projects.GetByName(ctx, projectName)
+	if err != nil {
+		return fmt.Errorf("get project: %w", err)
 	}
-	if err := json.NewDecoder(listResp.Body).Decode(&deploymentsResp); err != nil || len(deploymentsResp.Items) == 0 {
+
+	// Get recent deployments
+	deployments, err := exec.Services().Deployments.ListRecent(ctx, 10)
+	if err != nil {
+		return fmt.Errorf("list deployments: %w", err)
+	}
+
+	// Find deployments for this project
+	var projectDeployments []*storage.DeploymentRecord
+	for _, d := range deployments {
+		if d.ProjectID != nil && *d.ProjectID == project.ID {
+			projectDeployments = append(projectDeployments, d)
+		}
+	}
+
+	if len(projectDeployments) == 0 {
 		return fmt.Errorf("no deployments found for project %s", projectName)
 	}
 
-	deploymentID := deploymentsResp.Items[0].ID
-
-	// Call rollback API
-	reqBody := map[string]interface{}{}
+	var targetDeploy *storage.DeploymentRecord
 	if release > 0 {
-		reqBody["release"] = release
+		// Find specific release
+		for _, d := range projectDeployments {
+			if d.ReleaseNumber == release {
+				targetDeploy = d
+				break
+			}
+		}
+		if targetDeploy == nil {
+			return fmt.Errorf("release %d not found for project %s", release, projectName)
+		}
+	} else {
+		// Find previous successful deployment (skip current)
+		for i, d := range projectDeployments {
+			if i > 0 && d.Status == storage.DeploymentStatusSuccess {
+				targetDeploy = d
+				break
+			}
+		}
+		if targetDeploy == nil {
+			return fmt.Errorf("no previous successful deployment found for rollback")
+		}
+	}
+
+	commitDisplay := targetDeploy.CommitHash
+	if len(commitDisplay) > 8 {
+		commitDisplay = commitDisplay[:8]
+	}
+	fmt.Printf("\n🔄 Creating rollback deployment to release %d (commit: %s)...\n", targetDeploy.ReleaseNumber, commitDisplay)
+
+	// Create rollback deployment
+	rollback := &storage.DeploymentRecord{
+		Project:       projectName,
+		ProjectID:     &project.ID,
+		Branch:        targetDeploy.Branch,
+		CommitHash:    targetDeploy.CommitHash,
+		Status:        storage.DeploymentStatusPending,
+		ReleaseNumber: targetDeploy.ReleaseNumber,
+		TriggeredBy:   "cli",
+		TriggerSource: "rollback",
 	}
 	if target != "" {
-		reqBody["target"] = target
+		rollback.Target = target
 	}
 
-	reqJSON, _ := json.Marshal(reqBody)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/v1/deployments/"+deploymentID+"/rollback", strings.NewReader(string(reqJSON)))
-	if err != nil {
-		return fmt.Errorf("create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if apiToken != "" {
-		req.Header.Set("Authorization", "Bearer "+apiToken)
+	if err := exec.Services().Deployments.Create(ctx, rollback); err != nil {
+		return fmt.Errorf("create rollback deployment: %w", err)
 	}
 
-	fmt.Println("\n🔄 Triggering rollback via master...")
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("rollback request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("rollback failed: %s", string(body))
-	}
-
-	fmt.Println("✅ Rollback triggered successfully!")
-
-	// Parse response
-	var rollbackResp struct {
-		Message string `json:"message"`
-		ID      string `json:"rollbackId"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&rollbackResp); err == nil && rollbackResp.ID != "" {
-		fmt.Printf("   Rollback ID: %s\n", rollbackResp.ID)
-	}
+	fmt.Println("✅ Rollback deployment created!")
+	fmt.Printf("   Deployment ID: %s\n", rollback.ID)
+	fmt.Printf("   Rolling back to release: %d\n", targetDeploy.ReleaseNumber)
 
 	return nil
 }
