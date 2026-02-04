@@ -228,7 +228,7 @@ If issues persist:
 
 3. **Review documentation:**
    - [GitHub Issues](https://github.com/BlackOrder/vcdeploy/issues)
-   - [API Reference](api.md)
+   - [API Reference](../api.md)
 
 4. **Open an issue** with:
    - vcdeploy version

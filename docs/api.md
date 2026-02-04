@@ -98,6 +98,10 @@ All error responses follow this format:
 | Blocked IPs | `/api/v1/blocked`, `/api/v1/blocked/{ip}` | Admin |
 | Provision | `/api/v1/provision`, `/api/v1/provision/{id}` | Admin |
 | Agent Binaries | `/api/v1/binaries`, `/api/v1/binaries/latest` | Yes |
+| Certificates | `/api/v1/certificates`, `/api/v1/certificates/{id}` | Admin |
+| TLS | `/api/v1/tls/status`, `/api/v1/tls/renew`, `/api/v1/tls/settings` | Admin |
+| Credentials | `/api/v1/credentials`, `/api/v1/credentials/{id}` | Admin |
+| SSH Keys | `/api/v1/ssh-keys`, `/api/v1/ssh-keys/{id}` | Admin |
 | Health Checks | `/api/v1/health-checks`, `/api/v1/health-checks/global` | Yes |
 | Rollbacks | `/api/v1/rollbacks`, `/api/v1/rollbacks/{id}` | Yes |
 | Recipes | `/api/v1/recipes/components`, `/api/v1/recipes/playbooks` | Yes |
@@ -1237,6 +1241,322 @@ POST /api/v1/recipes/migration/{project_id}
   "activate": true
 }
 ```
+
+---
+
+## Certificate Management
+
+Manage TLS certificates for agent authentication.
+
+### List Certificates
+
+```
+GET /api/v1/certificates
+```
+
+Returns list of all agent certificates.
+
+**Response:**
+```json
+{
+  "items": [
+    {
+      "id": 1,
+      "agentId": "agent-001",
+      "serialNumber": "ABC123DEF456",
+      "issuedAt": "2026-01-01T00:00:00Z",
+      "expiresAt": "2027-01-01T00:00:00Z",
+      "status": "active"
+    }
+  ],
+  "totalCount": 1
+}
+```
+
+### Get Certificate
+
+```
+GET /api/v1/certificates/{id}
+```
+
+Returns details for a specific certificate.
+
+### Revoke Certificate
+
+```
+POST /api/v1/certificates/agents/{agent_id}/revoke
+```
+
+Revoke an agent's certificate, preventing it from authenticating.
+
+**Request Body:**
+```json
+{
+  "reason": "Agent decommissioned"
+}
+```
+
+### Certificate Audit Log
+
+```
+GET /api/v1/certificates/audit
+```
+
+Returns certificate issuance and revocation history.
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| limit | integer | Maximum entries to return (default: 50) |
+| offset | integer | Pagination offset |
+
+---
+
+## TLS Management
+
+Manage TLS configuration for the master server.
+
+### Get TLS Status
+
+```
+GET /api/v1/tls/status
+```
+
+Returns current TLS configuration status.
+
+**Response:**
+```json
+{
+  "mode": "acme",
+  "enabled": true,
+  "certExpires": "2026-06-01T00:00:00Z",
+  "domains": ["vcdeploy.example.com"],
+  "autoRenew": true
+}
+```
+
+### Force ACME Renewal
+
+```
+POST /api/v1/tls/renew
+```
+
+Force renewal of ACME certificate (Let's Encrypt).
+
+### Update TLS Settings
+
+```
+PUT /api/v1/tls/settings
+```
+
+Update TLS configuration.
+
+**Request Body:**
+```json
+{
+  "mode": "acme",
+  "acme": {
+    "email": "admin@example.com",
+    "domains": ["vcdeploy.example.com"]
+  }
+}
+```
+
+---
+
+## Source Credentials
+
+Manage credentials for Git repository authentication.
+
+### List Credentials
+
+```
+GET /api/v1/credentials
+```
+
+Returns list of configured source credentials.
+
+**Response:**
+```json
+{
+  "items": [
+    {
+      "id": 1,
+      "name": "github-token",
+      "type": "token",
+      "urlPattern": "github.com/*",
+      "createdAt": "2026-01-01T00:00:00Z"
+    }
+  ],
+  "totalCount": 1
+}
+```
+
+### Create Credential
+
+```
+POST /api/v1/credentials
+```
+
+Create a new source credential.
+
+**Request Body (Token):**
+```json
+{
+  "name": "github-pat",
+  "type": "token",
+  "urlPattern": "github.com/myorg/*",
+  "token": "ghp_xxxxxxxxxxxxxxxxxxxx"
+}
+```
+
+**Request Body (Basic Auth):**
+```json
+{
+  "name": "gitlab-creds",
+  "type": "basic",
+  "urlPattern": "gitlab.com/myorg/*",
+  "username": "deploy-user",
+  "password": "secret"
+}
+```
+
+**Request Body (SSH Key Reference):**
+```json
+{
+  "name": "ssh-deploy",
+  "type": "ssh",
+  "urlPattern": "git@github.com:myorg/*",
+  "sshKeyId": 123
+}
+```
+
+### Get Credential
+
+```
+GET /api/v1/credentials/{id}
+```
+
+Returns credential details (secrets are redacted).
+
+### Delete Credential
+
+```
+DELETE /api/v1/credentials/{id}
+```
+
+Delete a source credential.
+
+### Test Credential
+
+```
+POST /api/v1/credentials/{id}/test
+```
+
+Test credential connectivity against a repository.
+
+**Request Body:**
+```json
+{
+  "repositoryUrl": "https://github.com/myorg/myrepo.git"
+}
+```
+
+---
+
+## SSH Keys
+
+Manage SSH keys for provisioning and Git authentication.
+
+### List SSH Keys
+
+```
+GET /api/v1/ssh-keys
+```
+
+Returns list of managed SSH keys.
+
+**Response:**
+```json
+{
+  "items": [
+    {
+      "id": 1,
+      "name": "deploy-key",
+      "type": "ed25519",
+      "fingerprint": "SHA256:xxxxx",
+      "createdAt": "2026-01-01T00:00:00Z"
+    }
+  ],
+  "totalCount": 1
+}
+```
+
+### Generate SSH Key
+
+```
+POST /api/v1/ssh-keys
+```
+
+Generate a new Ed25519 SSH key pair.
+
+**Request Body:**
+```json
+{
+  "name": "new-deploy-key",
+  "comment": "Deployment key for production"
+}
+```
+
+**Response:**
+```json
+{
+  "id": 2,
+  "name": "new-deploy-key",
+  "type": "ed25519",
+  "fingerprint": "SHA256:xxxxx",
+  "publicKey": "ssh-ed25519 AAAA... comment"
+}
+```
+
+### Import SSH Key
+
+```
+POST /api/v1/ssh-keys/import
+```
+
+Import an existing SSH private key.
+
+**Request Body:**
+```json
+{
+  "name": "existing-key",
+  "privateKey": "-----BEGIN OPENSSH PRIVATE KEY-----\n...",
+  "passphrase": "optional-passphrase"
+}
+```
+
+### Get Public Key
+
+```
+GET /api/v1/ssh-keys/{id}/public
+```
+
+Returns the public key in OpenSSH format.
+
+**Response:**
+```
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG... comment
+```
+
+### Delete SSH Key
+
+```
+DELETE /api/v1/ssh-keys/{id}
+```
+
+Delete an SSH key.
 
 ---
 

@@ -47,6 +47,14 @@ vcdeploy
 ├── audit           # Audit log commands
 │   ├── list        # List audit log entries
 │   └── export      # Export audit logs
+├── certs           # Certificate management
+│   ├── list        # List agent certificates
+│   ├── show        # Show certificate details
+│   ├── revoke      # Revoke a certificate
+│   ├── audit       # Certificate audit log
+│   └── ca          # CA management
+│       ├── list    # List CA certificates
+│       └── rotate  # Rotate CA certificate
 ├── completion      # Generate shell completions
 │   ├── bash        # Bash completion
 │   ├── zsh         # Zsh completion
@@ -57,6 +65,11 @@ vcdeploy
 │   ├── export      # Export config to stdout
 │   ├── import      # Import config from file
 │   └── set         # Set a config value
+├── creds           # Source credential management
+│   ├── list        # List credentials
+│   ├── add         # Add a credential
+│   ├── delete      # Delete a credential
+│   └── test        # Test credential connectivity
 ├── deploy          # Deployment management
 │   ├── list        # List deployments
 │   ├── status      # Show deployment status
@@ -81,6 +94,12 @@ vcdeploy
 │   ├── deploy      # Deploy a project
 │   ├── rollback    # Rollback to previous release
 │   └── health-check # Run health check
+├── provision       # Agent provisioning via SSH
+│   ├── list        # List provisioning jobs
+│   ├── status      # Check job status
+│   └── logs        # View provisioning logs
+├── recipes         # Recipe and playbook management
+│   └── import-yaml # Import YAML config as playbook
 ├── secret          # Secrets management
 │   ├── set         # Set a secret
 │   ├── list        # List secrets
@@ -96,6 +115,12 @@ vcdeploy
 │   ├── project     # Show project details
 │   ├── agent       # Show agent details
 │   └── deployment  # Show deployment details
+├── ssh-keys        # SSH key management
+│   ├── list        # List SSH keys
+│   ├── generate    # Generate new key
+│   ├── import      # Import existing key
+│   ├── public      # Show public key
+│   └── delete      # Delete a key
 ├── type            # Project type management
 │   ├── list        # List project types
 │   ├── create      # Create a project type
@@ -314,6 +339,90 @@ vcdeploy completion powershell > vcdeploy.ps1
 
 ---
 
+### certs
+
+Certificate management for agent TLS authentication.
+
+#### certs list
+
+List all agent certificates.
+
+```bash
+vcdeploy certs list [flags]
+```
+
+**Example:**
+```bash
+vcdeploy certs list --master localhost:9000 --token <token>
+```
+
+#### certs show
+
+Show certificate details for an agent.
+
+```bash
+vcdeploy certs show <agent-id> [flags]
+```
+
+**Example:**
+```bash
+vcdeploy certs show agent-001 --master localhost:9000 --token <token>
+```
+
+#### certs revoke
+
+Revoke an agent's certificate.
+
+```bash
+vcdeploy certs revoke <agent-id> [flags]
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `-r, --reason` | Reason for revocation |
+
+**Example:**
+```bash
+vcdeploy certs revoke agent-001 --reason "Agent compromised" --master localhost:9000 --token <token>
+```
+
+#### certs audit
+
+View certificate audit log.
+
+```bash
+vcdeploy certs audit [flags]
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `--limit` | Maximum entries to return (default: 100) |
+
+#### certs ca list
+
+List CA certificates.
+
+```bash
+vcdeploy certs ca list [flags]
+```
+
+#### certs ca rotate
+
+Rotate the CA certificate.
+
+```bash
+vcdeploy certs ca rotate [flags]
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `-d, --validity-days` | CA validity period in days (default: 365) |
+
+---
+
 ### config
 
 Configuration management commands.
@@ -420,6 +529,91 @@ vcdeploy deploy trigger <project-name> [flags]
 | `--target` | Specific target to deploy |
 | `--branch` | Branch to deploy (overrides project default) |
 | `--scheduled` | Schedule deployment for later (RFC3339 format) |
+
+---
+
+### creds
+
+Source credential management for Git repository authentication.
+
+#### creds list
+
+List all configured source credentials.
+
+```bash
+vcdeploy creds list [flags]
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `-t, --type` | Filter by credential type (basic, ssh, token, deploy-key) |
+
+**Example:**
+```bash
+vcdeploy creds list --master localhost:9000 --token <token>
+```
+
+#### creds add
+
+Add a new source credential.
+
+```bash
+vcdeploy creds add [flags]
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `-n, --name` | Credential name (required) |
+| `-t, --type` | Credential type: basic, ssh, token, deploy-key (required) |
+| `-u, --url-pattern` | URL pattern to match (e.g., github.com/*) |
+| `--username` | Username for basic auth |
+| `--password` | Password for basic auth (prompts if not provided) |
+| `--ssh-key-id` | SSH key ID for ssh type |
+| `--stdin` | Read secret value from stdin |
+
+**Examples:**
+```bash
+# Add a GitHub personal access token
+vcdeploy creds add --name github-token --type token --url-pattern "github.com/*" \
+  --master localhost:9000 --token <token>
+
+# Add basic auth credentials
+vcdeploy creds add --name gitlab-creds --type basic --url-pattern "gitlab.com/myorg/*" \
+  --username myuser --master localhost:9000 --token <token>
+
+# Add SSH key reference
+vcdeploy creds add --name ssh-deploy --type ssh --url-pattern "git@github.com:myorg/*" \
+  --ssh-key-id 123 --master localhost:9000 --token <token>
+```
+
+#### creds delete
+
+Delete a source credential.
+
+```bash
+vcdeploy creds delete <credential-id> [flags]
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `-f, --force` | Skip confirmation |
+
+#### creds test
+
+Test credential connectivity against a repository.
+
+```bash
+vcdeploy creds test <credential-id> <repo-url> [flags]
+```
+
+**Example:**
+```bash
+vcdeploy creds test 123 https://github.com/myorg/myrepo.git \
+  --master localhost:9000 --token <token>
+```
 
 ---
 
@@ -593,6 +787,108 @@ vcdeploy project health-check <name> [flags]
 
 ---
 
+### provision
+
+Agent provisioning via SSH. Install and configure agents on remote servers.
+
+```bash
+vcdeploy provision --host <hostname> [flags]
+```
+
+**Flags:**
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--host` | Target host to provision (required) | - |
+| `-p, --port` | SSH port | `22` |
+| `-u, --user` | SSH user | `root` |
+| `--ssh-key` | SSH key ID for authentication | - |
+| `--agent-id` | Agent ID to assign | auto-generated |
+| `--agent-name` | Agent display name | - |
+| `--groups` | Comma-separated groups to assign | - |
+| `--no-start` | Don't start agent after installation | - |
+
+**Example:**
+```bash
+vcdeploy provision --host 192.168.1.100 --user root --ssh-key deploy-key \
+  --agent-name "Production Server 1" --groups production,web \
+  --master localhost:9000 --token <token>
+```
+
+#### provision list
+
+List provisioning jobs.
+
+```bash
+vcdeploy provision list [flags]
+```
+
+**Flags:**
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-n, --limit` | Maximum jobs to show | `20` |
+| `--status` | Filter by status (pending, running, completed, failed) | - |
+
+#### provision status
+
+Check provisioning job status.
+
+```bash
+vcdeploy provision status <job-id> [flags]
+```
+
+#### provision logs
+
+View provisioning job logs.
+
+```bash
+vcdeploy provision logs <job-id> [flags]
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `-f, --follow` | Follow log output |
+
+---
+
+### recipes
+
+Recipe and playbook management for deployment workflows.
+
+#### recipes import-yaml
+
+Import a project YAML configuration as a recipe playbook.
+
+```bash
+vcdeploy recipes import-yaml <yaml-file> [flags]
+```
+
+**Flags:**
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--project-id` | Project ID to associate playbook with | - |
+| `--name` | Playbook name | `<project>-playbook` |
+| `--version` | Playbook version | `v1.0.0` |
+| `--create-components` | Create components from hooks | `true` |
+| `--activate` | Activate playbook after creation | `false` |
+| `--preview` | Preview migration without making changes | `false` |
+| `--json` | Output results as JSON | `false` |
+
+**Examples:**
+```bash
+# Preview migration
+vcdeploy recipes import-yaml configs/myproject.yaml --preview
+
+# Import and activate
+vcdeploy recipes import-yaml configs/myproject.yaml --project-id 123 --activate
+
+# Import with custom name and version
+vcdeploy recipes import-yaml configs/myproject.yaml --name "production-playbook" \
+  --version "v2.0.0" --project-id 123
+```
+
+---
+
 ### secret
 
 Secrets management for deployment-time environment variables.
@@ -704,6 +1000,98 @@ Set a setting value.
 ```bash
 vcdeploy settings set <category> <key> <value>
 ```
+
+---
+
+### ssh-keys
+
+SSH key management for provisioning and Git authentication.
+
+#### ssh-keys list
+
+List all managed SSH keys.
+
+```bash
+vcdeploy ssh-keys list [flags]
+```
+
+**Example:**
+```bash
+vcdeploy ssh-keys list --master localhost:9000 --token <token>
+```
+
+#### ssh-keys generate
+
+Generate a new Ed25519 SSH key pair.
+
+```bash
+vcdeploy ssh-keys generate [flags]
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `-n, --name` | Key name (required) |
+| `-c, --comment` | Key comment (appears in public key) |
+
+**Example:**
+```bash
+vcdeploy ssh-keys generate --name deploy-key --comment "Deployment key" \
+  --master localhost:9000 --token <token>
+```
+
+#### ssh-keys import
+
+Import an existing SSH private key.
+
+```bash
+vcdeploy ssh-keys import [flags]
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `-n, --name` | Key name (required) |
+| `-f, --file` | Path to private key file |
+| `--stdin` | Read private key from stdin |
+| `-p, --passphrase` | Passphrase for encrypted key |
+
+**Examples:**
+```bash
+# Import from file
+vcdeploy ssh-keys import --name my-key --file ~/.ssh/id_ed25519 \
+  --master localhost:9000 --token <token>
+
+# Import from stdin
+cat ~/.ssh/id_ed25519 | vcdeploy ssh-keys import --name my-key --stdin \
+  --master localhost:9000 --token <token>
+```
+
+#### ssh-keys public
+
+Output the public key in OpenSSH format.
+
+```bash
+vcdeploy ssh-keys public <key-id> [flags]
+```
+
+**Example:**
+```bash
+vcdeploy ssh-keys public 123 --master localhost:9000 --token <token> > deploy.pub
+```
+
+#### ssh-keys delete
+
+Delete an SSH key.
+
+```bash
+vcdeploy ssh-keys delete <key-id> [flags]
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `-f, --force` | Skip confirmation |
 
 ---
 
