@@ -66,6 +66,7 @@ func init() {
 	rootCmd.PersistentFlags().String("config", "", "config file (default: /etc/vcdeploy/master.yaml)")
 	rootCmd.PersistentFlags().String("master", "", "master address for remote CLI (e.g., localhost:9000)")
 	rootCmd.PersistentFlags().String("token", "", "API token for remote CLI")
+	rootCmd.PersistentFlags().Bool("offline", false, "force offline/direct mode even if server is running")
 
 	// Add subcommands
 	rootCmd.AddCommand(masterCmd)

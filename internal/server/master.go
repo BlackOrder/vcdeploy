@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -713,6 +714,14 @@ func (s *MasterServer) Start(ctx context.Context) error {
 		}
 	})
 
+	// Start Unix socket listener for local CLI access
+	s.wg.Go(func() {
+		if err := s.startUnixSocket(ctx); err != nil {
+			// Unix socket failure is non-fatal - log warning and continue
+			s.logger.Warn("Unix socket server error (CLI will use TCP)", zap.Error(err))
+		}
+	})
+
 	s.wg.Go(func() {
 		s.runBackgroundTasks(ctx)
 	})
@@ -1095,6 +1104,83 @@ func (s *MasterServer) startHTTPS(_ context.Context) error {
 
 	// Empty cert/key paths because TLSConfig provides GetCertificate
 	return s.httpsServer.ListenAndServeTLS("", "")
+}
+
+// startUnixSocket starts a Unix socket listener for local CLI access.
+// This provides secure local access via filesystem permissions.
+func (s *MasterServer) startUnixSocket(ctx context.Context) error {
+	socketPath := s.config.Server.SocketPath
+	if socketPath == "" {
+		socketPath = "/var/run/vcdeploy/vcdeploy.sock"
+	}
+
+	// Ensure socket directory exists
+	socketDir := filepath.Dir(socketPath)
+	if err := os.MkdirAll(socketDir, 0755); err != nil {
+		return fmt.Errorf("create socket directory: %w", err)
+	}
+
+	// Remove stale socket if it exists
+	if err := os.Remove(socketPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove stale socket: %w", err)
+	}
+
+	listener, err := net.Listen("unix", socketPath)
+	if err != nil {
+		return fmt.Errorf("listen on unix socket: %w", err)
+	}
+
+	// Set socket permissions: owner (root) + group (vcdeploy) can access
+	// This allows: root users, and users in vcdeploy group
+	if err := os.Chmod(socketPath, 0660); err != nil {
+		listener.Close()
+		return fmt.Errorf("set socket permissions: %w", err)
+	}
+
+	// Optionally set group ownership to vcdeploy group
+	if gid := getVCDeployGID(); gid >= 0 {
+		if err := os.Chown(socketPath, -1, gid); err != nil {
+			s.logger.Warn("could not set socket group ownership", zap.Error(err))
+		}
+	}
+
+	s.logger.Info("Starting Unix socket server for local CLI", zap.String("path", socketPath))
+
+	handler, err := s.buildMainHandler()
+	if err != nil {
+		listener.Close()
+		return fmt.Errorf("build handler: %w", err)
+	}
+
+	unixServer := &http.Server{
+		Handler:      handler,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	// Start serving in a goroutine
+	go func() {
+		if err := unixServer.Serve(listener); err != nil && err != http.ErrServerClosed {
+			s.logger.Error("Unix socket server error", zap.Error(err))
+		}
+	}()
+
+	// Wait for context cancellation, then shutdown
+	<-ctx.Done()
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return unixServer.Shutdown(shutdownCtx)
+}
+
+// getVCDeployGID returns the GID of the vcdeploy group, or -1 if not found.
+func getVCDeployGID() int {
+	group, err := user.LookupGroup("vcdeploy")
+	if err != nil {
+		return -1
+	}
+	gid, _ := strconv.Atoi(group.Gid)
+	return gid
 }
 
 func (s *MasterServer) startGRPC() error {

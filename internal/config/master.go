@@ -43,6 +43,7 @@ const (
 type ServerConfig struct {
 	Listen       string    `yaml:"listen"`        // HTTP address (default: ":80")
 	HTTPSAddress string    `yaml:"https_address"` // HTTPS address (default: ":443")
+	SocketPath   string    `yaml:"socket_path"`   // Unix socket path for local CLI access (default: /var/run/vcdeploy/vcdeploy.sock)
 	TLS          TLSConfig `yaml:"tls"`
 }
 
@@ -296,7 +297,8 @@ type StorageConfig struct {
 func DefaultMasterConfig() *MasterConfig {
 	return &MasterConfig{
 		Server: ServerConfig{
-			Listen: ":9000",
+			Listen:     ":9000",
+			SocketPath: "/var/run/vcdeploy/vcdeploy.sock",
 			TLS: TLSConfig{
 				Mode:       TLSModeDisabled,
 				CertFile:   "/etc/vcdeploy/certs/server.crt",
