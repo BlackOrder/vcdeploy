@@ -60,6 +60,7 @@ type MemoryStore struct {
 	deploymentLogs      map[string][]*DeploymentLog
 	deploymentRollbacks map[int64]*DeploymentRollback
 	scheduledDeploys    map[string]*ScheduledDeployment
+	deploymentAgents    map[string][]DeploymentAgent // keyed by deployment_id
 
 	auditLogs []*AuditEntry // append-only slice
 
@@ -271,6 +272,7 @@ func NewMemoryStore(cfg *MemoryStoreConfig) *MemoryStore {
 		deploymentLogs:      make(map[string][]*DeploymentLog),
 		deploymentRollbacks: make(map[int64]*DeploymentRollback),
 		scheduledDeploys:    make(map[string]*ScheduledDeployment),
+		deploymentAgents:    make(map[string][]DeploymentAgent),
 
 		auditLogs: make([]*AuditEntry, 0),
 

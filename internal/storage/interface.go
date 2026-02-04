@@ -26,6 +26,7 @@ type Store interface {
 	AgentUpdateStore
 	DeploymentStore
 	DeploymentLogStore
+	DeploymentAgentStore
 	DeploymentRollbackStore
 	ScheduledDeploymentStore
 	AuditStore
@@ -152,6 +153,20 @@ type DeploymentLogStore interface {
 	ListDeploymentLogsAfter(ctx context.Context, deploymentID string, afterID int64) ([]*DeploymentLog, error)
 	ListDeploymentLogsPaginated(ctx context.Context, deploymentID string, limit, offset int) ([]*DeploymentLog, error)
 	CountDeploymentLogs(ctx context.Context, deploymentID string) (int64, error)
+}
+
+// DeploymentAgentStore defines multi-agent deployment tracking operations.
+type DeploymentAgentStore interface {
+	AssignAgentToDeployment(ctx context.Context, deploymentID, agentID string) error
+	AssignAgentsToDeployment(ctx context.Context, deploymentID string, agentIDs []string) error
+	GetDeploymentAgents(ctx context.Context, deploymentID string) ([]DeploymentAgent, error)
+	GetAgentDeployments(ctx context.Context, agentID string) ([]DeploymentAgent, error)
+	UpdateDeploymentAgentStatus(ctx context.Context, deploymentID, agentID string, status DeploymentStatus, errorMsg string) error
+	StartDeploymentAgent(ctx context.Context, deploymentID, agentID string) error
+	IsAgentAssignedToDeployment(ctx context.Context, deploymentID, agentID string) (bool, error)
+	GetDeploymentAgentStatus(ctx context.Context, deploymentID, agentID string) (*DeploymentAgent, error)
+	CountDeploymentAgentsByStatus(ctx context.Context, deploymentID string) (map[DeploymentStatus]int, error)
+	RemoveAgentFromDeployment(ctx context.Context, deploymentID, agentID string) error
 }
 
 // DeploymentRollbackStore defines rollback operations.

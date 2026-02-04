@@ -228,6 +228,19 @@ type DeploymentLog struct {
 	CreatedAt    time.Time
 }
 
+// DeploymentAgent tracks an agent's participation in a multi-agent deployment.
+// Each deployment can have multiple agents, and this table tracks the status
+// of each agent's deployment execution independently.
+type DeploymentAgent struct {
+	ID           int64
+	DeploymentID string
+	AgentID      string
+	Status       DeploymentStatus // pending, running, success, failed, cancelled
+	StartedAt    *time.Time
+	CompletedAt  *time.Time
+	ErrorMessage string
+}
+
 // ScheduledDeployment represents a deployment scheduled for future execution.
 type ScheduledDeployment struct {
 	ID          string
