@@ -415,3 +415,27 @@ func ParseAndValidateJSON(r *http.Request, maxSize int64, v interface{}) error {
 
 // DefaultMaxBodySize is the default maximum request body size (1MB).
 const DefaultMaxBodySize = 1 << 20
+
+// ValidateBinaryPathComponent validates a path component to prevent path traversal attacks.
+// It ensures the value doesn't contain directory traversal sequences or path separators.
+func ValidateBinaryPathComponent(s string) error {
+	if s == "" {
+		return fmt.Errorf("empty value")
+	}
+	if strings.Contains(s, "..") {
+		return fmt.Errorf("path traversal not allowed")
+	}
+	if strings.Contains(s, "/") || strings.Contains(s, "\\") {
+		return fmt.Errorf("path separators not allowed")
+	}
+	if strings.Contains(s, "\x00") {
+		return fmt.Errorf("null bytes not allowed")
+	}
+	// Also validate no control characters
+	for _, r := range s {
+		if r < 32 || r == 127 {
+			return fmt.Errorf("control characters not allowed")
+		}
+	}
+	return nil
+}
