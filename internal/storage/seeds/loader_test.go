@@ -31,14 +31,14 @@ func setupTestDB(t *testing.T) (*storage.DB, func()) {
 	}
 }
 
-func TestLoader_HasSeeds_Empty(t *testing.T) {
+func TestLoader_HasSeeds_WithData(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
 	loader := seeds.NewLoader(db)
 
-	// With empty seed definitions, HasSeeds should return false
-	assert.False(t, loader.HasSeeds())
+	// With populated seed definitions, HasSeeds should return true
+	assert.True(t, loader.HasSeeds())
 }
 
 func TestLoader_LoadSeeds_Empty(t *testing.T) {
@@ -75,9 +75,9 @@ func TestLoader_CountSeeds(t *testing.T) {
 	loader := seeds.NewLoader(db)
 
 	components, playbooks := loader.CountSeeds()
-	// With empty seed definitions
-	assert.Equal(t, 0, components)
-	assert.Equal(t, 0, playbooks)
+	// With populated seed definitions
+	assert.Greater(t, components, 0, "Should have seed components")
+	assert.Greater(t, playbooks, 0, "Should have seed playbooks")
 }
 
 func TestGetEmptyStateTitle(t *testing.T) {
