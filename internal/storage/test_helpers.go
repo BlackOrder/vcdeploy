@@ -100,7 +100,7 @@ func (s *TestMemoryStore) MustUpsertAgent(id, hostname, status string) *Agent {
 	agent := &Agent{
 		ID:       id,
 		Hostname: hostname,
-		Status:   status,
+		Status:   AgentStatus(status),
 	}
 
 	if err := s.UpsertAgent(context.Background(), agent); err != nil {
@@ -117,7 +117,7 @@ func (s *TestMemoryStore) MustCreateDeployment(id, project, status string) *Depl
 	deployment := &DeploymentRecord{
 		ID:        id,
 		Project:   project,
-		Status:    status,
+		Status:    DeploymentStatus(status),
 		StartedAt: time.Now(),
 	}
 

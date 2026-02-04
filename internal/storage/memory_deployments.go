@@ -102,7 +102,7 @@ func (s *MemoryStore) CountDeploymentsByStatus(ctx context.Context) (map[string]
 
 	counts := make(map[string]int64)
 	for _, d := range s.deployments {
-		counts[d.Status]++
+		counts[d.Status.String()]++
 	}
 	return counts, nil
 }

@@ -3,6 +3,138 @@ package storage
 
 import "time"
 
+// =============================================================================
+// Status Type Definitions
+// =============================================================================
+
+// DeploymentStatus represents the status of a deployment.
+type DeploymentStatus string
+
+const (
+	DeploymentStatusPending   DeploymentStatus = "pending"
+	DeploymentStatusScheduled DeploymentStatus = "scheduled"
+	DeploymentStatusRunning   DeploymentStatus = "running"
+	DeploymentStatusSuccess   DeploymentStatus = "success"
+	DeploymentStatusFailed    DeploymentStatus = "failed"
+	DeploymentStatusCancelled DeploymentStatus = "cancelled" // British spelling
+)
+
+// IsTerminal returns true if the deployment status is a terminal state.
+func (s DeploymentStatus) IsTerminal() bool {
+	switch s {
+	case DeploymentStatusSuccess, DeploymentStatusFailed, DeploymentStatusCancelled:
+		return true
+	}
+	return false
+}
+
+// String returns the string representation of the deployment status.
+func (s DeploymentStatus) String() string { return string(s) }
+
+// AgentStatus represents the status of an agent.
+type AgentStatus string
+
+const (
+	AgentStatusOnline       AgentStatus = "online"
+	AgentStatusOffline      AgentStatus = "offline"
+	AgentStatusConnected    AgentStatus = "connected"
+	AgentStatusDisconnected AgentStatus = "disconnected"
+	AgentStatusStale        AgentStatus = "stale"
+	AgentStatusPending      AgentStatus = "pending"
+)
+
+// IsHealthy returns true if the agent is in a healthy state.
+func (s AgentStatus) IsHealthy() bool {
+	return s == AgentStatusOnline || s == AgentStatusConnected
+}
+
+// String returns the string representation of the agent status.
+func (s AgentStatus) String() string { return string(s) }
+
+// ProvisionStatus represents the status of a provision job.
+type ProvisionStatus string
+
+const (
+	ProvisionStatusPending    ProvisionStatus = "pending"
+	ProvisionStatusInProgress ProvisionStatus = "in_progress"
+	ProvisionStatusCompleted  ProvisionStatus = "completed"
+	ProvisionStatusFailed     ProvisionStatus = "failed"
+	ProvisionStatusCancelled  ProvisionStatus = "cancelled" // British spelling
+)
+
+// IsTerminal returns true if the provision status is a terminal state.
+func (s ProvisionStatus) IsTerminal() bool {
+	switch s {
+	case ProvisionStatusCompleted, ProvisionStatusFailed, ProvisionStatusCancelled:
+		return true
+	}
+	return false
+}
+
+// String returns the string representation of the provision status.
+func (s ProvisionStatus) String() string { return string(s) }
+
+// UpdateStatus represents the status of an agent update operation.
+type UpdateStatus string
+
+const (
+	UpdateStatusPending    UpdateStatus = "pending"
+	UpdateStatusInProgress UpdateStatus = "in_progress"
+	UpdateStatusCompleted  UpdateStatus = "completed"
+	UpdateStatusFailed     UpdateStatus = "failed"
+	UpdateStatusRolledBack UpdateStatus = "rolled_back"
+)
+
+// IsTerminal returns true if the update status is a terminal state.
+func (s UpdateStatus) IsTerminal() bool {
+	switch s {
+	case UpdateStatusCompleted, UpdateStatusFailed, UpdateStatusRolledBack:
+		return true
+	}
+	return false
+}
+
+// String returns the string representation of the update status.
+func (s UpdateStatus) String() string { return string(s) }
+
+// RollbackStatus represents the status of a deployment rollback.
+type RollbackStatus string
+
+const (
+	RollbackStatusPending    RollbackStatus = "pending"
+	RollbackStatusInProgress RollbackStatus = "in_progress"
+	RollbackStatusCompleted  RollbackStatus = "completed"
+	RollbackStatusFailed     RollbackStatus = "failed"
+)
+
+// IsTerminal returns true if the rollback status is a terminal state.
+func (s RollbackStatus) IsTerminal() bool {
+	switch s {
+	case RollbackStatusCompleted, RollbackStatusFailed:
+		return true
+	}
+	return false
+}
+
+// String returns the string representation of the rollback status.
+func (s RollbackStatus) String() string { return string(s) }
+
+// ScheduledDeploymentStatus represents the status of a scheduled deployment.
+type ScheduledDeploymentStatus string
+
+const (
+	ScheduledDeploymentStatusPending   ScheduledDeploymentStatus = "pending"
+	ScheduledDeploymentStatusTriggered ScheduledDeploymentStatus = "triggered"
+	ScheduledDeploymentStatusCancelled ScheduledDeploymentStatus = "cancelled" // British spelling
+)
+
+// String returns the string representation of the scheduled deployment status.
+func (s ScheduledDeploymentStatus) String() string { return string(s) }
+
+// =============================================================================
+// Model Definitions
+// =============================================================================
+
 // --- User Model ---
 
 // User represents a user in the system.
@@ -27,7 +159,7 @@ type Agent struct {
 	Hostname     string
 	Labels       map[string]string
 	Capabilities string // JSON string
-	Status       string
+	Status       AgentStatus
 	LastSeenAt   time.Time
 	RegisteredAt time.Time
 	Certificate  string
@@ -59,7 +191,7 @@ type AgentUpdateHistory struct {
 	AgentID      string
 	FromVersion  string
 	ToVersion    string
-	Status       string // "pending", "in_progress", "completed", "failed", "rolled_back"
+	Status       UpdateStatus
 	ErrorMessage string
 	StartedAt    time.Time
 	CompletedAt  *time.Time
@@ -77,7 +209,7 @@ type DeploymentRecord struct {
 	Target        string
 	Branch        string
 	CommitHash    string
-	Status        string
+	Status        DeploymentStatus
 	ReleaseNumber int
 	StartedAt     time.Time
 	CompletedAt   *time.Time
@@ -104,7 +236,7 @@ type ScheduledDeployment struct {
 	Branch      string
 	ScheduledAt time.Time
 	ScheduledBy string
-	Status      string
+	Status      ScheduledDeploymentStatus
 }
 
 // --- Audit Model ---
@@ -303,7 +435,7 @@ type ProvisionJob struct {
 	TargetUser    string
 	SSHKeyID      *int64
 	AgentBinaryID *int64
-	Status        string
+	Status        ProvisionStatus
 	Stage         string
 	Progress      int
 	ErrorMessage  string
@@ -380,7 +512,7 @@ type DeploymentRollback struct {
 	TriggeredBy       string // "user", "auto_health_fail", "manual"
 	HealthCheckFailed bool
 	HealthCheckError  string
-	Status            string // "pending", "in_progress", "completed", "failed"
+	Status            RollbackStatus
 	ErrorMessage      string
 	StartedAt         time.Time
 	CompletedAt       *time.Time

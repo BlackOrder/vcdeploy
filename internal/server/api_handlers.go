@@ -1217,7 +1217,7 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 				s.jsonError(w, http.StatusBadRequest, "status must be one of: online, offline, maintenance, connected, disconnected")
 				return
 			}
-			agent.Status = req.Status
+			agent.Status = storage.AgentStatus(req.Status)
 		}
 
 		if err := s.agentService.Upsert(ctx, agent); err != nil {

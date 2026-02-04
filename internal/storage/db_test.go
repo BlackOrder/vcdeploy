@@ -3289,7 +3289,7 @@ func TestListPendingProvisionJobs(t *testing.T) {
 			TargetHost: "10.0.0.100",
 			TargetPort: 22,
 			TargetUser: "deploy",
-			Status:     j.status,
+			Status:     ProvisionStatus(j.status),
 			StartedAt:  time.Now(),
 		}
 		_ = db.CreateProvisionJob(ctx, job)
@@ -3423,7 +3423,7 @@ func TestCountAgentsByStatus(t *testing.T) {
 		agent := &Agent{
 			ID:       a.id,
 			Hostname: a.id + ".example.com",
-			Status:   a.status,
+			Status:   AgentStatus(a.status),
 		}
 		_ = db.UpsertAgent(ctx, agent)
 	}
@@ -3495,7 +3495,7 @@ func TestCountDeploymentsByStatus(t *testing.T) {
 			Project: "testproject",
 			Target:  "production",
 			Branch:  "main",
-			Status:  d.status,
+			Status:  DeploymentStatus(d.status),
 		}
 		_ = db.CreateDeployment(ctx, deployment)
 	}

@@ -274,12 +274,13 @@ func (s *MemoryStore) UpdateProvisionJobStatus(ctx context.Context, id, status, 
 		return ErrNotFound
 	}
 
-	job.Status = status
+	typedStatus := ProvisionStatus(status)
+	job.Status = typedStatus
 	job.Stage = stage
 	job.ErrorMessage = errorMessage
 	job.Progress = progress
 
-	if status == "completed" || status == "failed" {
+	if typedStatus.IsTerminal() {
 		now := time.Now()
 		job.CompletedAt = &now
 	}

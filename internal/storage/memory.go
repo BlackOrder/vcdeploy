@@ -91,6 +91,20 @@ type MemoryStore struct {
 	// Recovery codes storage
 	recoveryCodes map[int64][]*RecoveryCode // keyed by user ID
 
+	// Recipe and playbook storage
+	recipeComponents        map[int64]*RecipeComponent
+	recipeComponentsByKey   map[string]*RecipeComponent // keyed by "namespace:slug:version"
+	playbooks               map[int64]*Playbook
+	playbooksByKey          map[string]*Playbook // keyed by "namespace:slug:version"
+	playbookActivations     map[int64]*PlaybookActivation
+	activationsByProject    map[int64][]*PlaybookActivation // keyed by project ID
+	activationsByPlaybook   map[int64][]*PlaybookActivation // keyed by playbook ID
+	variableBindings        map[int64]*PlaybookVariableBinding
+	bindingsByActivation    map[int64][]*PlaybookVariableBinding  // keyed by activation ID
+	bindingsBySourceRef     map[string][]*PlaybookVariableBinding // keyed by "sourceType:sourceRef"
+	rawApprovals            map[int64]*RawCommandApproval
+	rawApprovalsByComponent map[int64][]*RawCommandApproval // keyed by component ID
+
 	// ID generators (atomic)
 	nextUserID          atomic.Int64
 	nextAPIKeyID        atomic.Int64
@@ -125,6 +139,13 @@ type MemoryStore struct {
 
 	// Recovery code ID generator
 	nextRecoveryCodeID atomic.Int64
+
+	// Recipe and playbook ID generators
+	nextRecipeComponentID    atomic.Int64
+	nextPlaybookID           atomic.Int64
+	nextPlaybookActivationID atomic.Int64
+	nextVariableBindingID    atomic.Int64
+	nextRawApprovalID        atomic.Int64
 
 	// Shutdown coordination
 	done chan struct{}
@@ -280,6 +301,20 @@ func NewMemoryStore(cfg *MemoryStoreConfig) *MemoryStore {
 
 		// Recovery codes map
 		recoveryCodes: make(map[int64][]*RecoveryCode),
+
+		// Recipe and playbook maps
+		recipeComponents:        make(map[int64]*RecipeComponent),
+		recipeComponentsByKey:   make(map[string]*RecipeComponent),
+		playbooks:               make(map[int64]*Playbook),
+		playbooksByKey:          make(map[string]*Playbook),
+		playbookActivations:     make(map[int64]*PlaybookActivation),
+		activationsByProject:    make(map[int64][]*PlaybookActivation),
+		activationsByPlaybook:   make(map[int64][]*PlaybookActivation),
+		variableBindings:        make(map[int64]*PlaybookVariableBinding),
+		bindingsByActivation:    make(map[int64][]*PlaybookVariableBinding),
+		bindingsBySourceRef:     make(map[string][]*PlaybookVariableBinding),
+		rawApprovals:            make(map[int64]*RawCommandApproval),
+		rawApprovalsByComponent: make(map[int64][]*RawCommandApproval),
 
 		done: make(chan struct{}),
 	}
@@ -468,122 +503,6 @@ func secretKey(project, scope, key string) string {
 // rateLimitKey returns the map key for a rate limit record.
 func rateLimitKey(key, bucket string) string {
 	return key + ":" + bucket
-}
-
-// --- Recipe System Stubs (MemoryStore - not implemented) ---
-// These methods return errors as MemoryStore doesn't support recipe system yet.
-// Recipe operations should use the SQLite DB implementation.
-
-func (m *MemoryStore) CreateRecipeComponent(_ context.Context, _ *RecipeComponent) error {
-	return fmt.Errorf("MemoryStore: CreateRecipeComponent not implemented")
-}
-
-func (m *MemoryStore) GetRecipeComponent(_ context.Context, _, _, _ string) (*RecipeComponent, error) {
-	return nil, fmt.Errorf("MemoryStore: GetRecipeComponent not implemented")
-}
-
-func (m *MemoryStore) GetRecipeComponentByID(_ context.Context, _ int64) (*RecipeComponent, error) {
-	return nil, fmt.Errorf("MemoryStore: GetRecipeComponentByID not implemented")
-}
-
-func (m *MemoryStore) ListRecipeComponents(_ context.Context, _ string, _ bool) ([]*RecipeComponent, error) {
-	return nil, fmt.Errorf("MemoryStore: ListRecipeComponents not implemented")
-}
-
-func (m *MemoryStore) ListRecipeComponentVersions(_ context.Context, _, _ string) ([]*RecipeComponent, error) {
-	return nil, fmt.Errorf("MemoryStore: ListRecipeComponentVersions not implemented")
-}
-
-func (m *MemoryStore) UpdateRecipeComponent(_ context.Context, _ *RecipeComponent) error {
-	return fmt.Errorf("MemoryStore: UpdateRecipeComponent not implemented")
-}
-
-func (m *MemoryStore) DeleteRecipeComponent(_ context.Context, _ int64) error {
-	return fmt.Errorf("MemoryStore: DeleteRecipeComponent not implemented")
-}
-
-func (m *MemoryStore) CreatePlaybook(_ context.Context, _ *Playbook) error {
-	return fmt.Errorf("MemoryStore: CreatePlaybook not implemented")
-}
-
-func (m *MemoryStore) GetPlaybook(_ context.Context, _, _, _ string) (*Playbook, error) {
-	return nil, fmt.Errorf("MemoryStore: GetPlaybook not implemented")
-}
-
-func (m *MemoryStore) GetPlaybookByID(_ context.Context, _ int64) (*Playbook, error) {
-	return nil, fmt.Errorf("MemoryStore: GetPlaybookByID not implemented")
-}
-
-func (m *MemoryStore) ListPlaybooks(_ context.Context, _, _ string, _ bool) ([]*Playbook, error) {
-	return nil, fmt.Errorf("MemoryStore: ListPlaybooks not implemented")
-}
-
-func (m *MemoryStore) ListPlaybookVersions(_ context.Context, _, _ string) ([]*Playbook, error) {
-	return nil, fmt.Errorf("MemoryStore: ListPlaybookVersions not implemented")
-}
-
-func (m *MemoryStore) UpdatePlaybook(_ context.Context, _ *Playbook) error {
-	return fmt.Errorf("MemoryStore: UpdatePlaybook not implemented")
-}
-
-func (m *MemoryStore) DeletePlaybook(_ context.Context, _ int64) error {
-	return fmt.Errorf("MemoryStore: DeletePlaybook not implemented")
-}
-
-func (m *MemoryStore) CreatePlaybookActivation(_ context.Context, _ *PlaybookActivation) error {
-	return fmt.Errorf("MemoryStore: CreatePlaybookActivation not implemented")
-}
-
-func (m *MemoryStore) GetPlaybookActivation(_ context.Context, _ int64) (*PlaybookActivation, error) {
-	return nil, fmt.Errorf("MemoryStore: GetPlaybookActivation not implemented")
-}
-
-func (m *MemoryStore) GetPlaybookActivationByID(_ context.Context, _ int64) (*PlaybookActivation, error) {
-	return nil, fmt.Errorf("MemoryStore: GetPlaybookActivationByID not implemented")
-}
-
-func (m *MemoryStore) ListActivationsByPlaybook(_ context.Context, _ int64) ([]*PlaybookActivation, error) {
-	return nil, fmt.Errorf("MemoryStore: ListActivationsByPlaybook not implemented")
-}
-
-func (m *MemoryStore) DeletePlaybookActivation(_ context.Context, _ int64) error {
-	return fmt.Errorf("MemoryStore: DeletePlaybookActivation not implemented")
-}
-
-func (m *MemoryStore) CreateVariableBinding(_ context.Context, _ *PlaybookVariableBinding) error {
-	return fmt.Errorf("MemoryStore: CreateVariableBinding not implemented")
-}
-
-func (m *MemoryStore) GetVariableBindings(_ context.Context, _ int64) ([]*PlaybookVariableBinding, error) {
-	return nil, fmt.Errorf("MemoryStore: GetVariableBindings not implemented")
-}
-
-func (m *MemoryStore) UpdateVariableBinding(_ context.Context, _ *PlaybookVariableBinding) error {
-	return fmt.Errorf("MemoryStore: UpdateVariableBinding not implemented")
-}
-
-func (m *MemoryStore) DeleteVariableBinding(_ context.Context, _ int64) error {
-	return fmt.Errorf("MemoryStore: DeleteVariableBinding not implemented")
-}
-
-func (m *MemoryStore) FindBindingsBySourceRef(_ context.Context, _, _ string) ([]*PlaybookVariableBinding, error) {
-	return nil, fmt.Errorf("MemoryStore: FindBindingsBySourceRef not implemented")
-}
-
-func (m *MemoryStore) CreateRawApproval(_ context.Context, _ *RawCommandApproval) error {
-	return fmt.Errorf("MemoryStore: CreateRawApproval not implemented")
-}
-
-func (m *MemoryStore) GetRawApproval(_ context.Context, _ int64) (*RawCommandApproval, error) {
-	return nil, fmt.Errorf("MemoryStore: GetRawApproval not implemented")
-}
-
-func (m *MemoryStore) DeleteRawApproval(_ context.Context, _ int64) error {
-	return fmt.Errorf("MemoryStore: DeleteRawApproval not implemented")
-}
-
-func (m *MemoryStore) ListRawApprovals(_ context.Context) ([]*RawCommandApproval, error) {
-	return nil, fmt.Errorf("MemoryStore: ListRawApprovals not implemented")
 }
 
 // Ensure MemoryStore implements Store at compile time.

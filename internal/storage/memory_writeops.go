@@ -62,6 +62,16 @@ func (s *MemoryStore) executeWriteOp(tx *sql.Tx, op WriteOp) error {
 		return s.executeACMEAccountOp(tx, op)
 	case "recovery_codes":
 		return s.executeRecoveryCodeOp(tx, op)
+	case "recipe_components":
+		return s.executeRecipeComponentOp(tx, op)
+	case "playbooks":
+		return s.executePlaybookOp(tx, op)
+	case "playbook_activations":
+		return s.executePlaybookActivationOp(tx, op)
+	case "playbook_variable_bindings":
+		return s.executeVariableBindingOp(tx, op)
+	case "raw_command_approvals":
+		return s.executeRawApprovalOp(tx, op)
 	default:
 		s.logger.Warn("unknown table for write op",
 			zap.String("table", op.Table),
@@ -949,6 +959,240 @@ func (s *MemoryStore) executeRecoveryCodeOp(tx *sql.Tx, op WriteOp) error {
 			return fmt.Errorf("invalid data type for recovery_code delete")
 		}
 		_, err := tx.Exec(`DELETE FROM recovery_codes WHERE id = ?`, c.ID)
+		return err
+	}
+	return nil
+}
+
+// --- Recipe Component operations ---
+
+func (s *MemoryStore) executeRecipeComponentOp(tx *sql.Tx, op WriteOp) error {
+	switch op.Type {
+	case WriteOpInsert:
+		c, ok := op.Data.(*RecipeComponent)
+		if !ok {
+			return fmt.Errorf("invalid data type for recipe_component insert")
+		}
+		contentJSON, err := c.ContentJSON()
+		if err != nil {
+			return fmt.Errorf("marshal content: %w", err)
+		}
+		variablesJSON, err := c.VariablesJSON()
+		if err != nil {
+			return fmt.Errorf("marshal variables: %w", err)
+		}
+		_, err = tx.Exec(`
+			INSERT INTO recipe_components (id, namespace, slug, version, name, description, 
+				component_type, content, variables, is_seed, is_raw, is_deprecated, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, c.ID, c.Namespace, c.Slug, c.Version, c.Name, c.Description,
+			c.ComponentType, contentJSON, variablesJSON, c.IsSeed, c.IsRaw, c.IsDeprecated, c.CreatedAt)
+		return err
+
+	case WriteOpUpdate:
+		c, ok := op.Data.(*RecipeComponent)
+		if !ok {
+			return fmt.Errorf("invalid data type for recipe_component update")
+		}
+		contentJSON, err := c.ContentJSON()
+		if err != nil {
+			return fmt.Errorf("marshal content: %w", err)
+		}
+		variablesJSON, err := c.VariablesJSON()
+		if err != nil {
+			return fmt.Errorf("marshal variables: %w", err)
+		}
+		_, err = tx.Exec(`
+			UPDATE recipe_components SET namespace = ?, slug = ?, version = ?, name = ?, 
+				description = ?, component_type = ?, content = ?, variables = ?, 
+				is_seed = ?, is_raw = ?, is_deprecated = ?
+			WHERE id = ?
+		`, c.Namespace, c.Slug, c.Version, c.Name, c.Description, c.ComponentType,
+			contentJSON, variablesJSON, c.IsSeed, c.IsRaw, c.IsDeprecated, c.ID)
+		return err
+
+	case WriteOpDelete:
+		id, ok := op.Data.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data type for recipe_component delete")
+		}
+		_, err := tx.Exec(`DELETE FROM recipe_components WHERE id = ?`, id)
+		return err
+	}
+	return nil
+}
+
+// --- Playbook operations ---
+
+func (s *MemoryStore) executePlaybookOp(tx *sql.Tx, op WriteOp) error {
+	switch op.Type {
+	case WriteOpInsert:
+		p, ok := op.Data.(*Playbook)
+		if !ok {
+			return fmt.Errorf("invalid data type for playbook insert")
+		}
+		stepsJSON, err := p.StepsJSON()
+		if err != nil {
+			return fmt.Errorf("marshal steps: %w", err)
+		}
+		sharedDirsJSON, err := p.SharedDirsJSON()
+		if err != nil {
+			return fmt.Errorf("marshal shared_dirs: %w", err)
+		}
+		sharedFilesJSON, err := p.SharedFilesJSON()
+		if err != nil {
+			return fmt.Errorf("marshal shared_files: %w", err)
+		}
+		writableDirsJSON, err := p.WritableDirsJSON()
+		if err != nil {
+			return fmt.Errorf("marshal writable_dirs: %w", err)
+		}
+		validationRulesJSON, err := p.ValidationRulesJSON()
+		if err != nil {
+			return fmt.Errorf("marshal validation_rules: %w", err)
+		}
+		_, err = tx.Exec(`
+			INSERT INTO playbooks (id, namespace, slug, version, name, description, framework_type,
+				steps, shared_dirs, shared_files, writable_dirs, keep_releases,
+				validation_rules, is_seed, is_deprecated, parent_id, parent_version, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, p.ID, p.Namespace, p.Slug, p.Version, p.Name, p.Description, p.FrameworkType,
+			stepsJSON, sharedDirsJSON, sharedFilesJSON, writableDirsJSON, p.KeepReleases,
+			validationRulesJSON, p.IsSeed, p.IsDeprecated, p.ParentID, p.ParentVersion, p.CreatedAt)
+		return err
+
+	case WriteOpUpdate:
+		p, ok := op.Data.(*Playbook)
+		if !ok {
+			return fmt.Errorf("invalid data type for playbook update")
+		}
+		stepsJSON, err := p.StepsJSON()
+		if err != nil {
+			return fmt.Errorf("marshal steps: %w", err)
+		}
+		sharedDirsJSON, err := p.SharedDirsJSON()
+		if err != nil {
+			return fmt.Errorf("marshal shared_dirs: %w", err)
+		}
+		sharedFilesJSON, err := p.SharedFilesJSON()
+		if err != nil {
+			return fmt.Errorf("marshal shared_files: %w", err)
+		}
+		writableDirsJSON, err := p.WritableDirsJSON()
+		if err != nil {
+			return fmt.Errorf("marshal writable_dirs: %w", err)
+		}
+		validationRulesJSON, err := p.ValidationRulesJSON()
+		if err != nil {
+			return fmt.Errorf("marshal validation_rules: %w", err)
+		}
+		_, err = tx.Exec(`
+			UPDATE playbooks SET namespace = ?, slug = ?, version = ?, name = ?, description = ?,
+				framework_type = ?, steps = ?, shared_dirs = ?, shared_files = ?, writable_dirs = ?,
+				keep_releases = ?, validation_rules = ?, is_seed = ?, is_deprecated = ?,
+				parent_id = ?, parent_version = ?
+			WHERE id = ?
+		`, p.Namespace, p.Slug, p.Version, p.Name, p.Description, p.FrameworkType,
+			stepsJSON, sharedDirsJSON, sharedFilesJSON, writableDirsJSON, p.KeepReleases,
+			validationRulesJSON, p.IsSeed, p.IsDeprecated, p.ParentID, p.ParentVersion, p.ID)
+		return err
+
+	case WriteOpDelete:
+		id, ok := op.Data.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data type for playbook delete")
+		}
+		_, err := tx.Exec(`DELETE FROM playbooks WHERE id = ?`, id)
+		return err
+	}
+	return nil
+}
+
+// --- Playbook Activation operations ---
+
+func (s *MemoryStore) executePlaybookActivationOp(tx *sql.Tx, op WriteOp) error {
+	switch op.Type {
+	case WriteOpInsert:
+		a, ok := op.Data.(*PlaybookActivation)
+		if !ok {
+			return fmt.Errorf("invalid data type for playbook_activation insert")
+		}
+		_, err := tx.Exec(`
+			INSERT INTO playbook_activations (id, project_id, playbook_id, activated_at, activated_by)
+			VALUES (?, ?, ?, ?, ?)
+		`, a.ID, a.ProjectID, a.PlaybookID, a.ActivatedAt, a.ActivatedBy)
+		return err
+
+	case WriteOpDelete:
+		id, ok := op.Data.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data type for playbook_activation delete")
+		}
+		_, err := tx.Exec(`DELETE FROM playbook_activations WHERE id = ?`, id)
+		return err
+	}
+	return nil
+}
+
+// --- Variable Binding operations ---
+
+func (s *MemoryStore) executeVariableBindingOp(tx *sql.Tx, op WriteOp) error {
+	switch op.Type {
+	case WriteOpInsert:
+		b, ok := op.Data.(*PlaybookVariableBinding)
+		if !ok {
+			return fmt.Errorf("invalid data type for variable_binding insert")
+		}
+		_, err := tx.Exec(`
+			INSERT INTO playbook_variable_bindings (id, activation_id, variable_name, source_type, source_ref, literal_value)
+			VALUES (?, ?, ?, ?, ?, ?)
+		`, b.ID, b.ActivationID, b.VariableName, b.SourceType, b.SourceRef, b.LiteralValue)
+		return err
+
+	case WriteOpUpdate:
+		b, ok := op.Data.(*PlaybookVariableBinding)
+		if !ok {
+			return fmt.Errorf("invalid data type for variable_binding update")
+		}
+		_, err := tx.Exec(`
+			UPDATE playbook_variable_bindings SET variable_name = ?, source_type = ?, 
+				source_ref = ?, literal_value = ?
+			WHERE id = ?
+		`, b.VariableName, b.SourceType, b.SourceRef, b.LiteralValue, b.ID)
+		return err
+
+	case WriteOpDelete:
+		id, ok := op.Data.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data type for variable_binding delete")
+		}
+		_, err := tx.Exec(`DELETE FROM playbook_variable_bindings WHERE id = ?`, id)
+		return err
+	}
+	return nil
+}
+
+// --- Raw Approval operations ---
+
+func (s *MemoryStore) executeRawApprovalOp(tx *sql.Tx, op WriteOp) error {
+	switch op.Type {
+	case WriteOpInsert:
+		a, ok := op.Data.(*RawCommandApproval)
+		if !ok {
+			return fmt.Errorf("invalid data type for raw_approval insert")
+		}
+		_, err := tx.Exec(`
+			INSERT INTO raw_command_approvals (id, component_id, approved_by, approved_at, approval_note)
+			VALUES (?, ?, ?, ?, ?)
+		`, a.ID, a.ComponentID, a.ApprovedBy, a.ApprovedAt, a.ApprovalNote)
+		return err
+
+	case WriteOpDelete:
+		id, ok := op.Data.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data type for raw_approval delete")
+		}
+		_, err := tx.Exec(`DELETE FROM raw_command_approvals WHERE id = ?`, id)
 		return err
 	}
 	return nil

@@ -138,7 +138,7 @@ func WithDeploymentID(id string) func(*storage.DeploymentRecord) {
 // WithStatus sets the deployment status.
 func WithStatus(status string) func(*storage.DeploymentRecord) {
 	return func(d *storage.DeploymentRecord) {
-		d.Status = status
+		d.Status = storage.DeploymentStatus(status)
 	}
 }
 
@@ -205,7 +205,7 @@ func WithHostname(hostname string) func(*storage.Agent) {
 // WithAgentStatus sets the agent status.
 func WithAgentStatus(status string) func(*storage.Agent) {
 	return func(a *storage.Agent) {
-		a.Status = status
+		a.Status = storage.AgentStatus(status)
 	}
 }
 
