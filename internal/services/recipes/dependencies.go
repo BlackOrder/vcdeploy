@@ -2,6 +2,7 @@ package recipes
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/BlackOrder/vcdeploy/internal/storage"
@@ -146,14 +147,15 @@ func (e *DeletionBlockedError) Error() string {
 
 // IsDeletionBlockedError checks if an error is a DeletionBlockedError.
 func IsDeletionBlockedError(err error) bool {
-	_, ok := err.(*DeletionBlockedError)
-	return ok
+	var dbe *DeletionBlockedError
+	return errors.As(err, &dbe)
 }
 
 // GetDeletionBlockedError extracts the DeletionBlockedError from an error.
 func GetDeletionBlockedError(err error) *DeletionBlockedError {
-	if e, ok := err.(*DeletionBlockedError); ok {
-		return e
+	var dbe *DeletionBlockedError
+	if errors.As(err, &dbe) {
+		return dbe
 	}
 	return nil
 }

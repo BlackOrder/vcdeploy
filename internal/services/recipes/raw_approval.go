@@ -55,7 +55,7 @@ func (s *RawApprovalService) RequiresApproval(ctx context.Context, componentID i
 	approval, err := s.store.GetRawApproval(ctx, componentID)
 	if err != nil {
 		// Treat errors as "not approved" for safety
-		return true, nil
+		return true, nil //nolint:nilerr // Errors mean approval unknown - treat as needing approval
 	}
 	if approval == nil {
 		return true, nil
@@ -191,8 +191,10 @@ func (s *RawApprovalService) ListPendingApprovals(ctx context.Context) ([]*stora
 		return nil, err
 	}
 
+	allComponents := make([]*storage.RecipeComponent, 0, len(seedComponents)+len(userComponents))
+	allComponents = append(allComponents, seedComponents...)
+	allComponents = append(allComponents, userComponents...)
 	var pending []*storage.RecipeComponent
-	allComponents := append(seedComponents, userComponents...)
 
 	for _, c := range allComponents {
 		if !c.IsRaw {

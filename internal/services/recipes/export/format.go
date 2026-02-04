@@ -11,6 +11,8 @@ import (
 const FormatVersion = "v1.0.0"
 
 // ExportBundle contains exported recipe data.
+//
+//nolint:revive // ExportBundle is more descriptive than Bundle when used outside package
 type ExportBundle struct {
 	FormatVersion   string            `json:"format_version"`
 	ExportedAt      time.Time         `json:"exported_at"`

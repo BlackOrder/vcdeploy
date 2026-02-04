@@ -20,8 +20,8 @@ func TestPlaybookResolver_HasActivePlaybook(t *testing.T) {
 	assert.False(t, resolver.HasActivePlaybook(ctx, 1))
 
 	// Create and activate a playbook
-	component := createResolverTestComponent(t, db, ctx, "test-comp", "v1.0.0")
-	playbook := createResolverTestPlaybook(t, db, ctx, "test-playbook", "v1.0.0", component)
+	component := createResolverTestComponent(t, ctx, db, "test-comp", "v1.0.0")
+	playbook := createResolverTestPlaybook(t, ctx, db, "test-playbook", "v1.0.0", component)
 
 	activationSvc := NewActivationService(db)
 	_, err := activationSvc.Activate(ctx, 1, playbook.ID, map[string]VariableBinding{}, nil)
@@ -96,10 +96,10 @@ func TestPlaybookResolver_Resolve_MultiplePhases(t *testing.T) {
 	ctx := context.Background()
 
 	// Create components for each phase
-	createResolverTestComponentWithCommands(t, db, ctx, "pre-check", "v1.0.0", []string{"echo 'Pre-deploy check'"})
-	createResolverTestComponentWithCommands(t, db, ctx, "deploy-app", "v1.0.0", []string{"echo 'Deploying'"})
-	createResolverTestComponentWithCommands(t, db, ctx, "post-check", "v1.0.0", []string{"echo 'Post-deploy'"})
-	createResolverTestComponentWithCommands(t, db, ctx, "rollback-app", "v1.0.0", []string{"echo 'Rolling back'"})
+	createResolverTestComponentWithCommands(t, ctx, db, "pre-check", "v1.0.0", []string{"echo 'Pre-deploy check'"})
+	createResolverTestComponentWithCommands(t, ctx, db, "deploy-app", "v1.0.0", []string{"echo 'Deploying'"})
+	createResolverTestComponentWithCommands(t, ctx, db, "post-check", "v1.0.0", []string{"echo 'Post-deploy'"})
+	createResolverTestComponentWithCommands(t, ctx, db, "rollback-app", "v1.0.0", []string{"echo 'Rolling back'"})
 
 	// Create playbook with all phases
 	playbook := &storage.Playbook{
@@ -227,7 +227,7 @@ func TestPlaybookResolver_ValidateForDeployment(t *testing.T) {
 	ctx := context.Background()
 
 	// Create component
-	createResolverTestComponent(t, db, ctx, "valid-comp", "v1.0.0")
+	createResolverTestComponent(t, ctx, db, "valid-comp", "v1.0.0")
 
 	// Create playbook
 	playbook := &storage.Playbook{
@@ -425,7 +425,8 @@ func TestPlaybookResolver_Resolve_VariableSubstitution(t *testing.T) {
 
 // Helper functions
 
-func createResolverTestComponent(t *testing.T, db storage.Store, ctx context.Context, slug, version string) *storage.RecipeComponent {
+//nolint:revive // t *testing.T conventionally first in test helpers
+func createResolverTestComponent(t *testing.T, ctx context.Context, db storage.Store, slug, version string) *storage.RecipeComponent {
 	component := &storage.RecipeComponent{
 		Namespace:     storage.NamespaceUser,
 		Slug:          slug,
@@ -443,7 +444,8 @@ func createResolverTestComponent(t *testing.T, db storage.Store, ctx context.Con
 	return component
 }
 
-func createResolverTestComponentWithCommands(t *testing.T, db storage.Store, ctx context.Context, slug, version string, commands []string) *storage.RecipeComponent {
+//nolint:revive // t *testing.T conventionally first in test helpers
+func createResolverTestComponentWithCommands(t *testing.T, ctx context.Context, db storage.Store, slug, version string, commands []string) *storage.RecipeComponent {
 	component := &storage.RecipeComponent{
 		Namespace:     storage.NamespaceUser,
 		Slug:          slug,
@@ -461,7 +463,8 @@ func createResolverTestComponentWithCommands(t *testing.T, db storage.Store, ctx
 	return component
 }
 
-func createResolverTestPlaybook(t *testing.T, db storage.Store, ctx context.Context, slug, version string, component *storage.RecipeComponent) *storage.Playbook {
+//nolint:revive // t *testing.T conventionally first in test helpers
+func createResolverTestPlaybook(t *testing.T, ctx context.Context, db storage.Store, slug, version string, component *storage.RecipeComponent) *storage.Playbook {
 	playbook := &storage.Playbook{
 		Namespace:     storage.NamespaceUser,
 		Slug:          slug,

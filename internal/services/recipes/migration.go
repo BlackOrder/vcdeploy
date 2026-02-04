@@ -337,13 +337,13 @@ func slugify(name string) string {
 		} else if c >= '0' && c <= '9' {
 			result += string(c)
 		} else if c == ' ' || c == '_' || c == '-' {
-			if len(result) > 0 && result[len(result)-1] != '-' {
+			if result != "" && result[len(result)-1] != '-' {
 				result += "-"
 			}
 		}
 	}
 	// Trim trailing dash
-	for len(result) > 0 && result[len(result)-1] == '-' {
+	for result != "" && result[len(result)-1] == '-' {
 		result = result[:len(result)-1]
 	}
 	return result
@@ -366,7 +366,7 @@ func isRawCommand(cmd string) bool {
 
 // containsString is a simple contains check.
 func containsString(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
+	return len(s) >= len(substr) && (s == substr || s != "" && containsHelper(s, substr))
 }
 
 func containsHelper(s, substr string) bool {

@@ -24,15 +24,17 @@ func (l *Loader) LoadSeeds(ctx context.Context, logger *zap.Logger) error {
 	)
 
 	// Load components
-	for _, sc := range SeedComponents {
-		if err := l.loadComponent(ctx, sc, logger); err != nil {
+	for idx := range SeedComponents {
+		sc := &SeedComponents[idx]
+		if err := l.loadComponent(ctx, *sc, logger); err != nil {
 			return fmt.Errorf("failed to load component %s:%s: %w", sc.Slug, sc.Version, err)
 		}
 	}
 
 	// Load playbooks
-	for _, sp := range SeedPlaybooks {
-		if err := l.loadPlaybook(ctx, sp, logger); err != nil {
+	for idx := range SeedPlaybooks {
+		sp := &SeedPlaybooks[idx]
+		if err := l.loadPlaybook(ctx, *sp, logger); err != nil {
 			return fmt.Errorf("failed to load playbook %s:%s: %w", sp.Slug, sp.Version, err)
 		}
 	}

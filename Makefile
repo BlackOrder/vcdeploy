@@ -340,7 +340,7 @@ vuln: ## Run vulnerability check
 
 .PHONY: gosec
 gosec: ## Run security scanner
-	gosec -exclude=G104,G115,G204,G301,G302,G304,G306 -quiet ./...
+	gosec -exclude=G104,G115,G204,G301,G302,G304,G306 -exclude-generated -quiet ./...
 
 .PHONY: verify
 verify: lint vet vuln test ## Run all verification checks
@@ -352,9 +352,12 @@ verify: lint vet vuln test ## Run all verification checks
 .PHONY: proto
 proto: ## Generate protobuf code
 	@mkdir -p $(PROTO_OUT)
-	protoc --go_out=$(PROTO_OUT) --go_opt=paths=source_relative \
+	protoc -I=$(PROTO_DIR) \
+		--go_out=$(PROTO_OUT) --go_opt=paths=source_relative \
 		--go-grpc_out=$(PROTO_OUT) --go-grpc_opt=paths=source_relative \
 		$(PROTO_DIR)/*.proto
+	@# Clean up any nested directories created by protoc
+	@rm -rf $(PROTO_OUT)/api 2>/dev/null || true
 
 .PHONY: proto-check
 proto-check: proto ## Verify proto stubs are up to date (mirrors CI)

@@ -125,8 +125,8 @@ func (s *ComponentService) CreateFromSeed(ctx context.Context, seedID int64, new
 		return nil, fmt.Errorf("invalid version: %w", err)
 	}
 
-	// Create copy in user namespace
-	copy := &storage.RecipeComponent{
+	// Create clone in user namespace
+	cloned := &storage.RecipeComponent{
 		Namespace:     storage.NamespaceUser,
 		Slug:          newSlug,
 		Version:       validation.NormalizeSemver(newVersion),
@@ -141,11 +141,11 @@ func (s *ComponentService) CreateFromSeed(ctx context.Context, seedID int64, new
 		CreatedAt:     time.Now(),
 	}
 
-	if err := s.store.CreateRecipeComponent(ctx, copy); err != nil {
+	if err := s.store.CreateRecipeComponent(ctx, cloned); err != nil {
 		return nil, err
 	}
 
-	return copy, nil
+	return cloned, nil
 }
 
 // ValidateVariables checks if provided bindings satisfy required variables.
