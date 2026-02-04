@@ -961,9 +961,7 @@ func (s *AgentServer) StreamRepoArchive(req *proto.StreamRepoRequest, stream pro
 		zap.String("ref", req.Ref),
 	)
 
-	// Verify agent is assigned to this deployment
-	// TODO: For multi-agent deployments, we'd need a deployment_agents table
-	// For now, just verify the deployment exists
+	// Verify agent is assigned to this deployment (multi-agent deployment support)
 	if req.DeploymentId != "" {
 		deployment, err := s.deploymentService.GetByID(ctx, req.DeploymentId)
 		if err != nil {
@@ -972,6 +970,25 @@ func (s *AgentServer) StreamRepoArchive(req *proto.StreamRepoRequest, stream pro
 		if deployment == nil {
 			return status.Error(codes.NotFound, "deployment not found")
 		}
+
+		// Check if this is a multi-agent deployment (has assignments in deployment_agents)
+		agents, err := s.store.GetDeploymentAgents(ctx, req.DeploymentId)
+		if err != nil {
+			return status.Errorf(codes.Internal, "failed to check deployment agents: %v", err)
+		}
+
+		// If deployment_agents has entries, verify this agent is assigned
+		if len(agents) > 0 {
+			assigned, err := s.store.IsAgentAssignedToDeployment(ctx, req.DeploymentId, agentID)
+			if err != nil {
+				return status.Errorf(codes.Internal, "failed to verify agent assignment: %v", err)
+			}
+			if !assigned {
+				return status.Errorf(codes.PermissionDenied, "agent %s not assigned to deployment %s", agentID, req.DeploymentId)
+			}
+		}
+		// For single-agent deployments (no entries in deployment_agents), allow any agent
+		// This maintains backward compatibility with existing single-agent deployments
 	}
 
 	// Check if git service is configured
