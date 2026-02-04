@@ -22,13 +22,13 @@ func TestRecipeComponentStorage(t *testing.T) {
 			Slug:          "test-component",
 			Version:       "v1.0.0",
 			Name:          "Test Component",
-			ComponentType: "shell",
+			ComponentType: "command",
 			Description:   "A test component",
 			Content:       storage.ComponentContent{},
 			CreatedAt:     time.Now(),
 		}
 
-		if err := fix.DB.CreateComponent(ctx, component); err != nil {
+		if err := fix.DB.CreateRecipeComponent(ctx, component); err != nil {
 			t.Fatalf("Failed to create component: %v", err)
 		}
 
@@ -37,7 +37,7 @@ func TestRecipeComponentStorage(t *testing.T) {
 		}
 
 		// Get by ref
-		got, err := fix.DB.GetComponentByRef(ctx, "user", "test-component", "v1.0.0")
+		got, err := fix.DB.GetRecipeComponent(ctx, storage.NamespaceUser, "test-component", "v1.0.0")
 		if err != nil {
 			t.Fatalf("Failed to get component: %v", err)
 		}
@@ -57,14 +57,14 @@ func TestRecipeComponentStorage(t *testing.T) {
 			Slug:          "test-component-2",
 			Version:       "v1.0.0",
 			Name:          "Test Component 2",
-			ComponentType: "shell",
+			ComponentType: "command",
 			Content:       storage.ComponentContent{},
 			CreatedAt:     time.Now(),
 		}
-		fix.DB.CreateComponent(ctx, component)
+		fix.DB.CreateRecipeComponent(ctx, component)
 
 		// List user components
-		components, err := fix.DB.ListComponents(ctx, "user", false)
+		components, err := fix.DB.ListRecipeComponents(ctx, storage.NamespaceUser, false)
 		if err != nil {
 			t.Fatalf("Failed to list components: %v", err)
 		}
@@ -102,7 +102,7 @@ func TestRecipePlaybookStorage(t *testing.T) {
 			t.Error("Playbook ID should be set after create")
 		}
 
-		got, err := fix.DB.GetPlaybookByRef(ctx, "user", "test-playbook", "v1.0.0")
+		got, err := fix.DB.GetPlaybook(ctx, storage.NamespaceUser, "test-playbook", "v1.0.0")
 		if err != nil {
 			t.Fatalf("Failed to get playbook: %v", err)
 		}
@@ -138,7 +138,7 @@ func TestRecipePlaybookStorage(t *testing.T) {
 			t.Fatalf("Failed to create playbook with steps: %v", err)
 		}
 
-		got, err := fix.DB.GetPlaybookByRef(ctx, "user", "steps-playbook", "v1.0.0")
+		got, err := fix.DB.GetPlaybook(ctx, storage.NamespaceUser, "steps-playbook", "v1.0.0")
 		if err != nil {
 			t.Fatalf("Failed to get playbook: %v", err)
 		}
@@ -187,7 +187,7 @@ func TestRecipeActivationStorage(t *testing.T) {
 	})
 
 	t.Run("GetActivePlaybook", func(t *testing.T) {
-		activation, err := fix.DB.GetActivePlaybookActivation(ctx, project.ID)
+		activation, err := fix.DB.GetPlaybookActivation(ctx, project.ID)
 		if err != nil {
 			t.Fatalf("Failed to get active playbook: %v", err)
 		}
@@ -211,7 +211,7 @@ func TestEmptyNamespaceStates(t *testing.T) {
 
 	t.Run("EmptySeedComponents", func(t *testing.T) {
 		// New database should have no seed components
-		components, err := fix.DB.ListComponents(ctx, "seed", false)
+		components, err := fix.DB.ListRecipeComponents(ctx, storage.NamespaceSeed, false)
 		if err != nil {
 			t.Fatalf("Failed to list: %v", err)
 		}
