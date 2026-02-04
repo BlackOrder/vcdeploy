@@ -26,7 +26,7 @@ func (s *MasterServer) handleCredentials(w http.ResponseWriter, r *http.Request)
 		case http.MethodPost:
 			s.handleCreateCredential(w, r)
 		default:
-			s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+			s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
 		return
 	}
@@ -38,7 +38,7 @@ func (s *MasterServer) handleCredentials(w http.ResponseWriter, r *http.Request)
 	// Parse credential ID
 	credID, err := strconv.ParseInt(parts[0], 10, 64)
 	if err != nil {
-		s.jsonError(w, http.StatusBadRequest, "Invalid credential ID")
+		s.jsonError(w, http.StatusBadRequest, "invalid credential ID")
 		return
 	}
 
@@ -52,7 +52,7 @@ func (s *MasterServer) handleCredentials(w http.ResponseWriter, r *http.Request)
 		case http.MethodDelete:
 			s.handleDeleteCredential(w, r, credID)
 		default:
-			s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+			s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
 		return
 	}
@@ -63,7 +63,7 @@ func (s *MasterServer) handleCredentials(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	s.jsonError(w, http.StatusNotFound, "Not found")
+	s.jsonError(w, http.StatusNotFound, "not found")
 }
 
 // handleListCredentials lists all credentials.
@@ -74,7 +74,7 @@ func (s *MasterServer) handleListCredentials(w http.ResponseWriter, r *http.Requ
 	creds, err := credService.ListCredentials(ctx)
 	if err != nil {
 		s.logger.Error("Failed to list credentials", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+		s.jsonError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -92,11 +92,11 @@ func (s *MasterServer) handleGetCredential(w http.ResponseWriter, r *http.Reques
 	cred, err := credService.GetCredential(ctx, id)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") || services.IsNotFound(err) {
-			s.jsonError(w, http.StatusNotFound, "Credential not found")
+			s.jsonError(w, http.StatusNotFound, "credential not found")
 			return
 		}
 		s.logger.Error("Failed to get credential", zap.Error(err), zap.Int64("id", id))
-		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+		s.jsonError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -109,7 +109,7 @@ func (s *MasterServer) handleCreateCredential(w http.ResponseWriter, r *http.Req
 
 	var req security.CreateCredentialRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.jsonError(w, http.StatusBadRequest, "Invalid request body")
+		s.jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
@@ -133,7 +133,7 @@ func (s *MasterServer) handleCreateCredential(w http.ResponseWriter, r *http.Req
 			return
 		}
 		s.logger.Error("Failed to create credential", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+		s.jsonError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -147,7 +147,7 @@ func (s *MasterServer) handleUpdateCredential(w http.ResponseWriter, r *http.Req
 
 	var req security.UpdateCredentialRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.jsonError(w, http.StatusBadRequest, "Invalid request body")
+		s.jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
@@ -155,7 +155,7 @@ func (s *MasterServer) handleUpdateCredential(w http.ResponseWriter, r *http.Req
 	cred, err := credService.UpdateCredential(ctx, id, req)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") || services.IsNotFound(err) {
-			s.jsonError(w, http.StatusNotFound, "Credential not found")
+			s.jsonError(w, http.StatusNotFound, "credential not found")
 			return
 		}
 		var inputErr *services.InputError
@@ -164,7 +164,7 @@ func (s *MasterServer) handleUpdateCredential(w http.ResponseWriter, r *http.Req
 			return
 		}
 		s.logger.Error("Failed to update credential", zap.Error(err), zap.Int64("id", id))
-		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+		s.jsonError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -179,11 +179,11 @@ func (s *MasterServer) handleDeleteCredential(w http.ResponseWriter, r *http.Req
 	credService := security.NewCredentialService(s.store, s.kms, s.logger)
 	if err := credService.DeleteCredential(ctx, id); err != nil {
 		if strings.Contains(err.Error(), "not found") || services.IsNotFound(err) {
-			s.jsonError(w, http.StatusNotFound, "Credential not found")
+			s.jsonError(w, http.StatusNotFound, "credential not found")
 			return
 		}
 		s.logger.Error("Failed to delete credential", zap.Error(err), zap.Int64("id", id))
-		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+		s.jsonError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -199,7 +199,7 @@ type TestCredentialRequestBody struct {
 // handleTestCredential tests a credential against a repo URL.
 func (s *MasterServer) handleTestCredential(w http.ResponseWriter, r *http.Request, id int64) {
 	if r.Method != http.MethodPost {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
@@ -207,7 +207,7 @@ func (s *MasterServer) handleTestCredential(w http.ResponseWriter, r *http.Reque
 
 	var req TestCredentialRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.jsonError(w, http.StatusBadRequest, "Invalid request body")
+		s.jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
@@ -220,11 +220,11 @@ func (s *MasterServer) handleTestCredential(w http.ResponseWriter, r *http.Reque
 	result, err := credService.TestCredential(ctx, id, req.RepoURL)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") || services.IsNotFound(err) {
-			s.jsonError(w, http.StatusNotFound, "Credential not found")
+			s.jsonError(w, http.StatusNotFound, "credential not found")
 			return
 		}
 		s.logger.Error("Failed to test credential", zap.Error(err), zap.Int64("id", id))
-		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+		s.jsonError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 

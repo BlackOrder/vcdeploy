@@ -26,7 +26,7 @@ func (s *MasterServer) handleSSHKeys(w http.ResponseWriter, r *http.Request) {
 		case http.MethodPost:
 			s.handleGenerateSSHKey(w, r)
 		default:
-			s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+			s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
 		return
 	}
@@ -44,7 +44,7 @@ func (s *MasterServer) handleSSHKeys(w http.ResponseWriter, r *http.Request) {
 	// Parse key ID
 	keyID, err := strconv.ParseInt(parts[0], 10, 64)
 	if err != nil {
-		s.jsonError(w, http.StatusBadRequest, "Invalid SSH key ID")
+		s.jsonError(w, http.StatusBadRequest, "invalid SSH key ID")
 		return
 	}
 
@@ -56,7 +56,7 @@ func (s *MasterServer) handleSSHKeys(w http.ResponseWriter, r *http.Request) {
 		case http.MethodDelete:
 			s.handleDeleteSSHKey(w, r, keyID)
 		default:
-			s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+			s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
 		return
 	}
@@ -67,7 +67,7 @@ func (s *MasterServer) handleSSHKeys(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.jsonError(w, http.StatusNotFound, "Not found")
+	s.jsonError(w, http.StatusNotFound, "not found")
 }
 
 // handleListSSHKeys lists all SSH keys.
@@ -78,7 +78,7 @@ func (s *MasterServer) handleListSSHKeys(w http.ResponseWriter, r *http.Request)
 	keys, err := sshKeyService.ListSSHKeys(ctx)
 	if err != nil {
 		s.logger.Error("Failed to list SSH keys", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+		s.jsonError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -100,7 +100,7 @@ func (s *MasterServer) handleGetSSHKey(w http.ResponseWriter, r *http.Request, i
 			return
 		}
 		s.logger.Error("Failed to get SSH key", zap.Error(err), zap.Int64("id", id))
-		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+		s.jsonError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -113,7 +113,7 @@ func (s *MasterServer) handleGenerateSSHKey(w http.ResponseWriter, r *http.Reque
 
 	var req security.GenerateSSHKeyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.jsonError(w, http.StatusBadRequest, "Invalid request body")
+		s.jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
@@ -137,7 +137,7 @@ func (s *MasterServer) handleGenerateSSHKey(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		s.logger.Error("Failed to generate SSH key", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+		s.jsonError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -148,7 +148,7 @@ func (s *MasterServer) handleGenerateSSHKey(w http.ResponseWriter, r *http.Reque
 // handleImportSSHKey imports an existing SSH key.
 func (s *MasterServer) handleImportSSHKey(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
@@ -156,7 +156,7 @@ func (s *MasterServer) handleImportSSHKey(w http.ResponseWriter, r *http.Request
 
 	var req security.ImportSSHKeyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.jsonError(w, http.StatusBadRequest, "Invalid request body")
+		s.jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
@@ -180,7 +180,7 @@ func (s *MasterServer) handleImportSSHKey(w http.ResponseWriter, r *http.Request
 			return
 		}
 		s.logger.Error("Failed to import SSH key", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+		s.jsonError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -199,7 +199,7 @@ func (s *MasterServer) handleDeleteSSHKey(w http.ResponseWriter, r *http.Request
 			return
 		}
 		s.logger.Error("Failed to delete SSH key", zap.Error(err), zap.Int64("id", id))
-		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+		s.jsonError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -210,7 +210,7 @@ func (s *MasterServer) handleDeleteSSHKey(w http.ResponseWriter, r *http.Request
 // handleGetSSHKeyPublic returns just the public key (for authorized_keys).
 func (s *MasterServer) handleGetSSHKeyPublic(w http.ResponseWriter, r *http.Request, id int64) {
 	if r.Method != http.MethodGet {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
@@ -224,7 +224,7 @@ func (s *MasterServer) handleGetSSHKeyPublic(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		s.logger.Error("Failed to get SSH key public key", zap.Error(err), zap.Int64("id", id))
-		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+		s.jsonError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 

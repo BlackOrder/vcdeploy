@@ -30,7 +30,7 @@ func (s *MasterServer) handleHostKeys(w http.ResponseWriter, r *http.Request) {
 		keys, err := s.hostKeyService.List(ctx)
 		if err != nil {
 			s.logger.Error("Failed to list host keys", zap.Error(err))
-			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+			s.jsonError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}
 
@@ -73,7 +73,7 @@ func (s *MasterServer) handleHostKeys(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-			s.jsonError(w, http.StatusBadRequest, "Invalid JSON body")
+			s.jsonError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
 
@@ -114,14 +114,14 @@ func (s *MasterServer) handleHostKeys(w http.ResponseWriter, r *http.Request) {
 
 		if err := s.hostKeyService.Create(ctx, key); err != nil {
 			s.logger.Error("Failed to create host key", zap.Error(err))
-			s.jsonError(w, http.StatusInternalServerError, "Failed to create host key")
+			s.jsonError(w, http.StatusInternalServerError, "failed to create host key")
 			return
 		}
 
 		s.writeJSON(w, http.StatusCreated, key)
 
 	default:
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
@@ -136,7 +136,7 @@ func (s *MasterServer) handleHostKey(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/host-keys/")
 	id, err := strconv.ParseInt(path, 10, 64)
 	if err != nil {
-		s.jsonError(w, http.StatusBadRequest, "Invalid host key ID")
+		s.jsonError(w, http.StatusBadRequest, "invalid host key ID")
 		return
 	}
 
@@ -151,7 +151,7 @@ func (s *MasterServer) handleHostKey(w http.ResponseWriter, r *http.Request) {
 		keys, err := s.hostKeyService.List(ctx)
 		if err != nil {
 			s.logger.Error("Failed to list host keys", zap.Error(err))
-			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+			s.jsonError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}
 
@@ -164,7 +164,7 @@ func (s *MasterServer) handleHostKey(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if found == nil {
-			s.jsonError(w, http.StatusNotFound, "Host key not found")
+			s.jsonError(w, http.StatusNotFound, "host key not found")
 			return
 		}
 
@@ -181,7 +181,7 @@ func (s *MasterServer) handleHostKey(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-			s.jsonError(w, http.StatusBadRequest, "Invalid JSON body")
+			s.jsonError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
 
@@ -195,7 +195,7 @@ func (s *MasterServer) handleHostKey(w http.ResponseWriter, r *http.Request) {
 
 		if err := s.hostKeyService.UpdateTrust(ctx, id, input.Trusted, verifiedBy); err != nil {
 			s.logger.Error("Failed to update host key trust", zap.Error(err))
-			s.jsonError(w, http.StatusInternalServerError, "Failed to update host key")
+			s.jsonError(w, http.StatusInternalServerError, "failed to update host key")
 			return
 		}
 
@@ -210,14 +210,14 @@ func (s *MasterServer) handleHostKey(w http.ResponseWriter, r *http.Request) {
 
 		if err := s.hostKeyService.Delete(ctx, id); err != nil {
 			s.logger.Error("Failed to delete host key", zap.Error(err))
-			s.jsonError(w, http.StatusInternalServerError, "Failed to delete host key")
+			s.jsonError(w, http.StatusInternalServerError, "failed to delete host key")
 			return
 		}
 
 		w.WriteHeader(http.StatusNoContent)
 
 	default:
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
@@ -237,7 +237,7 @@ func (s *MasterServer) handleJumpServers(w http.ResponseWriter, r *http.Request)
 		servers, err := s.store.ListJumpServers(ctx)
 		if err != nil {
 			s.logger.Error("Failed to list jump servers", zap.Error(err))
-			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+			s.jsonError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}
 
@@ -278,7 +278,7 @@ func (s *MasterServer) handleJumpServers(w http.ResponseWriter, r *http.Request)
 		}
 
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-			s.jsonError(w, http.StatusBadRequest, "Invalid JSON body")
+			s.jsonError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
 
@@ -309,14 +309,14 @@ func (s *MasterServer) handleJumpServers(w http.ResponseWriter, r *http.Request)
 
 		if err := s.store.CreateJumpServer(ctx, server); err != nil {
 			s.logger.Error("Failed to create jump server", zap.Error(err))
-			s.jsonError(w, http.StatusInternalServerError, "Failed to create jump server")
+			s.jsonError(w, http.StatusInternalServerError, "failed to create jump server")
 			return
 		}
 
 		s.writeJSON(w, http.StatusCreated, server)
 
 	default:
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
@@ -328,7 +328,7 @@ func (s *MasterServer) handleJumpServer(w http.ResponseWriter, r *http.Request) 
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/jump-servers/")
 	id, err := strconv.ParseInt(path, 10, 64)
 	if err != nil {
-		s.jsonError(w, http.StatusBadRequest, "Invalid jump server ID")
+		s.jsonError(w, http.StatusBadRequest, "invalid jump server ID")
 		return
 	}
 
@@ -342,11 +342,11 @@ func (s *MasterServer) handleJumpServer(w http.ResponseWriter, r *http.Request) 
 		server, err := s.store.GetJumpServer(ctx, id)
 		if err != nil {
 			if services.IsNotFound(err) {
-				s.jsonError(w, http.StatusNotFound, "Jump server not found")
+				s.jsonError(w, http.StatusNotFound, "jump server not found")
 				return
 			}
 			s.logger.Error("Failed to get jump server", zap.Error(err))
-			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+			s.jsonError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}
 
@@ -367,7 +367,7 @@ func (s *MasterServer) handleJumpServer(w http.ResponseWriter, r *http.Request) 
 		}
 
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-			s.jsonError(w, http.StatusBadRequest, "Invalid JSON body")
+			s.jsonError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
 
@@ -382,7 +382,7 @@ func (s *MasterServer) handleJumpServer(w http.ResponseWriter, r *http.Request) 
 
 		if err := s.store.UpdateJumpServer(ctx, server); err != nil {
 			s.logger.Error("Failed to update jump server", zap.Error(err))
-			s.jsonError(w, http.StatusInternalServerError, "Failed to update jump server")
+			s.jsonError(w, http.StatusInternalServerError, "failed to update jump server")
 			return
 		}
 
@@ -396,14 +396,14 @@ func (s *MasterServer) handleJumpServer(w http.ResponseWriter, r *http.Request) 
 
 		if err := s.store.DeleteJumpServer(ctx, id); err != nil {
 			s.logger.Error("Failed to delete jump server", zap.Error(err))
-			s.jsonError(w, http.StatusInternalServerError, "Failed to delete jump server")
+			s.jsonError(w, http.StatusInternalServerError, "failed to delete jump server")
 			return
 		}
 
 		w.WriteHeader(http.StatusNoContent)
 
 	default:
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
@@ -437,7 +437,7 @@ func (s *MasterServer) handleBlockedIPs(w http.ResponseWriter, r *http.Request) 
 		blocked, total, err := s.store.ListBlockedIPs(ctx, limit, offset)
 		if err != nil {
 			s.logger.Error("Failed to list blocked IPs", zap.Error(err))
-			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+			s.jsonError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}
 
@@ -464,7 +464,7 @@ func (s *MasterServer) handleBlockedIPs(w http.ResponseWriter, r *http.Request) 
 		}
 
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-			s.jsonError(w, http.StatusBadRequest, "Invalid JSON body")
+			s.jsonError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
 
@@ -477,7 +477,7 @@ func (s *MasterServer) handleBlockedIPs(w http.ResponseWriter, r *http.Request) 
 		if input.Duration != "" {
 			d, err := time.ParseDuration(input.Duration)
 			if err != nil {
-				s.jsonError(w, http.StatusBadRequest, "Invalid duration format (use Go duration syntax like '24h', '7d')")
+				s.jsonError(w, http.StatusBadRequest, "invalid duration format (use Go duration syntax like '24h', '7d')")
 				return
 			}
 			duration = d
@@ -501,14 +501,14 @@ func (s *MasterServer) handleBlockedIPs(w http.ResponseWriter, r *http.Request) 
 
 		if err := s.store.BlockIP(ctx, blocked); err != nil {
 			s.logger.Error("Failed to block IP", zap.Error(err))
-			s.jsonError(w, http.StatusInternalServerError, "Failed to block IP")
+			s.jsonError(w, http.StatusInternalServerError, "failed to block IP")
 			return
 		}
 
 		s.writeJSON(w, http.StatusCreated, blocked)
 
 	default:
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
@@ -537,7 +537,7 @@ func (s *MasterServer) handleBlockedIP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			s.logger.Error("Failed to get blocked IP", zap.Error(err))
-			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+			s.jsonError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}
 
@@ -551,7 +551,7 @@ func (s *MasterServer) handleBlockedIP(w http.ResponseWriter, r *http.Request) {
 
 		if err := s.store.UnblockIP(ctx, ip); err != nil {
 			s.logger.Error("Failed to unblock IP", zap.Error(err))
-			s.jsonError(w, http.StatusInternalServerError, "Failed to unblock IP")
+			s.jsonError(w, http.StatusInternalServerError, "failed to unblock IP")
 			return
 		}
 
@@ -559,7 +559,7 @@ func (s *MasterServer) handleBlockedIP(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"status":"unblocked"}`))
 
 	default:
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
@@ -580,7 +580,7 @@ func (s *MasterServer) handleProvisionJobs(w http.ResponseWriter, r *http.Reques
 		jobs, err := s.provisionService.ListPending(ctx)
 		if err != nil {
 			s.logger.Error("Failed to list provision jobs", zap.Error(err))
-			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+			s.jsonError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}
 
@@ -621,7 +621,7 @@ func (s *MasterServer) handleProvisionJobs(w http.ResponseWriter, r *http.Reques
 		}
 
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-			s.jsonError(w, http.StatusBadRequest, "Invalid JSON body")
+			s.jsonError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
 
@@ -647,14 +647,14 @@ func (s *MasterServer) handleProvisionJobs(w http.ResponseWriter, r *http.Reques
 
 		if err := s.provisionService.CreateJob(ctx, job); err != nil {
 			s.logger.Error("Failed to create provision job", zap.Error(err))
-			s.jsonError(w, http.StatusInternalServerError, "Failed to create provision job")
+			s.jsonError(w, http.StatusInternalServerError, "failed to create provision job")
 			return
 		}
 
 		s.writeJSON(w, http.StatusCreated, job)
 
 	default:
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
@@ -665,7 +665,7 @@ func (s *MasterServer) handleProvisionJob(w http.ResponseWriter, r *http.Request
 	// Extract ID from path
 	jobID := strings.TrimPrefix(r.URL.Path, "/api/v1/provision/")
 	if jobID == "" {
-		s.jsonError(w, http.StatusBadRequest, "Job ID required")
+		s.jsonError(w, http.StatusBadRequest, "job ID required")
 		return
 	}
 
@@ -679,7 +679,7 @@ func (s *MasterServer) handleProvisionJob(w http.ResponseWriter, r *http.Request
 		job, err := s.provisionService.GetJob(ctx, jobID)
 		if err != nil {
 			s.logger.Error("Failed to get provision job", zap.Error(err))
-			s.jsonError(w, http.StatusNotFound, "Provision job not found")
+			s.jsonError(w, http.StatusNotFound, "provision job not found")
 			return
 		}
 
@@ -694,7 +694,7 @@ func (s *MasterServer) handleProvisionJob(w http.ResponseWriter, r *http.Request
 		// Cancel the job (marks as cancelled rather than actual deletion)
 		if err := s.provisionService.Cancel(ctx, jobID); err != nil {
 			s.logger.Error("Failed to cancel provision job", zap.Error(err))
-			s.jsonError(w, http.StatusInternalServerError, "Failed to cancel provision job")
+			s.jsonError(w, http.StatusInternalServerError, "failed to cancel provision job")
 			return
 		}
 
@@ -702,6 +702,6 @@ func (s *MasterServer) handleProvisionJob(w http.ResponseWriter, r *http.Request
 		_, _ = w.Write([]byte(`{"status":"cancelled"}`))
 
 	default:
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
