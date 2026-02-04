@@ -1503,3 +1503,278 @@ func TestE2E_ConnectionTimeout(t *testing.T) {
 		t.Errorf("expected connection error, got: %v", err)
 	}
 }
+
+// =============================================================================
+// CLI Command Structure Tests for Certificates, Credentials, Provision, Recipes
+// =============================================================================
+
+// TestCertsCmdStructure tests the certs command structure.
+func TestCertsCmdStructure(t *testing.T) {
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
+
+	if certsCmd == nil {
+		t.Fatal("certsCmd is nil")
+	}
+
+	// Check subcommands exist
+	subcommands := make(map[string]bool)
+	for _, cmd := range certsCmd.Commands() {
+		subcommands[cmd.Name()] = true
+	}
+
+	expectedCommands := []string{"list", "show", "revoke", "ca", "audit"}
+	for _, name := range expectedCommands {
+		if !subcommands[name] {
+			t.Errorf("expected certs subcommand %q not found", name)
+		}
+	}
+}
+
+// TestCredsCmdStructure tests the creds command structure.
+func TestCredsCmdStructure(t *testing.T) {
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
+
+	if credsCmd == nil {
+		t.Fatal("credsCmd is nil")
+	}
+
+	// Check subcommands exist
+	subcommands := make(map[string]bool)
+	for _, cmd := range credsCmd.Commands() {
+		subcommands[cmd.Name()] = true
+	}
+
+	expectedCommands := []string{"list", "add", "delete", "test"}
+	for _, name := range expectedCommands {
+		if !subcommands[name] {
+			t.Errorf("expected creds subcommand %q not found", name)
+		}
+	}
+}
+
+// TestProvisionCmdStructure tests the provision command structure.
+func TestProvisionCmdStructure(t *testing.T) {
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
+
+	if provisionCmd == nil {
+		t.Fatal("provisionCmd is nil")
+	}
+
+	// Check subcommands exist
+	subcommands := make(map[string]bool)
+	for _, cmd := range provisionCmd.Commands() {
+		subcommands[cmd.Name()] = true
+	}
+
+	expectedCommands := []string{"list", "status", "logs"}
+	for _, name := range expectedCommands {
+		if !subcommands[name] {
+			t.Errorf("expected provision subcommand %q not found", name)
+		}
+	}
+}
+
+// TestRecipesCmdStructure tests the recipes command structure.
+func TestRecipesCmdStructure(t *testing.T) {
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
+
+	if RecipesCmd == nil {
+		t.Fatal("RecipesCmd is nil")
+	}
+
+	// Check subcommands exist
+	subcommands := make(map[string]bool)
+	for _, cmd := range RecipesCmd.Commands() {
+		subcommands[cmd.Name()] = true
+	}
+
+	// RecipesCmd has import-yaml subcommand
+	expectedCommands := []string{"import-yaml"}
+	for _, name := range expectedCommands {
+		if !subcommands[name] {
+			t.Errorf("expected recipes subcommand %q not found", name)
+		}
+	}
+}
+
+// TestSSHKeysCmdStructure tests the ssh-keys command structure.
+func TestSSHKeysCmdStructure(t *testing.T) {
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
+
+	if sshKeysCmd == nil {
+		t.Fatal("sshKeysCmd is nil")
+	}
+
+	// Check subcommands exist
+	subcommands := make(map[string]bool)
+	for _, cmd := range sshKeysCmd.Commands() {
+		subcommands[cmd.Name()] = true
+	}
+
+	expectedCommands := []string{"list", "generate", "delete"}
+	for _, name := range expectedCommands {
+		if !subcommands[name] {
+			t.Errorf("expected ssh-keys subcommand %q not found", name)
+		}
+	}
+}
+
+// TestCertsAddFlags tests the certs add command flags.
+func TestCertsAddFlags(t *testing.T) {
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
+
+	var showCmd *cobra.Command
+	for _, cmd := range certsCmd.Commands() {
+		if cmd.Name() == "show" {
+			showCmd = cmd
+			break
+		}
+	}
+
+	if showCmd == nil {
+		t.Fatal("certs show command not found")
+	}
+
+	// Test args validation - requires exactly 1 arg (agent-id)
+	if err := showCmd.Args(showCmd, []string{}); err == nil {
+		t.Error("certs show should require exactly 1 argument")
+	}
+
+	if err := showCmd.Args(showCmd, []string{"agent-001"}); err != nil {
+		t.Errorf("certs show should accept 1 argument, got error: %v", err)
+	}
+}
+
+// TestCredsAddFlags tests the creds add command flags.
+func TestCredsAddFlags(t *testing.T) {
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
+
+	var addCmd *cobra.Command
+	for _, cmd := range credsCmd.Commands() {
+		if cmd.Name() == "add" {
+			addCmd = cmd
+			break
+		}
+	}
+
+	if addCmd == nil {
+		t.Fatal("creds add command not found")
+	}
+
+	// Check required flags exist
+	nameFlag := addCmd.Flags().Lookup("name")
+	if nameFlag == nil {
+		t.Error("expected flag --name not found on creds add")
+	}
+
+	typeFlag := addCmd.Flags().Lookup("type")
+	if typeFlag == nil {
+		t.Error("expected flag --type not found on creds add")
+	}
+
+	urlPatternFlag := addCmd.Flags().Lookup("url-pattern")
+	if urlPatternFlag == nil {
+		t.Error("expected flag --url-pattern not found on creds add")
+	}
+}
+
+// TestProvisionFlags tests the provision command flags.
+func TestProvisionFlags(t *testing.T) {
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
+
+	// Check required flags exist on main provision command
+	hostFlag := provisionCmd.Flags().Lookup("host")
+	if hostFlag == nil {
+		t.Error("expected flag --host not found on provision")
+	}
+
+	userFlag := provisionCmd.Flags().Lookup("user")
+	if userFlag == nil {
+		t.Error("expected flag --user not found on provision")
+	}
+
+	sshKeyFlag := provisionCmd.Flags().Lookup("ssh-key")
+	if sshKeyFlag == nil {
+		t.Error("expected flag --ssh-key not found on provision")
+	}
+
+	portFlag := provisionCmd.Flags().Lookup("port")
+	if portFlag == nil {
+		t.Error("expected flag --port not found on provision")
+	}
+}
+
+// TestRecipesImportYAMLFlags tests the recipes import-yaml command flags.
+func TestRecipesImportYAMLFlags(t *testing.T) {
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
+
+	var importCmd *cobra.Command
+	for _, cmd := range RecipesCmd.Commands() {
+		if cmd.Name() == "import-yaml" {
+			importCmd = cmd
+			break
+		}
+	}
+
+	if importCmd == nil {
+		t.Fatal("recipes import-yaml command not found")
+	}
+
+	// Check flags exist
+	projectIDFlag := importCmd.Flags().Lookup("project-id")
+	if projectIDFlag == nil {
+		t.Error("expected flag --project-id not found on recipes import-yaml")
+	}
+
+	nameFlag := importCmd.Flags().Lookup("name")
+	if nameFlag == nil {
+		t.Error("expected flag --name not found on recipes import-yaml")
+	}
+
+	versionFlag := importCmd.Flags().Lookup("version")
+	if versionFlag == nil {
+		t.Error("expected flag --version not found on recipes import-yaml")
+	}
+
+	previewFlag := importCmd.Flags().Lookup("preview")
+	if previewFlag == nil {
+		t.Error("expected flag --preview not found on recipes import-yaml")
+	}
+
+	// Test args validation - requires exactly 1 arg (yaml file)
+	if err := importCmd.Args(importCmd, []string{}); err == nil {
+		t.Error("recipes import-yaml should require exactly 1 argument")
+	}
+
+	if err := importCmd.Args(importCmd, []string{"project.yaml"}); err != nil {
+		t.Errorf("recipes import-yaml should accept 1 argument, got error: %v", err)
+	}
+}
+
+// TestSSHKeysGenerateFlags tests the ssh-keys generate command flags.
+func TestSSHKeysGenerateFlags(t *testing.T) {
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
+
+	var genCmd *cobra.Command
+	for _, cmd := range sshKeysCmd.Commands() {
+		if cmd.Name() == "generate" {
+			genCmd = cmd
+			break
+		}
+	}
+
+	if genCmd == nil {
+		t.Fatal("ssh-keys generate command not found")
+	}
+
+	// Check required flags exist
+	nameFlag := genCmd.Flags().Lookup("name")
+	if nameFlag == nil {
+		t.Error("expected flag --name not found on ssh-keys generate")
+	}
+
+	commentFlag := genCmd.Flags().Lookup("comment")
+	if commentFlag == nil {
+		t.Error("expected flag --comment not found on ssh-keys generate")
+	}
+}
