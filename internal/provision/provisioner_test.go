@@ -68,7 +68,7 @@ func (m *mockAgentService) Count(_ context.Context) (int64, error) {
 func (m *mockAgentService) CountByStatus(_ context.Context) (map[string]int64, error) {
 	result := make(map[string]int64)
 	for _, a := range m.agents {
-		result[a.Status]++
+		result[a.Status.String()]++
 	}
 	return result, nil
 }

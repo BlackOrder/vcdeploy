@@ -188,7 +188,7 @@ func (s *MasterServer) handleGetProvisionStatus(w http.ResponseWriter, r *http.R
 		TargetHost:   job.TargetHost,
 		TargetPort:   job.TargetPort,
 		TargetUser:   job.TargetUser,
-		Status:       job.Status,
+		Status:       job.Status.String(),
 		Stage:        job.Stage,
 		Progress:     job.Progress,
 		ErrorMessage: job.ErrorMessage,
@@ -240,7 +240,7 @@ func (s *MasterServer) handleGetProvisionLogs(w http.ResponseWriter, r *http.Req
 
 	s.jsonResponse(w, ProvisionLogsResponse{
 		JobID:  job.ID,
-		Status: job.Status,
+		Status: job.Status.String(),
 		Stage:  job.Stage,
 		Logs:   logEntries,
 	})

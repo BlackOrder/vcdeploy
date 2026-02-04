@@ -47,7 +47,7 @@ func (s *MemoryStore) UpsertAgent(ctx context.Context, agent *Agent) error {
 	agent.RegisteredAt = now
 	agent.LastSeenAt = now
 	if agent.Status == "" {
-		agent.Status = "online"
+		agent.Status = AgentStatusOnline
 	}
 	if agent.UpdatePolicy == "" {
 		agent.UpdatePolicy = AgentUpdatePolicyImmediate
@@ -154,7 +154,7 @@ func (s *MemoryStore) CountAgentsByStatus(ctx context.Context) (map[string]int64
 
 	counts := make(map[string]int64)
 	for _, a := range s.agents {
-		counts[a.Status]++
+		counts[a.Status.String()]++
 	}
 	return counts, nil
 }
@@ -445,7 +445,7 @@ func (s *MemoryStore) CreateAgentUpdateHistory(ctx context.Context, history *Age
 	history.ID = nextID(&s.nextAgentUpdateID)
 	history.StartedAt = time.Now()
 	if history.Status == "" {
-		history.Status = "pending"
+		history.Status = UpdateStatusPending
 	}
 
 	// Copy-on-store

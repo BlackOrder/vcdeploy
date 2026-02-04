@@ -108,7 +108,7 @@ func (s *Service) UpdateStatus(ctx context.Context, id, status string) error {
 		return fmt.Errorf("getting agent: %w", err)
 	}
 
-	agent.Status = status
+	agent.Status = storage.AgentStatus(status)
 	agent.LastSeenAt = time.Now()
 
 	if err := s.store.UpsertAgent(ctx, agent); err != nil {

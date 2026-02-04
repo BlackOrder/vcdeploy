@@ -56,6 +56,12 @@ func (s *MemoryStore) LoadFromDB(ctx context.Context, db *DB) error {
 		{"acme_accounts", s.loadACMEAccounts},
 		// Recovery codes
 		{"recovery_codes", s.loadRecoveryCodes},
+		// Recipe system tables
+		{"recipe_components", s.loadRecipeComponentsFromDB},
+		{"playbooks", s.loadPlaybooksFromDB},
+		{"playbook_activations", s.loadPlaybookActivationsFromDB},
+		{"playbook_variable_bindings", s.loadVariableBindingsFromDB},
+		{"raw_command_approvals", s.loadRawApprovalsFromDB},
 	}
 
 	for _, loader := range loaders {

@@ -193,7 +193,7 @@ func TestService_CountByStatus(t *testing.T) {
 		agent := &storage.Agent{
 			ID:           fmt.Sprintf("status-agent-%d", i),
 			Hostname:     fmt.Sprintf("host-%d", i),
-			Status:       status,
+			Status:       storage.AgentStatus(status),
 			RegisteredAt: time.Now(),
 			LastSeenAt:   time.Now(),
 		}
@@ -692,7 +692,7 @@ func TestService_UpdateStatus_MultipleUpdates(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetByID() error = %v", err)
 		}
-		if updated.Status != status {
+		if updated.Status != storage.AgentStatus(status) {
 			t.Errorf("UpdateStatus() status = %v, want %v", updated.Status, status)
 		}
 	}

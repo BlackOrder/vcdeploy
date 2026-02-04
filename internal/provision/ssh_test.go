@@ -60,7 +60,7 @@ func (m *mockAgentServicer) Count(ctx context.Context) (int64, error) {
 func (m *mockAgentServicer) CountByStatus(ctx context.Context) (map[string]int64, error) {
 	result := make(map[string]int64)
 	for _, agent := range m.agents {
-		result[agent.Status]++
+		result[agent.Status.String()]++
 	}
 	return result, nil
 }
@@ -79,7 +79,7 @@ func (m *mockAgentServicer) MarkStale(ctx context.Context, cutoff time.Time) (in
 	var count int64
 	for _, agent := range m.agents {
 		if !agent.LastSeenAt.IsZero() && agent.LastSeenAt.Before(cutoff) {
-			agent.Status = "stale"
+			agent.Status = storage.AgentStatusStale
 			count++
 		}
 	}
@@ -88,7 +88,7 @@ func (m *mockAgentServicer) MarkStale(ctx context.Context, cutoff time.Time) (in
 
 func (m *mockAgentServicer) UpdateStatus(ctx context.Context, id, status string, ts time.Time) error {
 	if agent, ok := m.agents[id]; ok {
-		agent.Status = status
+		agent.Status = storage.AgentStatus(status)
 		agent.LastSeenAt = ts
 	}
 	return nil

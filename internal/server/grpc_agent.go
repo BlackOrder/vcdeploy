@@ -928,7 +928,7 @@ func (s *AgentServer) updateDeploymentStatus(ctx context.Context, status *proto.
 		dbStatus = "unknown"
 	}
 
-	deployment.Status = dbStatus
+	deployment.Status = storage.DeploymentStatus(dbStatus)
 	if status.State == proto.DeploymentState_DEPLOYMENT_STATE_COMPLETED ||
 		status.State == proto.DeploymentState_DEPLOYMENT_STATE_FAILED ||
 		status.State == proto.DeploymentState_DEPLOYMENT_STATE_CANCELLED {
