@@ -920,6 +920,10 @@ func (s *MasterServer) buildMainHandler() (http.Handler, error) {
 	mux.HandleFunc("/playbooks/composer", s.withUIAuth(s.handlePlaybookComposerUI))
 	mux.HandleFunc("/recipes/raw-approvals", s.withUIAuth(s.handleRawApprovalsUI))
 
+	// Recipe partials (for HTMX)
+	mux.HandleFunc("/partials/recipes/components/", s.withUIAuth(s.handleComponentDetailPartial))
+	mux.HandleFunc("/partials/recipes/playbooks/", s.withUIAuth(s.handlePlaybookDetailPartial))
+
 	// Build middleware chain: otel -> request ID -> logging -> CSP -> security headers -> rate limiting -> handler
 	var handler http.Handler = mux
 	handler = s.loggingMiddleware(handler)
@@ -1751,7 +1755,7 @@ func (s *MasterServer) withAuth(handler http.HandlerFunc) http.HandlerFunc {
 			}
 			s.logger.Debug("Session token validation failed", zap.Error(err))
 
-			s.jsonError(w, http.StatusUnauthorized, "Invalid token")
+			s.jsonError(w, http.StatusUnauthorized, "invalid token")
 			return
 		}
 
@@ -1767,7 +1771,7 @@ func (s *MasterServer) withAuth(handler http.HandlerFunc) http.HandlerFunc {
 			s.logger.Debug("Session validation failed", zap.Error(err))
 		}
 
-		s.jsonError(w, http.StatusUnauthorized, "Unauthorized")
+		s.jsonError(w, http.StatusUnauthorized, "unauthorized")
 	}
 }
 

@@ -26,7 +26,7 @@ func (s *MasterServer) handleProjectTypes(w http.ResponseWriter, r *http.Request
 		types, err := s.projectTypeService.List(ctx)
 		if err != nil {
 			s.logger.Error("Failed to list project types", zap.Error(err))
-			s.jsonError(w, http.StatusInternalServerError, "Failed to list project types")
+			s.jsonError(w, http.StatusInternalServerError, "failed to list project types")
 			return
 		}
 
@@ -68,7 +68,7 @@ func (s *MasterServer) handleProjectTypes(w http.ResponseWriter, r *http.Request
 		}
 
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
+			s.jsonError(w, http.StatusBadRequest, "invalid JSON")
 			return
 		}
 
@@ -80,7 +80,7 @@ func (s *MasterServer) handleProjectTypes(w http.ResponseWriter, r *http.Request
 		pt, err := s.projectTypeService.Create(ctx, req.Name, req.Description, req.BuildCmd)
 		if err != nil {
 			s.logger.Error("Failed to create project type", zap.Error(err))
-			s.jsonError(w, http.StatusInternalServerError, "Failed to create project type")
+			s.jsonError(w, http.StatusInternalServerError, "failed to create project type")
 			return
 		}
 
@@ -89,7 +89,7 @@ func (s *MasterServer) handleProjectTypes(w http.ResponseWriter, r *http.Request
 		s.writeJSON(w, http.StatusCreated, pt)
 
 	default:
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
@@ -101,7 +101,7 @@ func (s *MasterServer) handleProjectType(w http.ResponseWriter, r *http.Request)
 	name := parts[0]
 
 	if name == "" {
-		s.jsonError(w, http.StatusBadRequest, "Project type name required")
+		s.jsonError(w, http.StatusBadRequest, "project type name required")
 		return
 	}
 
@@ -118,7 +118,7 @@ func (s *MasterServer) handleProjectType(w http.ResponseWriter, r *http.Request)
 		pt, err := s.projectTypeService.GetByName(ctx, name)
 		if err != nil {
 			s.logger.Error("Failed to get project type", zap.Error(err))
-			s.jsonError(w, http.StatusNotFound, "Project type not found")
+			s.jsonError(w, http.StatusNotFound, "project type not found")
 			return
 		}
 		s.jsonResponse(w, pt)
@@ -130,7 +130,7 @@ func (s *MasterServer) handleProjectType(w http.ResponseWriter, r *http.Request)
 		}
 
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
+			s.jsonError(w, http.StatusBadRequest, "invalid JSON")
 			return
 		}
 
@@ -148,7 +148,7 @@ func (s *MasterServer) handleProjectType(w http.ResponseWriter, r *http.Request)
 
 		if err := s.projectTypeService.Update(ctx, pt); err != nil {
 			s.logger.Error("Failed to update project type", zap.Error(err))
-			s.jsonError(w, http.StatusInternalServerError, "Failed to update project type")
+			s.jsonError(w, http.StatusInternalServerError, "failed to update project type")
 			return
 		}
 
@@ -164,7 +164,7 @@ func (s *MasterServer) handleProjectType(w http.ResponseWriter, r *http.Request)
 
 		if err := s.projectTypeService.Delete(ctx, name); err != nil {
 			s.logger.Error("Failed to delete project type", zap.Error(err))
-			s.jsonError(w, http.StatusInternalServerError, "Failed to delete project type")
+			s.jsonError(w, http.StatusInternalServerError, "failed to delete project type")
 			return
 		}
 
@@ -172,6 +172,6 @@ func (s *MasterServer) handleProjectType(w http.ResponseWriter, r *http.Request)
 		w.WriteHeader(http.StatusNoContent)
 
 	default:
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }

@@ -155,7 +155,7 @@ func (sm *SecurityMiddleware) Middleware(next http.Handler) http.Handler {
 		// CSRF protection for non-safe methods
 		if sm.config.EnableCSRF && !sm.isSafeMethod(r.Method) && !sm.isExemptPath(r.URL.Path) {
 			if !sm.validateCSRFToken(r) {
-				WriteJSONError(w, http.StatusForbidden, "CSRF token validation failed")
+				WriteJSONError(w, http.StatusForbidden, "csrf token validation failed")
 				return
 			}
 		}

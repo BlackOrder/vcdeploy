@@ -41,13 +41,13 @@ func (s *MasterServer) handleProfileUI(w http.ResponseWriter, r *http.Request) {
 // POST /api/v1/totp/setup
 func (s *MasterServer) handleTOTPSetup(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
 	user, ok := GetUserFromContext(r.Context())
 	if !ok {
-		s.jsonError(w, http.StatusUnauthorized, "Unauthorized")
+		s.jsonError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -61,7 +61,7 @@ func (s *MasterServer) handleTOTPSetup(w http.ResponseWriter, r *http.Request) {
 	secret, err := security.GenerateTOTPSecret()
 	if err != nil {
 		s.logger.Error("Failed to generate TOTP secret", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Failed to generate TOTP secret")
+		s.jsonError(w, http.StatusInternalServerError, "failed to generate TOTP secret")
 		return
 	}
 
@@ -79,13 +79,13 @@ func (s *MasterServer) handleTOTPSetup(w http.ResponseWriter, r *http.Request) {
 // POST /api/v1/totp/enable
 func (s *MasterServer) handleTOTPEnable(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
 	user, ok := GetUserFromContext(r.Context())
 	if !ok {
-		s.jsonError(w, http.StatusUnauthorized, "Unauthorized")
+		s.jsonError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -101,12 +101,12 @@ func (s *MasterServer) handleTOTPEnable(w http.ResponseWriter, r *http.Request) 
 		TOTPCode string `json:"totp_code"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.jsonError(w, http.StatusBadRequest, "Invalid request body")
+		s.jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
 	if req.Secret == "" {
-		s.jsonError(w, http.StatusBadRequest, "Secret is required")
+		s.jsonError(w, http.StatusBadRequest, "secret is required")
 		return
 	}
 	if req.TOTPCode == "" {
@@ -118,7 +118,7 @@ func (s *MasterServer) handleTOTPEnable(w http.ResponseWriter, r *http.Request) 
 	if !security.ValidateTOTP(req.Secret, req.TOTPCode, security.DefaultTOTPConfig()) {
 		s.logAudit(r, "totp_enable_failed", "security",
 			"user: "+user.Username+", reason: invalid code", "failure")
-		s.jsonError(w, http.StatusUnauthorized, "Invalid TOTP code")
+		s.jsonError(w, http.StatusUnauthorized, "invalid TOTP code")
 		return
 	}
 
@@ -127,7 +127,7 @@ func (s *MasterServer) handleTOTPEnable(w http.ResponseWriter, r *http.Request) 
 	// Enable TOTP for the user
 	if err := s.userService.SetTOTP(ctx, user.ID, req.Secret, true); err != nil {
 		s.logger.Error("Failed to enable TOTP", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Failed to enable TOTP")
+		s.jsonError(w, http.StatusInternalServerError, "failed to enable TOTP")
 		return
 	}
 
@@ -135,7 +135,7 @@ func (s *MasterServer) handleTOTPEnable(w http.ResponseWriter, r *http.Request) 
 	codes, hashes, err := security.GenerateRecoveryCodes()
 	if err != nil {
 		s.logger.Error("Failed to generate recovery codes", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Failed to generate recovery codes")
+		s.jsonError(w, http.StatusInternalServerError, "failed to generate recovery codes")
 		return
 	}
 
@@ -171,13 +171,13 @@ func (s *MasterServer) handleTOTPEnable(w http.ResponseWriter, r *http.Request) 
 // POST /api/v1/totp/disable
 func (s *MasterServer) handleTOTPDisable(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
 	user, ok := GetUserFromContext(r.Context())
 	if !ok {
-		s.jsonError(w, http.StatusUnauthorized, "Unauthorized")
+		s.jsonError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -192,7 +192,7 @@ func (s *MasterServer) handleTOTPDisable(w http.ResponseWriter, r *http.Request)
 		TOTPCode string `json:"totp_code"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.jsonError(w, http.StatusBadRequest, "Invalid request body")
+		s.jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
@@ -205,7 +205,7 @@ func (s *MasterServer) handleTOTPDisable(w http.ResponseWriter, r *http.Request)
 	if !security.ValidateTOTP(user.TOTPSecret, req.TOTPCode, security.DefaultTOTPConfig()) {
 		s.logAudit(r, "totp_disable_failed", "security",
 			"user: "+user.Username+", reason: invalid code", "failure")
-		s.jsonError(w, http.StatusUnauthorized, "Invalid TOTP code")
+		s.jsonError(w, http.StatusUnauthorized, "invalid TOTP code")
 		return
 	}
 
@@ -214,7 +214,7 @@ func (s *MasterServer) handleTOTPDisable(w http.ResponseWriter, r *http.Request)
 	// Disable TOTP for the user
 	if err := s.userService.SetTOTP(ctx, user.ID, "", false); err != nil {
 		s.logger.Error("Failed to disable TOTP", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Failed to disable TOTP")
+		s.jsonError(w, http.StatusInternalServerError, "failed to disable TOTP")
 		return
 	}
 
