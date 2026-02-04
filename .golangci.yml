@@ -120,6 +120,8 @@ linters-settings:
     locale: US
     ignore-words:
       - cancelled  # British spelling used in proto and consistency
+      - initialise  # British spelling used consistently
+      - authorised  # British spelling used consistently
 
 issues:
   exclude-use-default: true
