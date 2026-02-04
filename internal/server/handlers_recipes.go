@@ -29,7 +29,7 @@ func (s *MasterServer) handleRecipeComponents(w http.ResponseWriter, r *http.Req
 	case http.MethodPost:
 		s.handleCreateComponent(ctx, w, r)
 	default:
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
@@ -42,7 +42,7 @@ func (s *MasterServer) handleRecipeComponent(w http.ResponseWriter, r *http.Requ
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/recipes/components/")
 	id, err := strconv.ParseInt(path, 10, 64)
 	if err != nil {
-		s.jsonError(w, http.StatusBadRequest, "Invalid component ID")
+		s.jsonError(w, http.StatusBadRequest, "invalid component ID")
 		return
 	}
 
@@ -54,7 +54,7 @@ func (s *MasterServer) handleRecipeComponent(w http.ResponseWriter, r *http.Requ
 	case http.MethodDelete:
 		s.handleDeleteComponent(ctx, w, id)
 	default:
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
@@ -74,7 +74,7 @@ func (s *MasterServer) handleListComponents(ctx context.Context, w http.Response
 	components, err := s.store.ListRecipeComponents(ctx, namespace, includeDeprecated)
 	if err != nil {
 		s.logger.Error("Failed to list components", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Failed to list components")
+		s.jsonError(w, http.StatusInternalServerError, "failed to list components")
 		return
 	}
 
@@ -94,11 +94,11 @@ func (s *MasterServer) handleGetComponent(ctx context.Context, w http.ResponseWr
 	component, err := s.store.GetRecipeComponentByID(ctx, id)
 	if err != nil {
 		s.logger.Error("Failed to get component", zap.Error(err), zap.Int64("id", id))
-		s.jsonError(w, http.StatusInternalServerError, "Failed to get component")
+		s.jsonError(w, http.StatusInternalServerError, "failed to get component")
 		return
 	}
 	if component == nil {
-		s.jsonError(w, http.StatusNotFound, "Component not found")
+		s.jsonError(w, http.StatusNotFound, "component not found")
 		return
 	}
 
@@ -124,9 +124,12 @@ func (s *MasterServer) handleCreateComponent(ctx context.Context, w http.Respons
 		return
 	}
 
+	// Limit body size to 1MB to prevent DoS
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
 	var req CreateComponentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.jsonError(w, http.StatusBadRequest, "Invalid request body")
+		s.jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
@@ -170,23 +173,26 @@ func (s *MasterServer) handleUpdateComponent(ctx context.Context, w http.Respons
 	existing, err := s.store.GetRecipeComponentByID(ctx, id)
 	if err != nil {
 		s.logger.Error("Failed to get component", zap.Error(err), zap.Int64("id", id))
-		s.jsonError(w, http.StatusInternalServerError, "Failed to get component")
+		s.jsonError(w, http.StatusInternalServerError, "failed to get component")
 		return
 	}
 	if existing == nil {
-		s.jsonError(w, http.StatusNotFound, "Component not found")
+		s.jsonError(w, http.StatusNotFound, "component not found")
 		return
 	}
 
 	// Cannot update seed components
 	if existing.IsSeed {
-		s.jsonError(w, http.StatusForbidden, "Cannot modify seed components")
+		s.jsonError(w, http.StatusForbidden, "cannot modify seed components")
 		return
 	}
 
+	// Limit body size to 1MB to prevent DoS
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
 	var req CreateComponentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.jsonError(w, http.StatusBadRequest, "Invalid request body")
+		s.jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
@@ -222,17 +228,17 @@ func (s *MasterServer) handleDeleteComponent(ctx context.Context, w http.Respons
 	existing, err := s.store.GetRecipeComponentByID(ctx, id)
 	if err != nil {
 		s.logger.Error("Failed to get component", zap.Error(err), zap.Int64("id", id))
-		s.jsonError(w, http.StatusInternalServerError, "Failed to get component")
+		s.jsonError(w, http.StatusInternalServerError, "failed to get component")
 		return
 	}
 	if existing == nil {
-		s.jsonError(w, http.StatusNotFound, "Component not found")
+		s.jsonError(w, http.StatusNotFound, "component not found")
 		return
 	}
 
 	// Cannot delete seed components
 	if existing.IsSeed {
-		s.jsonError(w, http.StatusForbidden, "Cannot delete seed components")
+		s.jsonError(w, http.StatusForbidden, "cannot delete seed components")
 		return
 	}
 
@@ -263,7 +269,7 @@ func (s *MasterServer) handleRecipePlaybooks(w http.ResponseWriter, r *http.Requ
 	case http.MethodPost:
 		s.handleCreatePlaybook(ctx, w, r)
 	default:
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
@@ -276,7 +282,7 @@ func (s *MasterServer) handleRecipePlaybook(w http.ResponseWriter, r *http.Reque
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/recipes/playbooks/")
 	id, err := strconv.ParseInt(path, 10, 64)
 	if err != nil {
-		s.jsonError(w, http.StatusBadRequest, "Invalid playbook ID")
+		s.jsonError(w, http.StatusBadRequest, "invalid playbook ID")
 		return
 	}
 
@@ -288,7 +294,7 @@ func (s *MasterServer) handleRecipePlaybook(w http.ResponseWriter, r *http.Reque
 	case http.MethodDelete:
 		s.handleDeletePlaybook(ctx, w, id)
 	default:
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
@@ -309,7 +315,7 @@ func (s *MasterServer) handleListPlaybooks(ctx context.Context, w http.ResponseW
 	playbooks, err := s.store.ListPlaybooks(ctx, namespace, framework, includeDeprecated)
 	if err != nil {
 		s.logger.Error("Failed to list playbooks", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Failed to list playbooks")
+		s.jsonError(w, http.StatusInternalServerError, "failed to list playbooks")
 		return
 	}
 
@@ -329,11 +335,11 @@ func (s *MasterServer) handleGetPlaybook(ctx context.Context, w http.ResponseWri
 	playbook, err := s.store.GetPlaybookByID(ctx, id)
 	if err != nil {
 		s.logger.Error("Failed to get playbook", zap.Error(err), zap.Int64("id", id))
-		s.jsonError(w, http.StatusInternalServerError, "Failed to get playbook")
+		s.jsonError(w, http.StatusInternalServerError, "failed to get playbook")
 		return
 	}
 	if playbook == nil {
-		s.jsonError(w, http.StatusNotFound, "Playbook not found")
+		s.jsonError(w, http.StatusNotFound, "playbook not found")
 		return
 	}
 
@@ -362,9 +368,12 @@ func (s *MasterServer) handleCreatePlaybook(ctx context.Context, w http.Response
 		return
 	}
 
+	// Limit body size to 1MB to prevent DoS
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
 	var req CreatePlaybookRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.jsonError(w, http.StatusBadRequest, "Invalid request body")
+		s.jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
@@ -411,23 +420,26 @@ func (s *MasterServer) handleUpdatePlaybook(ctx context.Context, w http.Response
 	existing, err := s.store.GetPlaybookByID(ctx, id)
 	if err != nil {
 		s.logger.Error("Failed to get playbook", zap.Error(err), zap.Int64("id", id))
-		s.jsonError(w, http.StatusInternalServerError, "Failed to get playbook")
+		s.jsonError(w, http.StatusInternalServerError, "failed to get playbook")
 		return
 	}
 	if existing == nil {
-		s.jsonError(w, http.StatusNotFound, "Playbook not found")
+		s.jsonError(w, http.StatusNotFound, "playbook not found")
 		return
 	}
 
 	// Cannot update seed playbooks
 	if existing.IsSeed {
-		s.jsonError(w, http.StatusForbidden, "Cannot modify seed playbooks")
+		s.jsonError(w, http.StatusForbidden, "cannot modify seed playbooks")
 		return
 	}
 
+	// Limit body size to 1MB to prevent DoS
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
 	var req CreatePlaybookRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.jsonError(w, http.StatusBadRequest, "Invalid request body")
+		s.jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
@@ -466,17 +478,17 @@ func (s *MasterServer) handleDeletePlaybook(ctx context.Context, w http.Response
 	existing, err := s.store.GetPlaybookByID(ctx, id)
 	if err != nil {
 		s.logger.Error("Failed to get playbook", zap.Error(err), zap.Int64("id", id))
-		s.jsonError(w, http.StatusInternalServerError, "Failed to get playbook")
+		s.jsonError(w, http.StatusInternalServerError, "failed to get playbook")
 		return
 	}
 	if existing == nil {
-		s.jsonError(w, http.StatusNotFound, "Playbook not found")
+		s.jsonError(w, http.StatusNotFound, "playbook not found")
 		return
 	}
 
 	// Cannot delete seed playbooks
 	if existing.IsSeed {
-		s.jsonError(w, http.StatusForbidden, "Cannot delete seed playbooks")
+		s.jsonError(w, http.StatusForbidden, "cannot delete seed playbooks")
 		return
 	}
 
@@ -509,7 +521,7 @@ func (s *MasterServer) handleProjectPlaybookByID(w http.ResponseWriter, r *http.
 	case http.MethodDelete:
 		s.handleDeactivatePlaybookByID(ctx, w, projectID)
 	default:
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
@@ -524,7 +536,7 @@ func (s *MasterServer) handleGetProjectPlaybookByID(ctx context.Context, w http.
 	activation, playbook, err := svc.GetActiveWithPlaybook(ctx, projectID)
 	if err != nil {
 		s.logger.Error("Failed to get activation", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Failed to get activation")
+		s.jsonError(w, http.StatusInternalServerError, "failed to get activation")
 		return
 	}
 
@@ -556,9 +568,12 @@ func (s *MasterServer) handleActivatePlaybookByID(ctx context.Context, w http.Re
 		return
 	}
 
+	// Limit body size to 1MB to prevent DoS
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
 	var req ActivatePlaybookRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.jsonError(w, http.StatusBadRequest, "Invalid request body")
+		s.jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
@@ -621,7 +636,7 @@ func (s *MasterServer) handleRawApprovals(w http.ResponseWriter, r *http.Request
 	case http.MethodPost:
 		s.handleApproveRaw(ctx, w, r)
 	default:
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
@@ -639,12 +654,12 @@ func (s *MasterServer) handleRawApproval(w http.ResponseWriter, r *http.Request)
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/recipes/raw-approvals/")
 	id, err := strconv.ParseInt(path, 10, 64)
 	if err != nil {
-		s.jsonError(w, http.StatusBadRequest, "Invalid approval ID")
+		s.jsonError(w, http.StatusBadRequest, "invalid approval ID")
 		return
 	}
 
 	if r.Method != http.MethodDelete {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
@@ -661,7 +676,7 @@ func (s *MasterServer) handleListRawApprovals(ctx context.Context, w http.Respon
 		components, err := svc.ListPendingApprovals(ctx)
 		if err != nil {
 			s.logger.Error("Failed to list pending RAW components", zap.Error(err))
-			s.jsonError(w, http.StatusInternalServerError, "Failed to list pending components")
+			s.jsonError(w, http.StatusInternalServerError, "failed to list pending components")
 			return
 		}
 		s.jsonResponse(w, map[string]interface{}{
@@ -675,7 +690,7 @@ func (s *MasterServer) handleListRawApprovals(ctx context.Context, w http.Respon
 	approvals, err := svc.ListAllApprovals(ctx)
 	if err != nil {
 		s.logger.Error("Failed to list RAW approvals", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Failed to list approvals")
+		s.jsonError(w, http.StatusInternalServerError, "failed to list approvals")
 		return
 	}
 
@@ -694,14 +709,14 @@ type ApproveRawRequest struct {
 func (s *MasterServer) handleApproveRaw(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	var req ApproveRawRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.jsonError(w, http.StatusBadRequest, "Invalid request body")
+		s.jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
 	// Get admin user ID from context
 	user, ok := GetUserFromContext(ctx)
 	if !ok || user == nil {
-		s.jsonError(w, http.StatusUnauthorized, "User not found")
+		s.jsonError(w, http.StatusUnauthorized, "user not found")
 		return
 	}
 
@@ -730,7 +745,7 @@ func (s *MasterServer) handleRevokeRawApproval(ctx context.Context, w http.Respo
 	// Get admin user ID from context
 	user, ok := GetUserFromContext(ctx)
 	if !ok || user == nil {
-		s.jsonError(w, http.StatusUnauthorized, "User not found")
+		s.jsonError(w, http.StatusUnauthorized, "user not found")
 		return
 	}
 
@@ -753,7 +768,7 @@ func (s *MasterServer) handleRevokeRawApproval(ctx context.Context, w http.Respo
 // handleRecipeExport handles GET for /api/v1/recipes/export.
 func (s *MasterServer) handleRecipeExport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
@@ -771,7 +786,7 @@ func (s *MasterServer) handleRecipeExport(w http.ResponseWriter, r *http.Request
 	bundle, err := exporter.ExportAll(ctx)
 	if err != nil {
 		s.logger.Error("Failed to export recipes", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Failed to export recipes")
+		s.jsonError(w, http.StatusInternalServerError, "failed to export recipes")
 		return
 	}
 
@@ -794,7 +809,7 @@ type RecipeImportRequest struct {
 // handleRecipeImport handles POST for /api/v1/recipes/import.
 func (s *MasterServer) handleRecipeImport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
@@ -809,7 +824,7 @@ func (s *MasterServer) handleRecipeImport(w http.ResponseWriter, r *http.Request
 
 	var req RecipeImportRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.jsonError(w, http.StatusBadRequest, "Invalid request body")
+		s.jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
@@ -851,11 +866,11 @@ func (s *MasterServer) handleRecipeImport(w http.ResponseWriter, r *http.Request
 func (s *MasterServer) requireAdmin(ctx context.Context, w http.ResponseWriter) bool {
 	user, ok := GetUserFromContext(ctx)
 	if !ok || user == nil {
-		s.jsonError(w, http.StatusUnauthorized, "Authentication required")
+		s.jsonError(w, http.StatusUnauthorized, "authentication required")
 		return false
 	}
 	if user.Role != "admin" {
-		s.jsonError(w, http.StatusForbidden, "Admin access required")
+		s.jsonError(w, http.StatusForbidden, "admin access required")
 		return false
 	}
 	return true
@@ -866,7 +881,7 @@ func (s *MasterServer) requireAdmin(ctx context.Context, w http.ResponseWriter) 
 // handleMigrationPreview handles GET /api/v1/recipes/migration/preview/{project_id}.
 func (s *MasterServer) handleMigrationPreview(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
@@ -877,14 +892,14 @@ func (s *MasterServer) handleMigrationPreview(w http.ResponseWriter, r *http.Req
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/recipes/migration/preview/")
 	projectID, err := strconv.ParseInt(path, 10, 64)
 	if err != nil {
-		s.jsonError(w, http.StatusBadRequest, "Invalid project ID")
+		s.jsonError(w, http.StatusBadRequest, "invalid project ID")
 		return
 	}
 
 	// Get project
 	project, err := s.store.GetProjectByID(ctx, projectID)
 	if err != nil {
-		s.jsonError(w, http.StatusNotFound, "Project not found")
+		s.jsonError(w, http.StatusNotFound, "project not found")
 		return
 	}
 
@@ -944,7 +959,7 @@ func (s *MasterServer) handleMigrationPreview(w http.ResponseWriter, r *http.Req
 // For actual YAML migration with existing config files, use the CLI: vcdeploy recipes import-yaml
 func (s *MasterServer) handleMigration(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
@@ -956,7 +971,7 @@ func (s *MasterServer) handleMigration(w http.ResponseWriter, r *http.Request) {
 	path = strings.TrimSuffix(path, "/")
 	projectID, err := strconv.ParseInt(path, 10, 64)
 	if err != nil {
-		s.jsonError(w, http.StatusBadRequest, "Invalid project ID")
+		s.jsonError(w, http.StatusBadRequest, "invalid project ID")
 		return
 	}
 
@@ -968,14 +983,14 @@ func (s *MasterServer) handleMigration(w http.ResponseWriter, r *http.Request) {
 		Activate         bool   `json:"activate"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.jsonError(w, http.StatusBadRequest, "Invalid request body")
+		s.jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
 	// Get project
 	project, err := s.store.GetProjectByID(ctx, projectID)
 	if err != nil {
-		s.jsonError(w, http.StatusNotFound, "Project not found")
+		s.jsonError(w, http.StatusNotFound, "project not found")
 		return
 	}
 
@@ -1006,7 +1021,7 @@ func (s *MasterServer) handleMigration(w http.ResponseWriter, r *http.Request) {
 	// Create the playbook
 	if err := s.store.CreatePlaybook(ctx, playbook); err != nil {
 		s.logger.Error("Failed to create playbook", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Failed to create playbook")
+		s.jsonError(w, http.StatusInternalServerError, "failed to create playbook")
 		return
 	}
 

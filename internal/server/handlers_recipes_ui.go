@@ -208,28 +208,24 @@ func (s *MasterServer) handleRawApprovalsUI(w http.ResponseWriter, r *http.Reque
 func (s *MasterServer) handleComponentDetailPartial(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// Parse component ID from path: /api/v1/recipes/components/{id}/detail
-	path := strings.TrimPrefix(r.URL.Path, "/api/v1/recipes/components/")
-	parts := strings.Split(path, "/")
-	if len(parts) < 2 {
-		http.Error(w, "Invalid path", http.StatusBadRequest)
-		return
-	}
+	// Parse component ID from path: /partials/recipes/components/{id}
+	path := strings.TrimPrefix(r.URL.Path, "/partials/recipes/components/")
+	path = strings.TrimSuffix(path, "/")
 
-	id, err := strconv.ParseInt(parts[0], 10, 64)
+	id, err := strconv.ParseInt(path, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid component ID", http.StatusBadRequest)
+		http.Error(w, "invalid component ID", http.StatusBadRequest)
 		return
 	}
 
 	if s.componentService == nil {
-		http.Error(w, "Service not available", http.StatusServiceUnavailable)
+		http.Error(w, "service not available", http.StatusServiceUnavailable)
 		return
 	}
 
 	component, err := s.componentService.GetByID(ctx, id)
 	if err != nil {
-		http.Error(w, "Component not found", http.StatusNotFound)
+		http.Error(w, "component not found", http.StatusNotFound)
 		return
 	}
 
@@ -366,28 +362,24 @@ func (s *MasterServer) renderComponentDetailPartial(w http.ResponseWriter, c *st
 func (s *MasterServer) handlePlaybookDetailPartial(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// Parse playbook ID from path: /api/v1/recipes/playbooks/{id}/detail
-	path := strings.TrimPrefix(r.URL.Path, "/api/v1/recipes/playbooks/")
-	parts := strings.Split(path, "/")
-	if len(parts) < 2 {
-		http.Error(w, "Invalid path", http.StatusBadRequest)
-		return
-	}
+	// Parse playbook ID from path: /partials/recipes/playbooks/{id}
+	path := strings.TrimPrefix(r.URL.Path, "/partials/recipes/playbooks/")
+	path = strings.TrimSuffix(path, "/")
 
-	id, err := strconv.ParseInt(parts[0], 10, 64)
+	id, err := strconv.ParseInt(path, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid playbook ID", http.StatusBadRequest)
+		http.Error(w, "invalid playbook ID", http.StatusBadRequest)
 		return
 	}
 
 	if s.playbookService == nil {
-		http.Error(w, "Service not available", http.StatusServiceUnavailable)
+		http.Error(w, "service not available", http.StatusServiceUnavailable)
 		return
 	}
 
 	playbook, err := s.playbookService.GetByID(ctx, id)
 	if err != nil {
-		http.Error(w, "Playbook not found", http.StatusNotFound)
+		http.Error(w, "playbook not found", http.StatusNotFound)
 		return
 	}
 

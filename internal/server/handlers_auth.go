@@ -122,7 +122,7 @@ func (s *MasterServer) handleSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+	s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 }
 
 // handleIndex redirects the root path to the dashboard.
@@ -140,7 +140,7 @@ func (s *MasterServer) handleIndex(w http.ResponseWriter, r *http.Request) {
 // Response: {"token": "session_id", "user": {...}}
 func (s *MasterServer) handleAPILogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
@@ -150,7 +150,7 @@ func (s *MasterServer) handleAPILogin(w http.ResponseWriter, r *http.Request) {
 		TOTP     string `json:"totp,omitempty"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req); err != nil {
-		s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
+		s.jsonError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
 
@@ -167,11 +167,11 @@ func (s *MasterServer) handleAPILogin(w http.ResponseWriter, r *http.Request) {
 		if services.IsNotFound(err) {
 			s.logger.Debug("API login failed: user not found", zap.String("username", req.Username))
 			s.logAudit(r, "api_login", "session", "user not found: "+req.Username, "failure")
-			s.jsonError(w, http.StatusUnauthorized, "Invalid credentials")
+			s.jsonError(w, http.StatusUnauthorized, "invalid credentials")
 			return
 		}
 		s.logger.Error("Database error during API login", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Internal error")
+		s.jsonError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 
@@ -179,7 +179,7 @@ func (s *MasterServer) handleAPILogin(w http.ResponseWriter, r *http.Request) {
 	if !verifyPassword(user.PasswordHash, req.Password) {
 		s.logger.Debug("API login failed: invalid password", zap.String("username", req.Username))
 		s.logAudit(r, "api_login", "session", "invalid password for: "+req.Username, "failure")
-		s.jsonError(w, http.StatusUnauthorized, "Invalid credentials")
+		s.jsonError(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
 
@@ -187,7 +187,7 @@ func (s *MasterServer) handleAPILogin(w http.ResponseWriter, r *http.Request) {
 	if user.MustChangePassword {
 		s.logger.Debug("API login blocked: password change required", zap.String("username", req.Username))
 		s.logAudit(r, "api_login", "session", "password change required for: "+req.Username, "blocked")
-		s.jsonError(w, http.StatusForbidden, "Password change required. Please login via web UI to change your password.")
+		s.jsonError(w, http.StatusForbidden, "password change required. Please login via web UI to change your password.")
 		return
 	}
 
@@ -204,7 +204,7 @@ func (s *MasterServer) handleAPILogin(w http.ResponseWriter, r *http.Request) {
 			codes, err := s.store.GetRecoveryCodes(ctx, user.ID)
 			if err != nil {
 				s.logger.Error("Failed to get recovery codes", zap.Error(err))
-				s.jsonError(w, http.StatusInternalServerError, "Internal error")
+				s.jsonError(w, http.StatusInternalServerError, "internal error")
 				return
 			}
 
@@ -225,7 +225,7 @@ func (s *MasterServer) handleAPILogin(w http.ResponseWriter, r *http.Request) {
 			if codeID == 0 {
 				s.logger.Debug("API login failed: invalid TOTP", zap.String("username", req.Username))
 				s.logAudit(r, "api_login", "session", "invalid TOTP for: "+req.Username, "failure")
-				s.jsonError(w, http.StatusUnauthorized, "Invalid verification code")
+				s.jsonError(w, http.StatusUnauthorized, "invalid verification code")
 				return
 			}
 
@@ -248,7 +248,7 @@ func (s *MasterServer) handleAPILogin(w http.ResponseWriter, r *http.Request) {
 	session, err := s.sessionService.Create(ctx, user.ID, extractClientIP(r), r.UserAgent(), 7*24*time.Hour)
 	if err != nil {
 		s.logger.Error("Failed to create session", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Failed to create session")
+		s.jsonError(w, http.StatusInternalServerError, "failed to create session")
 		return
 	}
 
@@ -274,14 +274,14 @@ func (s *MasterServer) handleAPILogin(w http.ResponseWriter, r *http.Request) {
 // Returns the currently authenticated user's information.
 func (s *MasterServer) handleAPICurrentUser(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
 	// Get the user from context (set by withAuth middleware)
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok || userID == 0 {
-		s.jsonError(w, http.StatusUnauthorized, "Not authenticated")
+		s.jsonError(w, http.StatusUnauthorized, "not authenticated")
 		return
 	}
 
@@ -289,11 +289,11 @@ func (s *MasterServer) handleAPICurrentUser(w http.ResponseWriter, r *http.Reque
 	user, err := s.userService.GetByID(ctx, userID)
 	if err != nil {
 		if services.IsNotFound(err) {
-			s.jsonError(w, http.StatusNotFound, "User not found")
+			s.jsonError(w, http.StatusNotFound, "user not found")
 			return
 		}
 		s.logger.Error("Failed to get user", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Internal error")
+		s.jsonError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 

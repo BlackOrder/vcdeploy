@@ -30,7 +30,7 @@ func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if s.secretService == nil {
-			s.jsonError(w, http.StatusInternalServerError, "Secret service not configured")
+			s.jsonError(w, http.StatusInternalServerError, "secret service not configured")
 			return
 		}
 
@@ -50,7 +50,7 @@ func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
 
 		if err != nil {
 			s.logger.Error("Failed to list secrets", zap.Error(err))
-			s.jsonError(w, http.StatusInternalServerError, "Failed to list secrets")
+			s.jsonError(w, http.StatusInternalServerError, "failed to list secrets")
 			return
 		}
 
@@ -115,7 +115,7 @@ func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
+			s.jsonError(w, http.StatusBadRequest, "invalid JSON")
 			return
 		}
 
@@ -131,13 +131,13 @@ func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
 
 		// Use SecretService for encryption and storage
 		if s.secretService == nil {
-			s.jsonError(w, http.StatusInternalServerError, "Secret service not configured")
+			s.jsonError(w, http.StatusInternalServerError, "secret service not configured")
 			return
 		}
 
 		if err := s.secretService.Set(ctx, req.Project, req.Scope, req.Key, req.Value); err != nil {
 			s.logger.Error("Failed to store secret", zap.Error(err))
-			s.jsonError(w, http.StatusInternalServerError, "Failed to store secret")
+			s.jsonError(w, http.StatusInternalServerError, "failed to store secret")
 			return
 		}
 
@@ -166,13 +166,13 @@ func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if s.secretService == nil {
-			s.jsonError(w, http.StatusInternalServerError, "Secret service not configured")
+			s.jsonError(w, http.StatusInternalServerError, "secret service not configured")
 			return
 		}
 
 		if err := s.secretService.Delete(ctx, project, scope, key); err != nil {
 			s.logger.Error("Failed to delete secret", zap.Error(err))
-			s.jsonError(w, http.StatusInternalServerError, "Failed to delete secret")
+			s.jsonError(w, http.StatusInternalServerError, "failed to delete secret")
 			return
 		}
 
@@ -181,6 +181,6 @@ func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 
 	default:
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
