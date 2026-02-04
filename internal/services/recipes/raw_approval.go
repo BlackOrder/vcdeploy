@@ -5,17 +5,27 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/BlackOrder/vcdeploy/internal/services"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 )
 
 // RawApprovalService handles RAW command approvals.
 type RawApprovalService struct {
-	store storage.Store
+	store        storage.Store
+	auditService services.AuditServicer
 }
 
 // NewRawApprovalService creates a new approval service.
 func NewRawApprovalService(store storage.Store) *RawApprovalService {
 	return &RawApprovalService{store: store}
+}
+
+// NewRawApprovalServiceWithAudit creates a new approval service with audit logging.
+func NewRawApprovalServiceWithAudit(store storage.Store, auditService services.AuditServicer) *RawApprovalService {
+	return &RawApprovalService{
+		store:        store,
+		auditService: auditService,
+	}
 }
 
 // ApprovalStatus represents the approval state of a component.
@@ -85,7 +95,16 @@ func (s *RawApprovalService) Approve(ctx context.Context, componentID, adminUser
 		return fmt.Errorf("failed to create approval: %w", err)
 	}
 
-	// TODO: Add audit logging here when audit service is injected
+	// Audit logging for RAW component approval
+	if s.auditService != nil {
+		_ = s.auditService.Log(ctx, &storage.AuditEntry{
+			Source:     "raw_approval",
+			Action:     "raw_component_approved",
+			Resource:   "component",
+			ResourceID: fmt.Sprintf("%d", componentID),
+			Details:    fmt.Sprintf("user_id=%d, component=%s:%s, note=%s", adminUserID, component.Namespace, component.Slug, note),
+		})
+	}
 
 	return nil
 }
@@ -115,7 +134,16 @@ func (s *RawApprovalService) RevokeApproval(ctx context.Context, componentID, ad
 		return fmt.Errorf("failed to delete approval: %w", err)
 	}
 
-	// TODO: Add audit logging here when audit service is injected
+	// Audit logging for RAW component approval revocation
+	if s.auditService != nil {
+		_ = s.auditService.Log(ctx, &storage.AuditEntry{
+			Source:     "raw_approval",
+			Action:     "raw_component_revoked",
+			Resource:   "component",
+			ResourceID: fmt.Sprintf("%d", componentID),
+			Details:    fmt.Sprintf("user_id=%d, component=%s:%s", adminUserID, component.Namespace, component.Slug),
+		})
+	}
 
 	return nil
 }
