@@ -542,6 +542,84 @@ The system prevents accidental credential deletion:
 - **Import Validation**: Imported recipes are validated before activation
 - **Dry-Run Mode**: Preview import effects without changes
 
+## CLI Access Security
+
+The vcdeploy CLI uses a unified execution model with automatic mode detection and secure local access.
+
+### Execution Modes
+
+The CLI operates in one of two modes:
+
+| Mode | When Used | Authentication |
+|------|-----------|----------------|
+| **API Mode** | Server is running (local or remote) | Token or Unix socket |
+| **Direct Mode** | Server is offline (uses `--offline` flag) | System permissions |
+
+### Mode Detection
+
+The CLI automatically detects the appropriate mode:
+
+1. If `--master` flag or `VCDEPLOY_MASTER` env is set → **API mode (remote)**
+2. If local server is running → **API mode (local via Unix socket)**
+3. If `--offline` flag is set → **Direct mode**
+4. Otherwise → **Direct mode** (requires permissions)
+
+### Unix Socket Access
+
+For local CLI access, the master server exposes a Unix socket at `/var/run/vcdeploy/vcdeploy.sock`. This provides secure local access without requiring API tokens.
+
+**Socket Permissions:**
+- Owner: `root`
+- Group: `vcdeploy`
+- Mode: `0660` (read/write for owner and group only)
+
+### Permission Model
+
+| User Type | Server Running | Server Offline | Auth Required |
+|-----------|----------------|----------------|---------------|
+| `root` / `sudo` | Unix socket | Direct DB | No |
+| `vcdeploy` group member | Unix socket | Direct DB | No |
+| Other local users | TCP + token | Permission denied | Yes (token) |
+| Remote users | TCP + token | N/A | Yes (token) |
+
+### Granting CLI Access
+
+To allow a non-root user to run CLI commands without an API token:
+
+```bash
+# Add user to the vcdeploy group
+sudo usermod -aG vcdeploy <username>
+
+# User must log out and back in for group membership to take effect
+```
+
+### Security Considerations
+
+1. **No Token Files**: vcdeploy does not store tokens in files on the filesystem, preventing accidental token exposure.
+
+2. **Unix Socket Security**: The socket's group ownership restricts access to authorized users only.
+
+3. **Root Always Allowed**: Root (UID 0) can always access the CLI, regardless of group membership.
+
+4. **Direct Mode Restrictions**: Direct database access (offline mode) is only available to root and vcdeploy group members.
+
+5. **Clear Error Messages**: Non-privileged users receive clear instructions:
+   ```
+   Error: permission denied: CLI direct access requires root or membership in the vcdeploy group
+   Hint: Either:
+     1. Run as root/sudo
+     2. Add your user to the vcdeploy group: sudo usermod -aG vcdeploy $USER
+     3. Use API mode: vcdeploy --master localhost:9000 --token <token> <command>
+   ```
+
+### Installation
+
+The post-installation script automatically:
+
+1. Creates the `vcdeploy` system group
+2. Creates the Unix socket directory at `/var/run/vcdeploy/`
+3. Sets appropriate permissions on directories
+
 ## See Also
 
 - [Recipe System Guide](recipes.md) - Full recipe system documentation

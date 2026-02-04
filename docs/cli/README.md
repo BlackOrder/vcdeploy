@@ -20,6 +20,7 @@ All commands support the following global flags:
 | `--config` | Path to master config file | `/etc/vcdeploy/master.yaml` |
 | `--master` | Master server address for remote CLI | - |
 | `--token` | API token for remote CLI authentication | - |
+| `--offline` | Force offline/direct mode even if server is running | `false` |
 
 ### vcdeploy-agent
 
@@ -135,6 +136,12 @@ vcdeploy
 │   ├── create      # Create a new user
 │   ├── delete      # Delete a user
 │   └── passwd      # Change user password
+├── webhook         # Webhook configuration management
+│   ├── add         # Add webhook to a project
+│   ├── list        # List webhooks for a project
+│   ├── delete      # Delete a webhook
+│   ├── test        # Test a webhook (requires server)
+│   └── rotate-secret # Rotate webhook secret
 └── version         # Print version info
 ```
 
@@ -1290,6 +1297,110 @@ vcdeploy version
 vcdeploy v1.0.0
   commit:     abc1234
   build time: 2024-01-01T00:00:00Z
+```
+
+---
+
+### webhook
+
+Manage webhook configurations for projects. Webhooks allow Git providers (GitHub, GitLab, Bitbucket) to trigger deployments automatically.
+
+#### webhook add
+
+Add a webhook configuration to a project.
+
+```bash
+vcdeploy webhook add <project> <provider> [flags]
+```
+
+**Arguments:**
+| Argument | Description |
+|----------|-------------|
+| `project` | Project name |
+| `provider` | Git provider: `github`, `gitlab`, or `bitbucket` |
+
+**Flags:**
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--secret` | Webhook secret | Auto-generated |
+| `--require-secret` | Require secret validation | `true` |
+
+**Example:**
+```bash
+# Add GitHub webhook with auto-generated secret
+vcdeploy webhook add myproject github
+
+# Add GitLab webhook with custom secret
+vcdeploy webhook add myproject gitlab --secret "my-webhook-secret"
+```
+
+#### webhook list
+
+List all webhooks configured for a project.
+
+```bash
+vcdeploy webhook list <project>
+```
+
+**Example:**
+```bash
+vcdeploy webhook list myproject
+```
+
+**Output:**
+```
+PROVIDER    ENABLED  REQUIRE SECRET
+github      true     true
+gitlab      true     true
+```
+
+#### webhook delete
+
+Remove a webhook configuration from a project.
+
+```bash
+vcdeploy webhook delete <project> <provider>
+```
+
+**Example:**
+```bash
+vcdeploy webhook delete myproject github
+```
+
+#### webhook test
+
+Send a test payload to verify webhook configuration. This command requires the server to be running.
+
+```bash
+vcdeploy webhook test <project> <provider>
+```
+
+**Example:**
+```bash
+vcdeploy webhook test myproject github
+```
+
+> **Note:** This command requires a running server and cannot be used in offline mode.
+
+#### webhook rotate-secret
+
+Generate a new secret for a webhook. You must update the secret in your Git provider's settings after running this command.
+
+```bash
+vcdeploy webhook rotate-secret <project> <provider>
+```
+
+**Example:**
+```bash
+vcdeploy webhook rotate-secret myproject github
+```
+
+**Output:**
+```
+✓ Webhook secret rotated for myproject/github
+New secret: <new-secret>
+
+⚠️  Update this secret in your Git provider's webhook settings.
 ```
 
 ---
