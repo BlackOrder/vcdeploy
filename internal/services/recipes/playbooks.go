@@ -134,7 +134,7 @@ func (s *PlaybookService) CustomizeFromSeed(ctx context.Context, seedID int64, n
 		return nil, fmt.Errorf("invalid version: %w", err)
 	}
 
-	copy := &storage.Playbook{
+	cloned := &storage.Playbook{
 		Namespace:       storage.NamespaceUser,
 		Slug:            newSlug,
 		Version:         validation.NormalizeSemver(newVersion),
@@ -154,11 +154,11 @@ func (s *PlaybookService) CustomizeFromSeed(ctx context.Context, seedID int64, n
 		CreatedAt:       time.Now(),
 	}
 
-	if err := s.store.CreatePlaybook(ctx, copy); err != nil {
+	if err := s.store.CreatePlaybook(ctx, cloned); err != nil {
 		return nil, err
 	}
 
-	return copy, nil
+	return cloned, nil
 }
 
 // CheckNewerVersionAvailable compares playbook against latest seed version.
@@ -175,13 +175,13 @@ func (s *PlaybookService) CheckNewerVersionAvailable(ctx context.Context, playbo
 
 	parent, err := s.store.GetPlaybookByID(ctx, *playbook.ParentID)
 	if err != nil {
-		return false, "", nil // Parent deleted
+		return false, "", nil //nolint:nilerr // Parent deleted is not an error - no update available
 	}
 
 	// Get latest version of parent's slug
 	latest, err := s.GetLatest(ctx, parent.Namespace, parent.Slug)
 	if err != nil {
-		return false, "", nil
+		return false, "", nil //nolint:nilerr // Can't get latest is not an error - no update available
 	}
 
 	if validation.CompareSemver(latest.Version, playbook.ParentVersion) > 0 {

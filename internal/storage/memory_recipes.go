@@ -110,8 +110,8 @@ func (m *MemoryStore) ListRecipeComponents(ctx context.Context, namespace string
 			continue
 		}
 		// Return a copy
-		copy := *c
-		result = append(result, &copy)
+		cloned := *c
+		result = append(result, &cloned)
 	}
 
 	// Sort by namespace, slug, version for consistent ordering
@@ -137,8 +137,8 @@ func (m *MemoryStore) ListRecipeComponentVersions(ctx context.Context, namespace
 	for _, c := range m.recipeComponents {
 		if c.Namespace == namespace && c.Slug == slug {
 			// Return a copy
-			copy := *c
-			result = append(result, &copy)
+			cloned := *c
+			result = append(result, &cloned)
 		}
 	}
 
@@ -541,8 +541,8 @@ func (m *MemoryStore) ListActivationsByPlaybook(ctx context.Context, playbookID 
 	activations := m.activationsByPlaybook[playbookID]
 	result := make([]*PlaybookActivation, len(activations))
 	for i, a := range activations {
-		copy := *a
-		result[i] = &copy
+		cloned := *a
+		result[i] = &cloned
 	}
 
 	return result, nil
@@ -624,8 +624,8 @@ func (m *MemoryStore) GetVariableBindings(ctx context.Context, activationID int6
 	bindings := m.bindingsByActivation[activationID]
 	result := make([]*PlaybookVariableBinding, len(bindings))
 	for i, b := range bindings {
-		copy := *b
-		result[i] = &copy
+		cloned := *b
+		result[i] = &cloned
 	}
 
 	return result, nil
@@ -713,8 +713,8 @@ func (m *MemoryStore) FindBindingsBySourceRef(ctx context.Context, sourceType, s
 	bindings := m.bindingsBySourceRef[key]
 	result := make([]*PlaybookVariableBinding, len(bindings))
 	for i, b := range bindings {
-		copy := *b
-		result[i] = &copy
+		cloned := *b
+		result[i] = &cloned
 	}
 
 	return result, nil
@@ -816,8 +816,8 @@ func (m *MemoryStore) ListRawApprovals(ctx context.Context) ([]*RawCommandApprov
 
 	result := make([]*RawCommandApproval, 0, len(m.rawApprovals))
 	for _, a := range m.rawApprovals {
-		copy := *a
-		result = append(result, &copy)
+		cloned := *a
+		result = append(result, &cloned)
 	}
 
 	// Sort by approved time for consistent ordering

@@ -94,3 +94,5 @@ ehthumbs.db
 cpu.out
 mem.out
 *.sarif
+seeds.test
+storage.test

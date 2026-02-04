@@ -339,7 +339,7 @@ func (s *MasterServer) renderComponentDetailPartial(w http.ResponseWriter, c *st
 			if v == c.Version {
 				selected = " selected"
 			}
-			sb.WriteString(fmt.Sprintf(`<option value="%s"%s>%s</option>`, template.HTMLEscapeString(v), selected, template.HTMLEscapeString(v)))
+			sb.WriteString(fmt.Sprintf(`<option value=%q%s>%s</option>`, template.HTMLEscapeString(v), selected, template.HTMLEscapeString(v)))
 		}
 		sb.WriteString(`</select>`)
 		sb.WriteString(`</div>`)
@@ -355,7 +355,7 @@ func (s *MasterServer) renderComponentDetailPartial(w http.ResponseWriter, c *st
 
 	sb.WriteString(`</div>`)
 
-	w.Write([]byte(sb.String()))
+	_, _ = w.Write([]byte(sb.String()))
 }
 
 // handlePlaybookDetailPartial returns playbook details as HTML partial.
@@ -477,7 +477,7 @@ func (s *MasterServer) renderPlaybookDetailPartial(w http.ResponseWriter, p *sto
 			if v == p.Version {
 				selected = " selected"
 			}
-			sb.WriteString(fmt.Sprintf(`<option value="%s"%s>%s</option>`, template.HTMLEscapeString(v), selected, template.HTMLEscapeString(v)))
+			sb.WriteString(fmt.Sprintf(`<option value=%q%s>%s</option>`, template.HTMLEscapeString(v), selected, template.HTMLEscapeString(v)))
 		}
 		sb.WriteString(`</select>`)
 		sb.WriteString(`</div>`)
@@ -493,7 +493,7 @@ func (s *MasterServer) renderPlaybookDetailPartial(w http.ResponseWriter, p *sto
 
 	sb.WriteString(`</div>`)
 
-	w.Write([]byte(sb.String()))
+	_, _ = w.Write([]byte(sb.String()))
 }
 
 // handlePlaybookComposerUI renders the playbook composer page for editing playbook steps.

@@ -48,7 +48,8 @@ func (i *Importer) ValidateBundle(bundle *ExportBundle) error {
 	}
 
 	// Validate components
-	for idx, c := range bundle.Components {
+	for idx := range bundle.Components {
+		c := &bundle.Components[idx]
 		if c.Slug == "" {
 			return fmt.Errorf("component[%d]: missing slug", idx)
 		}
@@ -61,7 +62,8 @@ func (i *Importer) ValidateBundle(bundle *ExportBundle) error {
 	}
 
 	// Validate playbooks
-	for idx, p := range bundle.Playbooks {
+	for idx := range bundle.Playbooks {
+		p := &bundle.Playbooks[idx]
 		if p.Slug == "" {
 			return fmt.Errorf("playbook[%d]: missing slug", idx)
 		}
@@ -89,8 +91,9 @@ func (i *Importer) Import(ctx context.Context, bundle *ExportBundle, strategy Co
 	result := &ImportResult{}
 
 	// Import components first (playbooks may depend on them)
-	for _, c := range bundle.Components {
-		imported, err := i.importComponent(ctx, c, strategy)
+	for idx := range bundle.Components {
+		c := &bundle.Components[idx]
+		imported, err := i.importComponent(ctx, *c, strategy)
 		if err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("component %s:%s: %v", c.Slug, c.Version, err))
 			continue
@@ -103,8 +106,9 @@ func (i *Importer) Import(ctx context.Context, bundle *ExportBundle, strategy Co
 	}
 
 	// Import playbooks
-	for _, p := range bundle.Playbooks {
-		imported, err := i.importPlaybook(ctx, p, strategy)
+	for idx := range bundle.Playbooks {
+		p := &bundle.Playbooks[idx]
+		imported, err := i.importPlaybook(ctx, *p, strategy)
 		if err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("playbook %s:%s: %v", p.Slug, p.Version, err))
 			continue
@@ -132,7 +136,8 @@ func (i *Importer) DryRun(ctx context.Context, bundle *ExportBundle, strategy Co
 	result := &ImportResult{}
 
 	// Check components
-	for _, c := range bundle.Components {
+	for idx := range bundle.Components {
+		c := &bundle.Components[idx]
 		version := validation.NormalizeSemver(c.Version)
 		existing, _ := i.store.GetRecipeComponent(ctx, storage.NamespaceUser, c.Slug, version)
 
@@ -149,7 +154,8 @@ func (i *Importer) DryRun(ctx context.Context, bundle *ExportBundle, strategy Co
 	}
 
 	// Check playbooks
-	for _, p := range bundle.Playbooks {
+	for idx := range bundle.Playbooks {
+		p := &bundle.Playbooks[idx]
 		version := validation.NormalizeSemver(p.Version)
 		existing, _ := i.store.GetPlaybook(ctx, storage.NamespaceUser, p.Slug, version)
 
@@ -182,7 +188,7 @@ func (i *Importer) importComponent(ctx context.Context, ce ComponentExport, stra
 				return false, fmt.Errorf("failed to delete existing: %w", err)
 			}
 		case ConflictRename:
-			slug = slug + "-imported"
+			slug += "-imported"
 			// Check if renamed version also exists
 			renamed, _ := i.store.GetRecipeComponent(ctx, storage.NamespaceUser, slug, version)
 			if renamed != nil {
@@ -227,7 +233,7 @@ func (i *Importer) importPlaybook(ctx context.Context, pe PlaybookExport, strate
 				return false, fmt.Errorf("failed to delete existing: %w", err)
 			}
 		case ConflictRename:
-			slug = slug + "-imported"
+			slug += "-imported"
 			// Check if renamed version also exists
 			renamed, _ := i.store.GetPlaybook(ctx, storage.NamespaceUser, slug, version)
 			if renamed != nil {
