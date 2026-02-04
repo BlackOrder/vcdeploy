@@ -126,11 +126,9 @@ func (w *Worker) Shutdown(timeout time.Duration) {
 	w.isShutdown = true
 	w.shutdownMu.Unlock()
 
-	// Stop DB polling
+	// Stop DB polling via context cancellation
+	// The pollPendingJobs goroutine will stop its own ticker when it sees the context is done
 	w.pollCancel()
-	if w.pollTicker != nil {
-		w.pollTicker.Stop()
-	}
 
 	close(w.shutdown)
 	close(w.queue)
