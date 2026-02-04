@@ -10,10 +10,21 @@ The master server is configured via a YAML file, typically located at `/etc/vcde
 # HTTP Server settings
 server:
   listen: ":9000"              # HTTP API and Web UI address
+  https_address: ":9443"       # Optional separate HTTPS port
   tls:
-    enabled: true              # Enable HTTPS
-    cert: "/etc/vcdeploy/tls/cert.pem"
-    key: "/etc/vcdeploy/tls/key.pem"
+    mode: "static"             # disabled, static, or acme
+    cert_file: "/etc/vcdeploy/tls/cert.pem"
+    key_file: "/etc/vcdeploy/tls/key.pem"
+    force_https: true          # Redirect HTTP to HTTPS
+    min_version: "1.2"         # Minimum TLS version
+    
+    # ACME (Let's Encrypt) configuration
+    acme:
+      email: "admin@example.com"
+      domains:
+        - "vcdeploy.example.com"
+      staging: false
+      cache_dir: "/var/lib/vcdeploy/acme"
 
 # gRPC Server settings (agent connections)
 grpc:
@@ -150,9 +161,16 @@ HTTP server configuration for the REST API and Web UI.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `listen` | string | `:9000` | Address to listen on |
-| `tls.enabled` | bool | `true` | Enable HTTPS |
-| `tls.cert` | string | `/etc/vcdeploy/tls/cert.pem` | TLS certificate path |
-| `tls.key` | string | `/etc/vcdeploy/tls/key.pem` | TLS private key path |
+| `https_address` | string | - | Optional separate HTTPS port |
+| `tls.mode` | string | `disabled` | TLS mode: disabled, static, or acme |
+| `tls.cert_file` | string | - | TLS certificate path (static mode) |
+| `tls.key_file` | string | - | TLS private key path (static mode) |
+| `tls.force_https` | bool | `false` | Redirect HTTP to HTTPS |
+| `tls.min_version` | string | `1.2` | Minimum TLS version (1.2 or 1.3) |
+| `tls.acme.email` | string | - | ACME contact email (acme mode) |
+| `tls.acme.domains` | list | `[]` | Domains for ACME certs |
+| `tls.acme.staging` | bool | `false` | Use Let's Encrypt staging |
+| `tls.acme.cache_dir` | string | - | Certificate cache directory |
 
 ### gRPC
 
@@ -325,6 +343,23 @@ The database location is not configurable in the YAML file—it's determined by 
 | Key rotation interval | `30 days` |
 | Backup interval | `30 days` |
 | Backup retention | `365 days` |
+
+## Environment Variables
+
+The following environment variables can be used to configure vcdeploy:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VCDEPLOY_CONFIG_DIR` | Configuration directory | `/etc/vcdeploy` |
+| `VCDEPLOY_DATA_DIR` | Data directory | `/var/lib/vcdeploy` |
+| `VCDEPLOY_LOG_DIR` | Log directory | `/var/log/vcdeploy` |
+| `VCDEPLOY_RUN_DIR` | Runtime directory | `/var/run/vcdeploy` |
+| `VCDEPLOY_MASTER_KEY` | Master encryption key (base64) | Auto-generated |
+| `VCDEPLOY_ADMIN_PASSWORD` | Initial admin password | - |
+| `VCDEPLOY_ADMIN_USERNAME` | Initial admin username | `admin` |
+| `VCDEPLOY_ADMIN_EMAIL` | Initial admin email | `admin@localhost` |
+
+Environment variables take precedence over config file values for the fields they override.
 
 ## See Also
 

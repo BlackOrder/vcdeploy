@@ -298,9 +298,12 @@ func DefaultMasterConfig() *MasterConfig {
 		Server: ServerConfig{
 			Listen: ":9000",
 			TLS: TLSConfig{
-				Enabled: true,
-				Cert:    "/etc/vcdeploy/tls/cert.pem",
-				Key:     "/etc/vcdeploy/tls/key.pem",
+				Mode:       TLSModeDisabled,
+				CertFile:   "/etc/vcdeploy/certs/server.crt",
+				KeyFile:    "/etc/vcdeploy/certs/server.key",
+				Enabled:    true, // Deprecated: for backward compatibility
+				ForceHTTPS: true,
+				MinVersion: "1.2",
 			},
 		},
 		GRPC: GRPCConfig{
@@ -440,5 +443,32 @@ func (c *MasterConfig) Validate() error {
 	if c.Backup.Config.Versions < 1 {
 		return fmt.Errorf("backup.config.versions must be at least 1")
 	}
+
+	// TLS file validation for static mode
+	if c.Server.TLS.Mode == TLSModeStatic {
+		if c.Server.TLS.CertFile == "" {
+			return fmt.Errorf("tls.cert_file is required when tls.mode is 'static'")
+		}
+		if c.Server.TLS.KeyFile == "" {
+			return fmt.Errorf("tls.key_file is required when tls.mode is 'static'")
+		}
+		if _, err := os.Stat(c.Server.TLS.CertFile); err != nil {
+			return fmt.Errorf("TLS cert file not found: %s", c.Server.TLS.CertFile)
+		}
+		if _, err := os.Stat(c.Server.TLS.KeyFile); err != nil {
+			return fmt.Errorf("TLS key file not found: %s", c.Server.TLS.KeyFile)
+		}
+	}
+
+	// ACME mode validation
+	if c.Server.TLS.Mode == TLSModeACME {
+		if c.Server.TLS.ACME.Email == "" {
+			return fmt.Errorf("tls.acme.email is required when tls.mode is 'acme'")
+		}
+		if len(c.Server.TLS.ACME.Domains) == 0 {
+			return fmt.Errorf("tls.acme.domains is required when tls.mode is 'acme'")
+		}
+	}
+
 	return nil
 }
