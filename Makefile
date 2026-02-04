@@ -80,6 +80,15 @@ test-cleanup: ## Clean up test Docker environment (use after interrupted tests)
 # Development Server (for manual testing)
 # ============================================================================
 
+.PHONY: vendor-ui
+vendor-ui: ## Update vendored UI dependencies (htmx, tailwind)
+	@mkdir -p web/static/js/vendor
+	curl -sL https://unpkg.com/htmx.org@1.9.10/dist/htmx.min.js -o web/static/js/vendor/htmx.min.js
+	curl -sL https://unpkg.com/htmx.org@1.9.10/dist/ext/json-enc.js -o web/static/js/vendor/htmx-json-enc.min.js
+	curl -sL https://cdn.tailwindcss.com -o web/static/js/vendor/tailwind.min.js
+	@echo "UI dependencies vendored successfully"
+	@ls -la web/static/js/vendor/
+
 .PHONY: dev
 dev: build ## Run master in development mode (for manual testing)
 	@mkdir -p data

@@ -20,6 +20,9 @@ coverage.txt
 # Dependency directories
 vendor/
 
+# Exception: keep UI vendor files
+!web/static/js/vendor/
+
 # IDE and editor files
 .idea/
 .vscode/

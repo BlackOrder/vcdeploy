@@ -6,9 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.Title}} - vcdeploy</title>
     <link rel="icon" type="image/svg+xml" href="/static/images/icon.svg">
-    <script src="https://unpkg.com/htmx.org@1.9.10"{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}></script>
-    <script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/json-enc.js"{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}></script>
-    <script src="https://cdn.tailwindcss.com"{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}></script>
+    <script src="/static/js/vendor/htmx.min.js"{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}></script>
+    <script src="/static/js/vendor/htmx-json-enc.min.js"{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}></script>
+    <script src="/static/js/vendor/tailwind.min.js"{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}></script>
     <script{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}>
         tailwind.config = {
             darkMode: 'class',
