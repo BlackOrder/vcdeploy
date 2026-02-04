@@ -1,9 +1,20 @@
 package security
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
+
+// mustDecrypt is a test helper that decrypts a value and panics on error.
+// This function is only available in tests - not shipped in production binary.
+func (e *ConfigEncryptor) mustDecrypt(encrypted string) string {
+	result, err := e.Decrypt(encrypted)
+	if err != nil {
+		panic(fmt.Sprintf("failed to decrypt config value: %v", err))
+	}
+	return result
+}
 
 func TestNewConfigEncryptor(t *testing.T) {
 	t.Parallel()
@@ -193,15 +204,15 @@ func TestConfigEncryptor_MustDecrypt(t *testing.T) {
 
 	// Should work for valid encrypted value
 	encrypted, _ := enc.Encrypt("test value")
-	result := enc.MustDecrypt(encrypted)
+	result := enc.mustDecrypt(encrypted)
 	if result != "test value" {
-		t.Errorf("MustDecrypt() = %q, want %q", result, "test value")
+		t.Errorf("mustDecrypt() = %q, want %q", result, "test value")
 	}
 
 	// Should pass through plaintext
-	plain := enc.MustDecrypt("plaintext")
+	plain := enc.mustDecrypt("plaintext")
 	if plain != "plaintext" {
-		t.Errorf("MustDecrypt(plaintext) = %q, want %q", plain, "plaintext")
+		t.Errorf("mustDecrypt(plaintext) = %q, want %q", plain, "plaintext")
 	}
 }
 
@@ -212,10 +223,10 @@ func TestConfigEncryptor_MustDecrypt_Panics(t *testing.T) {
 
 	defer func() {
 		if r := recover(); r == nil {
-			t.Error("MustDecrypt should panic on invalid ciphertext")
+			t.Error("mustDecrypt should panic on invalid ciphertext")
 		}
 	}()
 
 	// This should panic
-	enc.MustDecrypt("ENC:invalid-ciphertext-data==")
+	enc.mustDecrypt("ENC:invalid-ciphertext-data==")
 }

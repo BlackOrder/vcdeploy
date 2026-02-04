@@ -149,8 +149,8 @@ func (s *MasterServer) handleStartProvisioning(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// TODO: Trigger async provisioning worker
-	// For now, we just create the job and let it be picked up by a background worker
+	// Job is saved to database and will be picked up by the provisioning worker's
+	// background polling loop (every 5 seconds).
 
 	s.logAudit(r, "provision", "agent", "Started provisioning agent: "+req.AgentID+" on "+req.TargetHost+" by "+initiatedBy, "success")
 

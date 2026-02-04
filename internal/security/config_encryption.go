@@ -106,13 +106,3 @@ func (e *ConfigEncryptor) Decrypt(encrypted string) (string, error) {
 func IsEncrypted(value string) bool {
 	return strings.HasPrefix(value, EncryptedValuePrefix)
 }
-
-// MustDecrypt decrypts a value and panics on error.
-// Useful for configuration loading where errors should be fatal.
-func (e *ConfigEncryptor) MustDecrypt(encrypted string) string {
-	result, err := e.Decrypt(encrypted)
-	if err != nil {
-		panic(fmt.Sprintf("failed to decrypt config value: %v", err))
-	}
-	return result
-}
