@@ -14,14 +14,14 @@ import (
 // GET /api/v1/admin/totp/users
 func (s *MasterServer) handleAdminTOTPUsers(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
 	// Require admin role
 	user, ok := GetUserFromContext(r.Context())
 	if !ok || user.Role != "admin" {
-		s.jsonError(w, http.StatusForbidden, "Admin access required")
+		s.jsonError(w, http.StatusForbidden, "admin access required")
 		return
 	}
 
@@ -29,7 +29,7 @@ func (s *MasterServer) handleAdminTOTPUsers(w http.ResponseWriter, r *http.Reque
 	allUsers, err := s.userService.List(ctx)
 	if err != nil {
 		s.logger.Error("Failed to list users", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Failed to list users")
+		s.jsonError(w, http.StatusInternalServerError, "failed to list users")
 		return
 	}
 
@@ -64,14 +64,14 @@ func (s *MasterServer) handleAdminTOTPUsers(w http.ResponseWriter, r *http.Reque
 // GET /api/v1/admin/totp/status/{username}
 func (s *MasterServer) handleAdminTOTPStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
 	// Require admin role
 	admin, ok := GetUserFromContext(r.Context())
 	if !ok || admin.Role != "admin" {
-		s.jsonError(w, http.StatusForbidden, "Admin access required")
+		s.jsonError(w, http.StatusForbidden, "admin access required")
 		return
 	}
 
@@ -79,12 +79,12 @@ func (s *MasterServer) handleAdminTOTPStatus(w http.ResponseWriter, r *http.Requ
 	path := r.URL.Path
 	prefix := "/api/v1/admin/totp/status/"
 	if !strings.HasPrefix(path, prefix) {
-		s.jsonError(w, http.StatusBadRequest, "Invalid path")
+		s.jsonError(w, http.StatusBadRequest, "invalid path")
 		return
 	}
 	username := strings.TrimPrefix(path, prefix)
 	if username == "" {
-		s.jsonError(w, http.StatusBadRequest, "Username required")
+		s.jsonError(w, http.StatusBadRequest, "username required")
 		return
 	}
 
@@ -92,7 +92,7 @@ func (s *MasterServer) handleAdminTOTPStatus(w http.ResponseWriter, r *http.Requ
 
 	user, err := s.userService.GetByUsername(ctx, username)
 	if err != nil {
-		s.jsonError(w, http.StatusNotFound, "User not found")
+		s.jsonError(w, http.StatusNotFound, "user not found")
 		return
 	}
 
@@ -120,14 +120,14 @@ func (s *MasterServer) handleAdminTOTPStatus(w http.ResponseWriter, r *http.Requ
 // POST /api/v1/admin/totp/disable
 func (s *MasterServer) handleAdminTOTPDisable(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
 	// Require admin role
 	admin, ok := GetUserFromContext(r.Context())
 	if !ok || admin.Role != "admin" {
-		s.jsonError(w, http.StatusForbidden, "Admin access required")
+		s.jsonError(w, http.StatusForbidden, "admin access required")
 		return
 	}
 
@@ -138,17 +138,17 @@ func (s *MasterServer) handleAdminTOTPDisable(w http.ResponseWriter, r *http.Req
 		TOTPCode string `json:"totp_code"` // Admin's TOTP for verification (optional)
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.jsonError(w, http.StatusBadRequest, "Invalid request body")
+		s.jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
 	// Validate inputs
 	if req.Username == "" {
-		s.jsonError(w, http.StatusBadRequest, "Username is required")
+		s.jsonError(w, http.StatusBadRequest, "username is required")
 		return
 	}
 	if len(req.Reason) < 10 {
-		s.jsonError(w, http.StatusBadRequest, "Reason must be at least 10 characters")
+		s.jsonError(w, http.StatusBadRequest, "reason must be at least 10 characters")
 		return
 	}
 
@@ -157,32 +157,32 @@ func (s *MasterServer) handleAdminTOTPDisable(w http.ResponseWriter, r *http.Req
 	// Find target user
 	targetUser, err := s.userService.GetByUsername(ctx, req.Username)
 	if err != nil {
-		s.jsonError(w, http.StatusNotFound, "User not found")
+		s.jsonError(w, http.StatusNotFound, "user not found")
 		return
 	}
 
 	// Prevent self-disable via API
 	if targetUser.ID == admin.ID {
-		s.jsonError(w, http.StatusForbidden, "Cannot disable your own TOTP via admin interface")
+		s.jsonError(w, http.StatusForbidden, "cannot disable your own TOTP via admin interface")
 		return
 	}
 
 	// Check if target has TOTP enabled
 	if !targetUser.TOTPEnabled {
-		s.jsonError(w, http.StatusBadRequest, "User does not have TOTP enabled")
+		s.jsonError(w, http.StatusBadRequest, "user does not have TOTP enabled")
 		return
 	}
 
 	// Verify admin's TOTP if admin has it enabled
 	if admin.TOTPEnabled {
 		if req.TOTPCode == "" {
-			s.jsonError(w, http.StatusUnauthorized, "Admin TOTP verification required")
+			s.jsonError(w, http.StatusUnauthorized, "admin TOTP verification required")
 			return
 		}
 		if !security.ValidateTOTP(admin.TOTPSecret, req.TOTPCode, security.DefaultTOTPConfig()) {
 			s.logAudit(r, "admin_totp_disable_failed", "security",
 				"invalid admin TOTP for: "+req.Username, "failure")
-			s.jsonError(w, http.StatusUnauthorized, "Invalid admin TOTP code")
+			s.jsonError(w, http.StatusUnauthorized, "invalid admin TOTP code")
 			return
 		}
 	}
@@ -190,7 +190,7 @@ func (s *MasterServer) handleAdminTOTPDisable(w http.ResponseWriter, r *http.Req
 	// Disable TOTP
 	if err := s.userService.SetTOTP(ctx, targetUser.ID, "", false); err != nil {
 		s.logger.Error("Failed to disable TOTP", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Failed to disable TOTP")
+		s.jsonError(w, http.StatusInternalServerError, "failed to disable TOTP")
 		return
 	}
 
@@ -218,13 +218,13 @@ func (s *MasterServer) handleAdminTOTPDisable(w http.ResponseWriter, r *http.Req
 // Requires the user's current TOTP code for verification.
 func (s *MasterServer) handleRegenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
 	user, ok := GetUserFromContext(r.Context())
 	if !ok {
-		s.jsonError(w, http.StatusUnauthorized, "Unauthorized")
+		s.jsonError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -239,7 +239,7 @@ func (s *MasterServer) handleRegenerateRecoveryCodes(w http.ResponseWriter, r *h
 		TOTPCode string `json:"totp_code"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.jsonError(w, http.StatusBadRequest, "Invalid request body")
+		s.jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
@@ -252,7 +252,7 @@ func (s *MasterServer) handleRegenerateRecoveryCodes(w http.ResponseWriter, r *h
 	if !security.ValidateTOTP(user.TOTPSecret, req.TOTPCode, security.DefaultTOTPConfig()) {
 		s.logAudit(r, "recovery_codes_regenerate_failed", "security",
 			"user: "+user.Username+", reason: invalid TOTP", "failure")
-		s.jsonError(w, http.StatusUnauthorized, "Invalid TOTP code")
+		s.jsonError(w, http.StatusUnauthorized, "invalid TOTP code")
 		return
 	}
 
@@ -261,7 +261,7 @@ func (s *MasterServer) handleRegenerateRecoveryCodes(w http.ResponseWriter, r *h
 	// Delete existing recovery codes
 	if err := s.store.DeleteRecoveryCodes(ctx, user.ID); err != nil {
 		s.logger.Error("Failed to delete existing recovery codes", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Failed to regenerate recovery codes")
+		s.jsonError(w, http.StatusInternalServerError, "failed to regenerate recovery codes")
 		return
 	}
 
@@ -269,7 +269,7 @@ func (s *MasterServer) handleRegenerateRecoveryCodes(w http.ResponseWriter, r *h
 	codes, hashes, err := security.GenerateRecoveryCodes()
 	if err != nil {
 		s.logger.Error("Failed to generate recovery codes", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Failed to generate recovery codes")
+		s.jsonError(w, http.StatusInternalServerError, "failed to generate recovery codes")
 		return
 	}
 
@@ -283,7 +283,7 @@ func (s *MasterServer) handleRegenerateRecoveryCodes(w http.ResponseWriter, r *h
 	}
 	if err := s.store.SaveRecoveryCodes(ctx, user.ID, recoveryCodes); err != nil {
 		s.logger.Error("Failed to save recovery codes", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Failed to save recovery codes")
+		s.jsonError(w, http.StatusInternalServerError, "failed to save recovery codes")
 		return
 	}
 

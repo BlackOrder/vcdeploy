@@ -59,7 +59,7 @@ func (s *MasterServer) handleProvisionAgent(w http.ResponseWriter, r *http.Reque
 			s.handleStartProvisioning(w, r)
 			return
 		}
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
@@ -79,7 +79,7 @@ func (s *MasterServer) handleProvisionAgent(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	s.jsonError(w, http.StatusNotFound, "Not found")
+	s.jsonError(w, http.StatusNotFound, "not found")
 }
 
 // handleStartProvisioning starts a new provisioning job.
@@ -88,7 +88,7 @@ func (s *MasterServer) handleStartProvisioning(w http.ResponseWriter, r *http.Re
 
 	var req ProvisionAgentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.jsonError(w, http.StatusBadRequest, "Invalid request body")
+		s.jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
@@ -115,7 +115,7 @@ func (s *MasterServer) handleStartProvisioning(w http.ResponseWriter, r *http.Re
 			return
 		}
 		s.logger.Error("Failed to get SSH key", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+		s.jsonError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -145,7 +145,7 @@ func (s *MasterServer) handleStartProvisioning(w http.ResponseWriter, r *http.Re
 
 	if err := s.provisionService.CreateJob(ctx, job); err != nil {
 		s.logger.Error("Failed to create provision job", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+		s.jsonError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -166,7 +166,7 @@ func (s *MasterServer) handleStartProvisioning(w http.ResponseWriter, r *http.Re
 // handleGetProvisionStatus gets the status of a provisioning job.
 func (s *MasterServer) handleGetProvisionStatus(w http.ResponseWriter, r *http.Request, jobID string) {
 	if r.Method != http.MethodGet {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
@@ -175,11 +175,11 @@ func (s *MasterServer) handleGetProvisionStatus(w http.ResponseWriter, r *http.R
 	job, err := s.provisionService.GetJob(ctx, jobID)
 	if err != nil {
 		if services.IsNotFound(err) || strings.Contains(err.Error(), "not found") {
-			s.jsonError(w, http.StatusNotFound, "Provision job not found")
+			s.jsonError(w, http.StatusNotFound, "provision job not found")
 			return
 		}
 		s.logger.Error("Failed to get provision job", zap.Error(err), zap.String("job_id", jobID))
-		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+		s.jsonError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -200,7 +200,7 @@ func (s *MasterServer) handleGetProvisionStatus(w http.ResponseWriter, r *http.R
 // handleGetProvisionLogs gets the logs of a provisioning job.
 func (s *MasterServer) handleGetProvisionLogs(w http.ResponseWriter, r *http.Request, jobID string) {
 	if r.Method != http.MethodGet {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
@@ -210,11 +210,11 @@ func (s *MasterServer) handleGetProvisionLogs(w http.ResponseWriter, r *http.Req
 	job, err := s.provisionService.GetJob(ctx, jobID)
 	if err != nil {
 		if services.IsNotFound(err) || strings.Contains(err.Error(), "not found") {
-			s.jsonError(w, http.StatusNotFound, "Provision job not found")
+			s.jsonError(w, http.StatusNotFound, "provision job not found")
 			return
 		}
 		s.logger.Error("Failed to get provision job", zap.Error(err), zap.String("job_id", jobID))
-		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+		s.jsonError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -222,7 +222,7 @@ func (s *MasterServer) handleGetProvisionLogs(w http.ResponseWriter, r *http.Req
 	logs, err := s.store.GetProvisionLogs(ctx, jobID)
 	if err != nil {
 		s.logger.Error("Failed to get provision logs", zap.Error(err), zap.String("job_id", jobID))
-		s.jsonError(w, http.StatusInternalServerError, "Failed to retrieve logs")
+		s.jsonError(w, http.StatusInternalServerError, "failed to retrieve logs")
 		return
 	}
 
@@ -243,51 +243,5 @@ func (s *MasterServer) handleGetProvisionLogs(w http.ResponseWriter, r *http.Req
 		Status: job.Status,
 		Stage:  job.Stage,
 		Logs:   logEntries,
-	})
-}
-
-// handleProvisionJobsList lists provisioning jobs.
-//
-//nolint:unused // Reserved for future provision job listing endpoint
-func (s *MasterServer) handleProvisionJobsList(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	ctx := r.Context()
-
-	// Check for host filter
-	host := r.URL.Query().Get("host")
-
-	if host != "" {
-		p := parsePagination(r)
-		result, err := s.provisionService.ListByHost(ctx, host, p)
-		if err != nil {
-			s.logger.Error("Failed to list provision jobs by host", zap.Error(err))
-			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
-			return
-		}
-
-		s.jsonResponse(w, PaginatedResponse{
-			Items:      result.Items,
-			TotalCount: result.TotalCount,
-			Limit:      result.Pagination.Limit,
-			Offset:     result.Pagination.Offset,
-		})
-		return
-	}
-
-	// List pending jobs
-	jobs, err := s.provisionService.ListPending(ctx)
-	if err != nil {
-		s.logger.Error("Failed to list pending provision jobs", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
-		return
-	}
-
-	s.jsonResponse(w, ListCountResponse{
-		Items: jobs,
-		Count: len(jobs),
 	})
 }

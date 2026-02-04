@@ -13,7 +13,7 @@ import (
 // handleAuditLogs handles GET for /api/v1/audit.
 func (s *MasterServer) handleAuditLogs(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
@@ -34,7 +34,7 @@ func (s *MasterServer) handleAuditLogs(w http.ResponseWriter, r *http.Request) {
 	entries, err := s.auditService.List(ctx, p.Limit, p.Offset)
 	if err != nil {
 		s.logger.Error("Failed to list audit logs", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Internal error")
+		s.jsonError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 

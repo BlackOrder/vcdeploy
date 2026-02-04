@@ -47,13 +47,13 @@ func (s *MasterServer) handleCertificates(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	s.jsonError(w, http.StatusNotFound, "Not found")
+	s.jsonError(w, http.StatusNotFound, "not found")
 }
 
 // handleListAgentCertificates lists all agent certificates.
 func (s *MasterServer) handleListAgentCertificates(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
@@ -63,7 +63,7 @@ func (s *MasterServer) handleListAgentCertificates(w http.ResponseWriter, r *htt
 	certs, err := certService.ListAgentCertificates(ctx)
 	if err != nil {
 		s.logger.Error("Failed to list agent certificates", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+		s.jsonError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -76,7 +76,7 @@ func (s *MasterServer) handleListAgentCertificates(w http.ResponseWriter, r *htt
 // handleGetAgentCertificate gets a specific agent's certificate.
 func (s *MasterServer) handleGetAgentCertificate(w http.ResponseWriter, r *http.Request, agentID string) {
 	if r.Method != http.MethodGet {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
@@ -86,11 +86,11 @@ func (s *MasterServer) handleGetAgentCertificate(w http.ResponseWriter, r *http.
 	cert, err := certService.GetAgentCertificate(ctx, agentID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
-			s.jsonError(w, http.StatusNotFound, "Certificate not found")
+			s.jsonError(w, http.StatusNotFound, "certificate not found")
 			return
 		}
 		s.logger.Error("Failed to get agent certificate", zap.Error(err), zap.String("agent_id", agentID))
-		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+		s.jsonError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -105,7 +105,7 @@ type RevokeRequest struct {
 // handleRevokeAgentCertificate revokes an agent's certificate.
 func (s *MasterServer) handleRevokeAgentCertificate(w http.ResponseWriter, r *http.Request, agentID string) {
 	if r.Method != http.MethodPost {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
@@ -115,7 +115,7 @@ func (s *MasterServer) handleRevokeAgentCertificate(w http.ResponseWriter, r *ht
 	var req RevokeRequest
 	if r.Body != nil {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err.Error() != "EOF" {
-			s.jsonError(w, http.StatusBadRequest, "Invalid request body")
+			s.jsonError(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
 	}
@@ -132,11 +132,11 @@ func (s *MasterServer) handleRevokeAgentCertificate(w http.ResponseWriter, r *ht
 	certService := security.NewCertificateService(s.store, s.logger)
 	if err := certService.RevokeAgentCertificate(ctx, agentID, req.Reason, revokedBy); err != nil {
 		if strings.Contains(err.Error(), "not found") {
-			s.jsonError(w, http.StatusNotFound, "Certificate not found")
+			s.jsonError(w, http.StatusNotFound, "certificate not found")
 			return
 		}
 		s.logger.Error("Failed to revoke certificate", zap.Error(err), zap.String("agent_id", agentID))
-		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+		s.jsonError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -158,13 +158,13 @@ func (s *MasterServer) handleCAs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.jsonError(w, http.StatusNotFound, "Not found")
+	s.jsonError(w, http.StatusNotFound, "not found")
 }
 
 // handleListCAs lists all certificate authorities.
 func (s *MasterServer) handleListCAs(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
@@ -174,7 +174,7 @@ func (s *MasterServer) handleListCAs(w http.ResponseWriter, r *http.Request) {
 	cas, err := certService.ListCAs(ctx)
 	if err != nil {
 		s.logger.Error("Failed to list CAs", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+		s.jsonError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -187,7 +187,7 @@ func (s *MasterServer) handleListCAs(w http.ResponseWriter, r *http.Request) {
 // handleRotateCA initiates CA rotation.
 func (s *MasterServer) handleRotateCA(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
@@ -208,7 +208,7 @@ func (s *MasterServer) handleRotateCA(w http.ResponseWriter, r *http.Request) {
 	_, err := s.caManager.RotateCA(ctx, coreSecurity.DefaultCAConfig())
 	if err != nil {
 		s.logger.Error("Failed to rotate CA", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Failed to rotate CA: "+err.Error())
+		s.jsonError(w, http.StatusInternalServerError, "failed to rotate CA: "+err.Error())
 		return
 	}
 
@@ -230,13 +230,13 @@ func (s *MasterServer) handleServerCertificate(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	s.jsonError(w, http.StatusNotFound, "Not found")
+	s.jsonError(w, http.StatusNotFound, "not found")
 }
 
 // handleGetServerCertificate gets the server certificate.
 func (s *MasterServer) handleGetServerCertificate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
@@ -246,7 +246,7 @@ func (s *MasterServer) handleGetServerCertificate(w http.ResponseWriter, r *http
 	certs, err := certService.ListServerCertificates(ctx)
 	if err != nil {
 		s.logger.Error("Failed to get server certificates", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+		s.jsonError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -259,7 +259,7 @@ func (s *MasterServer) handleGetServerCertificate(w http.ResponseWriter, r *http
 // handleRenewServerCertificate renews the server certificate.
 func (s *MasterServer) handleRenewServerCertificate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
@@ -279,13 +279,13 @@ func (s *MasterServer) handleRenewServerCertificate(w http.ResponseWriter, r *ht
 
 	// Server certificate renewal is handled via ACME/Let's Encrypt typically
 	// Manual renewal through the API is not yet implemented
-	s.jsonError(w, http.StatusNotImplemented, "Server certificate renewal through API not yet implemented. Use ACME/Let's Encrypt or manual certificate management.")
+	s.jsonError(w, http.StatusNotImplemented, "server certificate renewal through API not yet implemented. Use ACME/Let's Encrypt or manual certificate management.")
 }
 
 // handleCertAudit handles /api/v1/certificates/audit endpoints.
 func (s *MasterServer) handleCertAudit(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
@@ -330,7 +330,7 @@ func (s *MasterServer) handleCertAudit(w http.ResponseWriter, r *http.Request) {
 	events, err := certService.ListCertAuditEvents(ctx, filter)
 	if err != nil {
 		s.logger.Error("Failed to list cert audit events", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+		s.jsonError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
