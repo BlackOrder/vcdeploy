@@ -3,8 +3,12 @@ package security
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
 	"encoding/pem"
 	"fmt"
 	"time"
@@ -189,11 +193,13 @@ func (s *SSHKeyService) GenerateSSHKey(ctx context.Context, req GenerateSSHKeyRe
 		privateKey, publicKey, fingerprint, err = generateEd25519Key()
 		keyType = storage.SSHKeyTypeEd25519
 	case storage.SSHKeyTypeRSA:
-		// TODO: Implement RSA key generation
-		return nil, services.NewInputError("RSA key generation not yet implemented", "key_type")
+		privateKey, publicKey, fingerprint, err = generateRSAKey(4096)
+		keyType = storage.SSHKeyTypeRSA
 	case storage.SSHKeyTypeECDSA:
-		// TODO: Implement ECDSA key generation
-		return nil, services.NewInputError("ECDSA key generation not yet implemented", "key_type")
+		privateKey, publicKey, fingerprint, err = generateECDSAKey(elliptic.P256())
+		keyType = storage.SSHKeyTypeECDSA
+	default:
+		return nil, services.NewInputError("unsupported key type: must be ed25519, rsa, or ecdsa", "key_type")
 	}
 
 	if err != nil {
@@ -369,6 +375,73 @@ func generateEd25519Key() (privateKey, publicKey []byte, fingerprint string, err
 	privateKey = pem.EncodeToMemory(&pem.Block{
 		Type:  "OPENSSH PRIVATE KEY",
 		Bytes: marshalED25519PrivateKey(privKey),
+	})
+
+	return privateKey, publicKey, fingerprint, nil
+}
+
+// generateRSAKey generates an RSA SSH key pair.
+func generateRSAKey(bits int) (privateKey, publicKey []byte, fingerprint string, err error) {
+	if bits < 2048 {
+		bits = 2048
+	}
+	if bits > 8192 {
+		bits = 8192
+	}
+
+	rsaKey, err := rsa.GenerateKey(rand.Reader, bits)
+	if err != nil {
+		return nil, nil, "", fmt.Errorf("generating RSA key: %w", err)
+	}
+
+	// Convert to SSH format
+	sshPubKey, err := ssh.NewPublicKey(&rsaKey.PublicKey)
+	if err != nil {
+		return nil, nil, "", fmt.Errorf("converting public key: %w", err)
+	}
+
+	// Get public key in authorized_keys format
+	publicKey = ssh.MarshalAuthorizedKey(sshPubKey)
+
+	// Get fingerprint
+	fingerprint = ssh.FingerprintSHA256(sshPubKey)
+
+	// Encode private key to PEM format
+	privateKey = pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(rsaKey),
+	})
+
+	return privateKey, publicKey, fingerprint, nil
+}
+
+// generateECDSAKey generates an ECDSA SSH key pair.
+func generateECDSAKey(curve elliptic.Curve) (privateKey, publicKey []byte, fingerprint string, err error) {
+	ecKey, err := ecdsa.GenerateKey(curve, rand.Reader)
+	if err != nil {
+		return nil, nil, "", fmt.Errorf("generating ECDSA key: %w", err)
+	}
+
+	// Convert to SSH format
+	sshPubKey, err := ssh.NewPublicKey(&ecKey.PublicKey)
+	if err != nil {
+		return nil, nil, "", fmt.Errorf("converting public key: %w", err)
+	}
+
+	// Get public key in authorized_keys format
+	publicKey = ssh.MarshalAuthorizedKey(sshPubKey)
+
+	// Get fingerprint
+	fingerprint = ssh.FingerprintSHA256(sshPubKey)
+
+	// Encode private key to PEM format
+	ecKeyBytes, err := x509.MarshalECPrivateKey(ecKey)
+	if err != nil {
+		return nil, nil, "", fmt.Errorf("marshaling ECDSA key: %w", err)
+	}
+	privateKey = pem.EncodeToMemory(&pem.Block{
+		Type:  "EC PRIVATE KEY",
+		Bytes: ecKeyBytes,
 	})
 
 	return privateKey, publicKey, fingerprint, nil

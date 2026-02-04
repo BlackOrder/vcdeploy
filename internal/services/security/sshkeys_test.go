@@ -94,7 +94,7 @@ func TestSSHKeyService_GenerateKey_InvalidType(t *testing.T) {
 	assert.Equal(t, "key_type", inputErr.Field)
 }
 
-func TestSSHKeyService_GenerateKey_RSA_NotImplemented(t *testing.T) {
+func TestSSHKeyService_GenerateKey_RSA(t *testing.T) {
 	t.Parallel()
 
 	tdb := testutil.NewTestDB(t)
@@ -108,11 +108,35 @@ func TestSSHKeyService_GenerateKey_RSA_NotImplemented(t *testing.T) {
 		CreatedBy: "test-user",
 	}
 
-	_, err := svc.GenerateSSHKey(ctx, req)
-	require.Error(t, err)
-	// RSA not yet implemented
-	var inputErr *services.InputError
-	require.True(t, errors.As(err, &inputErr))
+	info, err := svc.GenerateSSHKey(ctx, req)
+	require.NoError(t, err)
+	assert.Equal(t, "rsa-key", info.Name)
+	assert.Equal(t, "rsa", info.KeyType)
+	assert.Contains(t, info.PublicKey, "ssh-rsa")
+	assert.NotEmpty(t, info.Fingerprint)
+}
+
+func TestSSHKeyService_GenerateKey_ECDSA(t *testing.T) {
+	t.Parallel()
+
+	tdb := testutil.NewTestDB(t)
+	kms := testutil_mocks.NewMockKMS()
+	svc := NewSSHKeyService(tdb.Store(), kms, zap.NewNop())
+
+	ctx := context.Background()
+	req := GenerateSSHKeyRequest{
+		Name:      "ecdsa-key",
+		KeyType:   "ecdsa",
+		CreatedBy: "test-user",
+	}
+
+	info, err := svc.GenerateSSHKey(ctx, req)
+	require.NoError(t, err)
+	assert.Equal(t, "ecdsa-key", info.Name)
+	assert.Equal(t, "ecdsa", info.KeyType)
+	assert.Contains(t, info.PublicKey, "ecdsa-sha2")
+	assert.NotEmpty(t, info.Fingerprint)
+	assert.NotEmpty(t, info.Fingerprint)
 }
 
 func TestSSHKeyService_GenerateKey_DuplicateName(t *testing.T) {
