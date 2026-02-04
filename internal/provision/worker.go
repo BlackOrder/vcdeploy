@@ -23,6 +23,11 @@ type Worker struct {
 	shutdown    chan struct{}
 	shutdownMu  sync.Mutex
 	isShutdown  bool
+	pollTicker  *time.Ticker
+	pollCtx     context.Context
+	pollCancel  context.CancelFunc
+	pollRunning map[string]struct{} // tracks jobs currently being processed
+	pollMu      sync.Mutex          // protects pollRunning
 }
 
 // NewWorker creates a new provisioning worker.
@@ -30,6 +35,7 @@ func NewWorker(provisioner *SSHProvisioner, store storage.Store, logger *zap.Log
 	if workers < 1 {
 		workers = 2
 	}
+	ctx, cancel := context.WithCancel(context.Background())
 	return &Worker{
 		provisioner: provisioner,
 		store:       store,
@@ -37,16 +43,28 @@ func NewWorker(provisioner *SSHProvisioner, store storage.Store, logger *zap.Log
 		queue:       make(chan string, 100),
 		workers:     workers,
 		shutdown:    make(chan struct{}),
+		pollCtx:     ctx,
+		pollCancel:  cancel,
+		pollRunning: make(map[string]struct{}),
 	}
 }
 
-// Start starts the worker goroutines.
+// Start starts the worker goroutines and the DB polling loop.
 func (w *Worker) Start() {
+	// Start worker goroutines
 	for i := 0; i < w.workers; i++ {
 		w.wg.Add(1)
 		go w.worker(i)
 	}
-	w.logger.Info("Provisioning worker started", zap.Int("workers", w.workers))
+
+	// Start DB polling goroutine
+	w.wg.Add(1)
+	go w.pollPendingJobs()
+
+	w.logger.Info("Provisioning worker started",
+		zap.Int("workers", w.workers),
+		zap.String("poll_interval", "5s"),
+	)
 }
 
 // Submit submits a new provisioning job for async execution.
@@ -108,6 +126,12 @@ func (w *Worker) Shutdown(timeout time.Duration) {
 	w.isShutdown = true
 	w.shutdownMu.Unlock()
 
+	// Stop DB polling
+	w.pollCancel()
+	if w.pollTicker != nil {
+		w.pollTicker.Stop()
+	}
+
 	close(w.shutdown)
 	close(w.queue)
 
@@ -123,6 +147,76 @@ func (w *Worker) Shutdown(timeout time.Duration) {
 		w.logger.Info("Provisioning worker shutdown complete")
 	case <-time.After(timeout):
 		w.logger.Warn("Provisioning worker shutdown timed out")
+	}
+}
+
+// pollPendingJobs checks the database for pending jobs and submits them to the queue.
+// This ensures jobs created via API are automatically picked up for processing.
+func (w *Worker) pollPendingJobs() {
+	defer w.wg.Done()
+
+	w.pollTicker = time.NewTicker(5 * time.Second)
+	defer w.pollTicker.Stop()
+
+	w.logger.Debug("DB polling goroutine started")
+
+	for {
+		select {
+		case <-w.pollCtx.Done():
+			w.logger.Debug("DB polling goroutine stopped (context cancelled)")
+			return
+		case <-w.shutdown:
+			w.logger.Debug("DB polling goroutine stopped (shutdown)")
+			return
+		case <-w.pollTicker.C:
+			w.pollOnce()
+		}
+	}
+}
+
+// pollOnce performs a single poll for pending jobs.
+func (w *Worker) pollOnce() {
+	ctx, cancel := context.WithTimeout(w.pollCtx, 10*time.Second)
+	defer cancel()
+
+	jobs, err := w.store.ListPendingProvisionJobs(ctx)
+	if err != nil {
+		w.logger.Error("Failed to poll pending provision jobs", zap.Error(err))
+		return
+	}
+
+	if len(jobs) == 0 {
+		return
+	}
+
+	w.logger.Debug("Found pending provision jobs", zap.Int("count", len(jobs)))
+
+	for _, job := range jobs {
+		// Check if already being processed
+		w.pollMu.Lock()
+		if _, running := w.pollRunning[job.ID]; running {
+			w.pollMu.Unlock()
+			continue
+		}
+		w.pollRunning[job.ID] = struct{}{}
+		w.pollMu.Unlock()
+
+		// Non-blocking submit to queue
+		select {
+		case w.queue <- job.ID:
+			w.logger.Debug("Submitted pending job from DB poll",
+				zap.String("job_id", job.ID),
+				zap.String("target", job.TargetHost),
+			)
+		default:
+			// Queue full, remove from running set and try next tick
+			w.pollMu.Lock()
+			delete(w.pollRunning, job.ID)
+			w.pollMu.Unlock()
+			w.logger.Debug("Queue full, will retry pending job",
+				zap.String("job_id", job.ID),
+			)
+		}
 	}
 }
 
@@ -148,6 +242,13 @@ func (w *Worker) worker(id int) {
 
 // runJob executes a single provisioning job.
 func (w *Worker) runJob(ctx context.Context, jobID string) {
+	// Ensure we clean up pollRunning when done
+	defer func() {
+		w.pollMu.Lock()
+		delete(w.pollRunning, jobID)
+		w.pollMu.Unlock()
+	}()
+
 	job, err := w.store.GetProvisionJob(ctx, jobID)
 	if err != nil {
 		w.logger.Error("Failed to get provision job", zap.String("job_id", jobID), zap.Error(err))
