@@ -97,15 +97,16 @@ func (m *MemoryStore) StartDeploymentAgent(ctx context.Context, deploymentID, ag
 
 	agents := m.deploymentAgents[deploymentID]
 	for i := range agents {
-		if agents[i].AgentID == agentID {
-			if agents[i].Status != DeploymentStatusPending {
-				return fmt.Errorf("agent %s not in pending state for deployment %s", agentID, deploymentID)
-			}
-			agents[i].Status = DeploymentStatusRunning
-			now := time.Now()
-			agents[i].StartedAt = &now
-			return nil
+		if agents[i].AgentID != agentID {
+			continue
 		}
+		if agents[i].Status != DeploymentStatusPending {
+			return fmt.Errorf("agent %s not in pending state for deployment %s", agentID, deploymentID)
+		}
+		agents[i].Status = DeploymentStatusRunning
+		now := time.Now()
+		agents[i].StartedAt = &now
+		return nil
 	}
 	return fmt.Errorf("agent %s not assigned to deployment %s", agentID, deploymentID)
 }

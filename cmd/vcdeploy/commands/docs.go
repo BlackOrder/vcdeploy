@@ -30,6 +30,7 @@ Example:
 		outputDir := args[0]
 
 		// Create output directory if it doesn't exist
+		// #nosec G301 - Documentation output directory needs world-read access
 		if err := os.MkdirAll(outputDir, 0o755); err != nil {
 			return fmt.Errorf("creating output directory: %w", err)
 		}
@@ -60,6 +61,7 @@ Example:
 		outputDir := args[0]
 
 		// Create output directory if it doesn't exist
+		// #nosec G301 - Documentation output directory needs world-read access
 		if err := os.MkdirAll(outputDir, 0o755); err != nil {
 			return fmt.Errorf("creating output directory: %w", err)
 		}
@@ -96,6 +98,7 @@ Example:
 		outputDir := args[0]
 
 		// Create output directory if it doesn't exist
+		// #nosec G301 - Documentation output directory needs world-read access
 		if err := os.MkdirAll(outputDir, 0o755); err != nil {
 			return fmt.Errorf("creating output directory: %w", err)
 		}

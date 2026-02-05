@@ -391,7 +391,7 @@ func DefaultMasterConfig() *MasterConfig {
 func LoadMasterConfig(path string) (*MasterConfig, error) {
 	config := DefaultMasterConfig()
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 - path is admin-controlled config file location
 	if err != nil {
 		if os.IsNotExist(err) {
 			return config, nil // Use defaults if no config file
@@ -415,6 +415,7 @@ func LoadMaster(path string) (*MasterConfig, error) {
 func SaveMasterConfig(config *MasterConfig, path string) error {
 	// Ensure directory exists
 	dir := filepath.Dir(path)
+	// #nosec G301 - Config directory needs group access for service user
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("creating config directory: %w", err)
 	}
@@ -424,6 +425,7 @@ func SaveMasterConfig(config *MasterConfig, path string) error {
 		return fmt.Errorf("marshaling config: %w", err)
 	}
 
+	// #nosec G306 - Master config needs to be readable by service user
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return fmt.Errorf("writing config file: %w", err)
 	}

@@ -72,6 +72,7 @@ func (g *Service) CloneAndArchive(ctx context.Context, repoURL, ref string) (*Re
 	)
 
 	// Ensure work directory exists
+	// #nosec G301 - Work directory needs access for git operations
 	if err := os.MkdirAll(g.workDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create work dir: %w", err)
 	}
@@ -278,7 +279,7 @@ func (g *Service) writeSSHKey(key []byte) (string, error) {
 // createArchive creates a tar.gz archive of the source directory.
 // Returns the SHA256 checksum of the archive.
 func (g *Service) createArchive(srcDir, destPath string) (string, error) {
-	file, err := os.Create(destPath)
+	file, err := os.Create(destPath) // #nosec G304 - destPath is constructed from admin-controlled workDir
 	if err != nil {
 		return "", fmt.Errorf("create archive file: %w", err)
 	}
@@ -332,7 +333,7 @@ func (g *Service) createArchive(srcDir, destPath string) (string, error) {
 
 		// Write file contents (only for regular files)
 		if info.Mode().IsRegular() {
-			f, err := os.Open(path)
+			f, err := os.Open(path) // #nosec G304 - path is within admin-controlled srcDir from filepath.Walk
 			if err != nil {
 				return err
 			}

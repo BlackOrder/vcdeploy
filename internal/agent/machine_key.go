@@ -70,6 +70,7 @@ func getMachineID() ([]byte, error) {
 			"/var/lib/dbus/machine-id",
 		}
 		for _, path := range paths {
+			// #nosec G304 - path is hardcoded system path from constant slice
 			if data, err := os.ReadFile(path); err == nil {
 				return bytes.TrimSpace(data), nil
 			}

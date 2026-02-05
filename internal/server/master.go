@@ -1116,6 +1116,7 @@ func (s *MasterServer) startUnixSocket(ctx context.Context) error {
 
 	// Ensure socket directory exists
 	socketDir := filepath.Dir(socketPath)
+	// #nosec G301 - Socket directory needs world-execute for socket access
 	if err := os.MkdirAll(socketDir, 0o755); err != nil {
 		return fmt.Errorf("create socket directory: %w", err)
 	}
@@ -1132,6 +1133,7 @@ func (s *MasterServer) startUnixSocket(ctx context.Context) error {
 
 	// Set socket permissions: owner (root) + group (vcdeploy) can access
 	// This allows: root users, and users in vcdeploy group
+	// #nosec G302 - Unix socket intentionally allows group access (0660)
 	if err := os.Chmod(socketPath, 0o660); err != nil {
 		listener.Close()
 		return fmt.Errorf("set socket permissions: %w", err)

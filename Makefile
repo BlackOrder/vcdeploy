@@ -34,6 +34,9 @@ TEST_SSH_PORT     := 2223
 TEST_LOG_FILE     := test-server.log
 TEST_COMPOSE_FILE := docker/docker-compose.test.yml
 
+# Build tags used in codebase (for linting/vetting tagged files)
+BUILD_TAGS := integration,e2e,cli,systemd
+
 # ============================================================================
 # Development Build
 # ============================================================================
@@ -327,7 +330,7 @@ test-infra-logs: ## Show test infrastructure logs
 
 .PHONY: lint
 lint: ## Run linter (mirrors CI 'lint' job)
-	golangci-lint run --timeout=5m ./...
+	golangci-lint run --timeout=5m --build-tags=$(BUILD_TAGS) ./...
 
 .PHONY: fmt
 fmt: ## Format code
@@ -341,15 +344,15 @@ fmt-check: ## Check formatting
 
 .PHONY: vet
 vet: ## Run go vet
-	go vet ./...
+	go vet -tags=$(BUILD_TAGS) ./...
 
 .PHONY: vuln
 vuln: ## Run vulnerability check
-	govulncheck ./...
+	govulncheck -tags=$(BUILD_TAGS) ./...
 
 .PHONY: gosec
 gosec: ## Run security scanner
-	gosec -exclude=G104,G115,G204,G301,G302,G304,G306 -exclude-generated -quiet ./...
+	gosec -exclude=G104 -exclude-generated -tags=$(BUILD_TAGS) -quiet ./...
 
 .PHONY: verify
 verify: lint vet vuln test ## Run all verification checks

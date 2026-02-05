@@ -156,11 +156,13 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 	// Ensure PID directory exists
 	pidDir := filepath.Dir(pidFile)
+	// #nosec G301 - PID directory needs world-execute for process status checks
 	if err := os.MkdirAll(pidDir, 0o755); err != nil {
 		logger.Warn("Failed to create PID directory", zap.String("dir", pidDir), zap.Error(err))
 	}
 
 	// Write current PID
+	// #nosec G306 - PID file needs to be readable by status checking tools
 	if err := os.WriteFile(pidFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0o644); err != nil {
 		logger.Warn("Failed to write PID file", zap.String("path", pidFile), zap.Error(err))
 	}
@@ -250,7 +252,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 // checkAgentProcess checks if the agent process is running by reading its PID file.
 func checkAgentProcess(pidFile string) (bool, int) {
-	data, err := os.ReadFile(pidFile)
+	data, err := os.ReadFile(pidFile) // #nosec G304 - pidFile is system-configured PID path
 	if err != nil {
 		return false, 0
 	}
@@ -331,6 +333,7 @@ func runRegister(cmd *cobra.Command, args []string) error {
 	certPath := agentCertsDir + "/cert.pem"
 	caPath := agentCertsDir + "/ca.pem"
 
+	// #nosec G301 - Certs directory needs access for service operations
 	if err := os.MkdirAll(agentCertsDir, 0o755); err != nil {
 		return fmt.Errorf("creating agent directory: %w", err)
 	}

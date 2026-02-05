@@ -64,7 +64,7 @@ func GetSystemConfig() (*SystemConfig, error) {
 		// Try to load from config file
 		configPath := getSystemConfigPath()
 		if _, err := os.Stat(configPath); err == nil {
-			data, err := os.ReadFile(configPath)
+			data, err := os.ReadFile(configPath) // #nosec G304 - configPath is system config location
 			if err != nil {
 				systemConfigErr = err
 				return
@@ -212,6 +212,7 @@ func (c *SystemConfig) EnsureDirectories() error {
 	}
 
 	for _, dir := range dirs {
+		// #nosec G301 - System directories need world-execute for service access
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}

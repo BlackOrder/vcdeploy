@@ -1569,13 +1569,14 @@ func (a *Agent) performSelfUpdate(notification *pb.UpdateNotification) {
 	}
 
 	// Make it executable
+	// #nosec G302 - Binary needs execute permission
 	if err := os.Chmod(newBinaryPath, 0o755); err != nil {
 		a.logger.Error("Failed to make new binary executable", zap.Error(err))
 		return
 	}
 
 	// Verify new binary can run
-	cmd := exec.Command(newBinaryPath, "version") //nolint:gosec // G204: newBinaryPath is internally constructed from version/OS/arch, not user input
+	cmd := exec.Command(newBinaryPath, "version") // #nosec G204 - newBinaryPath is internally constructed from version/OS/arch, not user input
 	if output, err := cmd.CombinedOutput(); err != nil {
 		a.logger.Error("New binary failed verification",
 			zap.Error(err),
@@ -1602,6 +1603,7 @@ func (a *Agent) performSelfUpdate(notification *pb.UpdateNotification) {
 	}
 
 	// Make the new binary executable again (in case copyFile didn't preserve permissions)
+	// #nosec G302 - Binary needs execute permission
 	if err := os.Chmod(execPath, 0o755); err != nil {
 		a.logger.Warn("Failed to set executable permissions", zap.Error(err))
 	}
@@ -1647,7 +1649,7 @@ func (a *Agent) downloadBinary(url, destPath, expectedChecksum string, expectedS
 	}
 
 	// Create destination file
-	dest, err := os.Create(destPath)
+	dest, err := os.Create(destPath) // #nosec G304 - destPath is agent-controlled download destination
 	if err != nil {
 		return fmt.Errorf("create destination file: %w", err)
 	}
@@ -1683,13 +1685,13 @@ func (a *Agent) downloadBinary(url, destPath, expectedChecksum string, expectedS
 
 // copyFile copies a file from src to dst.
 func copyFile(src, dst string) error {
-	srcFile, err := os.Open(src)
+	srcFile, err := os.Open(src) // #nosec G304 - src is agent-controlled file path
 	if err != nil {
 		return err
 	}
 	defer srcFile.Close()
 
-	dstFile, err := os.Create(dst)
+	dstFile, err := os.Create(dst) // #nosec G304 - dst is agent-controlled file path
 	if err != nil {
 		return err
 	}

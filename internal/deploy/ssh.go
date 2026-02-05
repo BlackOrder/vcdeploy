@@ -258,7 +258,7 @@ func (r *SSHRunner) buildHostKeyCallback() (ssh.HostKeyCallback, error) {
 
 	// Create known_hosts file if it doesn't exist
 	if _, err := os.Stat(knownHostsPath); os.IsNotExist(err) {
-		f, err := os.OpenFile(knownHostsPath, os.O_CREATE|os.O_RDONLY, 0o600)
+		f, err := os.OpenFile(knownHostsPath, os.O_CREATE|os.O_RDONLY, 0o600) // #nosec G304 - knownHostsPath is admin-controlled SSH config path
 		if err != nil {
 			return nil, fmt.Errorf("creating known_hosts file: %w", err)
 		}
@@ -321,7 +321,7 @@ func (r *SSHRunner) tofuCallback(wrapped ssh.HostKeyCallback, knownHostsPath str
 
 // addToKnownHosts appends a host key to the known_hosts file.
 func (r *SSHRunner) addToKnownHosts(knownHostsPath, hostname string, key ssh.PublicKey) error {
-	f, err := os.OpenFile(knownHostsPath, os.O_APPEND|os.O_WRONLY, 0o600)
+	f, err := os.OpenFile(knownHostsPath, os.O_APPEND|os.O_WRONLY, 0o600) // #nosec G304 - knownHostsPath is admin-controlled SSH config path
 	if err != nil {
 		return fmt.Errorf("opening known_hosts: %w", err)
 	}
@@ -334,7 +334,7 @@ func (r *SSHRunner) addToKnownHosts(knownHostsPath, hostname string, key ssh.Pub
 }
 
 func (r *SSHRunner) loadKey(path, passphrase string) (ssh.Signer, error) {
-	key, err := os.ReadFile(path)
+	key, err := os.ReadFile(path) // #nosec G304 - path is admin-controlled SSH key location
 	if err != nil {
 		return nil, fmt.Errorf("reading key file: %w", err)
 	}

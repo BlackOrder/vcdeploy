@@ -245,6 +245,7 @@ func (c *ACMEClient) generateSelfSignedCertificate(ctx context.Context) (*tls.Ce
 	if c.cacheDir != "" {
 		certPath := filepath.Join(c.cacheDir, "self-signed.crt")
 		keyPath := filepath.Join(c.cacheDir, "self-signed.key")
+		// #nosec G306 - Certificate (not key) is typically world-readable
 		if err := os.WriteFile(certPath, certPEM, 0o644); err != nil {
 			c.logger.Warn("failed to save self-signed certificate", zap.Error(err))
 		}
