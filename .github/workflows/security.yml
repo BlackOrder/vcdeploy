@@ -36,7 +36,7 @@ jobs:
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
 
       - name: Run govulncheck
-        run: govulncheck ./...
+        run: govulncheck -tags=integration,e2e,cli,systemd ./...
 
   gosec:
     name: Security Scan
@@ -48,8 +48,8 @@ jobs:
       - name: Run Gosec Security Scanner
         uses: securego/gosec@master
         with:
-          # Exclude known false positives while still failing on critical issues
-          args: "-exclude=G104,G115,G204,G301,G302,G304,G306 -fmt sarif -out results.sarif ./..."
+          # Only exclude G104 (covered by errcheck) - inline #nosec comments handle the rest
+          args: "-exclude=G104 -exclude-generated -tags=integration,e2e,cli,systemd -fmt sarif -out results.sarif ./..."
         continue-on-error: ${{ github.event_name != 'pull_request' }}
 
       - name: Upload SARIF file

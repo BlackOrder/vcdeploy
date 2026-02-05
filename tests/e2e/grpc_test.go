@@ -55,7 +55,7 @@ func dialGRPC(ctx context.Context, cfg *GRPCTestConfig) (*grpc.ClientConn, error
 		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 
-	conn, err := grpc.DialContext(ctx, cfg.MasterGRPCAddr, opts...)
+	conn, err := grpc.NewClient(cfg.MasterGRPCAddr, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial gRPC: %w", err)
 	}

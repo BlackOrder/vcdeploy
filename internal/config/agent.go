@@ -113,7 +113,7 @@ func DefaultAgentConfig() *AgentConfig {
 func LoadAgentConfig(path string) (*AgentConfig, error) {
 	config := DefaultAgentConfig()
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 - path is admin-controlled config file location
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("config file not found: %s", path)
@@ -131,6 +131,7 @@ func LoadAgentConfig(path string) (*AgentConfig, error) {
 // SaveAgentConfig saves the agent configuration to a file.
 func SaveAgentConfig(config *AgentConfig, path string) error {
 	dir := filepath.Dir(path)
+	// #nosec G301 - Config directory needs group access for service user
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("creating config directory: %w", err)
 	}

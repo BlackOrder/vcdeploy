@@ -258,7 +258,7 @@ func runAuditExport(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("decode error: %w", err)
 	}
 
-	f, err := os.Create(filename)
+	f, err := os.Create(filename) // #nosec G304 - filename is CLI flag, user-intended export destination
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
 	}

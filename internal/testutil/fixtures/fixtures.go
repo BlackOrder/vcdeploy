@@ -196,9 +196,11 @@ func InvalidYAMLFixture() string {
 func WriteFixtureFile(t *testing.T, dir, name, content string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)
+	// #nosec G301 - Test directory needs standard permissions
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatalf("failed to create directory: %v", err)
 	}
+	// #nosec G306 - Test file needs to be readable for assertions
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("failed to write fixture file: %v", err)
 	}
@@ -220,6 +222,7 @@ func CreateTestProjectStructure(t *testing.T, baseDir string) string {
 	}
 
 	for _, d := range dirs {
+		// #nosec G301 - Test directory needs standard permissions
 		if err := os.MkdirAll(filepath.Join(projectDir, d), 0o755); err != nil {
 			t.Fatalf("failed to create directory %s: %v", d, err)
 		}
@@ -235,6 +238,7 @@ func CreateTestProjectStructure(t *testing.T, baseDir string) string {
 
 	for f, content := range files {
 		path := filepath.Join(projectDir, f)
+		// #nosec G306 - Test file needs to be readable for assertions
 		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatalf("failed to create file %s: %v", f, err)
 		}
@@ -266,6 +270,7 @@ func CreateTestGitRepo(t *testing.T, dir string) string {
 	}
 
 	for _, d := range dirs {
+		// #nosec G301 - Test directory needs standard permissions
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatalf("failed to create git directory: %v", err)
 		}
@@ -273,6 +278,7 @@ func CreateTestGitRepo(t *testing.T, dir string) string {
 
 	// Create HEAD file
 	headFile := filepath.Join(gitDir, "HEAD")
+	// #nosec G306 - Test file needs to be readable for git operations
 	if err := os.WriteFile(headFile, []byte("ref: refs/heads/main\n"), 0o644); err != nil {
 		t.Fatalf("failed to create HEAD file: %v", err)
 	}
@@ -290,12 +296,14 @@ func CreateTestGitRepo(t *testing.T, dir string) string {
 	remote = origin
 	merge = refs/heads/main
 `
+	// #nosec G306 - Test file needs to be readable for git operations
 	if err := os.WriteFile(configFile, []byte(config), 0o644); err != nil {
 		t.Fatalf("failed to create config file: %v", err)
 	}
 
 	// Create a test file
 	testFile := filepath.Join(repoDir, "README.md")
+	// #nosec G306 - Test file needs to be readable
 	if err := os.WriteFile(testFile, []byte("# Test Repository\n"), 0o644); err != nil {
 		t.Fatalf("failed to create test file: %v", err)
 	}

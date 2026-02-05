@@ -138,7 +138,7 @@ func (a *Agent) receiveRepoArchive(ctx context.Context, deploymentID, repoURL, r
 // extractArchive extracts a tar.gz archive to the destination directory.
 // It includes security protections against path traversal, symlinks, and resource exhaustion.
 func (a *Agent) extractArchive(archivePath, destDir string) error {
-	file, err := os.Open(archivePath)
+	file, err := os.Open(archivePath) // #nosec G304 - archivePath is constructed from agent-controlled workDir
 	if err != nil {
 		return fmt.Errorf("open archive: %w", err)
 	}
@@ -260,7 +260,7 @@ func (a *Agent) extractFile(tr *tar.Reader, target string, header *tar.Header) e
 		mode = 0o644
 	}
 
-	f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode) // #nosec G304 - target validated against destDir earlier in function
 	if err != nil {
 		return fmt.Errorf("create file: %w", err)
 	}

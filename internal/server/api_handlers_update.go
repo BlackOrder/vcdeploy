@@ -132,6 +132,7 @@ func (s *MasterServer) handleAgentBinaries(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		binDir := filepath.Join(sysCfg.Paths.DataDir, "binaries")
+		// #nosec G301 - Binary directory needs world-execute for agent binary execution
 		if err := os.MkdirAll(binDir, 0o755); err != nil {
 			s.logger.Error("Failed to create binaries directory", zap.Error(err))
 			s.jsonError(w, http.StatusInternalServerError, "internal server error")
@@ -143,7 +144,7 @@ func (s *MasterServer) handleAgentBinaries(w http.ResponseWriter, r *http.Reques
 		destPath := filepath.Join(binDir, filename)
 
 		// Create destination file
-		dest, err := os.Create(destPath) //nolint:gosec // G304: destPath is constructed from server-controlled binDir and validated version/os/arch
+		dest, err := os.Create(destPath) // #nosec G304 - destPath is constructed from server-controlled binDir and validated version/os/arch
 		if err != nil {
 			s.logger.Error("Failed to create binary file", zap.Error(err))
 			s.jsonError(w, http.StatusInternalServerError, "internal server error")
@@ -165,6 +166,7 @@ func (s *MasterServer) handleAgentBinaries(w http.ResponseWriter, r *http.Reques
 		checksum := hex.EncodeToString(hasher.Sum(nil))
 
 		// Make binary executable
+		// #nosec G302 - Binary needs execute permission
 		if err := os.Chmod(destPath, 0o755); err != nil {
 			s.logger.Error("Failed to make binary executable", zap.Error(err))
 		}

@@ -240,7 +240,7 @@ func (s *SafeOps) SafeReadFile(path string) ([]byte, error) {
 		return nil, err
 	}
 
-	return os.ReadFile(absPath)
+	return os.ReadFile(absPath) // #nosec G304 - Path validated by validatePath before use
 }
 
 // SafeOpen opens a file within the base directory.
@@ -250,7 +250,7 @@ func (s *SafeOps) SafeOpen(path string) (*os.File, error) {
 		return nil, err
 	}
 
-	return os.Open(absPath)
+	return os.Open(absPath) // #nosec G304 - Path validated by validatePath before use
 }
 
 // SafeCreate creates or truncates a file within the base directory.
@@ -269,7 +269,7 @@ func (s *SafeOps) SafeCreate(path string) (*os.File, error) {
 		absPath = joined
 	}
 
-	return os.Create(absPath)
+	return os.Create(absPath) // #nosec G304 - Path validated by IsWithinBase/SafeJoin before use
 }
 
 // SafeStat returns file info for a path within the base directory.

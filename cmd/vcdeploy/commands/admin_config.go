@@ -107,7 +107,7 @@ func runConfigExport(cmd *cobra.Command, args []string) error {
 func runConfigImport(cmd *cobra.Command, args []string) error {
 	filename := args[0]
 
-	data, err := os.ReadFile(filename)
+	data, err := os.ReadFile(filename) // #nosec G304 - filename is CLI arg, user-intended file
 	if err != nil {
 		return fmt.Errorf("read file: %w", err)
 	}

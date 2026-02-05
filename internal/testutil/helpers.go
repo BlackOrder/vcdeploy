@@ -21,6 +21,7 @@ func TempFile(t *testing.T, name, content string) string {
 	t.Helper()
 	dir := t.TempDir()
 	path := filepath.Join(dir, name)
+	// #nosec G306 - Test file needs to be readable for test assertions
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
 	}
@@ -31,9 +32,11 @@ func TempFile(t *testing.T, name, content string) string {
 func TempFileInDir(t *testing.T, dir, name, content string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)
+	// #nosec G301 - Test directory needs standard permissions for test file operations
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatalf("failed to create directory: %v", err)
 	}
+	// #nosec G306 - Test file needs to be readable for test assertions
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
 	}

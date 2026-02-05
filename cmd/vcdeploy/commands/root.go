@@ -583,7 +583,7 @@ func tryPidFileStop() error {
 	}
 	pidFile := sysCfg.MasterPIDPath()
 
-	data, err := os.ReadFile(pidFile)
+	data, err := os.ReadFile(pidFile) // #nosec G304 - pidFile is system-configured PID path
 	if err != nil {
 		fmt.Println("Could not find running master process.")
 		fmt.Println("If using systemd, use: systemctl stop vcdeploy-master")
@@ -703,7 +703,7 @@ func checkMasterPid() int {
 		return 0
 	}
 	pidFile := sysCfg.MasterPIDPath()
-	data, err := os.ReadFile(pidFile)
+	data, err := os.ReadFile(pidFile) // #nosec G304 - pidFile is system-configured PID path
 	if err != nil {
 		return 0
 	}
@@ -926,7 +926,7 @@ func runBackupRestore(cmd *cobra.Command, args []string) error {
 	fmt.Println("\nRestoring from backup...")
 
 	// Read the backup file
-	backupData, err := os.ReadFile(backupFile)
+	backupData, err := os.ReadFile(backupFile) // #nosec G304 - backupFile is CLI arg, user-intended restore source
 	if err != nil {
 		return fmt.Errorf("read backup file: %w", err)
 	}
@@ -934,6 +934,7 @@ func runBackupRestore(cmd *cobra.Command, args []string) error {
 	// Create a backup of the current database before replacing
 	if _, err := os.Stat(dbPath); err == nil {
 		backupCurrent := dbPath + ".pre-restore." + time.Now().Format("20060102-150405")
+		// #nosec G304 - dbPath is system-configured database path
 		if currentData, err := os.ReadFile(dbPath); err == nil {
 			if err := os.WriteFile(backupCurrent, currentData, 0o600); err != nil {
 				fmt.Printf("Warning: could not backup current database: %v\n", err)
@@ -1998,7 +1999,7 @@ func runSecretRestore(cmd *cobra.Command, args []string) error {
 	backupFile := args[0]
 
 	// Read backup file
-	data, err := os.ReadFile(backupFile)
+	data, err := os.ReadFile(backupFile) // #nosec G304 - backupFile is CLI arg, user-intended restore source
 	if err != nil {
 		return fmt.Errorf("read backup file: %w", err)
 	}

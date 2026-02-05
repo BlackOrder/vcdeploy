@@ -37,7 +37,7 @@ func LoadMasterKey(keyPath string) (*MasterKey, error) {
 	}
 
 	// Load from file
-	data, err := os.ReadFile(keyPath)
+	data, err := os.ReadFile(keyPath) // #nosec G304 - keyPath is admin-controlled master key location
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("master key not found at %s (run 'vcdeploy init' to generate)", keyPath)

@@ -254,7 +254,7 @@ func runSSHKeysImport(cmd *cobra.Command, args []string) error {
 		privateKey = sb.String()
 	} else if filePath != "" {
 		// Read from file
-		data, err := os.ReadFile(filePath)
+		data, err := os.ReadFile(filePath) // #nosec G304 - filePath is CLI flag, user-intended file
 		if err != nil {
 			return fmt.Errorf("read key file: %w", err)
 		}

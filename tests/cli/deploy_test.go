@@ -46,9 +46,9 @@ func TestDeployCommands(t *testing.T) {
 		// CLI: deploy trigger [project]
 		result := ctx.CLI.Run("deploy", "trigger", "cli-deploy-project")
 		// May fail due to no agents, but command should work
-		// Check it doesn't crash
-		if result.ExitCode == 0 || result.ContainsStderr("no agents") {
-			// Expected outcomes
+		// Check it doesn't crash - either success or "no agents" error is acceptable
+		if result.ExitCode != 0 && !result.ContainsStderr("no agents") {
+			t.Errorf("Unexpected error: %s", result.Stderr)
 		}
 	})
 

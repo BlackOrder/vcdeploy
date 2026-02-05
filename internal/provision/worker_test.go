@@ -110,11 +110,12 @@ func TestWorker_SubmitJobQueueFull(t *testing.T) {
 
 	// Fill the queue manually (since no workers are consuming)
 	// The queue has capacity 100 by default, so we need to fill it
+fillLoop:
 	for i := 0; i < 100; i++ {
 		select {
 		case w.queue <- "job":
 		default:
-			break
+			break fillLoop
 		}
 	}
 
