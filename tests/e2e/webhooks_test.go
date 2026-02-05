@@ -390,13 +390,14 @@ func TestWebhookTriggersDeployment(t *testing.T) {
 		t.Logf("Webhook returned status %d (may not trigger deployment)", webhookResp.StatusCode)
 	}
 
-	// Wait briefly for deployment to be created
-	time.Sleep(2 * time.Second)
-
-	// Check for new deployment
-	newDeplResp, _ := ctx.Client.Get("/api/v1/deployments?project=" + projectID)
-	newDeps, _ := testutil.DecodePaginatedJSON(newDeplResp)
-	newDeplResp.Body.Close()
+	// Poll for new deployment instead of fixed sleep
+	var newDeps *testutil.PaginatedResponse
+	testutil.Eventually(t, 10*time.Second, func() bool {
+		newDeplResp, _ := ctx.Client.Get("/api/v1/deployments?project=" + projectID)
+		newDeps, _ = testutil.DecodePaginatedJSON(newDeplResp)
+		newDeplResp.Body.Close()
+		return len(newDeps.Items) > initialCount
+	}, "waiting for webhook to trigger deployment")
 
 	newCount := len(newDeps.Items)
 	if newCount > initialCount {
@@ -630,9 +631,13 @@ func TestWebhookBranchFiltering(t *testing.T) {
 		webhookResp, _ := testutil.SendWebhookEvent(webhookURL, "github", payload, webhookSecret)
 		webhookResp.Body.Close()
 
-		time.Sleep(2 * time.Second)
+		// Poll for deployment count change
+		var newCount int
+		testutil.Eventually(t, 10*time.Second, func() bool {
+			newCount = getInitialCount()
+			return newCount > initialCount
+		}, "waiting for push to main to trigger deployment")
 
-		newCount := getInitialCount()
 		if newCount > initialCount {
 			t.Log("✓ Push to main triggered deployment")
 		} else {
@@ -652,13 +657,17 @@ func TestWebhookBranchFiltering(t *testing.T) {
 		webhookResp, _ := testutil.SendWebhookEvent(webhookURL, "github", payload, webhookSecret)
 		webhookResp.Body.Close()
 
-		time.Sleep(2 * time.Second)
+		// For non-trigger case, we use Never to ensure no deployment is created
+		// Brief wait then check - we expect count to remain the same
+		testutil.Never(t, 3*time.Second, func() bool {
+			return getInitialCount() > initialCount
+		}, "deployment was created when it should not have been")
 
 		newCount := getInitialCount()
 		if newCount == initialCount {
 			t.Log("✓ Push to develop correctly did not trigger deployment")
 		} else {
-			t.Log("Push to develop triggered deployment - branch filtering may not be enabled")
+			t.Error("Push to develop triggered deployment - branch filtering may not be working")
 		}
 	})
 }

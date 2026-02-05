@@ -102,9 +102,9 @@ service AgentService {
 ### Webhooks (Port 9000)
 
 Git provider callbacks:
-- GitHub: `/webhooks/github/{project}`
-- GitLab: `/webhooks/gitlab/{project}`
-- Bitbucket: `/webhooks/bitbucket/{project}`
+- GitHub: `/webhook/github/{project}`
+- GitLab: `/webhook/gitlab/{project}`
+- Bitbucket: `/webhook/bitbucket/{project}`
 
 ## Security Middleware
 

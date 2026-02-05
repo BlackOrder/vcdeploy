@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/BlackOrder/vcdeploy/internal/storage"
+	"github.com/BlackOrder/vcdeploy/internal/validation"
 	"go.uber.org/zap"
 )
 
@@ -129,7 +130,7 @@ func (s *MasterServer) handleProjectType(w http.ResponseWriter, r *http.Request)
 			BuildCmd    string `json:"buildCmd"`
 		}
 
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
 			s.jsonError(w, http.StatusBadRequest, "invalid JSON")
 			return
 		}

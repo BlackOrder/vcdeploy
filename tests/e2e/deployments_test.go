@@ -502,8 +502,15 @@ func TestDeploymentCancelRunning(t *testing.T) {
 	deploymentID := deployment["id"].(string)
 	t.Logf("Triggered deployment for cancellation: %s", deploymentID)
 
-	// Wait briefly for deployment to start
-	time.Sleep(2 * time.Second)
+	// Wait for deployment to be in running state using polling
+	testutil.Eventually(t, 15*time.Second, func() bool {
+		getResp, _ := ctx.Client.Get("/api/v1/deployments/" + deploymentID)
+		var dep map[string]interface{}
+		testutil.DecodeJSON(getResp, &dep)
+		getResp.Body.Close()
+		status, _ := dep["status"].(string)
+		return status == "running"
+	}, "deployment did not reach running state")
 
 	// Try to cancel
 	err = seeder.CancelDeployment(deploymentID)
@@ -512,8 +519,15 @@ func TestDeploymentCancelRunning(t *testing.T) {
 		t.Logf("Cancel request returned error (may have completed): %v", err)
 	}
 
-	// Wait for final state
-	time.Sleep(3 * time.Second)
+	// Wait for final state using polling
+	testutil.Eventually(t, 15*time.Second, func() bool {
+		getResp, _ := ctx.Client.Get("/api/v1/deployments/" + deploymentID)
+		var dep map[string]interface{}
+		testutil.DecodeJSON(getResp, &dep)
+		getResp.Body.Close()
+		status, _ := dep["status"].(string)
+		return status == "cancelled" || status == "success" || status == "failed"
+	}, "deployment did not reach final state")
 
 	// Check final status
 	getResp, err := ctx.Client.Get("/api/v1/deployments/" + deploymentID)

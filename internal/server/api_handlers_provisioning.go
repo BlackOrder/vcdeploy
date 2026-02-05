@@ -12,6 +12,7 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/security"
 	"github.com/BlackOrder/vcdeploy/internal/services"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
+	"github.com/BlackOrder/vcdeploy/internal/validation"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -87,7 +88,7 @@ func (s *MasterServer) handleStartProvisioning(w http.ResponseWriter, r *http.Re
 	ctx := r.Context()
 
 	var req ProvisionAgentRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
 		s.jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}

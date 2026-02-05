@@ -13,6 +13,7 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/services/recipes"
 	"github.com/BlackOrder/vcdeploy/internal/services/recipes/export"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
+	"github.com/BlackOrder/vcdeploy/internal/validation"
 	"go.uber.org/zap"
 )
 
@@ -78,9 +79,25 @@ func (s *MasterServer) handleListComponents(ctx context.Context, w http.Response
 		return
 	}
 
-	s.jsonResponse(w, map[string]interface{}{
-		"components": components,
-		"count":      len(components),
+	// Apply pagination
+	p := parsePagination(r)
+	totalCount := len(components)
+
+	// Apply offset and limit
+	if p.Offset >= totalCount {
+		components = nil
+	} else {
+		components = components[p.Offset:]
+		if p.Limit > 0 && p.Limit < len(components) {
+			components = components[:p.Limit]
+		}
+	}
+
+	s.jsonResponse(w, PaginatedResponse{
+		Items:      components,
+		TotalCount: int64(totalCount),
+		Limit:      p.Limit,
+		Offset:     p.Offset,
 	})
 }
 
@@ -319,9 +336,25 @@ func (s *MasterServer) handleListPlaybooks(ctx context.Context, w http.ResponseW
 		return
 	}
 
-	s.jsonResponse(w, map[string]interface{}{
-		"playbooks": playbooks,
-		"count":     len(playbooks),
+	// Apply pagination
+	p := parsePagination(r)
+	totalCount := len(playbooks)
+
+	// Apply offset and limit
+	if p.Offset >= totalCount {
+		playbooks = nil
+	} else {
+		playbooks = playbooks[p.Offset:]
+		if p.Limit > 0 && p.Limit < len(playbooks) {
+			playbooks = playbooks[:p.Limit]
+		}
+	}
+
+	s.jsonResponse(w, PaginatedResponse{
+		Items:      playbooks,
+		TotalCount: int64(totalCount),
+		Limit:      p.Limit,
+		Offset:     p.Offset,
 	})
 }
 
@@ -708,7 +741,7 @@ type ApproveRawRequest struct {
 
 func (s *MasterServer) handleApproveRaw(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	var req ApproveRawRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
 		s.jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
@@ -823,7 +856,7 @@ func (s *MasterServer) handleRecipeImport(w http.ResponseWriter, r *http.Request
 	}
 
 	var req RecipeImportRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
 		s.jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
@@ -982,7 +1015,7 @@ func (s *MasterServer) handleMigration(w http.ResponseWriter, r *http.Request) {
 		CreateComponents bool   `json:"createComponents"`
 		Activate         bool   `json:"activate"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
 		s.jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}

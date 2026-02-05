@@ -101,13 +101,13 @@ alerting:
 webhooks:
   github:
     enabled: true
-    path: /webhooks/github
+    path: /webhook/github
   gitlab:
     enabled: true
-    path: /webhooks/gitlab
+    path: /webhook/gitlab
   bitbucket:
     enabled: true
-    path: /webhooks/bitbucket
+    path: /webhook/bitbucket
 
 # Outgoing notification settings
 notifications:
@@ -264,11 +264,11 @@ Incoming webhook configuration for Git providers.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `github.enabled` | bool | `true` | Enable GitHub webhooks |
-| `github.path` | string | `/webhooks/github` | GitHub webhook path |
+| `github.path` | string | `/webhook/github` | GitHub webhook path |
 | `gitlab.enabled` | bool | `true` | Enable GitLab webhooks |
-| `gitlab.path` | string | `/webhooks/gitlab` | GitLab webhook path |
+| `gitlab.path` | string | `/webhook/gitlab` | GitLab webhook path |
 | `bitbucket.enabled` | bool | `true` | Enable Bitbucket webhooks |
-| `bitbucket.path` | string | `/webhooks/bitbucket` | Bitbucket webhook path |
+| `bitbucket.path` | string | `/webhook/bitbucket` | Bitbucket webhook path |
 
 ### Notifications
 

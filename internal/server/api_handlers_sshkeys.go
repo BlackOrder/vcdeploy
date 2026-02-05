@@ -10,6 +10,7 @@ import (
 
 	"github.com/BlackOrder/vcdeploy/internal/services"
 	"github.com/BlackOrder/vcdeploy/internal/services/security"
+	"github.com/BlackOrder/vcdeploy/internal/validation"
 	"go.uber.org/zap"
 )
 
@@ -82,9 +83,25 @@ func (s *MasterServer) handleListSSHKeys(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	s.jsonResponse(w, ListCountResponse{
-		Items: keys,
-		Count: len(keys),
+	// Apply pagination
+	p := parsePagination(r)
+	totalCount := len(keys)
+
+	// Apply offset and limit
+	if p.Offset >= totalCount {
+		keys = nil
+	} else {
+		keys = keys[p.Offset:]
+		if p.Limit > 0 && p.Limit < len(keys) {
+			keys = keys[:p.Limit]
+		}
+	}
+
+	s.jsonResponse(w, PaginatedResponse{
+		Items:      keys,
+		TotalCount: int64(totalCount),
+		Limit:      p.Limit,
+		Offset:     p.Offset,
 	})
 }
 
@@ -112,7 +129,7 @@ func (s *MasterServer) handleGenerateSSHKey(w http.ResponseWriter, r *http.Reque
 	ctx := r.Context()
 
 	var req security.GenerateSSHKeyRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
 		s.jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
@@ -155,7 +172,7 @@ func (s *MasterServer) handleImportSSHKey(w http.ResponseWriter, r *http.Request
 	ctx := r.Context()
 
 	var req security.ImportSSHKeyRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
 		s.jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}

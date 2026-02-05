@@ -132,7 +132,7 @@ func LoadProjectConfig(path string) (*ProjectConfig, error) {
 		config.Deployment.Strategy = "symlink"
 	}
 	if config.Deployment.KeepReleases == 0 {
-		config.Deployment.KeepReleases = 5
+		config.Deployment.KeepReleases = DefaultKeepReleases
 	}
 	if config.Env.PlaceholderPattern == "" {
 		config.Env.PlaceholderPattern = "${SECRET_NAME}"

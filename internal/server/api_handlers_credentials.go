@@ -10,6 +10,7 @@ import (
 
 	"github.com/BlackOrder/vcdeploy/internal/services"
 	"github.com/BlackOrder/vcdeploy/internal/services/security"
+	"github.com/BlackOrder/vcdeploy/internal/validation"
 	"go.uber.org/zap"
 )
 
@@ -78,9 +79,25 @@ func (s *MasterServer) handleListCredentials(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	s.jsonResponse(w, ListCountResponse{
-		Items: creds,
-		Count: len(creds),
+	// Apply pagination
+	p := parsePagination(r)
+	totalCount := len(creds)
+
+	// Apply offset and limit
+	if p.Offset >= totalCount {
+		creds = nil
+	} else {
+		creds = creds[p.Offset:]
+		if p.Limit > 0 && p.Limit < len(creds) {
+			creds = creds[:p.Limit]
+		}
+	}
+
+	s.jsonResponse(w, PaginatedResponse{
+		Items:      creds,
+		TotalCount: int64(totalCount),
+		Limit:      p.Limit,
+		Offset:     p.Offset,
 	})
 }
 
@@ -108,7 +125,7 @@ func (s *MasterServer) handleCreateCredential(w http.ResponseWriter, r *http.Req
 	ctx := r.Context()
 
 	var req security.CreateCredentialRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
 		s.jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
@@ -146,7 +163,7 @@ func (s *MasterServer) handleUpdateCredential(w http.ResponseWriter, r *http.Req
 	ctx := r.Context()
 
 	var req security.UpdateCredentialRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
 		s.jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
@@ -206,7 +223,7 @@ func (s *MasterServer) handleTestCredential(w http.ResponseWriter, r *http.Reque
 	ctx := r.Context()
 
 	var req TestCredentialRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
 		s.jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}

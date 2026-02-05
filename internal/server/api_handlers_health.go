@@ -12,6 +12,7 @@ import (
 
 	"github.com/BlackOrder/vcdeploy/internal/services"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
+	"github.com/BlackOrder/vcdeploy/internal/validation"
 	"go.uber.org/zap"
 )
 
@@ -99,7 +100,7 @@ func (s *MasterServer) handleCreateHealthCheckConfig(w http.ResponseWriter, r *h
 	ctx := r.Context()
 
 	var config storage.HealthCheckConfig
-	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&config); err != nil {
 		s.jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
@@ -196,7 +197,7 @@ func (s *MasterServer) handleUpdateHealthCheckConfig(w http.ResponseWriter, r *h
 		BodyContains      *string `json:"bodyContains"`
 		Enabled           *bool   `json:"enabled"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&updates); err != nil {
 		s.jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
@@ -341,7 +342,7 @@ func (s *MasterServer) handleProjectHealthConfig(w http.ResponseWriter, r *http.
 			AutoRollbackEnabled  *bool  `json:"autoRollbackEnabled"`
 			RollbackOnHealthFail *bool  `json:"rollbackOnHealthFail"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
 			s.jsonError(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
@@ -457,7 +458,7 @@ func (s *MasterServer) handleTestHealthCheck(w http.ResponseWriter, r *http.Requ
 	var reqBody struct {
 		URL string `json:"url"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&reqBody); err == nil && reqBody.URL != "" {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&reqBody); err == nil && reqBody.URL != "" {
 		config.URL = reqBody.URL
 	}
 
