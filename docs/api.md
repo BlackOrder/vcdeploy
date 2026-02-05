@@ -214,6 +214,161 @@ Authenticate with username and password to receive a JWT token.
 
 ---
 
+## TOTP (Two-Factor Authentication) Endpoints
+
+### Setup TOTP
+
+```
+POST /api/v1/totp/setup
+```
+
+Initialize TOTP setup for the current user. Returns a secret and QR code for authenticator app configuration.
+
+**Response:**
+```json
+{
+  "secret": "JBSWY3DPEHPK3PXP",
+  "qr_code": "data:image/png;base64,...",
+  "recovery_codes": ["XXXX-XXXX-XXXX", "YYYY-YYYY-YYYY", ...]
+}
+```
+
+### Enable TOTP
+
+```
+POST /api/v1/totp/enable
+```
+
+Enable TOTP after verifying setup with a valid code.
+
+**Request:**
+```json
+{
+  "code": "123456"
+}
+```
+
+**Response:**
+```json
+{
+  "enabled": true,
+  "message": "TOTP enabled successfully"
+}
+```
+
+### Disable TOTP
+
+```
+POST /api/v1/totp/disable
+```
+
+Disable TOTP for the current user.
+
+**Request:**
+```json
+{
+  "code": "123456"
+}
+```
+
+**Response:**
+```json
+{
+  "enabled": false,
+  "message": "TOTP disabled successfully"
+}
+```
+
+### Regenerate Recovery Codes
+
+```
+POST /api/v1/totp/recovery/regenerate
+```
+
+Generate new recovery codes. Previous codes are invalidated.
+
+**Request:**
+```json
+{
+  "code": "123456"
+}
+```
+
+**Response:**
+```json
+{
+  "recovery_codes": ["XXXX-XXXX-XXXX", "YYYY-YYYY-YYYY", ...]
+}
+```
+
+---
+
+## Admin TOTP Endpoints
+
+### List Users with TOTP
+
+```
+GET /api/v1/admin/totp/users
+```
+
+Returns all users with their TOTP status. **Admin only.**
+
+**Response:**
+```json
+{
+  "users": [
+    {
+      "id": 1,
+      "username": "admin",
+      "totp_enabled": true,
+      "totp_configured_at": "2024-01-15T10:30:00Z"
+    }
+  ]
+}
+```
+
+### Get User TOTP Status
+
+```
+GET /api/v1/admin/totp/status/{username}
+```
+
+Returns detailed TOTP status for a specific user. **Admin only.**
+
+**Response:**
+```json
+{
+  "username": "user1",
+  "totp_enabled": true,
+  "totp_configured_at": "2024-01-15T10:30:00Z",
+  "recovery_codes_remaining": 5
+}
+```
+
+### Admin Disable TOTP
+
+```
+POST /api/v1/admin/totp/disable
+```
+
+Forcibly disable TOTP for a user (e.g., if they lost their device). **Admin only.**
+
+**Request:**
+```json
+{
+  "username": "user1"
+}
+```
+
+**Response:**
+```json
+{
+  "message": "TOTP disabled for user user1"
+}
+```
+
+---
+
 ## Stats Endpoint
 
 ### Dashboard Statistics

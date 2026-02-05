@@ -48,14 +48,14 @@ func TestHandleRecipeComponents_List(t *testing.T) {
 	}
 
 	var response struct {
-		Items []storage.RecipeComponent `json:"items"`
-		Count int                       `json:"count"`
+		Items      []storage.RecipeComponent `json:"items"`
+		TotalCount int64                     `json:"totalCount"`
 	}
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	if response.Count == 0 {
+	if response.TotalCount == 0 {
 		t.Error("expected at least one component")
 	}
 }
@@ -178,14 +178,14 @@ func TestHandleRecipePlaybooks_List(t *testing.T) {
 	}
 
 	var response struct {
-		Items []storage.Playbook `json:"items"`
-		Count int                `json:"count"`
+		Items      []storage.Playbook `json:"items"`
+		TotalCount int64              `json:"totalCount"`
 	}
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	if response.Count == 0 {
+	if response.TotalCount == 0 {
 		t.Error("expected at least one playbook")
 	}
 }

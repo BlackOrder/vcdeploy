@@ -10,6 +10,7 @@ import (
 
 	"github.com/BlackOrder/vcdeploy/internal/services"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
+	"github.com/BlackOrder/vcdeploy/internal/validation"
 	"go.uber.org/zap"
 )
 
@@ -72,7 +73,7 @@ func (s *MasterServer) handleHostKeys(w http.ResponseWriter, r *http.Request) {
 			Trusted     bool   `json:"trusted"`
 		}
 
-		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&input); err != nil {
 			s.jsonError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
@@ -180,7 +181,7 @@ func (s *MasterServer) handleHostKey(w http.ResponseWriter, r *http.Request) {
 			Trusted bool `json:"trusted"`
 		}
 
-		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&input); err != nil {
 			s.jsonError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
@@ -199,8 +200,7 @@ func (s *MasterServer) handleHostKey(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
+		s.jsonResponse(w, StatusResponse{Status: "ok"})
 
 	case http.MethodDelete:
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
@@ -277,7 +277,7 @@ func (s *MasterServer) handleJumpServers(w http.ResponseWriter, r *http.Request)
 			SSHKeyID *int64 `json:"sshKeyId,omitempty"`
 		}
 
-		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&input); err != nil {
 			s.jsonError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
@@ -366,7 +366,7 @@ func (s *MasterServer) handleJumpServer(w http.ResponseWriter, r *http.Request) 
 			SSHKeyID *int64 `json:"sshKeyId,omitempty"`
 		}
 
-		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&input); err != nil {
 			s.jsonError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
@@ -463,7 +463,7 @@ func (s *MasterServer) handleBlockedIPs(w http.ResponseWriter, r *http.Request) 
 			Duration  string `json:"duration"` // e.g., "24h", "7d"
 		}
 
-		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&input); err != nil {
 			s.jsonError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
@@ -555,8 +555,7 @@ func (s *MasterServer) handleBlockedIP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"unblocked"}`))
+		s.jsonResponse(w, StatusResponse{Status: "unblocked"})
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -620,7 +619,7 @@ func (s *MasterServer) handleProvisionJobs(w http.ResponseWriter, r *http.Reques
 			AgentBinaryID *int64 `json:"agentBinaryId,omitempty"`
 		}
 
-		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&input); err != nil {
 			s.jsonError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
@@ -698,8 +697,7 @@ func (s *MasterServer) handleProvisionJob(w http.ResponseWriter, r *http.Request
 			return
 		}
 
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"cancelled"}`))
+		s.jsonResponse(w, StatusResponse{Status: "cancelled"})
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")

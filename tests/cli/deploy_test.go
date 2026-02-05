@@ -163,8 +163,20 @@ func TestDeployCancelRunning(t *testing.T) {
 			t.Skip("Could not trigger deployment for cancel test")
 		}
 
-		// Brief wait for deployment to start
-		time.Sleep(2 * time.Second)
+		// Wait for deployment to be in running state using polling
+		var deploymentStarted bool
+		testutil.Eventually(t, 15*time.Second, func() bool {
+			listResult := ctx.CLI.Run("deploy", "list", "--project", projectName, "--output", "json")
+			if listResult.ExitCode == 0 && strings.Contains(listResult.Stdout, `"status":"running"`) {
+				deploymentStarted = true
+				return true
+			}
+			return false
+		}, "deployment did not start running")
+
+		if !deploymentStarted {
+			t.Skip("Deployment did not reach running state")
+		}
 
 		// Get deployment ID from list
 		listResult := ctx.CLI.Run("deploy", "list", "--project", projectName, "--output", "json")
@@ -206,29 +218,52 @@ func TestDeployRollbackCLI(t *testing.T) {
 	})
 
 	t.Run("rollback command exists", func(t *testing.T) {
-		result := ctx.CLI.Run("deploy", "rollback", "--help")
-		if result.ExitCode == 0 {
-			t.Log("Rollback command is available")
-		} else if result.ContainsStderr("unknown command") {
-			t.Log("Rollback command not implemented in CLI")
+		result := ctx.CLI.Run("project", "rollback", "--help")
+		// Command should be available - if not, fail the test
+		if result.ExitCode != 0 {
+			if result.ContainsStderr("unknown command") {
+				t.Fatal("Rollback command not found - expected 'project rollback' to exist")
+			}
+			t.Fatalf("Rollback --help failed with exit code %d: %s", result.ExitCode, result.Stderr)
 		}
 	})
 
 	t.Run("rollback to previous deployment", func(t *testing.T) {
 		// Trigger first deployment
-		ctx.CLI.Run("deploy", "trigger", projectName)
-		time.Sleep(5 * time.Second) // Wait for completion
+		triggerResult := ctx.CLI.Run("deploy", "trigger", projectName)
+		if triggerResult.ExitCode != 0 {
+			t.Skipf("Could not trigger first deployment: %s", triggerResult.Stderr)
+		}
+
+		// Wait for first deployment to complete using polling
+		testutil.Eventually(t, 30*time.Second, func() bool {
+			listResult := ctx.CLI.Run("deploy", "list", "--project", projectName, "--output", "json", "--limit", "1")
+			return listResult.ExitCode == 0 && (strings.Contains(listResult.Stdout, `"status":"success"`) ||
+				strings.Contains(listResult.Stdout, `"status":"failed"`))
+		}, "first deployment did not complete")
 
 		// Trigger second deployment
-		ctx.CLI.Run("deploy", "trigger", projectName)
-		time.Sleep(5 * time.Second)
+		triggerResult = ctx.CLI.Run("deploy", "trigger", projectName)
+		if triggerResult.ExitCode != 0 {
+			t.Skipf("Could not trigger second deployment: %s", triggerResult.Stderr)
+		}
 
-		// Try rollback
-		result := ctx.CLI.Run("deploy", "rollback", projectName)
-		if result.ExitCode == 0 {
-			t.Log("Rollback succeeded")
-		} else {
-			t.Logf("Rollback returned %d", result.ExitCode)
+		// Wait for second deployment to complete
+		testutil.Eventually(t, 30*time.Second, func() bool {
+			listResult := ctx.CLI.Run("deploy", "list", "--project", projectName, "--output", "json", "--limit", "1")
+			return listResult.ExitCode == 0 && (strings.Contains(listResult.Stdout, `"status":"success"`) ||
+				strings.Contains(listResult.Stdout, `"status":"failed"`))
+		}, "second deployment did not complete")
+
+		// Try rollback - rollback is a project subcommand
+		result := ctx.CLI.Run("project", "rollback", projectName)
+		// Rollback should succeed (exit 0) or fail with a specific error
+		if result.ExitCode != 0 {
+			// If rollback fails, it should be because there's nothing to rollback to,
+			// not because of an unexpected error
+			if !result.ContainsStderr("no previous release") && !result.ContainsStderr("cannot rollback") {
+				t.Errorf("Rollback failed unexpectedly: exit %d, stderr: %s", result.ExitCode, result.Stderr)
+			}
 		}
 	})
 }

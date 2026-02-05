@@ -11,6 +11,7 @@ import (
 	coreSecurity "github.com/BlackOrder/vcdeploy/internal/security"
 	"github.com/BlackOrder/vcdeploy/internal/services/security"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
+	"github.com/BlackOrder/vcdeploy/internal/validation"
 	"go.uber.org/zap"
 )
 
@@ -67,9 +68,25 @@ func (s *MasterServer) handleListAgentCertificates(w http.ResponseWriter, r *htt
 		return
 	}
 
-	s.jsonResponse(w, ListCountResponse{
-		Items: certs,
-		Count: len(certs),
+	// Apply pagination
+	p := parsePagination(r)
+	totalCount := len(certs)
+
+	// Apply offset and limit
+	if p.Offset >= totalCount {
+		certs = nil
+	} else {
+		certs = certs[p.Offset:]
+		if p.Limit > 0 && p.Limit < len(certs) {
+			certs = certs[:p.Limit]
+		}
+	}
+
+	s.jsonResponse(w, PaginatedResponse{
+		Items:      certs,
+		TotalCount: int64(totalCount),
+		Limit:      p.Limit,
+		Offset:     p.Offset,
 	})
 }
 
@@ -114,7 +131,7 @@ func (s *MasterServer) handleRevokeAgentCertificate(w http.ResponseWriter, r *ht
 	// Get revocation reason from request body
 	var req RevokeRequest
 	if r.Body != nil {
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err.Error() != "EOF" {
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil && err.Error() != "EOF" {
 			s.jsonError(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
@@ -178,9 +195,25 @@ func (s *MasterServer) handleListCAs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.jsonResponse(w, ListCountResponse{
-		Items: cas,
-		Count: len(cas),
+	// Apply pagination
+	p := parsePagination(r)
+	totalCount := len(cas)
+
+	// Apply offset and limit
+	if p.Offset >= totalCount {
+		cas = nil
+	} else {
+		cas = cas[p.Offset:]
+		if p.Limit > 0 && p.Limit < len(cas) {
+			cas = cas[:p.Limit]
+		}
+	}
+
+	s.jsonResponse(w, PaginatedResponse{
+		Items:      cas,
+		TotalCount: int64(totalCount),
+		Limit:      p.Limit,
+		Offset:     p.Offset,
 	})
 }
 
@@ -250,9 +283,25 @@ func (s *MasterServer) handleGetServerCertificate(w http.ResponseWriter, r *http
 		return
 	}
 
-	s.jsonResponse(w, ListCountResponse{
-		Items: certs,
-		Count: len(certs),
+	// Apply pagination
+	p := parsePagination(r)
+	totalCount := len(certs)
+
+	// Apply offset and limit
+	if p.Offset >= totalCount {
+		certs = nil
+	} else {
+		certs = certs[p.Offset:]
+		if p.Limit > 0 && p.Limit < len(certs) {
+			certs = certs[:p.Limit]
+		}
+	}
+
+	s.jsonResponse(w, PaginatedResponse{
+		Items:      certs,
+		TotalCount: int64(totalCount),
+		Limit:      p.Limit,
+		Offset:     p.Offset,
 	})
 }
 
@@ -334,8 +383,10 @@ func (s *MasterServer) handleCertAudit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.jsonResponse(w, ListCountResponse{
-		Items: events,
-		Count: len(events),
+	s.jsonResponse(w, PaginatedResponse{
+		Items:      events,
+		TotalCount: int64(len(events)),
+		Limit:      filter.Limit,
+		Offset:     filter.Offset,
 	})
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/BlackOrder/vcdeploy/internal/security"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
+	"github.com/BlackOrder/vcdeploy/internal/validation"
 	"go.uber.org/zap"
 )
 
@@ -137,7 +138,7 @@ func (s *MasterServer) handleAdminTOTPDisable(w http.ResponseWriter, r *http.Req
 		Reason   string `json:"reason"`
 		TOTPCode string `json:"totp_code"` // Admin's TOTP for verification (optional)
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
 		s.jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
@@ -238,7 +239,7 @@ func (s *MasterServer) handleRegenerateRecoveryCodes(w http.ResponseWriter, r *h
 	var req struct {
 		TOTPCode string `json:"totp_code"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
 		s.jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}

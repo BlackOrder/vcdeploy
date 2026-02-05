@@ -289,7 +289,7 @@ vcdeploy deploy logs <deployment-id> --follow
 
 1. In your GitHub repository, go to **Settings → Webhooks**
 2. Add webhook:
-   - **Payload URL:** `https://your-master:9000/webhooks/github`
+   - **Payload URL:** `https://your-master:9000/webhook/github/{project-name}`
    - **Content type:** `application/json`
    - **Secret:** Configure in vcdeploy settings
    - **Events:** Push, Pull Requests

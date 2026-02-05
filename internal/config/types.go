@@ -54,7 +54,7 @@ func LoadTypeConfig(path string) (*TypeConfig, error) {
 
 	// Apply defaults
 	if config.KeepReleases == 0 {
-		config.KeepReleases = 5
+		config.KeepReleases = DefaultKeepReleases
 	}
 
 	return &config, nil
@@ -100,7 +100,7 @@ func BuiltinTypes() map[string]*TypeConfig {
 			SharedDirs:   []string{"storage"},
 			SharedFiles:  []string{".env"},
 			WritableDirs: []string{"bootstrap/cache", "storage"},
-			KeepReleases: 5,
+			KeepReleases: DefaultKeepReleases,
 			Validation: TypeValidation{
 				RequiredFiles: []string{"artisan", "composer.json"},
 				Env: EnvValidation{
@@ -122,7 +122,7 @@ func BuiltinTypes() map[string]*TypeConfig {
 			SharedDirs:   []string{"var/log", "var/sessions"},
 			SharedFiles:  []string{".env.local"},
 			WritableDirs: []string{"var"},
-			KeepReleases: 5,
+			KeepReleases: DefaultKeepReleases,
 			Validation: TypeValidation{
 				RequiredFiles: []string{"bin/console", "composer.json"},
 			},
@@ -139,7 +139,7 @@ func BuiltinTypes() map[string]*TypeConfig {
 			Name:         "nextjs",
 			SharedDirs:   []string{".next/cache"},
 			SharedFiles:  []string{".env.local"},
-			KeepReleases: 5,
+			KeepReleases: DefaultKeepReleases,
 			Validation: TypeValidation{
 				RequiredFiles: []string{"package.json", "next.config.js"},
 			},
@@ -152,7 +152,7 @@ func BuiltinTypes() map[string]*TypeConfig {
 		},
 		"static": {
 			Name:         "static",
-			KeepReleases: 5,
+			KeepReleases: DefaultKeepReleases,
 			Validation: TypeValidation{
 				RequiredFiles: []string{"index.html"},
 			},
@@ -160,7 +160,7 @@ func BuiltinTypes() map[string]*TypeConfig {
 		"nodejs": {
 			Name:         "nodejs",
 			SharedFiles:  []string{".env"},
-			KeepReleases: 5,
+			KeepReleases: DefaultKeepReleases,
 			Validation: TypeValidation{
 				RequiredFiles: []string{"package.json"},
 			},

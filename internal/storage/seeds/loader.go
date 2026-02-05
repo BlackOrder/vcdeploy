@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/BlackOrder/vcdeploy/internal/config"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"go.uber.org/zap"
 )
@@ -101,7 +102,7 @@ func (l *Loader) loadPlaybook(ctx context.Context, sp SeedPlaybook, logger *zap.
 	// Insert new seed playbook
 	keepReleases := sp.KeepReleases
 	if keepReleases == 0 {
-		keepReleases = 5
+		keepReleases = config.DefaultKeepReleases
 	}
 
 	playbook := &storage.Playbook{

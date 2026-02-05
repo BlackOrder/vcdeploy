@@ -3190,3 +3190,83 @@ func TestAPIKeys_PaginationResponse(t *testing.T) {
 		t.Errorf("expected totalCount >= 5, got %d", totalCount)
 	}
 }
+
+// --- Body Size Limit Tests ---
+
+// TestBodySizeLimit_UserCreate verifies that the user creation endpoint
+// rejects request bodies that exceed the maximum allowed size.
+func TestBodySizeLimit_UserCreate(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	// Create a body larger than DefaultMaxBodySize (1MB)
+	largeBody := strings.Repeat("a", 2*1024*1024) // 2MB
+	body := bytes.NewBufferString(`{"username":"` + largeBody + `"}`)
+
+	req := httptest.NewRequest("POST", "/api/v1/users", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	req = requestWithUserContext(req, userID)
+	server.handleUsers(w, req)
+
+	// Should get a 400 Bad Request when body is too large
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d for oversized body, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
+	}
+}
+
+// TestBodySizeLimit_ProjectCreate verifies that the project creation endpoint
+// rejects request bodies that exceed the maximum allowed size.
+func TestBodySizeLimit_ProjectCreate(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	// Create a body larger than DefaultMaxBodySize (1MB)
+	largeBody := strings.Repeat("a", 2*1024*1024) // 2MB
+	body := bytes.NewBufferString(`{"name":"` + largeBody + `"}`)
+
+	req := httptest.NewRequest("POST", "/api/v1/projects", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	req = requestWithUserContext(req, userID)
+	server.handleProjectsAPI(w, req)
+
+	// Should get a 400 Bad Request when body is too large
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d for oversized body, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
+	}
+}
+
+// TestBodySizeLimit_HealthCheckCreate verifies that the health check creation endpoint
+// rejects request bodies that exceed the maximum allowed size.
+func TestBodySizeLimit_HealthCheckCreate(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	// Create a body larger than DefaultMaxBodySize (1MB)
+	largeBody := strings.Repeat("a", 2*1024*1024) // 2MB
+	body := bytes.NewBufferString(`{"name":"` + largeBody + `"}`)
+
+	req := httptest.NewRequest("POST", "/api/v1/health-checks", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	req = requestWithUserContext(req, userID)
+	server.handleHealthCheckConfigs(w, req)
+
+	// Should get a 400 Bad Request when body is too large
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d for oversized body, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
+	}
+}
