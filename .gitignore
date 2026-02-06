@@ -99,3 +99,4 @@ mem.out
 *.sarif
 seeds.test
 storage.test
+server.test

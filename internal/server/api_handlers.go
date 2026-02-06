@@ -223,16 +223,30 @@ func (s *MasterServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 
 // handleUser handles individual user operations.
 func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
-	// Extract user ID from path: /api/v1/users/{id}
+	// Extract user ID from path: /api/v1/users/{id} or /api/v1/users/{id}/totp
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/users/")
 	if path == "" {
 		s.jsonError(w, http.StatusBadRequest, "User ID required")
 		return
 	}
 
-	userID, err := strconv.ParseInt(path, 10, 64)
+	// Check for "me" special case
+	if strings.HasPrefix(path, "me") {
+		s.handleUserMe(w, r)
+		return
+	}
+
+	// Parse user ID and check for sub-resources
+	parts := strings.Split(path, "/")
+	userID, err := strconv.ParseInt(parts[0], 10, 64)
 	if err != nil {
 		s.jsonError(w, http.StatusBadRequest, "Invalid user ID")
+		return
+	}
+
+	// Check for TOTP sub-resource: /users/{id}/totp
+	if len(parts) > 1 && parts[1] == "totp" {
+		s.handleAdminUserTOTP(w, r, userID)
 		return
 	}
 
@@ -741,9 +755,7 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 		case "webhooks":
 			s.handleProjectWebhooksByID(w, r, projectID)
 			return
-		case "deploy":
-			s.handleProjectDeployByID(w, r, projectID)
-			return
+		// NOTE: "deploy" shortcut removed - use POST /deployments with project field instead
 		case "health-config":
 			s.handleProjectHealthConfig(w, r, projectID)
 			return
@@ -964,25 +976,6 @@ func (s *MasterServer) handleProjectDeploy(w http.ResponseWriter, r *http.Reques
 	defer cancel()
 
 	project, err := s.projectService.GetByName(ctx, projectName)
-	if err != nil {
-		s.jsonError(w, http.StatusNotFound, "Project not found")
-		return
-	}
-
-	s.handleProjectDeployInternal(ctx, w, r, project)
-}
-
-// handleProjectDeployByID triggers a deployment for a project by ID.
-func (s *MasterServer) handleProjectDeployByID(w http.ResponseWriter, r *http.Request, projectID int64) {
-	if r.Method != http.MethodPost {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
-	defer cancel()
-
-	project, err := s.projectService.GetByID(ctx, projectID)
 	if err != nil {
 		s.jsonError(w, http.StatusNotFound, "Project not found")
 		return
@@ -1382,9 +1375,7 @@ func (s *MasterServer) handleDeploymentAPI(w http.ResponseWriter, r *http.Reques
 	// Check for actions
 	if len(parts) > 1 {
 		switch parts[1] {
-		case "cancel":
-			s.handleDeploymentCancel(w, r, deploymentID)
-			return
+		// NOTE: "cancel" removed - use DELETE /deployments/{id} instead
 		case "rollback":
 			s.handleDeploymentRollback(w, r, deploymentID)
 			return
@@ -1421,19 +1412,68 @@ func (s *MasterServer) handleDeploymentAPI(w http.ResponseWriter, r *http.Reques
 		s.jsonResponse(w, deployment)
 
 	case http.MethodDelete:
-		// Cancel if running, otherwise just acknowledge
+		// Cancel deployment - handles scheduled, pending, and running deployments
 		deployment, err := s.deploymentService.GetByID(ctx, deploymentID)
 		if err != nil || deployment == nil {
 			s.jsonError(w, http.StatusNotFound, "Deployment not found")
 			return
 		}
 
+		// Check if deployment can be cancelled
+		if deployment.Status != "running" && deployment.Status != "pending" && deployment.Status != "scheduled" {
+			s.jsonError(w, http.StatusBadRequest, fmt.Sprintf("deployment cannot be cancelled (status: %s)", deployment.Status))
+			return
+		}
+
+		// Handle scheduled deployments
 		if deployment.Status == "scheduled" {
 			if err := s.deploymentService.CancelScheduled(ctx, deploymentID); err != nil {
-				s.logger.Error("Failed to cancel deployment", zap.Error(err))
+				s.logger.Error("Failed to cancel scheduled deployment", zap.Error(err))
 				s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 				return
 			}
+			s.logAudit(r, "cancel", "deployment", fmt.Sprintf("Cancelled scheduled deployment: %s", deploymentID), "success")
+			s.jsonResponse(w, StatusResponse{Status: "cancelled"})
+			return
+		}
+
+		// Try to send cancel command to agent if deployment is running
+		if deployment.Status == "running" && s.agentServer != nil {
+			agentID := deployment.Target
+			if agentID == "" {
+				connectedAgents := s.agentServer.GetConnectedAgents()
+				if len(connectedAgents) > 0 {
+					agentID = connectedAgents[0]
+				}
+			}
+
+			if agentID != "" && s.agentServer.IsAgentConnected(agentID) {
+				cancelCmd := &proto.CancelCommand{
+					DeploymentId: deploymentID,
+					Reason:       "Cancelled by user via API",
+				}
+				if err := s.agentServer.SendCancelCommand(agentID, cancelCmd); err != nil {
+					s.logger.Warn("Failed to send cancel command to agent",
+						zap.String("agent", agentID),
+						zap.Error(err),
+					)
+				} else {
+					s.logger.Info("Sent cancel command to agent",
+						zap.String("deployment_id", deploymentID),
+						zap.String("agent", agentID),
+					)
+				}
+			}
+		}
+
+		// Update status
+		now := time.Now()
+		deployment.Status = "cancelled"
+		deployment.CompletedAt = &now
+		if err := s.deploymentService.Update(ctx, deployment); err != nil {
+			s.logger.Error("Failed to cancel deployment", zap.Error(err))
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+			return
 		}
 
 		s.logAudit(r, "cancel", "deployment", fmt.Sprintf("Cancelled deployment: %s", deploymentID), "success")
@@ -1442,72 +1482,6 @@ func (s *MasterServer) handleDeploymentAPI(w http.ResponseWriter, r *http.Reques
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
-}
-
-// handleDeploymentCancel cancels a running deployment.
-func (s *MasterServer) handleDeploymentCancel(w http.ResponseWriter, r *http.Request, deploymentID string) {
-	if r.Method != http.MethodPost {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
-	defer cancel()
-
-	deployment, err := s.deploymentService.GetByID(ctx, deploymentID)
-	if err != nil || deployment == nil {
-		s.jsonError(w, http.StatusNotFound, "Deployment not found")
-		return
-	}
-
-	if deployment.Status != "running" && deployment.Status != "pending" && deployment.Status != "scheduled" {
-		s.jsonError(w, http.StatusBadRequest, "deployment cannot be cancelled (not running)")
-		return
-	}
-
-	// Try to send cancel command to agent if deployment is running
-	if deployment.Status == "running" && s.agentServer != nil {
-		// Determine target agent
-		agentID := deployment.Target
-		if agentID == "" {
-			// Try to find the agent handling this deployment
-			connectedAgents := s.agentServer.GetConnectedAgents()
-			if len(connectedAgents) > 0 {
-				agentID = connectedAgents[0]
-			}
-		}
-
-		if agentID != "" && s.agentServer.IsAgentConnected(agentID) {
-			cancelCmd := &proto.CancelCommand{
-				DeploymentId: deploymentID,
-				Reason:       "Cancelled by user via API",
-			}
-			if err := s.agentServer.SendCancelCommand(agentID, cancelCmd); err != nil {
-				s.logger.Warn("Failed to send cancel command to agent",
-					zap.String("agent", agentID),
-					zap.Error(err),
-				)
-			} else {
-				s.logger.Info("Sent cancel command to agent",
-					zap.String("deployment_id", deploymentID),
-					zap.String("agent", agentID),
-				)
-			}
-		}
-	}
-
-	// Update status
-	now := time.Now()
-	deployment.Status = "cancelled"
-	deployment.CompletedAt = &now
-	if err := s.deploymentService.Update(ctx, deployment); err != nil {
-		s.logger.Error("Failed to cancel deployment", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
-		return
-	}
-
-	s.logAudit(r, "cancel", "deployment", fmt.Sprintf("Cancelled deployment: %s", deploymentID), "success")
-	s.jsonResponse(w, StatusResponse{Status: "cancelled"})
 }
 
 // handleDeploymentRollback triggers a rollback for a deployment.
