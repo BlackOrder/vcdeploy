@@ -41,12 +41,12 @@ Example:
 
 	// Block an IP
 	addCmd := &cobra.Command{
-		Use:   "add <ip>",
+		Use:   "create <ip>",
 		Short: "Block an IP address",
 		Long: `Block an IP address from accessing the API.
 
 Example:
-  vcdeploy blocked-ip add 192.0.2.100 --reason "Malicious activity" \
+  vcdeploy blocked-ip create 192.0.2.100 --reason "Malicious activity" \
     --master localhost:9000 --token <token>`,
 		Args: cobra.ExactArgs(1),
 		RunE: runBlockedIPAdd,
@@ -57,12 +57,12 @@ Example:
 
 	// Unblock an IP
 	removeCmd := &cobra.Command{
-		Use:   "remove <ip>",
+		Use:   "delete <ip>",
 		Short: "Unblock an IP address",
 		Long: `Remove an IP address from the blocklist.
 
 Example:
-  vcdeploy blocked-ip remove 192.0.2.100 --master localhost:9000 --token <token>`,
+  vcdeploy blocked-ip delete 192.0.2.100 --master localhost:9000 --token <token>`,
 		Args: cobra.ExactArgs(1),
 		RunE: runBlockedIPRemove,
 	}
