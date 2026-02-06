@@ -450,6 +450,47 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 
 // --- Settings API ---
 
+// handleSettingsAll handles GET /api/v1/settings to list all settings grouped by category.
+func (s *MasterServer) handleSettingsAll(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
+	defer cancel()
+
+	// Read access: viewer role + read scope
+	if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
+		s.jsonError(w, status, msg)
+		return
+	}
+
+	if s.settingsSvc == nil {
+		s.jsonError(w, http.StatusInternalServerError, "Settings service not configured")
+		return
+	}
+
+	// Get all settings grouped by category
+	allSettings, err := s.settingsSvc.ListAll(ctx)
+	if err != nil {
+		s.logger.Error("Failed to list settings", zap.Error(err))
+		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	// Group by category
+	result := make(map[string]map[string]interface{})
+	for _, setting := range allSettings {
+		if result[setting.Category] == nil {
+			result[setting.Category] = make(map[string]interface{})
+		}
+		result[setting.Category][setting.Key] = setting.Value
+	}
+
+	s.jsonResponse(w, result)
+}
+
 // handleSettingsCategory handles settings operations for a category.
 func (s *MasterServer) handleSettingsCategory(w http.ResponseWriter, r *http.Request) {
 	// Extract category from path: /api/v1/settings/{category}
@@ -762,6 +803,9 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 		case "playbook":
 			s.handleProjectPlaybookByID(w, r, projectID)
 			return
+		case "clone":
+			s.handleProjectClone(w, r, projectID)
+			return
 		}
 	}
 
@@ -866,6 +910,77 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
+}
+
+// handleProjectClone creates a copy of an existing project.
+func (s *MasterServer) handleProjectClone(w http.ResponseWriter, r *http.Request, projectID int64) {
+	if r.Method != http.MethodPost {
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
+	defer cancel()
+
+	// Check write access
+	if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
+		s.jsonError(w, status, msg)
+		return
+	}
+
+	// Get source project
+	source, err := s.projectService.GetByID(ctx, projectID)
+	if err != nil {
+		if services.IsNotFound(err) {
+			s.jsonError(w, http.StatusNotFound, "Project not found")
+			return
+		}
+		s.logger.Error("Failed to get project", zap.Error(err))
+		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	// Parse request for new project name
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
+		s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
+		return
+	}
+
+	if req.Name == "" {
+		s.jsonError(w, http.StatusBadRequest, "New project name is required")
+		return
+	}
+
+	// Check if name already exists
+	existing, _ := s.projectService.GetByName(ctx, req.Name)
+	if existing != nil {
+		s.jsonError(w, http.StatusConflict, "Project with this name already exists")
+		return
+	}
+
+	// Create new project with same configuration
+	newProject, err := s.projectService.Create(ctx, req.Name, source.Repository, source.Branch, source.DeployPath, source.Type)
+	if err != nil {
+		s.logger.Error("Failed to create cloned project", zap.Error(err))
+		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	// Copy additional settings
+	if source.AutoRollbackEnabled || source.RollbackOnHealthFail {
+		newProject.AutoRollbackEnabled = source.AutoRollbackEnabled
+		newProject.RollbackOnHealthFail = source.RollbackOnHealthFail
+		if err := s.projectService.Update(ctx, newProject); err != nil {
+			s.logger.Warn("Failed to update cloned project settings", zap.Error(err))
+		}
+	}
+
+	s.logAudit(r, "clone", "project", fmt.Sprintf("Cloned project %s from %s (ID: %d)", req.Name, source.Name, projectID), "success")
+	w.WriteHeader(http.StatusCreated)
+	s.jsonResponse(w, newProject)
 }
 
 // handleProjectWebhooks handles webhook configuration for a project.
@@ -1379,6 +1494,9 @@ func (s *MasterServer) handleDeploymentAPI(w http.ResponseWriter, r *http.Reques
 		case "rollback":
 			s.handleDeploymentRollback(w, r, deploymentID)
 			return
+		case "retry":
+			s.handleDeploymentRetry(w, r, deploymentID)
+			return
 		case "logs":
 			// Check for streaming request
 			if r.URL.Query().Get("stream") == "true" {
@@ -1585,6 +1703,109 @@ func (s *MasterServer) handleDeploymentRollback(w http.ResponseWriter, r *http.R
 	s.logAudit(r, "rollback", "deployment", fmt.Sprintf("Triggered rollback for: %s", deploymentID), "success")
 	w.WriteHeader(http.StatusAccepted)
 	s.jsonResponse(w, rollback)
+}
+
+// handleDeploymentRetry creates a new deployment with the same configuration as a failed one.
+func (s *MasterServer) handleDeploymentRetry(w http.ResponseWriter, r *http.Request, deploymentID string) {
+	if r.Method != http.MethodPost {
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
+	defer cancel()
+
+	// Check write access
+	if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
+		s.jsonError(w, status, msg)
+		return
+	}
+
+	deployment, err := s.deploymentService.GetByID(ctx, deploymentID)
+	if err != nil || deployment == nil {
+		s.jsonError(w, http.StatusNotFound, "Deployment not found")
+		return
+	}
+
+	// Only allow retry of failed or cancelled deployments
+	if deployment.Status != "failed" && deployment.Status != "cancelled" && deployment.Status != "error" {
+		s.jsonError(w, http.StatusBadRequest, "Can only retry failed or cancelled deployments")
+		return
+	}
+
+	// Get username from context
+	username := "api"
+	if userID, ok := GetUserIDFromContext(r.Context()); ok {
+		if user, err := s.userService.GetByID(ctx, userID); err == nil && user != nil {
+			username = user.Username
+		}
+	}
+
+	// Create new deployment with same configuration
+	newDeploymentID := fmt.Sprintf("deploy-%d", time.Now().UnixNano())
+	newDeployment := &storage.DeploymentRecord{
+		ID:            newDeploymentID,
+		Project:       deployment.Project,
+		Target:        deployment.Target,
+		Branch:        deployment.Branch,
+		Status:        "pending",
+		TriggeredBy:   username,
+		TriggerSource: "retry:" + deploymentID,
+		StartedAt:     time.Now(),
+	}
+
+	if err := s.deploymentService.Create(ctx, newDeployment); err != nil {
+		s.logger.Error("Failed to create retry deployment", zap.Error(err))
+		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	// Try to send deploy command to agent
+	if s.agentServer != nil {
+		agentID := deployment.Target
+		if agentID == "" {
+			connectedAgents := s.agentServer.GetConnectedAgents()
+			if len(connectedAgents) > 0 {
+				agentID = connectedAgents[0]
+			}
+		}
+
+		if agentID != "" && s.agentServer.IsAgentConnected(agentID) {
+			project, err := s.projectService.GetByName(ctx, deployment.Project)
+			if err == nil && project != nil {
+				deployCmd := &proto.DeployCommand{
+					DeploymentId: newDeploymentID,
+					Project:      deployment.Project,
+					Branch:       deployment.Branch,
+					Target:       deployment.Target,
+					Repository:   project.Repository,
+					Path:         project.DeployPath,
+				}
+
+				newDeployment.Status = "running"
+				if err := s.deploymentService.Update(ctx, newDeployment); err != nil {
+					s.logger.Error("Failed to update deployment status to running", zap.Error(err))
+				}
+
+				if err := s.agentServer.SendDeployCommand(agentID, deployCmd); err != nil {
+					s.logger.Error("Failed to send deploy command to agent",
+						zap.String("agent", agentID),
+						zap.Error(err),
+					)
+					newDeployment.Status = "failed"
+					now := time.Now()
+					newDeployment.CompletedAt = &now
+					if err := s.deploymentService.Update(ctx, newDeployment); err != nil {
+						s.logger.Error("Failed to update deployment status to failed", zap.Error(err))
+					}
+				}
+			}
+		}
+	}
+
+	s.logAudit(r, "retry", "deployment", fmt.Sprintf("Retried deployment: %s as %s", deploymentID, newDeploymentID), "success")
+	w.WriteHeader(http.StatusAccepted)
+	s.jsonResponse(w, newDeployment)
 }
 
 // handleDeploymentLogs returns logs for a deployment.
