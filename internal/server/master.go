@@ -205,6 +205,9 @@ type MasterServer struct {
 	// Scheduled jobs
 	scheduler *scheduler.Scheduler
 
+	// SSE event streaming
+	sseBroker *SSEBroker
+
 	// Setup state - true when no users exist and env credentials not provided
 	requiresSetup bool
 }
@@ -313,6 +316,7 @@ func NewMasterServer(cfg *config.MasterConfig, store storage.Store, logger *zap.
 		agents:       make(map[string]*AgentConnection),
 		shutdown:     make(chan struct{}),
 		templatesDir: sysCfg.TemplatesDir(),
+		sseBroker:    NewSSEBroker(),
 	}
 
 	// Initialize KMS for encryption services (using the store for persistence)
@@ -366,6 +370,9 @@ func NewMasterServer(cfg *config.MasterConfig, store storage.Store, logger *zap.
 				// Create the gRPC agent server with the CA manager
 				s.agentServer = NewAgentServer(s.store, ca, s.logger)
 				s.agentServer.SetServices(s.agentService, s.deploymentService)
+
+				// Set SSE event callback for agent events
+				s.agentServer.SetAgentEventCallback(s.publishAgentEvent)
 
 				// Enable auto-registration in test mode
 				// WARNING: This allows any agent to register without authentication
@@ -430,6 +437,9 @@ func (s *MasterServer) SetCAManager(ca *security.CAManager) {
 	s.caManager = ca
 	// Create the gRPC agent server with the CA manager
 	s.agentServer = NewAgentServer(s.store, ca, s.logger)
+
+	// Set SSE event callback for agent events
+	s.agentServer.SetAgentEventCallback(s.publishAgentEvent)
 
 	// Enable auto-registration in test mode
 	// WARNING: This allows any agent to register without authentication
@@ -834,6 +844,9 @@ func (s *MasterServer) buildMainHandler() (http.Handler, error) {
 
 	// Audit API
 	mux.HandleFunc("/api/v1/audit", s.withAuth(s.handleAuditLogs))
+
+	// Events API - Server-Sent Events streaming
+	mux.HandleFunc("/api/v1/events/stream", s.withAuth(s.handleEventStream))
 
 	// Host Keys API (canonical kebab-case only)
 	mux.HandleFunc("/api/v1/host-keys", s.withAuth(s.handleHostKeys))

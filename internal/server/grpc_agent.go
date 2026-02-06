@@ -45,6 +45,9 @@ type AgentServer struct {
 	// Alert manager for system alerts
 	alertManager *alerting.Manager
 
+	// Event publisher callback for SSE events
+	onAgentEvent func(id, name, status, hostname string)
+
 	// allowAutoRegister enables agents to register without a pre-generated token (for testing)
 	allowAutoRegister bool
 
@@ -93,6 +96,11 @@ func (s *AgentServer) SetServices(agentSvc services.AgentServicer, deploymentSvc
 // SetAlertManager sets the alert manager for system alerts.
 func (s *AgentServer) SetAlertManager(alertMgr *alerting.Manager) {
 	s.alertManager = alertMgr
+}
+
+// SetAgentEventCallback sets the callback function for agent events (for SSE).
+func (s *AgentServer) SetAgentEventCallback(cb func(id, name, status, hostname string)) {
+	s.onAgentEvent = cb
 }
 
 // SetGitService sets the git service for repository operations.
@@ -356,6 +364,11 @@ func (s *AgentServer) Connect(stream proto.AgentService_ConnectServer) error {
 	agent.LastSeenAt = time.Now()
 	if err := s.agentService.Upsert(ctx, agent); err != nil {
 		s.logger.Warn("Failed to update agent status", zap.Error(err))
+	}
+
+	// Publish agent online event
+	if s.onAgentEvent != nil {
+		s.onAgentEvent(agentID, agent.Hostname, "online", agent.Hostname)
 	}
 
 	// Update metrics
@@ -763,6 +776,11 @@ func (s *AgentServer) cleanupConnection(agentID string) {
 			s.logger.Warn("Failed to update agent status to offline",
 				zap.String("agent_id", agentID),
 				zap.Error(err))
+		}
+
+		// Publish agent offline event
+		if s.onAgentEvent != nil {
+			s.onAgentEvent(agentID, agent.Hostname, "offline", agent.Hostname)
 		}
 
 		// Update metrics
