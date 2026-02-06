@@ -85,12 +85,12 @@ Example:
 
 	// Get recipe details
 	getCmd := &cobra.Command{
-		Use:   "get <name>",
-		Short: "Get recipe/playbook details",
-		Long: `Get detailed information about a specific recipe or playbook.
+		Use:   "show <name>",
+		Short: "Show recipe/playbook details",
+		Long: `Show detailed information about a specific recipe or playbook.
 
 Example:
-  vcdeploy recipe get my-playbook --master localhost:9000 --token <token>`,
+  vcdeploy recipe show my-playbook --master localhost:9000 --token <token>`,
 		Args: cobra.ExactArgs(1),
 		RunE: runRecipeGet,
 	}
