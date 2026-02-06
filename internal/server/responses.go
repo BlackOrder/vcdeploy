@@ -211,6 +211,7 @@ type PaginatedResponse struct {
 // --- SSH Key Responses ---
 
 // SSHKeyResponse represents an SSH key in API responses.
+// Note: The actual API returns security.SSHKeyInfo directly from the service layer.
 type SSHKeyResponse struct {
 	ID          int64     `json:"id"`
 	Name        string    `json:"name"`
@@ -218,17 +219,20 @@ type SSHKeyResponse struct {
 	Fingerprint string    `json:"fingerprint"`
 	PublicKey   string    `json:"publicKey"`
 	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
 // --- Credential Responses ---
 
 // CredentialResponse represents a source credential in API responses.
+// Note: The actual API returns security.CredentialInfo directly from the service layer.
 type CredentialResponse struct {
 	ID         int64     `json:"id"`
 	Name       string    `json:"name"`
 	Type       string    `json:"type"`
 	URLPattern string    `json:"urlPattern"`
 	CreatedAt  time.Time `json:"createdAt"`
+	UpdatedAt  time.Time `json:"updatedAt"`
 }
 
 // --- Provision Job Responses ---
@@ -249,7 +253,7 @@ type ProvisionJobResponse struct {
 
 // ProvisionLogsResponse represents provisioning logs in API responses.
 type ProvisionLogsResponse struct {
-	JobID  string               `json:"job_id"`
+	JobID  string               `json:"jobId"`
 	Status string               `json:"status"`
 	Stage  string               `json:"stage"`
 	Logs   []*ProvisionLogEntry `json:"logs"`
@@ -266,9 +270,9 @@ type ProvisionLogEntry struct {
 
 // ProvisionJobCreateResponse represents the response when creating a provision job.
 type ProvisionJobCreateResponse struct {
-	JobID      string `json:"job_id"`
-	AgentID    string `json:"agent_id"`
-	TargetHost string `json:"target_host"`
+	JobID      string `json:"jobId"`
+	AgentID    string `json:"agentId"`
+	TargetHost string `json:"targetHost"`
 	Status     string `json:"status"`
 	Message    string `json:"message"`
 }
@@ -321,19 +325,19 @@ type HealthCheckConfigResponse struct {
 
 // ProjectHealthConfigResponse represents project health check configuration.
 type ProjectHealthConfigResponse struct {
-	HealthCheckID        *int64 `json:"health_check_id"`
-	AutoRollbackEnabled  bool   `json:"auto_rollback_enabled"`
-	RollbackOnHealthFail bool   `json:"rollback_on_health_fail"`
+	HealthCheckID        *int64 `json:"healthCheckId"`
+	AutoRollbackEnabled  bool   `json:"autoRollbackEnabled"`
+	RollbackOnHealthFail bool   `json:"rollbackOnHealthFail"`
 }
 
 // --- Rollback Responses ---
 
 // RollbackListResponse represents a paginated list of rollbacks.
 type RollbackListResponse struct {
-	Items  interface{} `json:"items"`
-	Total  int64       `json:"total"`
-	Limit  int         `json:"limit"`
-	Offset int         `json:"offset"`
+	Items      interface{} `json:"items"`
+	TotalCount int64       `json:"totalCount"`
+	Limit      int         `json:"limit"`
+	Offset     int         `json:"offset"`
 }
 
 // --- Agent Binary Responses ---
@@ -353,17 +357,17 @@ type AgentBinaryResponse struct {
 // AgentUpdateTriggerResponse represents the response when triggering an agent update.
 type AgentUpdateTriggerResponse struct {
 	Status      string `json:"status"`
-	FromVersion string `json:"from_version,omitempty"`
-	ToVersion   string `json:"to_version,omitempty"`
+	FromVersion string `json:"fromVersion,omitempty"`
+	ToVersion   string `json:"toVersion,omitempty"`
 	Force       bool   `json:"force,omitempty"`
-	UpdateID    int64  `json:"update_id,omitempty"`
+	UpdateID    int64  `json:"updateId,omitempty"`
 	Delivery    string `json:"delivery,omitempty"`
 }
 
 // AgentUpToDateResponse represents the response when an agent is already up to date.
 type AgentUpToDateResponse struct {
 	Status         string `json:"status"`
-	CurrentVersion string `json:"current_version"`
+	CurrentVersion string `json:"currentVersion"`
 }
 
 // --- Certificate Responses ---
@@ -383,15 +387,15 @@ type CertificateResponse struct {
 // ACMERenewalResponse represents the response from ACME renewal check.
 type ACMERenewalResponse struct {
 	Status        string `json:"status"`
-	NeedsRenewal  bool   `json:"needs_renewal"`
-	DaysRemaining int    `json:"days_remaining"`
+	NeedsRenewal  bool   `json:"needsRenewal"`
+	DaysRemaining int    `json:"daysRemaining"`
 	Message       string `json:"message"`
 }
 
 // TLSConfigInfo represents current TLS configuration info.
 type TLSConfigInfo struct {
 	Mode       string `json:"mode"`
-	ForceHTTPS bool   `json:"force_https"`
+	ForceHTTPS bool   `json:"forceHttps"`
 }
 
 // TLSSettingsInfoResponse represents TLS settings info response.
@@ -419,6 +423,8 @@ type ProjectTypeResponse struct {
 
 // WebhookResponse represents a webhook configuration in API responses.
 type WebhookResponse struct {
-	Provider string `json:"provider"`
-	Enabled  bool   `json:"enabled"`
+	Provider  string     `json:"provider"`
+	Enabled   bool       `json:"enabled"`
+	CreatedAt *time.Time `json:"createdAt,omitempty"`
+	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
 }

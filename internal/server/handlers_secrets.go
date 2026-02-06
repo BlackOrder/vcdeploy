@@ -14,7 +14,7 @@ import (
 
 // handleSecrets handles GET/POST for /api/v1/secrets and per-project secrets.
 func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
 	// Parse query params for filtering

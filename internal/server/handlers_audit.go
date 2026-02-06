@@ -28,7 +28,7 @@ func (s *MasterServer) handleAuditLogs(w http.ResponseWriter, r *http.Request) {
 	// Parse pagination params
 	p := parsePagination(r)
 
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
 	entries, err := s.auditService.List(ctx, p.Limit, p.Offset)

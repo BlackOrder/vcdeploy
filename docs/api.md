@@ -222,16 +222,17 @@ Authenticate with username and password to receive a JWT token.
 POST /api/v1/totp/setup
 ```
 
-Initialize TOTP setup for the current user. Returns a secret and QR code for authenticator app configuration.
+Initialize TOTP setup for the current user. Returns a secret and URI for authenticator app configuration.
 
 **Response:**
 ```json
 {
   "secret": "JBSWY3DPEHPK3PXP",
-  "qr_code": "data:image/png;base64,...",
-  "recovery_codes": ["XXXX-XXXX-XXXX", "YYYY-YYYY-YYYY", ...]
+  "uri": "otpauth://totp/vcdeploy:username?secret=JBSWY3DPEHPK3PXP&issuer=vcdeploy"
 }
 ```
+
+> **Note:** Recovery codes are returned from `/api/v1/totp/enable`, not `/setup`.
 
 ### Enable TOTP
 
@@ -239,20 +240,21 @@ Initialize TOTP setup for the current user. Returns a secret and QR code for aut
 POST /api/v1/totp/enable
 ```
 
-Enable TOTP after verifying setup with a valid code.
+Enable TOTP after verifying setup with a valid code. Returns recovery codes.
 
 **Request:**
 ```json
 {
-  "code": "123456"
+  "secret": "JBSWY3DPEHPK3PXP",
+  "totp_code": "123456"
 }
 ```
 
 **Response:**
 ```json
 {
-  "enabled": true,
-  "message": "TOTP enabled successfully"
+  "message": "TOTP enabled successfully",
+  "recovery_codes": ["XXXXXXXX", "YYYYYYYY", "ZZZZZZZZ", "..."]
 }
 ```
 

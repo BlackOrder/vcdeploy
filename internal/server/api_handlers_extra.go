@@ -697,7 +697,7 @@ func (s *MasterServer) handleProvisionJob(w http.ResponseWriter, r *http.Request
 			return
 		}
 
-		s.jsonResponse(w, StatusResponse{Status: "cancelled"})
+		w.WriteHeader(http.StatusNoContent)
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")

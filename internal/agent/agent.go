@@ -305,7 +305,11 @@ func (a *Agent) Register(ctx context.Context, token string) (cert []byte, caCert
 		return nil, nil, fmt.Errorf("not connected")
 	}
 
-	hostname, _ := os.Hostname()
+	hostname, err := os.Hostname()
+	if err != nil {
+		a.logger.Warn("Failed to get hostname, using 'unknown'", zap.Error(err))
+		hostname = "unknown"
+	}
 
 	// Build capabilities
 	caps := &pb.AgentCapabilities{
@@ -610,7 +614,11 @@ func (a *Agent) sendHeartbeat(ctx context.Context) error {
 		Arch:              runtime.GOARCH,
 	}
 
-	hostname, _ := os.Hostname()
+	hostname, err := os.Hostname()
+	if err != nil {
+		a.logger.Warn("Failed to get hostname for heartbeat log", zap.Error(err))
+		hostname = "unknown"
+	}
 	a.logger.Debug("Sending heartbeat",
 		zap.String("hostname", hostname),
 		zap.Int("active_deployments", len(activeStatuses)),

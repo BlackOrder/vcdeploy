@@ -1562,6 +1562,65 @@ vcdeploy-agent start
 
 ---
 
+## API-Only Features
+
+Some features are intentionally available only via the REST API or Web UI, not the CLI. This is by design.
+
+| API Endpoint | Feature | Reason |
+|--------------|---------|--------|
+| `/api/v1/blocked` | IP blocking/unblocking | Security feature best managed via UI for audit visibility |
+| `/api/v1/host-keys` | SSH host key management | Low-frequency admin operation |
+| `/api/v1/jump-servers` | Jump server configuration | Low-frequency admin operation |
+| `/api/v1/binaries` | Agent binary management | Internal system feature |
+| `/api/v1/tls/*` | TLS certificate management | Server configuration via UI |
+| `/api/v1/recipes/*` | Full recipe CRUD | Use `recipes import-yaml` for CLI workflow |
+
+If you need CLI access to these features, use `curl` or similar tools with an API key:
+
+```bash
+# Example: List blocked IPs
+curl -H "Authorization: Bearer $VCDEPLOY_TOKEN" \
+     https://vcdeploy.example.com/api/v1/blocked
+
+# Example: Block an IP
+curl -X POST -H "Authorization: Bearer $VCDEPLOY_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"ip":"192.168.1.100","reason":"suspicious activity"}' \
+     https://vcdeploy.example.com/api/v1/blocked
+```
+
+---
+
+## Command Conventions
+
+### Resource Lifecycle Verbs
+
+| Verb | Usage | Example |
+|------|-------|---------|
+| `create` | Create a new resource | `vcdeploy user create` |
+| `list` | List all resources | `vcdeploy project list` |
+| `show` | Show resource details | `vcdeploy agent show` |
+| `edit` | Modify an existing resource | `vcdeploy project edit` |
+| `delete` | Permanently remove a resource | `vcdeploy project delete` |
+
+### Special Verbs
+
+| Verb | Usage | When to Use |
+|------|-------|-------------|
+| `revoke` | Invalidate without deleting | `apikey revoke`, `certs revoke` - preserves audit trail |
+| `trigger` | Start an operation | `deploy trigger` |
+| `cancel` | Cancel a running operation | `deploy cancel` |
+| `rotate` | Regenerate/replace credentials | `webhook rotate-secret`, `certs ca rotate` |
+
+**Why `revoke` instead of `delete`?**
+
+For credentials like API keys and certificates, we use `revoke` because:
+1. The resource's existence must be remembered for audit purposes
+2. The credential should no longer grant access
+3. Deletion would lose the audit trail of what was revoked and when
+
+---
+
 ## See Also
 
 - [Installation Guide](../installation.md)

@@ -368,7 +368,10 @@ func NewMasterServer(cfg *config.MasterConfig, store storage.Store, logger *zap.
 				s.agentServer.SetServices(s.agentService, s.deploymentService)
 
 				// Enable auto-registration in test mode
+				// WARNING: This allows any agent to register without authentication
 				if os.Getenv("VCDEPLOY_TEST_MODE") == "true" {
+					logger.Warn("⚠️  TEST MODE ENABLED - Agent auto-registration is active",
+						zap.String("warning", "DO NOT USE IN PRODUCTION - agents can register without authentication"))
 					s.agentServer.SetAllowAutoRegister(true)
 				}
 
@@ -429,7 +432,10 @@ func (s *MasterServer) SetCAManager(ca *security.CAManager) {
 	s.agentServer = NewAgentServer(s.store, ca, s.logger)
 
 	// Enable auto-registration in test mode
+	// WARNING: This allows any agent to register without authentication
 	if os.Getenv("VCDEPLOY_TEST_MODE") == "true" {
+		s.logger.Warn("⚠️  TEST MODE ENABLED - Agent auto-registration is active",
+			zap.String("warning", "DO NOT USE IN PRODUCTION - agents can register without authentication"))
 		s.agentServer.SetAllowAutoRegister(true)
 	}
 }
@@ -793,6 +799,10 @@ func (s *MasterServer) buildMainHandler() (http.Handler, error) {
 	// Recipes API - Playbooks
 	mux.HandleFunc("/api/v1/recipes/playbooks", s.withAuth(s.handleRecipePlaybooks))
 	mux.HandleFunc("/api/v1/recipes/playbooks/", s.withAuth(s.handleRecipePlaybook))
+
+	// Recipes API - Activations
+	mux.HandleFunc("/api/v1/recipes/activations", s.withAuth(s.handleActivations))
+	mux.HandleFunc("/api/v1/recipes/activations/", s.withAuth(s.handleActivation))
 
 	// Recipes API - RAW Approvals (Admin only)
 	mux.HandleFunc("/api/v1/recipes/raw-approvals", s.withAuth(s.handleRawApprovals))

@@ -888,8 +888,8 @@ func TestHandleProvisionJob_Cancel(t *testing.T) {
 
 	server.handleProvisionJob(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	if rec.Code != http.StatusNoContent {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusNoContent, rec.Body.String())
 	}
 }
 
@@ -940,9 +940,9 @@ func TestHandleProvisionJob_Logs(t *testing.T) {
 		t.Errorf("expected 3 logs, got %d", len(logs))
 	}
 
-	// Verify job_id is included
-	if result["job_id"] != job.ID {
-		t.Errorf("job_id = %v, want %v", result["job_id"], job.ID)
+	// Verify jobId is included
+	if result["jobId"] != job.ID {
+		t.Errorf("jobId = %v, want %v", result["jobId"], job.ID)
 	}
 }
 

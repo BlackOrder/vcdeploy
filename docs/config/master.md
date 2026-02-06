@@ -11,6 +11,7 @@ The master server is configured via a YAML file, typically located at `/etc/vcde
 server:
   listen: ":9000"              # HTTP API and Web UI address
   https_address: ":9443"       # Optional separate HTTPS port
+  socket_path: "/var/run/vcdeploy/vcdeploy.sock"  # Unix socket for local CLI
   tls:
     mode: "static"             # disabled, static, or acme
     cert_file: "/etc/vcdeploy/tls/cert.pem"
@@ -48,6 +49,7 @@ ssh:
 security:
   session_timeout: 24h                        # Web session timeout
   require_2fa_admin: true                     # Require TOTP for admin users
+  reauth_address: ":9002"                     # Dedicated port for re-authentication
   key_rotation:
     enabled: true                             # Enable automatic key rotation
     interval: 720h                            # Rotation interval (30 days)
@@ -146,6 +148,14 @@ notifications:
 # API settings
 api:
   enabled: true
+  rate_limit:
+    enabled: false                            # Enable rate limiting
+    requests_per_second: 100                  # Requests per second limit
+    burst_size: 50                            # Burst allowance
+
+# Storage settings
+storage:
+  use_memory_cache: true                      # Enable in-memory cache layer
 
 # UI appearance
 appearance:
@@ -162,6 +172,7 @@ HTTP server configuration for the REST API and Web UI.
 |-------|------|---------|-------------|
 | `listen` | string | `:9000` | Address to listen on |
 | `https_address` | string | - | Optional separate HTTPS port |
+| `socket_path` | string | `/var/run/vcdeploy/vcdeploy.sock` | Unix socket for local CLI access |
 | `tls.mode` | string | `disabled` | TLS mode: disabled, static, or acme |
 | `tls.cert_file` | string | - | TLS certificate path (static mode) |
 | `tls.key_file` | string | - | TLS private key path (static mode) |
@@ -202,6 +213,7 @@ Security and authentication settings.
 |-------|------|---------|-------------|
 | `session_timeout` | duration | `24h` | Web session timeout |
 | `require_2fa_admin` | bool | `true` | Require TOTP for admin users |
+| `reauth_address` | string | - | Dedicated port for re-authentication (optional) |
 | `key_rotation.enabled` | bool | `true` | Enable automatic key rotation |
 | `key_rotation.interval` | duration | `720h` | Key rotation interval |
 
@@ -276,6 +288,25 @@ Outgoing notification configuration.
 
 See [Notifications Guide](../operations/logging.md#notifications) for detailed setup.
 
+### API
+
+API server configuration.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | bool | `true` | Enable REST API |
+| `rate_limit.enabled` | bool | `false` | Enable rate limiting |
+| `rate_limit.requests_per_second` | float | `100` | Max requests per second |
+| `rate_limit.burst_size` | int | `50` | Burst allowance above limit |
+
+### Storage
+
+Storage and caching configuration.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `use_memory_cache` | bool | `true` | Enable in-memory cache layer with batched SQLite persistence. Eliminates SQLITE_BUSY errors from concurrent access. |
+
 ## Environment Variables
 
 Configuration can be overridden via environment variables:
@@ -348,16 +379,39 @@ The database location is not configurable in the YAML file—it's determined by 
 
 The following environment variables can be used to configure vcdeploy:
 
+### Directory Configuration
+
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `VCDEPLOY_CONFIG_DIR` | Configuration directory | `/etc/vcdeploy` |
 | `VCDEPLOY_DATA_DIR` | Data directory | `/var/lib/vcdeploy` |
 | `VCDEPLOY_LOG_DIR` | Log directory | `/var/log/vcdeploy` |
 | `VCDEPLOY_RUN_DIR` | Runtime directory | `/var/run/vcdeploy` |
+| `VCDEPLOY_SYSTEM_CONFIG` | Override system config path | - |
+
+### Security
+
+| Variable | Description | Default |
+|----------|-------------|---------|
 | `VCDEPLOY_MASTER_KEY` | Master encryption key (base64) | Auto-generated |
 | `VCDEPLOY_ADMIN_PASSWORD` | Initial admin password | - |
 | `VCDEPLOY_ADMIN_USERNAME` | Initial admin username | `admin` |
 | `VCDEPLOY_ADMIN_EMAIL` | Initial admin email | `admin@localhost` |
+
+### CLI Configuration
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VCDEPLOY_MASTER` | Master server address for remote CLI | - |
+| `VCDEPLOY_TOKEN` | API token for remote CLI authentication | - |
+
+### Testing (Development Only)
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VCDEPLOY_TEST_MODE` | Enable test mode (disables some security checks) | `false` |
+
+> **Warning:** `VCDEPLOY_TEST_MODE` bypasses security guards. Never use in production.
 
 Environment variables take precedence over config file values for the fields they override.
 

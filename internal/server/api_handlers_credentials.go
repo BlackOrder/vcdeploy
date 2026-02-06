@@ -155,7 +155,7 @@ func (s *MasterServer) handleCreateCredential(w http.ResponseWriter, r *http.Req
 	}
 
 	s.logAudit(r, "create", "credential", "Created credential: "+cred.Name, "success")
-	s.jsonResponse(w, cred)
+	s.writeJSON(w, http.StatusCreated, cred)
 }
 
 // handleUpdateCredential updates an existing credential.
