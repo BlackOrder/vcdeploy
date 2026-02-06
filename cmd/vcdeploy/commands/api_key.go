@@ -12,18 +12,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// apikeyCmd handles API key commands
-var apikeyCmd = &cobra.Command{
-	Use:   "apikey",
+// apiKeyCmd handles API key commands
+var apiKeyCmd = &cobra.Command{
+	Use:   "api-key",
 	Short: "API key management",
 	Long:  "Commands for managing API keys.",
 }
 
 func init() {
-	rootCmd.AddCommand(apikeyCmd)
+	rootCmd.AddCommand(apiKeyCmd)
 
 	// API Key subcommands
-	apikeyCmd.AddCommand(&cobra.Command{
+	apiKeyCmd.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List all API keys",
 		RunE:  runAPIKeyList,
@@ -36,9 +36,9 @@ func init() {
 		RunE:  runAPIKeyCreate,
 	}
 	createKeyCmd.Flags().Int("expires", 0, "Days until expiry (0 = never)")
-	apikeyCmd.AddCommand(createKeyCmd)
+	apiKeyCmd.AddCommand(createKeyCmd)
 
-	apikeyCmd.AddCommand(&cobra.Command{
+	apiKeyCmd.AddCommand(&cobra.Command{
 		Use:   "revoke [key-id]",
 		Short: "Revoke an API key",
 		Args:  cobra.ExactArgs(1),
