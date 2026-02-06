@@ -18,6 +18,9 @@ import (
 	"go.uber.org/zap"
 )
 
+// ErrKMSNotConfigured is returned when a KMS operation is attempted but KMS is nil.
+var ErrKMSNotConfigured = errors.New("KMS not configured: encryption/decryption operations are unavailable")
+
 // KMS provides AWS KMS-style key management with versioning and rotation.
 // Keys are never deleted, only deactivated for decryption backward compatibility.
 // Ciphertext format: v1:{key_id}:{base64_nonce}:{base64_ciphertext}
@@ -513,9 +516,10 @@ func (k *KMS) invalidateCache() {
 	k.cacheMu.Unlock()
 }
 
-func (k *KMS) logKeyUsage(ctx context.Context, keyID, operation, resourceType, resourceID string) error {
+func (k *KMS) logKeyUsage(_ context.Context, keyID, operation, resourceType, resourceID string) error {
 	// Key usage logging is now optional - skipped if encryption_key_usage table doesn't exist
 	// The main audit logging is handled through cert_audit_events
+	// ctx parameter reserved for future distributed tracing
 	k.logger.Debug("key usage",
 		zap.String("keyID", keyID),
 		zap.String("operation", operation),

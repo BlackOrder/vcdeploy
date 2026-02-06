@@ -661,7 +661,7 @@ func TestHandleBlockedIPs_List(t *testing.T) {
 	}
 	_ = server.store.BlockIP(ctx, block)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/blocked", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/blocked-ips", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -684,7 +684,7 @@ func TestHandleBlockedIPs_Block(t *testing.T) {
 		"duration": "1h"
 	}`)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/blocked", body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/blocked-ips", body)
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
@@ -713,7 +713,7 @@ func TestHandleBlockedIP_Unblock(t *testing.T) {
 	}
 	_ = server.store.BlockIP(ctx, block)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/blocked/172.16.0.1", http.NoBody)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/blocked-ips/172.16.0.1", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -741,7 +741,7 @@ func TestHandleBlockedIP_Get(t *testing.T) {
 	}
 	_ = server.store.BlockIP(ctx, block)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/blocked/10.0.0.1", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/blocked-ips/10.0.0.1", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -758,7 +758,7 @@ func TestHandleBlockedIP_GetNotFound(t *testing.T) {
 	server := newTestServer(t)
 	adminUserID := createTestAdminUser(t, server)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/blocked/192.168.99.99", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/blocked-ips/192.168.99.99", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -775,7 +775,7 @@ func TestHandleBlockedIP_MethodNotAllowed(t *testing.T) {
 	server := newTestServer(t)
 	adminUserID := createTestAdminUser(t, server)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/blocked/10.0.0.1", http.NoBody)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/blocked-ips/10.0.0.1", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -1020,8 +1020,8 @@ func TestNewEndpoints_RequireAdminAccess(t *testing.T) {
 		method string
 		path   string
 	}{
-		{http.MethodGet, "/api/v1/blocked"},
-		{http.MethodPost, "/api/v1/blocked"},
+		{http.MethodGet, "/api/v1/blocked-ips"},
+		{http.MethodPost, "/api/v1/blocked-ips"},
 		{http.MethodGet, "/api/v1/provision"},
 		{http.MethodPost, "/api/v1/provision"},
 	}
@@ -1044,7 +1044,7 @@ func TestNewEndpoints_RequireAdminAccess(t *testing.T) {
 			rec := httptest.NewRecorder()
 
 			switch ep.path {
-			case "/api/v1/blocked":
+			case "/api/v1/blocked-ips":
 				server.handleBlockedIPs(rec, req)
 			case "/api/v1/provision":
 				server.handleProvisionJobs(rec, req)

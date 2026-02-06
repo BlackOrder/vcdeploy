@@ -257,7 +257,7 @@ func TestCleanupTask_CleanOldDeployments(t *testing.T) {
 		Repository: "https://github.com/test/test",
 		CreatedAt:  time.Now(),
 	}
-	if err := db.CreateProject(project); err != nil {
+	if err := db.CreateProject(context.Background(), project); err != nil {
 		t.Fatalf("create project: %v", err)
 	}
 

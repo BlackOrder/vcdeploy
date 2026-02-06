@@ -409,7 +409,7 @@ func (s *MasterServer) handleJumpServer(w http.ResponseWriter, r *http.Request) 
 
 // --- Blocked IPs API Handlers ---
 
-// handleBlockedIPs handles GET /api/v1/blocked (list) and POST /api/v1/blocked (block IP).
+// handleBlockedIPs handles GET /api/v1/blocked-ips (list) and POST /api/v1/blocked-ips (block IP).
 func (s *MasterServer) handleBlockedIPs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -512,12 +512,12 @@ func (s *MasterServer) handleBlockedIPs(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-// handleBlockedIP handles DELETE /api/v1/blocked/{ip} (unblock).
+// handleBlockedIP handles DELETE /api/v1/blocked-ips/{ip} (unblock).
 func (s *MasterServer) handleBlockedIP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	// Extract IP from path
-	ip := strings.TrimPrefix(r.URL.Path, "/api/v1/blocked/")
+	ip := strings.TrimPrefix(r.URL.Path, "/api/v1/blocked-ips/")
 	if ip == "" {
 		s.jsonError(w, http.StatusBadRequest, "IP address required")
 		return

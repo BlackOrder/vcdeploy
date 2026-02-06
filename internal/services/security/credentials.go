@@ -35,6 +35,14 @@ func NewCredentialService(store storage.Store, kms SecretEncryptor, logger *zap.
 	}
 }
 
+// requireKMS returns an error if KMS is not configured.
+func (s *CredentialService) requireKMS() error {
+	if s.kms == nil {
+		return ErrKMSNotConfigured
+	}
+	return nil
+}
+
 // CredentialInfo represents credential info for API responses (without secrets).
 type CredentialInfo struct {
 	ID         int64     `json:"id"`
@@ -184,6 +192,9 @@ func (s *CredentialService) GetCredentialByName(ctx context.Context, name string
 
 // CreateCredential creates a new source credential.
 func (s *CredentialService) CreateCredential(ctx context.Context, req CreateCredentialRequest) (*CredentialInfo, error) {
+	if err := s.requireKMS(); err != nil {
+		return nil, err
+	}
 	if err := req.Validate(); err != nil {
 		return nil, err
 	}
@@ -239,6 +250,13 @@ func (s *CredentialService) CreateCredential(ctx context.Context, req CreateCred
 
 // UpdateCredential updates an existing credential.
 func (s *CredentialService) UpdateCredential(ctx context.Context, id int64, req UpdateCredentialRequest) (*CredentialInfo, error) {
+	// Only require KMS if credential value is being updated
+	if req.Credential != nil {
+		if err := s.requireKMS(); err != nil {
+			return nil, err
+		}
+	}
+
 	cred, err := s.store.GetSourceCredential(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("getting credential: %w", err)
@@ -396,6 +414,10 @@ func (s *CredentialService) MatchCredentialForURL(ctx context.Context, repoURL s
 // GetDecryptedCredential returns the decrypted credential value.
 // This should only be used internally when actually needing the credential.
 func (s *CredentialService) GetDecryptedCredential(ctx context.Context, id int64) (string, error) {
+	if err := s.requireKMS(); err != nil {
+		return "", err
+	}
+
 	cred, err := s.store.GetSourceCredential(ctx, id)
 	if err != nil {
 		return "", fmt.Errorf("getting credential: %w", err)

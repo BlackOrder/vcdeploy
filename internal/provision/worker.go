@@ -113,7 +113,7 @@ func (w *Worker) GetJob(ctx context.Context, jobID string) (*storage.ProvisionJo
 
 // GetLogs retrieves logs for a job.
 func (w *Worker) GetLogs(ctx context.Context, jobID string) ([]*storage.ProvisionLog, error) {
-	return w.store.GetProvisionLogs(ctx, jobID)
+	return w.store.ListProvisionLogs(ctx, jobID)
 }
 
 // Shutdown gracefully shuts down the worker, waiting for in-progress jobs.

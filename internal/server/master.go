@@ -835,9 +835,9 @@ func (s *MasterServer) buildMainHandler() (http.Handler, error) {
 	mux.HandleFunc("/api/v1/jump-servers", s.withAuth(s.handleJumpServers))
 	mux.HandleFunc("/api/v1/jump-servers/", s.withAuth(s.handleJumpServer))
 
-	// Blocked IPs API
-	mux.HandleFunc("/api/v1/blocked", s.withAuth(s.handleBlockedIPs))
-	mux.HandleFunc("/api/v1/blocked/", s.withAuth(s.handleBlockedIP))
+	// Blocked IPs API (canonical kebab-case)
+	mux.HandleFunc("/api/v1/blocked-ips", s.withAuth(s.handleBlockedIPs))
+	mux.HandleFunc("/api/v1/blocked-ips/", s.withAuth(s.handleBlockedIP))
 
 	// Admin TOTP Management API
 	mux.HandleFunc("/api/v1/admin/totp/users", s.withAuth(s.handleAdminTOTPUsers))
@@ -1253,7 +1253,8 @@ func (s *MasterServer) setupMTLS() (*tls.Config, error) {
 // startReauthServer starts the dedicated re-authentication gRPC server.
 // This server does not require client certificates, allowing agents with
 // expired certificates to re-authenticate using HMAC.
-func (s *MasterServer) startReauthServer(ctx context.Context) error {
+func (s *MasterServer) startReauthServer(_ context.Context) error {
+	// ctx reserved for future graceful shutdown support
 	addr := s.config.GRPC.ReauthAddress
 	if addr == "" {
 		addr = ":9444"

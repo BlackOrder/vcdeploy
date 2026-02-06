@@ -8,8 +8,9 @@ import (
 
 // Auth helper methods for MasterServer.
 // These methods reduce boilerplate when checking access permissions in handlers.
+// All methods return JSON error responses via jsonError().
 
-// requireReadAccess checks read permission and writes error response if denied.
+// requireReadAccess checks read permission and writes JSON error response if denied.
 // Returns true if access is granted, false if denied (error already written to w).
 func (s *MasterServer) requireReadAccess(ctx context.Context, w http.ResponseWriter) bool {
 	if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
@@ -19,7 +20,7 @@ func (s *MasterServer) requireReadAccess(ctx context.Context, w http.ResponseWri
 	return true
 }
 
-// requireWriteAccess checks write permission and writes error response if denied.
+// requireWriteAccess checks write permission and writes JSON error response if denied.
 // Returns true if access is granted, false if denied (error already written to w).
 func (s *MasterServer) requireWriteAccess(ctx context.Context, w http.ResponseWriter) bool {
 	if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
@@ -29,7 +30,7 @@ func (s *MasterServer) requireWriteAccess(ctx context.Context, w http.ResponseWr
 	return true
 }
 
-// requireAdminAccess checks admin permission and writes error response if denied.
+// requireAdminAccess checks admin permission and writes JSON error response if denied.
 // Returns true if access is granted, false if denied (error already written to w).
 func (s *MasterServer) requireAdminAccess(ctx context.Context, w http.ResponseWriter) bool {
 	if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
@@ -39,24 +40,14 @@ func (s *MasterServer) requireAdminAccess(ctx context.Context, w http.ResponseWr
 	return true
 }
 
-// requireReadAccessJSON checks read permission and writes JSON error response if denied.
-// Use this for API endpoints that return JSON responses.
-// Returns true if access is granted, false if denied (error already written to w).
+// requireReadAccessJSON is an alias for requireReadAccess for backward compatibility.
+// Deprecated: Use requireReadAccess instead. Will be removed in a future release.
 func (s *MasterServer) requireReadAccessJSON(ctx context.Context, w http.ResponseWriter) bool {
-	if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-		s.jsonError(w, status, msg)
-		return false
-	}
-	return true
+	return s.requireReadAccess(ctx, w)
 }
 
-// requireAdminAccessJSON checks admin permission and writes JSON error response if denied.
-// Use this for API endpoints that return JSON responses.
-// Returns true if access is granted, false if denied (error already written to w).
+// requireAdminAccessJSON is an alias for requireAdminAccess for backward compatibility.
+// Deprecated: Use requireAdminAccess instead. Will be removed in a future release.
 func (s *MasterServer) requireAdminAccessJSON(ctx context.Context, w http.ResponseWriter) bool {
-	if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-		s.jsonError(w, status, msg)
-		return false
-	}
-	return true
+	return s.requireAdminAccess(ctx, w)
 }

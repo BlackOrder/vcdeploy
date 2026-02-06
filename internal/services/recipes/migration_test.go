@@ -18,7 +18,7 @@ func TestMigrationService_MigrateProjectConfig_Basic(t *testing.T) {
 		Name: "test-project",
 		Type: "laravel",
 	}
-	if err := db.CreateProject(project); err != nil {
+	if err := db.CreateProject(ctx, project); err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 
@@ -67,7 +67,7 @@ func TestMigrationService_MigrateProjectConfig_NoComponents(t *testing.T) {
 		Name: "test-project",
 		Type: "static",
 	}
-	if err := db.CreateProject(project); err != nil {
+	if err := db.CreateProject(ctx, project); err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 
@@ -104,7 +104,7 @@ func TestMigrationService_MigrateProjectConfig_WithActivation(t *testing.T) {
 		Name: "test-project",
 		Type: "node",
 	}
-	if err := db.CreateProject(project); err != nil {
+	if err := db.CreateProject(ctx, project); err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 
@@ -174,7 +174,7 @@ func TestMigrationService_Defaults(t *testing.T) {
 		Name: "default-test",
 		Type: "generic",
 	}
-	if err := db.CreateProject(project); err != nil {
+	if err := db.CreateProject(ctx, project); err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 
@@ -212,6 +212,24 @@ func TestMigrationPreview(t *testing.T) {
 		Warnings:        []string{"Test warning"},
 	}
 
+	if preview.ProjectName != "test" {
+		t.Errorf("ProjectName = %s, want test", preview.ProjectName)
+	}
+	if preview.ProjectType != "laravel" {
+		t.Errorf("ProjectType = %s, want laravel", preview.ProjectType)
+	}
+	if preview.PreDeployHooks != 2 {
+		t.Errorf("PreDeployHooks = %d, want 2", preview.PreDeployHooks)
+	}
+	if preview.PostDeployHooks != 3 {
+		t.Errorf("PostDeployHooks = %d, want 3", preview.PostDeployHooks)
+	}
+	if preview.ReloadActions != 1 {
+		t.Errorf("ReloadActions = %d, want 1", preview.ReloadActions)
+	}
+	if preview.RollbackHooks != 0 {
+		t.Errorf("RollbackHooks = %d, want 0", preview.RollbackHooks)
+	}
 	if preview.TotalComponents != 6 {
 		t.Errorf("TotalComponents = %d, want 6", preview.TotalComponents)
 	}

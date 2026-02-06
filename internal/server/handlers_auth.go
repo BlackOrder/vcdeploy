@@ -201,7 +201,7 @@ func (s *MasterServer) handleAPILogin(w http.ResponseWriter, r *http.Request) {
 		// First try as regular TOTP code
 		if !verifyTOTP(user.TOTPSecret, req.TOTP) {
 			// Try as recovery code
-			codes, err := s.store.GetRecoveryCodes(ctx, user.ID)
+			codes, err := s.store.ListRecoveryCodes(ctx, user.ID)
 			if err != nil {
 				s.logger.Error("Failed to get recovery codes", zap.Error(err))
 				s.jsonError(w, http.StatusInternalServerError, "internal error")
@@ -350,7 +350,7 @@ func (s *MasterServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 			// First try as regular TOTP code
 			if !verifyTOTP(user.TOTPSecret, totp) {
 				// Try as recovery code
-				codes, err := s.store.GetRecoveryCodes(ctx, user.ID)
+				codes, err := s.store.ListRecoveryCodes(ctx, user.ID)
 				if err != nil {
 					s.logger.Error("Failed to get recovery codes", zap.Error(err))
 					s.renderTemplate(w, "login", map[string]interface{}{"Error": "Internal error"})

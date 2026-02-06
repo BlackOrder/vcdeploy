@@ -47,7 +47,7 @@ func (s *Service) Create(ctx context.Context, name, repository, branch, deployPa
 		CreatedAt:  time.Now(),
 	}
 
-	if err := s.store.CreateProject(project); err != nil {
+	if err := s.store.CreateProject(ctx, project); err != nil {
 		return nil, fmt.Errorf("creating project: %w", err)
 	}
 
@@ -74,7 +74,7 @@ func (s *Service) GetByName(ctx context.Context, name string) (*storage.Project,
 
 // List returns all projects.
 func (s *Service) List(ctx context.Context) ([]*storage.Project, error) {
-	return s.store.ListProjects()
+	return s.store.ListProjects(ctx)
 }
 
 // ListPaginated returns projects with pagination support.
@@ -129,7 +129,7 @@ func (s *Service) DeleteByID(ctx context.Context, id int64) error {
 
 // Delete removes a project by name.
 func (s *Service) Delete(ctx context.Context, name string) error {
-	if err := s.store.DeleteProject(name); err != nil {
+	if err := s.store.DeleteProject(ctx, name); err != nil {
 		return fmt.Errorf("deleting project: %w", err)
 	}
 	return nil

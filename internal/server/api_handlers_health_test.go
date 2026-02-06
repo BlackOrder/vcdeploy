@@ -278,7 +278,7 @@ func TestHandleProjectHealthConfig(t *testing.T) {
 		AutoRollbackEnabled:  false,
 		RollbackOnHealthFail: false,
 	}
-	if err := s.store.CreateProject(project); err != nil {
+	if err := s.store.CreateProject(context.Background(), project); err != nil {
 		t.Fatalf("Failed to create test project: %v", err)
 	}
 
@@ -367,7 +367,7 @@ func TestHandleRollbackRecords(t *testing.T) {
 		Branch:     "main",
 		DeployPath: "/var/www/test",
 	}
-	if err := s.store.CreateProject(project); err != nil {
+	if err := s.store.CreateProject(context.Background(), project); err != nil {
 		t.Fatalf("Failed to create test project: %v", err)
 	}
 
@@ -486,7 +486,7 @@ func TestHandleRollbackRecord(t *testing.T) {
 		Branch:     "main",
 		DeployPath: "/var/www/test",
 	}
-	if err := s.store.CreateProject(project); err != nil {
+	if err := s.store.CreateProject(context.Background(), project); err != nil {
 		t.Fatalf("Failed to create test project: %v", err)
 	}
 

@@ -326,6 +326,12 @@ func TestTLSStatusAPI(t *testing.T) {
 	if !status.Enabled {
 		t.Error("expected Enabled to be true")
 	}
+	if !status.ForceHTTPS {
+		t.Error("expected ForceHTTPS to be true")
+	}
+	if status.UsingFallback {
+		t.Error("expected UsingFallback to be false")
+	}
 	if status.Certificate == nil {
 		t.Error("expected Certificate to be set")
 	}
