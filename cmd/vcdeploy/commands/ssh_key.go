@@ -88,16 +88,16 @@ Examples:
 	_ = importSSHCmd.MarkFlagRequired("name")
 	sshKeyCmd.AddCommand(importSSHCmd)
 
-	// Get public key
+	// Show public key
 	pubSSHCmd := &cobra.Command{
-		Use:   "public [id]",
-		Short: "Output public key",
-		Long: `Output the public key in OpenSSH format.
+		Use:   "show [id]",
+		Short: "Show public key",
+		Long: `Show the public key in OpenSSH format.
 
 This can be used to add the key to authorized_keys or Git provider settings.
 
 Example:
-  vcdeploy ssh-key public 123 --master localhost:9000 --token <token> > key.pub`,
+  vcdeploy ssh-key show 123 --master localhost:9000 --token <token> > key.pub`,
 		Args: cobra.ExactArgs(1),
 		RunE: runSSHKeysPublic,
 	}

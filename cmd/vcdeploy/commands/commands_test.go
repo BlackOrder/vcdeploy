@@ -959,7 +959,7 @@ func TestE2E_APIKeyListCommand(t *testing.T) {
 
 	cmd := &cobra.Command{Use: "vcdeploy"}
 	apiKeyCmdTest := &cobra.Command{
-		Use:   "apikey",
+		Use:   "api-key",
 		Short: "API key management",
 	}
 	apiKeyCmdTest.AddCommand(&cobra.Command{
@@ -991,7 +991,7 @@ func TestE2E_APIKeyListCommand(t *testing.T) {
 	cmd.PersistentFlags().String("master", server.URL, "Master server URL")
 	cmd.PersistentFlags().String("token", "test-token", "API token")
 
-	stdout, _, err := executeCommand(cmd, "apikey", "list", "--master", server.URL, "--token", "test-token")
+	stdout, _, err := executeCommand(cmd, "api-key", "list", "--master", server.URL, "--token", "test-token")
 	if err != nil {
 		t.Fatalf("apikey list failed: %v", err)
 	}
@@ -1008,7 +1008,7 @@ func TestE2E_APIKeyCreateCommand(t *testing.T) {
 
 	cmd := &cobra.Command{Use: "vcdeploy"}
 	apiKeyCmdTest := &cobra.Command{
-		Use:   "apikey",
+		Use:   "api-key",
 		Short: "API key management",
 	}
 	createCmd := &cobra.Command{
@@ -1050,7 +1050,7 @@ func TestE2E_APIKeyCreateCommand(t *testing.T) {
 	cmd.PersistentFlags().String("master", server.URL, "Master server URL")
 	cmd.PersistentFlags().String("token", "test-token", "API token")
 
-	stdout, _, err := executeCommand(cmd, "apikey", "create", "test-key", "--master", server.URL, "--token", "test-token")
+	stdout, _, err := executeCommand(cmd, "api-key", "create", "test-key", "--master", server.URL, "--token", "test-token")
 	if err != nil {
 		t.Fatalf("apikey create failed: %v", err)
 	}
@@ -1409,13 +1409,13 @@ func TestCertsCmdStructure(t *testing.T) {
 func TestCredentialsCmdStructure(t *testing.T) {
 	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
-	if credentialsCmd == nil {
-		t.Fatal("credentialsCmd is nil")
+	if credentialCmd == nil {
+		t.Fatal("credentialCmd is nil")
 	}
 
 	// Check subcommands exist
 	subcommands := make(map[string]bool)
-	for _, cmd := range credentialsCmd.Commands() {
+	for _, cmd := range credentialCmd.Commands() {
 		subcommands[cmd.Name()] = true
 	}
 
@@ -1503,7 +1503,7 @@ func TestCredentialsCreateFlags(t *testing.T) {
 	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
 	var createCmd *cobra.Command
-	for _, cmd := range credentialsCmd.Commands() {
+	for _, cmd := range credentialCmd.Commands() {
 		if cmd.Name() == "create" {
 			createCmd = cmd
 			break

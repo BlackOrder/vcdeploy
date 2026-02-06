@@ -187,8 +187,7 @@ func runJumpServerDelete(cmd *cobra.Command, args []string) error {
 	if !force {
 		fmt.Printf("Are you sure you want to delete jump server '%s'? [y/N]: ", name)
 		var confirm string
-		fmt.Scanln(&confirm)
-		if confirm != "y" && confirm != "Y" {
+		if _, err := fmt.Scanln(&confirm); err != nil || (confirm != "y" && confirm != "Y") {
 			fmt.Println("Cancelled.")
 			return nil
 		}

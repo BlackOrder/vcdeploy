@@ -146,10 +146,9 @@ issues:
       linters:
         - all
 
-    # Command files - allow flag errors and intentional nil returns
+    # Command files - allow intentional nil returns for user-friendly messages
     - path: cmd/
       linters:
-        - errcheck
         - nilerr  # CLI often returns nil on expected errors to show user-friendly message
 
     # Main files
