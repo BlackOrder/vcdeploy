@@ -1,10 +1,14 @@
 package commands
 
 import (
+	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"text/tabwriter"
 	"time"
 
@@ -68,7 +72,7 @@ Example:
 		Args: cobra.ExactArgs(1),
 		RunE: runProvisionLogs,
 	}
-	logsCmd.Flags().BoolP("follow", "f", false, "Follow log output (not yet implemented)")
+	logsCmd.Flags().BoolP("follow", "f", false, "Follow log output in real-time")
 	provisionCmd.AddCommand(logsCmd)
 
 	// List subcommand
@@ -265,6 +269,23 @@ func runProvisionStatus(cmd *cobra.Command, args []string) error {
 
 // --- Provision Logs ---
 
+// provisionLogEntry represents a single log entry
+type provisionLogEntry struct {
+	ID        int64     `json:"id"`
+	Timestamp time.Time `json:"timestamp"`
+	Level     string    `json:"level"`
+	Message   string    `json:"message"`
+}
+
+// provisionLogsResult is the API response structure
+type provisionLogsResult struct {
+	JobID  string              `json:"jobId"`
+	Status string              `json:"status"`
+	Stage  string              `json:"stage"`
+	Logs   []provisionLogEntry `json:"logs"`
+	Output string              `json:"output,omitempty"`
+}
+
 func runProvisionLogs(cmd *cobra.Command, args []string) error {
 	jobID := args[0]
 	follow, _ := cmd.Flags().GetBool("follow")
@@ -274,6 +295,15 @@ func runProvisionLogs(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	if follow {
+		return followProvisionLogs(cmd.Context(), client, jobID)
+	}
+
+	return showProvisionLogs(client, jobID)
+}
+
+// showProvisionLogs fetches and displays logs once
+func showProvisionLogs(client *apiClient, jobID string) error {
 	resp, err := client.get("/api/v1/agents/provision/" + jobID + "/logs")
 	if err != nil {
 		return fmt.Errorf("API request failed: %w", err)
@@ -284,26 +314,12 @@ func runProvisionLogs(cmd *cobra.Command, args []string) error {
 		return handleAPIError(resp)
 	}
 
-	var result struct {
-		Logs []struct {
-			Timestamp time.Time `json:"timestamp"`
-			Level     string    `json:"level"`
-			Message   string    `json:"message"`
-		} `json:"logs"`
-		Output string `json:"output,omitempty"`
-	}
-
+	var result provisionLogsResult
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return fmt.Errorf("decode response: %w", err)
 	}
 
-	// Print structured logs if available
-	if len(result.Logs) > 0 {
-		for _, entry := range result.Logs {
-			ts := entry.Timestamp.Format("15:04:05")
-			fmt.Printf("[%s] %s: %s\n", ts, entry.Level, entry.Message)
-		}
-	}
+	printProvisionLogs(result.Logs, false)
 
 	// Print raw output if available
 	if result.Output != "" {
@@ -313,11 +329,88 @@ func runProvisionLogs(cmd *cobra.Command, args []string) error {
 		fmt.Println(result.Output)
 	}
 
-	if follow {
-		fmt.Println("\nNote: Follow mode is not yet implemented. Re-run the command to get updated logs.")
+	return nil
+}
+
+// followProvisionLogs polls for logs and streams them in real-time
+func followProvisionLogs(ctx context.Context, client *apiClient, jobID string) error {
+	// Set up signal handler for graceful exit
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
+
+	var lastID int64 = 0
+	seenIDs := make(map[int64]bool)
+	terminalStates := map[string]bool{
+		"completed": true,
+		"failed":    true,
+		"cancelled": true,
 	}
 
-	return nil
+	// Use a buffered writer for efficient output
+	writer := bufio.NewWriter(os.Stdout)
+	defer writer.Flush()
+
+	fmt.Fprintln(writer, "Following provision job logs... (Ctrl+C to exit)")
+	writer.Flush()
+
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-sigCh:
+			fmt.Fprintln(writer, "\nInterrupted.")
+			writer.Flush()
+			return nil
+		case <-ticker.C:
+			resp, err := client.get("/api/v1/agents/provision/" + jobID + "/logs")
+			if err != nil {
+				fmt.Fprintf(writer, "\rError fetching logs: %v\n", err)
+				writer.Flush()
+				continue
+			}
+
+			var result provisionLogsResult
+			if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+				resp.Body.Close()
+				fmt.Fprintf(writer, "\rError decoding response: %v\n", err)
+				writer.Flush()
+				continue
+			}
+			resp.Body.Close()
+
+			// Print only new logs (those we haven't seen before)
+			for _, log := range result.Logs {
+				if !seenIDs[log.ID] && log.ID > lastID {
+					ts := log.Timestamp.Format("15:04:05")
+					fmt.Fprintf(writer, "[%s] %s: %s\n", ts, log.Level, log.Message)
+					seenIDs[log.ID] = true
+					if log.ID > lastID {
+						lastID = log.ID
+					}
+				}
+			}
+			writer.Flush()
+
+			// Check if job has reached a terminal state
+			if terminalStates[result.Status] {
+				fmt.Fprintf(writer, "\nJob %s (status: %s, stage: %s)\n", result.JobID, result.Status, result.Stage)
+				writer.Flush()
+				return nil
+			}
+		}
+	}
+}
+
+// printProvisionLogs prints logs to stdout
+func printProvisionLogs(logs []provisionLogEntry, _ bool) {
+	for _, entry := range logs {
+		ts := entry.Timestamp.Format("15:04:05")
+		fmt.Printf("[%s] %s: %s\n", ts, entry.Level, entry.Message)
+	}
 }
 
 // --- Provision List ---

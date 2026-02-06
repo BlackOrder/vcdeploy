@@ -309,8 +309,8 @@ func (db *DB) SaveRecoveryCodes(ctx context.Context, userID int64, codes []*Reco
 	})
 }
 
-// GetRecoveryCodes returns all recovery codes for a user.
-func (db *DB) GetRecoveryCodes(ctx context.Context, userID int64) ([]*RecoveryCode, error) {
+// ListRecoveryCodes returns all recovery codes for a user.
+func (db *DB) ListRecoveryCodes(ctx context.Context, userID int64) ([]*RecoveryCode, error) {
 	rows, err := db.conn.QueryContext(ctx, `
 		SELECT id, user_id, code_hash, used_at, created_at
 		FROM recovery_codes

@@ -170,7 +170,7 @@ func (s *MemoryStore) loadSettings(ctx context.Context, db *DB) error {
 }
 
 func (s *MemoryStore) loadProjectTypes(ctx context.Context, db *DB) error {
-	types, err := db.ListProjectTypes()
+	types, err := db.ListProjectTypes(ctx)
 	if err != nil {
 		return err
 	}
@@ -189,7 +189,7 @@ func (s *MemoryStore) loadProjectTypes(ctx context.Context, db *DB) error {
 }
 
 func (s *MemoryStore) loadProjects(ctx context.Context, db *DB) error {
-	projects, err := db.ListProjects()
+	projects, err := db.ListProjects(ctx)
 	if err != nil {
 		return err
 	}

@@ -434,7 +434,7 @@ func (f *DBFixtures) SeedTestDB(store storage.Store) error {
 		f.DefaultProjectType(),
 		f.PHPProjectType(),
 	} {
-		if err := store.CreateProjectType(pt); err != nil {
+		if err := store.CreateProjectType(ctx, pt); err != nil {
 			return err
 		}
 	}

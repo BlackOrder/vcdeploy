@@ -118,6 +118,7 @@ func TestProjectDBOperations(t *testing.T) {
 
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
+	ctx := context.Background()
 
 	// Test CreateProject
 	project := &storage.Project{
@@ -128,7 +129,7 @@ func TestProjectDBOperations(t *testing.T) {
 		DeployPath: "/var/www/app",
 	}
 
-	if err := db.CreateProject(project); err != nil {
+	if err := db.CreateProject(ctx, project); err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 
@@ -137,7 +138,7 @@ func TestProjectDBOperations(t *testing.T) {
 	}
 
 	// Test GetProjectByName
-	retrieved, err := db.GetProjectByName(context.Background(), project.Name)
+	retrieved, err := db.GetProjectByName(ctx, project.Name)
 	if err != nil {
 		t.Fatalf("GetProjectByName() error = %v", err)
 	}
@@ -150,7 +151,7 @@ func TestProjectDBOperations(t *testing.T) {
 	}
 
 	// Test ListProjects
-	projects, err := db.ListProjects()
+	projects, err := db.ListProjects(ctx)
 	if err != nil {
 		t.Fatalf("ListProjects() error = %v", err)
 	}
@@ -160,7 +161,7 @@ func TestProjectDBOperations(t *testing.T) {
 	}
 
 	// Test DeleteProject
-	if err := db.DeleteProject(project.Name); err != nil {
+	if err := db.DeleteProject(ctx, project.Name); err != nil {
 		t.Fatalf("DeleteProject() error = %v", err)
 	}
 
@@ -176,6 +177,7 @@ func TestProjectTypeDBOperations(t *testing.T) {
 
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
+	ctx := context.Background()
 
 	// Test CreateProjectType
 	pt := &storage.ProjectType{
@@ -184,12 +186,12 @@ func TestProjectTypeDBOperations(t *testing.T) {
 		BuildCmd:    "npm install && npm run build",
 	}
 
-	if err := db.CreateProjectType(pt); err != nil {
+	if err := db.CreateProjectType(ctx, pt); err != nil {
 		t.Fatalf("CreateProjectType() error = %v", err)
 	}
 
 	// Test GetProjectTypeByName
-	retrieved, err := db.GetProjectTypeByName(pt.Name)
+	retrieved, err := db.GetProjectTypeByName(ctx, pt.Name)
 	if err != nil {
 		t.Fatalf("GetProjectTypeByName() error = %v", err)
 	}
@@ -202,7 +204,7 @@ func TestProjectTypeDBOperations(t *testing.T) {
 	}
 
 	// Test ListProjectTypes
-	types, err := db.ListProjectTypes()
+	types, err := db.ListProjectTypes(ctx)
 	if err != nil {
 		t.Fatalf("ListProjectTypes() error = %v", err)
 	}
@@ -212,11 +214,11 @@ func TestProjectTypeDBOperations(t *testing.T) {
 	}
 
 	// Test DeleteProjectType
-	if err := db.DeleteProjectType(pt.Name); err != nil {
+	if err := db.DeleteProjectType(ctx, pt.Name); err != nil {
 		t.Fatalf("DeleteProjectType() error = %v", err)
 	}
 
-	deleted, _ := db.GetProjectTypeByName(pt.Name)
+	deleted, _ := db.GetProjectTypeByName(ctx, pt.Name)
 	if deleted != nil {
 		t.Error("DeleteProjectType() didn't delete type")
 	}
@@ -240,7 +242,7 @@ func TestSecretDBOperations(t *testing.T) {
 	}
 
 	// Test ListSecrets
-	secrets, err := db.ListSecrets(scope)
+	secrets, err := db.ListSecrets(ctx, scope)
 	if err != nil {
 		t.Fatalf("ListSecrets() error = %v", err)
 	}
@@ -250,11 +252,11 @@ func TestSecretDBOperations(t *testing.T) {
 	}
 
 	// Test DeleteSecret
-	if err := db.DeleteSecret(scope, key); err != nil {
+	if err := db.DeleteSecret(ctx, scope, key); err != nil {
 		t.Fatalf("DeleteSecret() error = %v", err)
 	}
 
-	secretsAfterDelete, _ := db.ListSecrets(scope)
+	secretsAfterDelete, _ := db.ListSecrets(ctx, scope)
 	if len(secretsAfterDelete) != 0 {
 		t.Error("DeleteSecret() didn't delete secret")
 	}
@@ -1530,24 +1532,24 @@ func TestCertsCmdStructure(t *testing.T) {
 	}
 }
 
-// TestCredsCmdStructure tests the creds command structure.
-func TestCredsCmdStructure(t *testing.T) {
+// TestCredentialsCmdStructure tests the credentials command structure.
+func TestCredentialsCmdStructure(t *testing.T) {
 	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
-	if credsCmd == nil {
-		t.Fatal("credsCmd is nil")
+	if credentialsCmd == nil {
+		t.Fatal("credentialsCmd is nil")
 	}
 
 	// Check subcommands exist
 	subcommands := make(map[string]bool)
-	for _, cmd := range credsCmd.Commands() {
+	for _, cmd := range credentialsCmd.Commands() {
 		subcommands[cmd.Name()] = true
 	}
 
-	expectedCommands := []string{"list", "add", "delete", "test"}
+	expectedCommands := []string{"list", "create", "delete", "test"}
 	for _, name := range expectedCommands {
 		if !subcommands[name] {
-			t.Errorf("expected creds subcommand %q not found", name)
+			t.Errorf("expected credentials subcommand %q not found", name)
 		}
 	}
 }
@@ -1574,47 +1576,47 @@ func TestProvisionCmdStructure(t *testing.T) {
 	}
 }
 
-// TestRecipesCmdStructure tests the recipes command structure.
-func TestRecipesCmdStructure(t *testing.T) {
+// TestRecipeCmdStructure tests the recipe command structure.
+func TestRecipeCmdStructure(t *testing.T) {
 	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
-	if RecipesCmd == nil {
-		t.Fatal("RecipesCmd is nil")
+	if recipeCmd == nil {
+		t.Fatal("recipeCmd is nil")
 	}
 
 	// Check subcommands exist
 	subcommands := make(map[string]bool)
-	for _, cmd := range RecipesCmd.Commands() {
+	for _, cmd := range recipeCmd.Commands() {
 		subcommands[cmd.Name()] = true
 	}
 
-	// RecipesCmd has import-yaml subcommand
+	// recipeCmd has import-yaml subcommand
 	expectedCommands := []string{"import-yaml"}
 	for _, name := range expectedCommands {
 		if !subcommands[name] {
-			t.Errorf("expected recipes subcommand %q not found", name)
+			t.Errorf("expected recipe subcommand %q not found", name)
 		}
 	}
 }
 
-// TestSSHKeysCmdStructure tests the ssh-keys command structure.
-func TestSSHKeysCmdStructure(t *testing.T) {
+// TestSSHKeyCmdStructure tests the ssh-key command structure.
+func TestSSHKeyCmdStructure(t *testing.T) {
 	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
-	if sshKeysCmd == nil {
-		t.Fatal("sshKeysCmd is nil")
+	if sshKeyCmd == nil {
+		t.Fatal("sshKeyCmd is nil")
 	}
 
 	// Check subcommands exist
 	subcommands := make(map[string]bool)
-	for _, cmd := range sshKeysCmd.Commands() {
+	for _, cmd := range sshKeyCmd.Commands() {
 		subcommands[cmd.Name()] = true
 	}
 
 	expectedCommands := []string{"list", "generate", "delete"}
 	for _, name := range expectedCommands {
 		if !subcommands[name] {
-			t.Errorf("expected ssh-keys subcommand %q not found", name)
+			t.Errorf("expected ssh-key subcommand %q not found", name)
 		}
 	}
 }
@@ -1645,36 +1647,36 @@ func TestCertsAddFlags(t *testing.T) {
 	}
 }
 
-// TestCredsAddFlags tests the creds add command flags.
-func TestCredsAddFlags(t *testing.T) {
+// TestCredentialsCreateFlags tests the credentials create command flags.
+func TestCredentialsCreateFlags(t *testing.T) {
 	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
-	var addCmd *cobra.Command
-	for _, cmd := range credsCmd.Commands() {
-		if cmd.Name() == "add" {
-			addCmd = cmd
+	var createCmd *cobra.Command
+	for _, cmd := range credentialsCmd.Commands() {
+		if cmd.Name() == "create" {
+			createCmd = cmd
 			break
 		}
 	}
 
-	if addCmd == nil {
-		t.Fatal("creds add command not found")
+	if createCmd == nil {
+		t.Fatal("credentials create command not found")
 	}
 
 	// Check required flags exist
-	nameFlag := addCmd.Flags().Lookup("name")
+	nameFlag := createCmd.Flags().Lookup("name")
 	if nameFlag == nil {
-		t.Error("expected flag --name not found on creds add")
+		t.Error("expected flag --name not found on credentials create")
 	}
 
-	typeFlag := addCmd.Flags().Lookup("type")
+	typeFlag := createCmd.Flags().Lookup("type")
 	if typeFlag == nil {
-		t.Error("expected flag --type not found on creds add")
+		t.Error("expected flag --type not found on credentials create")
 	}
 
-	urlPatternFlag := addCmd.Flags().Lookup("url-pattern")
+	urlPatternFlag := createCmd.Flags().Lookup("url-pattern")
 	if urlPatternFlag == nil {
-		t.Error("expected flag --url-pattern not found on creds add")
+		t.Error("expected flag --url-pattern not found on credentials create")
 	}
 }
 
@@ -1705,11 +1707,11 @@ func TestProvisionFlags(t *testing.T) {
 }
 
 // TestRecipesImportYAMLFlags tests the recipes import-yaml command flags.
-func TestRecipesImportYAMLFlags(t *testing.T) {
+func TestRecipeImportYAMLFlags(t *testing.T) {
 	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
 	var importCmd *cobra.Command
-	for _, cmd := range RecipesCmd.Commands() {
+	for _, cmd := range recipeCmd.Commands() {
 		if cmd.Name() == "import-yaml" {
 			importCmd = cmd
 			break
@@ -1717,13 +1719,13 @@ func TestRecipesImportYAMLFlags(t *testing.T) {
 	}
 
 	if importCmd == nil {
-		t.Fatal("recipes import-yaml command not found")
+		t.Fatal("recipe import-yaml command not found")
 	}
 
 	// Check flags exist
 	projectIDFlag := importCmd.Flags().Lookup("project-id")
 	if projectIDFlag == nil {
-		t.Error("expected flag --project-id not found on recipes import-yaml")
+		t.Error("expected flag --project-id not found on recipe import-yaml")
 	}
 
 	nameFlag := importCmd.Flags().Lookup("name")
@@ -1751,12 +1753,12 @@ func TestRecipesImportYAMLFlags(t *testing.T) {
 	}
 }
 
-// TestSSHKeysGenerateFlags tests the ssh-keys generate command flags.
-func TestSSHKeysGenerateFlags(t *testing.T) {
+// TestSSHKeyGenerateFlags tests the ssh-key generate command flags.
+func TestSSHKeyGenerateFlags(t *testing.T) {
 	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
 	var genCmd *cobra.Command
-	for _, cmd := range sshKeysCmd.Commands() {
+	for _, cmd := range sshKeyCmd.Commands() {
 		if cmd.Name() == "generate" {
 			genCmd = cmd
 			break
@@ -1764,17 +1766,17 @@ func TestSSHKeysGenerateFlags(t *testing.T) {
 	}
 
 	if genCmd == nil {
-		t.Fatal("ssh-keys generate command not found")
+		t.Fatal("ssh-key generate command not found")
 	}
 
 	// Check required flags exist
 	nameFlag := genCmd.Flags().Lookup("name")
 	if nameFlag == nil {
-		t.Error("expected flag --name not found on ssh-keys generate")
+		t.Error("expected flag --name not found on ssh-key generate")
 	}
 
 	commentFlag := genCmd.Flags().Lookup("comment")
 	if commentFlag == nil {
-		t.Error("expected flag --comment not found on ssh-keys generate")
+		t.Error("expected flag --comment not found on ssh-key generate")
 	}
 }

@@ -106,6 +106,10 @@ func (c *apiClient) post(path string, body io.Reader) (*http.Response, error) {
 	return c.do("POST", path, body)
 }
 
+func (c *apiClient) put(path string, body io.Reader) (*http.Response, error) {
+	return c.do("PUT", path, body)
+}
+
 func (c *apiClient) delete(path string) (*http.Response, error) {
 	return c.do("DELETE", path, nil)
 }

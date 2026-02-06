@@ -43,8 +43,8 @@ func (db *DB) GetSecret(ctx context.Context, project, scope, key string) (*Secre
 }
 
 // ListSecrets returns secret metadata for a scope (CLI version)
-func (db *DB) ListSecrets(scope string) ([]*SecretInfo, error) {
-	rows, err := db.conn.Query(`
+func (db *DB) ListSecrets(ctx context.Context, scope string) ([]*SecretInfo, error) {
+	rows, err := db.conn.QueryContext(ctx, `
 		SELECT key, scope, updated_at FROM secrets WHERE project = ? ORDER BY key
 	`, scope)
 	if err != nil {
@@ -87,8 +87,8 @@ func (db *DB) ListSecretsCtx(ctx context.Context, project string) ([]*Secret, er
 }
 
 // DeleteSecret deletes a secret (CLI version).
-func (db *DB) DeleteSecret(scope, key string) error {
-	_, err := db.conn.Exec(`DELETE FROM secrets WHERE project = ? AND key = ?`, scope, key)
+func (db *DB) DeleteSecret(ctx context.Context, scope, key string) error {
+	_, err := db.conn.ExecContext(ctx, `DELETE FROM secrets WHERE project = ? AND key = ?`, scope, key)
 	if err != nil {
 		return fmt.Errorf("deleting secret: %w", err)
 	}

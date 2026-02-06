@@ -149,8 +149,8 @@ func (db *DB) SaveProvisionLog(ctx context.Context, jobID, level, message string
 	return nil
 }
 
-// GetProvisionLogs retrieves all logs for a provisioning job.
-func (db *DB) GetProvisionLogs(ctx context.Context, jobID string) ([]*ProvisionLog, error) {
+// ListProvisionLogs retrieves all logs for a provisioning job.
+func (db *DB) ListProvisionLogs(ctx context.Context, jobID string) ([]*ProvisionLog, error) {
 	rows, err := db.conn.QueryContext(ctx, `
 		SELECT id, job_id, timestamp, level, message
 		FROM provision_logs

@@ -43,7 +43,8 @@ func getGRPCTestConfig() *GRPCTestConfig {
 }
 
 // dialGRPC creates a gRPC connection to the master server.
-func dialGRPC(ctx context.Context, cfg *GRPCTestConfig) (*grpc.ClientConn, error) {
+func dialGRPC(_ context.Context, cfg *GRPCTestConfig) (*grpc.ClientConn, error) {
+	// ctx reserved for future dial timeout/cancellation support
 	var opts []grpc.DialOption
 
 	if cfg.TLSEnabled {

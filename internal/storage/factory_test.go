@@ -271,7 +271,7 @@ func TestCachedStore_Recipe_Integration(t *testing.T) {
 		Branch:     "main",
 		DeployPath: "/var/www/test",
 	}
-	if err := store.CreateProject(project); err != nil {
+	if err := store.CreateProject(ctx, project); err != nil {
 		t.Fatalf("CreateProject failed: %v", err)
 	}
 

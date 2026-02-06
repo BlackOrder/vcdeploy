@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -410,6 +411,232 @@ func runCertsAudit(cmd *cobra.Command, args []string) error {
 		)
 	}
 	w.Flush()
+
+	return nil
+}
+
+// --- TLS subcommand ---
+
+func init() {
+	// TLS subcommand for server TLS configuration
+	tlsCmd := &cobra.Command{
+		Use:   "tls",
+		Short: "Server TLS configuration",
+		Long:  "Commands for managing server TLS settings and certificates.",
+	}
+	certsCmd.AddCommand(tlsCmd)
+
+	// TLS status
+	tlsCmd.AddCommand(&cobra.Command{
+		Use:   "status",
+		Short: "Show TLS certificate status",
+		Long: `Display status of the server's TLS certificate.
+
+Example:
+  vcdeploy certs tls status --master localhost:9000 --token <token>`,
+		RunE: runTLSStatus,
+	})
+
+	// TLS renew
+	tlsRenewCmd := &cobra.Command{
+		Use:   "renew",
+		Short: "Renew TLS certificate",
+		Long: `Renew the server's TLS certificate (ACME/Let's Encrypt).
+
+Example:
+  vcdeploy certs tls renew --master localhost:9000 --token <token>`,
+		RunE: runTLSRenew,
+	}
+	tlsRenewCmd.Flags().BoolP("force", "f", false, "Force renewal even if not near expiry")
+	tlsCmd.AddCommand(tlsRenewCmd)
+
+	// TLS settings
+	tlsSettingsCmd := &cobra.Command{
+		Use:   "settings",
+		Short: "Manage TLS settings",
+		Long: `View or update TLS settings.
+
+Example:
+  vcdeploy certs tls settings --master localhost:9000 --token <token>
+  vcdeploy certs tls settings --min-version TLS12 --master localhost:9000 --token <token>`,
+		RunE: runTLSSettings,
+	}
+	tlsSettingsCmd.Flags().String("min-version", "", "Minimum TLS version (TLS10, TLS11, TLS12, TLS13)")
+	tlsSettingsCmd.Flags().StringSlice("ciphers", nil, "Allowed cipher suites")
+	tlsCmd.AddCommand(tlsSettingsCmd)
+}
+
+type tlsStatusResponse struct {
+	Enabled      bool   `json:"enabled"`
+	Certificate  string `json:"certificate"`
+	Issuer       string `json:"issuer"`
+	Subject      string `json:"subject"`
+	NotBefore    string `json:"not_before"`
+	NotAfter     string `json:"not_after"`
+	SerialNumber string `json:"serial_number"`
+	Fingerprint  string `json:"fingerprint"`
+	ACMEEnabled  bool   `json:"acme_enabled"`
+	ACMEDomain   string `json:"acme_domain,omitempty"`
+	AutoRenew    bool   `json:"auto_renew"`
+	DaysUntilExp int    `json:"days_until_expiry"`
+}
+
+func runTLSStatus(cmd *cobra.Command, args []string) error {
+	client, err := newAPIClient(cmd)
+	if err != nil {
+		return err
+	}
+
+	resp, err := client.get("/api/v1/tls/status")
+	if err != nil {
+		return fmt.Errorf("API request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return handleAPIError(resp)
+	}
+
+	var status tlsStatusResponse
+	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
+		return fmt.Errorf("decode response: %w", err)
+	}
+
+	fmt.Printf("TLS Enabled:     %v\n", status.Enabled)
+	if !status.Enabled {
+		return nil
+	}
+
+	fmt.Printf("Subject:         %s\n", status.Subject)
+	fmt.Printf("Issuer:          %s\n", status.Issuer)
+	fmt.Printf("Valid From:      %s\n", status.NotBefore)
+	fmt.Printf("Valid Until:     %s\n", status.NotAfter)
+	fmt.Printf("Days Until Exp:  %d\n", status.DaysUntilExp)
+	fmt.Printf("Serial Number:   %s\n", status.SerialNumber)
+	fmt.Printf("Fingerprint:     %s\n", status.Fingerprint)
+	fmt.Printf("ACME Enabled:    %v\n", status.ACMEEnabled)
+	if status.ACMEEnabled {
+		fmt.Printf("ACME Domain:     %s\n", status.ACMEDomain)
+	}
+	fmt.Printf("Auto Renew:      %v\n", status.AutoRenew)
+
+	// Warning if expiring soon
+	if status.DaysUntilExp <= 30 {
+		fmt.Printf("\n⚠️  Certificate expires in %d days!\n", status.DaysUntilExp)
+	}
+
+	return nil
+}
+
+func runTLSRenew(cmd *cobra.Command, args []string) error {
+	force, _ := cmd.Flags().GetBool("force")
+
+	client, err := newAPIClient(cmd)
+	if err != nil {
+		return err
+	}
+
+	endpoint := "/api/v1/tls/renew"
+	if force {
+		endpoint += "?force=true"
+	}
+
+	resp, err := client.post(endpoint, nil)
+	if err != nil {
+		return fmt.Errorf("API request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return handleAPIError(resp)
+	}
+
+	var result struct {
+		Success     bool   `json:"success"`
+		Message     string `json:"message"`
+		Certificate string `json:"certificate,omitempty"`
+		NotAfter    string `json:"not_after,omitempty"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return fmt.Errorf("decode response: %w", err)
+	}
+
+	if result.Success {
+		fmt.Println("✅ TLS certificate renewed successfully.")
+		if result.NotAfter != "" {
+			fmt.Printf("   New expiry: %s\n", result.NotAfter)
+		}
+	} else {
+		fmt.Printf("❌ Renewal failed: %s\n", result.Message)
+	}
+
+	return nil
+}
+
+type tlsSettingsResponse struct {
+	MinVersion   string   `json:"min_version"`
+	MaxVersion   string   `json:"max_version"`
+	CipherSuites []string `json:"cipher_suites"`
+	ClientAuth   string   `json:"client_auth"`
+}
+
+func runTLSSettings(cmd *cobra.Command, args []string) error {
+	minVersion, _ := cmd.Flags().GetString("min-version")
+	ciphers, _ := cmd.Flags().GetStringSlice("ciphers")
+
+	client, err := newAPIClient(cmd)
+	if err != nil {
+		return err
+	}
+
+	// If flags provided, update settings
+	if minVersion != "" || len(ciphers) > 0 {
+		data := make(map[string]interface{})
+		if minVersion != "" {
+			data["min_version"] = minVersion
+		}
+		if len(ciphers) > 0 {
+			data["cipher_suites"] = ciphers
+		}
+
+		body, _ := json.Marshal(data)
+		resp, err := client.put("/api/v1/tls/settings", bytes.NewReader(body))
+		if err != nil {
+			return fmt.Errorf("API request failed: %w", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != 200 {
+			return handleAPIError(resp)
+		}
+
+		fmt.Println("TLS settings updated successfully.")
+		return nil
+	}
+
+	// Otherwise, show current settings
+	resp, err := client.get("/api/v1/tls/settings")
+	if err != nil {
+		return fmt.Errorf("API request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return handleAPIError(resp)
+	}
+
+	var settings tlsSettingsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&settings); err != nil {
+		return fmt.Errorf("decode response: %w", err)
+	}
+
+	fmt.Printf("Minimum TLS Version: %s\n", settings.MinVersion)
+	fmt.Printf("Maximum TLS Version: %s\n", settings.MaxVersion)
+	fmt.Printf("Client Auth:         %s\n", settings.ClientAuth)
+	fmt.Println("Cipher Suites:")
+	for _, cipher := range settings.CipherSuites {
+		fmt.Printf("  - %s\n", cipher)
+	}
 
 	return nil
 }

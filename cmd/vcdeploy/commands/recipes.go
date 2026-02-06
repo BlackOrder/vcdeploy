@@ -2,21 +2,25 @@
 package commands
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
+	"text/tabwriter"
 
 	"github.com/BlackOrder/vcdeploy/internal/config"
 	"github.com/BlackOrder/vcdeploy/internal/services/recipes"
 	"github.com/spf13/cobra"
 )
 
-// RecipesCmd represents the recipes command group.
-var RecipesCmd = &cobra.Command{
-	Use:   "recipes",
-	Short: "Recipe and playbook management commands",
-	Long:  `Commands for managing deployment recipes, playbooks, and migrations.`,
+// recipeCmd represents the recipe command group.
+var recipeCmd = &cobra.Command{
+	Use:     "recipe",
+	Aliases: []string{"recipes"},
+	Short:   "Recipe and playbook management commands",
+	Long:    `Commands for managing deployment recipes, playbooks, and migrations.`,
 }
 
 // ImportYAMLCmd migrates a YAML project configuration to a playbook.
@@ -50,7 +54,7 @@ var (
 )
 
 func init() {
-	RecipesCmd.AddCommand(ImportYAMLCmd)
+	recipeCmd.AddCommand(ImportYAMLCmd)
 
 	ImportYAMLCmd.Flags().Int64Var(&importProjectID, "project-id", 0, "Project ID to associate the playbook with")
 	ImportYAMLCmd.Flags().StringVar(&importPlaybookName, "name", "", "Name for the generated playbook (default: <project>-playbook)")
@@ -60,6 +64,316 @@ func init() {
 	ImportYAMLCmd.Flags().BoolVar(&importPreview, "preview", false, "Preview the migration without making changes")
 	ImportYAMLCmd.Flags().BoolVar(&importOutputJSON, "json", false, "Output results as JSON")
 	ImportYAMLCmd.Flags().StringVar(&importDatabasePath, "database", "", "Path to database file (default: auto-detect from config)")
+
+	// API-based recipe commands
+	initRecipeAPICommands()
+}
+
+func initRecipeAPICommands() {
+	// List recipes (playbooks)
+	listCmd := &cobra.Command{
+		Use:   "list",
+		Short: "List all recipes/playbooks",
+		Long: `List all available recipes and playbooks.
+
+Example:
+  vcdeploy recipe list --master localhost:9000 --token <token>`,
+		RunE: runRecipeList,
+	}
+	listCmd.Flags().Bool("json", false, "Output as JSON")
+	recipeCmd.AddCommand(listCmd)
+
+	// Get recipe details
+	getCmd := &cobra.Command{
+		Use:   "get <name>",
+		Short: "Get recipe/playbook details",
+		Long: `Get detailed information about a specific recipe or playbook.
+
+Example:
+  vcdeploy recipe get my-playbook --master localhost:9000 --token <token>`,
+		Args: cobra.ExactArgs(1),
+		RunE: runRecipeGet,
+	}
+	getCmd.Flags().Bool("json", false, "Output as JSON")
+	recipeCmd.AddCommand(getCmd)
+
+	// Create recipe
+	createCmd := &cobra.Command{
+		Use:   "create",
+		Short: "Create a new recipe/playbook",
+		Long: `Create a new recipe or playbook.
+
+Example:
+  vcdeploy recipe create --name my-playbook --version v1.0.0 \
+    --master localhost:9000 --token <token>`,
+		RunE: runRecipeCreate,
+	}
+	createCmd.Flags().StringP("name", "n", "", "Recipe name (required)")
+	createCmd.Flags().StringP("version", "v", "v1.0.0", "Recipe version")
+	createCmd.Flags().String("description", "", "Recipe description")
+	createCmd.Flags().String("file", "", "Load recipe from YAML file")
+	_ = createCmd.MarkFlagRequired("name")
+	recipeCmd.AddCommand(createCmd)
+
+	// Update recipe
+	updateCmd := &cobra.Command{
+		Use:   "update <name>",
+		Short: "Update an existing recipe/playbook",
+		Long: `Update an existing recipe or playbook.
+
+Example:
+  vcdeploy recipe update my-playbook --version v1.1.0 \
+    --master localhost:9000 --token <token>`,
+		Args: cobra.ExactArgs(1),
+		RunE: runRecipeUpdate,
+	}
+	updateCmd.Flags().StringP("version", "v", "", "New version")
+	updateCmd.Flags().String("description", "", "New description")
+	updateCmd.Flags().String("file", "", "Update from YAML file")
+	recipeCmd.AddCommand(updateCmd)
+
+	// Delete recipe
+	deleteCmd := &cobra.Command{
+		Use:   "delete <name>",
+		Short: "Delete a recipe/playbook",
+		Long: `Delete a recipe or playbook.
+
+Example:
+  vcdeploy recipe delete my-playbook --master localhost:9000 --token <token>`,
+		Args: cobra.ExactArgs(1),
+		RunE: runRecipeDelete,
+	}
+	deleteCmd.Flags().BoolP("force", "f", false, "Skip confirmation")
+	recipeCmd.AddCommand(deleteCmd)
+}
+
+// --- Recipe Types ---
+
+type recipeListResponse struct {
+	Recipes []recipeInfo `json:"recipes"`
+}
+
+type recipeInfo struct {
+	ID          int64  `json:"id"`
+	Name        string `json:"name"`
+	Slug        string `json:"slug"`
+	Version     string `json:"version"`
+	Description string `json:"description,omitempty"`
+	StepCount   int    `json:"step_count"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
+func runRecipeList(cmd *cobra.Command, args []string) error {
+	client, err := newAPIClient(cmd)
+	if err != nil {
+		return err
+	}
+
+	resp, err := client.get("/api/v1/recipes")
+	if err != nil {
+		return fmt.Errorf("API request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("API error: %s", resp.Status)
+	}
+
+	var result recipeListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return fmt.Errorf("decode response: %w", err)
+	}
+
+	outputJSON, _ := cmd.Flags().GetBool("json")
+	if outputJSON {
+		data, _ := json.MarshalIndent(result, "", "  ")
+		fmt.Println(string(data))
+		return nil
+	}
+
+	if len(result.Recipes) == 0 {
+		fmt.Println("No recipes found.")
+		return nil
+	}
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "NAME\tVERSION\tSTEPS\tDESCRIPTION\tUPDATED")
+	for _, r := range result.Recipes {
+		desc := r.Description
+		if len(desc) > 30 {
+			desc = desc[:27] + "..."
+		}
+		fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\n",
+			r.Name, r.Version, r.StepCount, desc, r.UpdatedAt)
+	}
+	w.Flush()
+	return nil
+}
+
+func runRecipeGet(cmd *cobra.Command, args []string) error {
+	name := args[0]
+
+	client, err := newAPIClient(cmd)
+	if err != nil {
+		return err
+	}
+
+	resp, err := client.get("/api/v1/recipes/" + name)
+	if err != nil {
+		return fmt.Errorf("API request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("API error: %s", resp.Status)
+	}
+
+	var r recipeInfo
+	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
+		return fmt.Errorf("decode response: %w", err)
+	}
+
+	outputJSON, _ := cmd.Flags().GetBool("json")
+	if outputJSON {
+		data, _ := json.MarshalIndent(r, "", "  ")
+		fmt.Println(string(data))
+		return nil
+	}
+
+	fmt.Printf("Name:        %s\n", r.Name)
+	fmt.Printf("Version:     %s\n", r.Version)
+	fmt.Printf("Slug:        %s\n", r.Slug)
+	fmt.Printf("Steps:       %d\n", r.StepCount)
+	fmt.Printf("Created:     %s\n", r.CreatedAt)
+	fmt.Printf("Updated:     %s\n", r.UpdatedAt)
+	if r.Description != "" {
+		fmt.Printf("Description: %s\n", r.Description)
+	}
+	return nil
+}
+
+func runRecipeCreate(cmd *cobra.Command, args []string) error {
+	name, _ := cmd.Flags().GetString("name")
+	version, _ := cmd.Flags().GetString("version")
+	description, _ := cmd.Flags().GetString("description")
+	filePath, _ := cmd.Flags().GetString("file")
+
+	client, err := newAPIClient(cmd)
+	if err != nil {
+		return err
+	}
+
+	data := map[string]interface{}{
+		"name":    name,
+		"version": version,
+	}
+	if description != "" {
+		data["description"] = description
+	}
+
+	// If file provided, load and include content
+	if filePath != "" {
+		content, err := os.ReadFile(filePath)
+		if err != nil {
+			return fmt.Errorf("read file: %w", err)
+		}
+		data["content"] = string(content)
+	}
+
+	body, _ := json.Marshal(data)
+	resp, err := client.post("/api/v1/recipes", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("API request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return fmt.Errorf("API error: %s", resp.Status)
+	}
+
+	fmt.Printf("Recipe '%s' created successfully.\n", name)
+	return nil
+}
+
+func runRecipeUpdate(cmd *cobra.Command, args []string) error {
+	name := args[0]
+	version, _ := cmd.Flags().GetString("version")
+	description, _ := cmd.Flags().GetString("description")
+	filePath, _ := cmd.Flags().GetString("file")
+
+	client, err := newAPIClient(cmd)
+	if err != nil {
+		return err
+	}
+
+	data := make(map[string]interface{})
+	if version != "" {
+		data["version"] = version
+	}
+	if description != "" {
+		data["description"] = description
+	}
+
+	// If file provided, load and include content
+	if filePath != "" {
+		content, err := os.ReadFile(filePath)
+		if err != nil {
+			return fmt.Errorf("read file: %w", err)
+		}
+		data["content"] = string(content)
+	}
+
+	if len(data) == 0 {
+		return fmt.Errorf("no updates specified")
+	}
+
+	body, _ := json.Marshal(data)
+	resp, err := client.put("/api/v1/recipes/"+name, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("API request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("API error: %s", resp.Status)
+	}
+
+	fmt.Printf("Recipe '%s' updated successfully.\n", name)
+	return nil
+}
+
+func runRecipeDelete(cmd *cobra.Command, args []string) error {
+	name := args[0]
+	force, _ := cmd.Flags().GetBool("force")
+
+	if !force {
+		fmt.Printf("Are you sure you want to delete recipe '%s'? [y/N]: ", name)
+		var confirm string
+		fmt.Scanln(&confirm)
+		if confirm != "y" && confirm != "Y" {
+			fmt.Println("Cancelled.")
+			return nil
+		}
+	}
+
+	client, err := newAPIClient(cmd)
+	if err != nil {
+		return err
+	}
+
+	resp, err := client.delete("/api/v1/recipes/" + name)
+	if err != nil {
+		return fmt.Errorf("API request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("API error: %s", resp.Status)
+	}
+
+	fmt.Printf("Recipe '%s' deleted successfully.\n", name)
+	return nil
 }
 
 func runImportYAML(cmd *cobra.Command, args []string) error {
