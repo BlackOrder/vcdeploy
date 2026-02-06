@@ -120,14 +120,14 @@ func (r *SSHRunner) Connect(ctx context.Context) error {
 		// Dial target through jump server
 		conn, err := jumpClient.Dial("tcp", addr)
 		if err != nil {
-			jumpClient.Close()
+			_ = jumpClient.Close() // #nosec G104 - best effort cleanup
 			return fmt.Errorf("connecting through jump server: %w", err)
 		}
 
 		ncc, chans, reqs, err := ssh.NewClientConn(conn, addr, clientConfig)
 		if err != nil {
-			conn.Close()
-			jumpClient.Close()
+			_ = conn.Close()       // #nosec G104 - best effort cleanup
+			_ = jumpClient.Close() // #nosec G104 - best effort cleanup
 			return fmt.Errorf("ssh handshake through jump: %w", err)
 		}
 
@@ -143,7 +143,7 @@ func (r *SSHRunner) Connect(ctx context.Context) error {
 
 		ncc, chans, reqs, err := ssh.NewClientConn(conn, addr, clientConfig)
 		if err != nil {
-			conn.Close()
+			_ = conn.Close() // #nosec G104 - best effort cleanup
 			return fmt.Errorf("ssh handshake: %w", err)
 		}
 
@@ -262,7 +262,7 @@ func (r *SSHRunner) buildHostKeyCallback() (ssh.HostKeyCallback, error) {
 		if err != nil {
 			return nil, fmt.Errorf("creating known_hosts file: %w", err)
 		}
-		f.Close()
+		_ = f.Close() // #nosec G104 - best effort cleanup
 	}
 
 	// Try to create callback from known_hosts file
@@ -576,7 +576,7 @@ func (p *SSHPool) cleanup() {
 	cutoff := time.Now().Add(-p.idleTimeout)
 	for key, runner := range p.connections {
 		if runner.LastUsed().Before(cutoff) {
-			runner.Close()
+			_ = runner.Close() // #nosec G104 - best effort cleanup
 			delete(p.connections, key)
 		}
 	}
@@ -591,7 +591,7 @@ func (p *SSHPool) Close() error {
 	defer p.mu.Unlock()
 
 	for key, runner := range p.connections {
-		runner.Close()
+		_ = runner.Close() // #nosec G104 - best effort cleanup
 		delete(p.connections, key)
 	}
 	return nil

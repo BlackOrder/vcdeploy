@@ -81,7 +81,7 @@ func runAPIKeyList(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(w, "%.0f\t%s\t%s\t%s\t%s\n",
 			k["id"], k["name"], k["createdAt"], expires, lastUsed)
 	}
-	w.Flush()
+	_ = w.Flush() // #nosec G104 - best effort output flush
 
 	if len(result.Items) == 0 {
 		fmt.Println("No API keys found.")

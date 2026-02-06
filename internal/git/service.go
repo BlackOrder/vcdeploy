@@ -115,7 +115,7 @@ func (g *Service) CloneAndArchive(ctx context.Context, repoURL, ref string) (*Re
 	// Get file size
 	info, err := os.Stat(archivePath)
 	if err != nil {
-		os.Remove(archivePath)
+		_ = os.Remove(archivePath) // #nosec G104 - best effort cleanup
 		return nil, fmt.Errorf("stat archive: %w", err)
 	}
 
@@ -257,19 +257,19 @@ func (g *Service) writeSSHKey(key []byte) (string, error) {
 	}
 
 	if err := os.Chmod(tmpFile.Name(), 0o600); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpFile.Name())
+		_ = tmpFile.Close()           // #nosec G104 - best effort cleanup
+		_ = os.Remove(tmpFile.Name()) // #nosec G104 - best effort cleanup
 		return "", err
 	}
 
 	if _, err := tmpFile.Write(key); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpFile.Name())
+		_ = tmpFile.Close()           // #nosec G104 - best effort cleanup
+		_ = os.Remove(tmpFile.Name()) // #nosec G104 - best effort cleanup
 		return "", err
 	}
 
 	if err := tmpFile.Close(); err != nil {
-		os.Remove(tmpFile.Name())
+		_ = os.Remove(tmpFile.Name()) // #nosec G104 - best effort cleanup
 		return "", err
 	}
 

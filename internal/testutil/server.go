@@ -206,7 +206,7 @@ func NewTestListener(t *testing.T) *TestListener {
 	}
 
 	t.Cleanup(func() {
-		listener.Close()
+		_ = listener.Close() // #nosec G104 - best effort cleanup in test
 	})
 
 	return &TestListener{
@@ -336,7 +336,7 @@ func WaitForServer(url string, timeout time.Duration) error {
 		if err == nil {
 			resp, err := client.Do(req)
 			if err == nil {
-				resp.Body.Close()
+				_ = resp.Body.Close() // #nosec G104 - best effort cleanup in test
 				cancel()
 				return nil
 			}

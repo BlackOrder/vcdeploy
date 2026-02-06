@@ -201,7 +201,7 @@ func runAgentList(cmd *cobra.Command, args []string) error {
 			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
 				a["id"], a["hostname"], a["status"], a["lastSeenAt"])
 		}
-		w.Flush()
+		_ = w.Flush() // #nosec G104 - best effort output flush
 
 		if len(result.Items) == 0 {
 			fmt.Println("No agents registered.")
@@ -499,7 +499,7 @@ func runAgentProvisionList(cmd *cobra.Command, args []string) error {
 			job.Duration,
 		)
 	}
-	w.Flush()
+	_ = w.Flush() // #nosec G104 - best effort output flush
 
 	return nil
 }
@@ -640,10 +640,10 @@ func followAgentProvisionLogs(ctx context.Context, client *apiClient, jobID stri
 
 	// Use a buffered writer for efficient output
 	writer := bufio.NewWriter(os.Stdout)
-	defer writer.Flush()
+	defer func() { _ = writer.Flush() }() // #nosec G104 - best effort flush
 
 	fmt.Fprintln(writer, "Following provision job logs... (Ctrl+C to exit)")
-	writer.Flush()
+	_ = writer.Flush() // #nosec G104 - best effort flush
 
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
@@ -654,24 +654,24 @@ func followAgentProvisionLogs(ctx context.Context, client *apiClient, jobID stri
 			return ctx.Err()
 		case <-sigCh:
 			fmt.Fprintln(writer, "\nInterrupted.")
-			writer.Flush()
+			_ = writer.Flush() // #nosec G104 - best effort flush
 			return nil
 		case <-ticker.C:
 			resp, err := client.get("/api/v1/agents/provision/" + jobID + "/logs")
 			if err != nil {
 				fmt.Fprintf(writer, "\rError fetching logs: %v\n", err)
-				writer.Flush()
+				_ = writer.Flush() // #nosec G104 - best effort flush
 				continue
 			}
 
 			var result agentProvisionLogsResult
 			if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-				resp.Body.Close()
+				_ = resp.Body.Close() // #nosec G104 - best effort cleanup
 				fmt.Fprintf(writer, "\rError decoding response: %v\n", err)
-				writer.Flush()
+				_ = writer.Flush() // #nosec G104 - best effort flush
 				continue
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close() // #nosec G104 - best effort cleanup
 
 			// Print only new logs (those we haven't seen before)
 			for _, log := range result.Logs {
@@ -684,12 +684,12 @@ func followAgentProvisionLogs(ctx context.Context, client *apiClient, jobID stri
 					}
 				}
 			}
-			writer.Flush()
+			_ = writer.Flush() // #nosec G104 - best effort flush
 
 			// Check if job has reached a terminal state
 			if terminalStates[result.Status] {
 				fmt.Fprintf(writer, "\nJob %s (status: %s, stage: %s)\n", result.JobID, result.Status, result.Stage)
-				writer.Flush()
+				_ = writer.Flush() // #nosec G104 - best effort flush
 				return nil
 			}
 		}

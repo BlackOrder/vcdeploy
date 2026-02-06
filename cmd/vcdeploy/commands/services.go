@@ -114,7 +114,7 @@ func InitCLIServices(dbPath string) (*CLIServices, func(), error) {
 	// Initialize KMS for encrypted operations (secrets, settings)
 	kms, err := security.NewKMS(context.Background(), store, logger)
 	if err != nil {
-		db.Close()
+		_ = db.Close() // #nosec G104 - best effort cleanup on error path
 		return nil, nil, fmt.Errorf("initialize KMS: %w", err)
 	}
 
@@ -139,7 +139,7 @@ func InitCLIServices(dbPath string) (*CLIServices, func(), error) {
 	}
 
 	cleanup := func() {
-		store.Close()
+		_ = store.Close() // #nosec G104 - best effort cleanup
 	}
 
 	return svc, cleanup, nil

@@ -181,7 +181,7 @@ func runWebhookList(cmd *cobra.Command, args []string) error {
 				webhook["enabled"],
 				webhook["require_secret"])
 		}
-		w.Flush()
+		_ = w.Flush() // #nosec G104 - best effort output flush
 	} else {
 		// Direct mode
 		ctx := context.Background()
@@ -208,7 +208,7 @@ func runWebhookList(cmd *cobra.Command, args []string) error {
 				webhook.Enabled,
 				webhook.RequireSecret)
 		}
-		w.Flush()
+		_ = w.Flush() // #nosec G104 - best effort output flush
 	}
 
 	return nil

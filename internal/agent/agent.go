@@ -106,7 +106,7 @@ func NewAgent(cfg *config.AgentConfig, logger *zap.Logger) (*Agent, error) {
 
 	// Initialize schema
 	if err := store.InitSchema(context.Background()); err != nil {
-		store.Close()
+		_ = store.Close() // #nosec G104 - best effort cleanup on error path
 		return nil, fmt.Errorf("initialize store schema: %w", err)
 	}
 
@@ -250,7 +250,7 @@ func (a *Agent) connect(ctx context.Context) error {
 
 	conn.Connect()
 	if !conn.WaitForStateChange(connectCtx, connectivity.Idle) {
-		conn.Close()
+		_ = conn.Close() // #nosec G104 - best effort cleanup on error path
 		return fmt.Errorf("connection timeout to master")
 	}
 
@@ -684,7 +684,7 @@ func (a *Agent) getActiveDeploymentStatuses() []*pb.DeploymentStatus {
 func (a *Agent) reconnect(ctx context.Context) error {
 	a.mu.Lock()
 	if a.conn != nil {
-		a.conn.Close()
+		_ = a.conn.Close() // #nosec G104 - best effort cleanup
 		a.conn = nil
 	}
 	a.mu.Unlock()
@@ -1389,7 +1389,7 @@ func (a *Agent) Shutdown(ctx context.Context) error {
 
 	a.mu.Lock()
 	if a.conn != nil {
-		a.conn.Close()
+		_ = a.conn.Close() // #nosec G104 - best effort cleanup
 		a.conn = nil
 	}
 	a.running = false
@@ -1622,7 +1622,7 @@ func (a *Agent) performSelfUpdate(notification *pb.UpdateNotification) {
 	)
 
 	// Clean up backup
-	os.Remove(backupPath)
+	_ = os.Remove(backupPath) // #nosec G104 - best effort cleanup
 
 	// Trigger restart - the systemd service or supervisor should restart us
 	// We send SIGTERM to ourselves and rely on the process manager to restart

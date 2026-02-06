@@ -64,9 +64,9 @@ func (a *Agent) receiveRepoArchive(ctx context.Context, deploymentID, repoURL, r
 	// Ensure cleanup on error
 	success := false
 	defer func() {
-		tmpFile.Close()
+		_ = tmpFile.Close() // #nosec G104 - best effort cleanup
 		if !success {
-			os.Remove(tmpPath)
+			_ = os.Remove(tmpPath) // #nosec G104 - best effort cleanup
 		}
 	}()
 
@@ -125,12 +125,12 @@ func (a *Agent) receiveRepoArchive(ctx context.Context, deploymentID, repoURL, r
 	}
 
 	if err := a.extractArchive(tmpPath, extractDir); err != nil {
-		os.RemoveAll(extractDir)
+		_ = os.RemoveAll(extractDir) // #nosec G104 - best effort cleanup
 		return "", fmt.Errorf("extract archive: %w", err)
 	}
 
 	success = true
-	os.Remove(tmpPath) // Clean up temp file after successful extraction
+	_ = os.Remove(tmpPath) // #nosec G104 - best effort cleanup after successful extraction
 
 	return extractDir, nil
 }
@@ -269,11 +269,11 @@ func (a *Agent) extractFile(tr *tar.Reader, target string, header *tar.Header) e
 	// Use LimitReader to enforce size limit
 	written, err := io.Copy(f, io.LimitReader(tr, maxFileSize+1))
 	if err != nil {
-		os.Remove(target)
+		_ = os.Remove(target) // #nosec G104 - best effort cleanup
 		return fmt.Errorf("write file: %w", err)
 	}
 	if written > maxFileSize {
-		os.Remove(target)
+		_ = os.Remove(target) // #nosec G104 - best effort cleanup
 		return fmt.Errorf("file exceeded size limit during extraction")
 	}
 

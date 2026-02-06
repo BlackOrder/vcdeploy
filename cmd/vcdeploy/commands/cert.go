@@ -169,7 +169,7 @@ func runCertsList(cmd *cobra.Command, args []string) error {
 			cert.ExpiresIn,
 		)
 	}
-	w.Flush()
+	_ = w.Flush() // #nosec G104 - best effort output flush
 
 	return nil
 }
@@ -301,7 +301,7 @@ func runCAList(cmd *cobra.Command, args []string) error {
 			ca.ExpiresIn,
 		)
 	}
-	w.Flush()
+	_ = w.Flush() // #nosec G104 - best effort output flush
 
 	return nil
 }
@@ -410,7 +410,7 @@ func runCertsAudit(cmd *cobra.Command, args []string) error {
 			truncate(event.Details, 40),
 		)
 	}
-	w.Flush()
+	_ = w.Flush() // #nosec G104 - best effort output flush
 
 	return nil
 }

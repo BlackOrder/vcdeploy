@@ -207,7 +207,7 @@ func runRecipeList(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\n",
 			r.Name, r.Version, r.StepCount, desc, r.UpdatedAt)
 	}
-	w.Flush()
+	_ = w.Flush() // #nosec G104 - best effort output flush
 	return nil
 }
 
@@ -274,7 +274,7 @@ func runRecipeCreate(cmd *cobra.Command, args []string) error {
 
 	// If file provided, load and include content
 	if filePath != "" {
-		content, err := os.ReadFile(filePath)
+		content, err := os.ReadFile(filePath) // #nosec G304 - user-specified file path from CLI flag
 		if err != nil {
 			return fmt.Errorf("read file: %w", err)
 		}
@@ -317,7 +317,7 @@ func runRecipeUpdate(cmd *cobra.Command, args []string) error {
 
 	// If file provided, load and include content
 	if filePath != "" {
-		content, err := os.ReadFile(filePath)
+		content, err := os.ReadFile(filePath) // #nosec G304 - user-specified file path from CLI flag
 		if err != nil {
 			return fmt.Errorf("read file: %w", err)
 		}

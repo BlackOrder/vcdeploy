@@ -166,7 +166,7 @@ func runBinaryList(cmd *cobra.Command, args []string) error {
 			b.Project, b.Version, b.Platform,
 			formatSize(b.Size), b.UploadedAt, b.UploadedBy)
 	}
-	w.Flush()
+	_ = w.Flush() // #nosec G104 - best effort output flush
 	return nil
 }
 
@@ -178,7 +178,7 @@ func runBinaryUpload(cmd *cobra.Command, args []string) error {
 	description, _ := cmd.Flags().GetString("description")
 
 	// Open file
-	file, err := os.Open(filePath)
+	file, err := os.Open(filePath) // #nosec G304 - user-specified file path from CLI argument
 	if err != nil {
 		return fmt.Errorf("open file: %w", err)
 	}
@@ -284,7 +284,7 @@ func runBinaryDownload(cmd *cobra.Command, args []string) error {
 	}
 
 	// Write to file
-	outFile, err := os.Create(output)
+	outFile, err := os.Create(output) // #nosec G304 - user-specified output path from CLI flag
 	if err != nil {
 		return fmt.Errorf("create output file: %w", err)
 	}

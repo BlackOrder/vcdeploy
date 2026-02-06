@@ -132,7 +132,7 @@ func runHostKeyList(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(w, "%d\t%s\t%d\t%s\t%s\t%s\n",
 			key.ID, key.Hostname, key.Port, key.KeyType, key.Fingerprint, key.AddedAt)
 	}
-	w.Flush()
+	_ = w.Flush() // #nosec G104 - best effort output flush
 	return nil
 }
 

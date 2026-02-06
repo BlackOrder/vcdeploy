@@ -219,7 +219,7 @@ func (c *AppContext) OpenStorage() error {
 // Close cleans up resources.
 func (c *AppContext) Close() {
 	if c.Storage != nil {
-		c.Storage.Close()
+		_ = c.Storage.Close() // #nosec G104 - best effort cleanup
 	}
 	if c.Logger != nil {
 		_ = c.Logger.Sync()
