@@ -159,7 +159,7 @@ func (s *MasterServer) handleGenerateSSHKey(w http.ResponseWriter, r *http.Reque
 	}
 
 	s.logAudit(r, "create", "ssh_key", "Generated SSH key: "+key.Name, "success")
-	s.jsonResponse(w, key)
+	s.writeJSON(w, http.StatusCreated, key)
 }
 
 // handleImportSSHKey imports an existing SSH key.
@@ -202,7 +202,7 @@ func (s *MasterServer) handleImportSSHKey(w http.ResponseWriter, r *http.Request
 	}
 
 	s.logAudit(r, "import", "ssh_key", "Imported SSH key: "+key.Name, "success")
-	s.jsonResponse(w, key)
+	s.writeJSON(w, http.StatusCreated, key)
 }
 
 // handleDeleteSSHKey deletes an SSH key.

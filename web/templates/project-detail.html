@@ -392,7 +392,7 @@
             body: JSON.stringify({
                 project_id: projectId,
                 playbook_id: parseInt(playbookId),
-                variable_bindings: bindings
+                bindings: bindings
             })
         })
         .then(response => {

@@ -287,6 +287,9 @@ func lookupUser(username string) (int, error) {
 			return uid, nil
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		return 0, fmt.Errorf("reading passwd file: %w", err)
+	}
 
 	return 0, fmt.Errorf("user not found: %s", username)
 }
@@ -323,6 +326,9 @@ func lookupGroup(groupname string) (int, error) {
 			return gid, nil
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		return 0, fmt.Errorf("reading group file: %w", err)
+	}
 
 	return 0, fmt.Errorf("group not found: %s", groupname)
 }
@@ -352,6 +358,9 @@ func lookupUserPrimaryGroup(username string) (int, error) {
 			}
 			return gid, nil
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		return 0, fmt.Errorf("reading passwd file: %w", err)
 	}
 
 	return 0, fmt.Errorf("user not found: %s", username)

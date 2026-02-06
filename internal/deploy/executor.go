@@ -614,6 +614,11 @@ func (s *SymlinkStrategy) Rollback(ctx context.Context, cmd *RollbackCommand) (*
 
 	// Reload services
 	for _, svc := range cmd.ReloadServices {
+		// Validate service name to prevent command injection
+		if !validation.IsValidServiceName(svc.Service) {
+			result.Error = fmt.Errorf("invalid service name: %q", svc.Service)
+			return result, result.Error
+		}
 		svcCmd := fmt.Sprintf("systemctl %s %s", svc.Action, svc.Service)
 		_, err := s.runner.Run(ctx, svcCmd, RunOptions{})
 		if err != nil {

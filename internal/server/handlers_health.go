@@ -30,7 +30,7 @@ type CheckResult struct {
 // handleHealth handles the /api/v1/health endpoint.
 // Returns detailed health status including database and gRPC connectivity.
 func (s *MasterServer) handleHealth(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
 	health := s.buildDetailedHealth(ctx)

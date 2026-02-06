@@ -404,10 +404,10 @@ func (s *MasterServer) handleRollbackRecords(w http.ResponseWriter, r *http.Requ
 	}
 
 	s.jsonResponse(w, RollbackListResponse{
-		Items:  rollbacks,
-		Total:  total,
-		Limit:  p.Limit,
-		Offset: p.Offset,
+		Items:      rollbacks,
+		TotalCount: total,
+		Limit:      p.Limit,
+		Offset:     p.Offset,
 	})
 }
 

@@ -96,9 +96,15 @@ func (m *CATrustManager) SyncCATrustBundle(ctx context.Context) error {
 	}
 
 	// Update trust version and count
-	_ = m.store.SetState(ctx, "ca_trust_version", []byte(resp.Version))
-	_ = m.store.SetState(ctx, "ca_trust_count", []byte(strconv.Itoa(len(resp.CaCertificates))))
-	_ = m.store.SetState(ctx, "ca_current_id", []byte(resp.CurrentCaId))
+	if err := m.store.SetState(ctx, "ca_trust_version", []byte(resp.Version)); err != nil {
+		m.logger.Warn("Failed to persist CA trust version", zap.Error(err))
+	}
+	if err := m.store.SetState(ctx, "ca_trust_count", []byte(strconv.Itoa(len(resp.CaCertificates)))); err != nil {
+		m.logger.Warn("Failed to persist CA trust count", zap.Error(err))
+	}
+	if err := m.store.SetState(ctx, "ca_current_id", []byte(resp.CurrentCaId)); err != nil {
+		m.logger.Warn("Failed to persist current CA ID", zap.Error(err))
+	}
 
 	// Rebuild local trust pool
 	m.rebuildTrustPool(ctx)
@@ -108,8 +114,10 @@ func (m *CATrustManager) SyncCATrustBundle(ctx context.Context) error {
 		zap.Int("ca_count", len(resp.CaCertificates)),
 		zap.String("current_ca", resp.CurrentCaId))
 
-	_ = m.store.LogAuditEvent(ctx, "ca_sync",
-		fmt.Sprintf("synced %d CAs, version %s", len(resp.CaCertificates), resp.Version), true)
+	if err := m.store.LogAuditEvent(ctx, "ca_sync",
+		fmt.Sprintf("synced %d CAs, version %s", len(resp.CaCertificates), resp.Version), true); err != nil {
+		m.logger.Warn("Failed to log CA sync audit event", zap.Error(err))
+	}
 
 	return nil
 }
@@ -153,6 +161,7 @@ func (m *CATrustManager) GetTrustPool() *x509.CertPool {
 	m.trustPoolMu.RLock()
 	defer m.trustPoolMu.RUnlock()
 	if m.trustPool == nil {
+		m.logger.Warn("Returning empty CA trust pool - TLS verification may fail")
 		return x509.NewCertPool()
 	}
 	return m.trustPool

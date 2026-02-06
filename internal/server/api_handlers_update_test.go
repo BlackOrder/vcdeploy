@@ -269,9 +269,9 @@ func TestHandleAgentUpdateHistory(t *testing.T) {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
 
-		total, ok := response["total"].(float64)
-		if !ok || int(total) != 2 {
-			t.Errorf("Expected total 2, got %v", response["total"])
+		totalCount, ok := response["totalCount"].(float64)
+		if !ok || int(totalCount) != 2 {
+			t.Errorf("Expected totalCount 2, got %v", response["totalCount"])
 		}
 
 		items, ok := response["items"].([]interface{})
@@ -439,11 +439,11 @@ func TestHandleTriggerAgentUpdate(t *testing.T) {
 		if response["status"] != "pending" {
 			t.Errorf("Expected status 'pending', got %v", response["status"])
 		}
-		if response["from_version"] != "1.0.0" {
-			t.Errorf("Expected from_version '1.0.0', got %v", response["from_version"])
+		if response["fromVersion"] != "1.0.0" {
+			t.Errorf("Expected fromVersion '1.0.0', got %v", response["fromVersion"])
 		}
-		if response["to_version"] != "2.0.0" {
-			t.Errorf("Expected to_version '2.0.0', got %v", response["to_version"])
+		if response["toVersion"] != "2.0.0" {
+			t.Errorf("Expected toVersion '2.0.0', got %v", response["toVersion"])
 		}
 		// When agent is not connected via gRPC, delivery should be heartbeat
 		if response["delivery"] != "heartbeat" {

@@ -900,8 +900,10 @@ func (s *MasterServer) handleProjectWebhooksInternal(ctx context.Context, w http
 			wh, err := s.webhookService.Get(ctx, project.ID, provider)
 			if err == nil && wh != nil {
 				webhooksList = append(webhooksList, WebhookResponse{
-					Provider: provider,
-					Enabled:  wh.Enabled,
+					Provider:  provider,
+					Enabled:   wh.Enabled,
+					CreatedAt: &wh.CreatedAt,
+					UpdatedAt: &wh.UpdatedAt,
 				})
 			}
 		}

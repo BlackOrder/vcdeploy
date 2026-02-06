@@ -11,8 +11,7 @@ The vcdeploy agent is configured via a YAML file, typically located at `/etc/vcd
 master:
   address: "master.example.com:9001"   # Master gRPC address
   token: ""                            # Authentication token (set after registration)
-  cert: /etc/vcdeploy/agent/cert.pem   # TLS certificate for mTLS
-  allow_insecure: false                # Allow unencrypted connection (NOT recommended)
+  ca_cert: /etc/vcdeploy/agent/ca.pem  # CA certificate for TLS verification
   reconnect:
     initial_delay: 1s                  # Initial reconnect delay
     max_delay: 5m                      # Maximum reconnect delay
@@ -31,6 +30,7 @@ agent:
 
 # Local paths
 paths:
+  data: /var/lib/vcdeploy/agent/       # Agent database directory
   repos: /var/lib/vcdeploy/repos/      # Git repository cache
   releases: /var/www/                  # Release deployment root
 
@@ -66,8 +66,7 @@ Connection settings for the master server.
 |-------|------|---------|-------------|
 | `address` | string | - | Master gRPC address (host:port) |
 | `token` | string | - | Authentication token |
-| `cert` | string | `/etc/vcdeploy/agent/cert.pem` | TLS certificate path |
-| `allow_insecure` | bool | `false` | Allow unencrypted connection |
+| `ca_cert` | string | `/etc/vcdeploy/agent/ca.pem` | CA certificate for TLS verification |
 | `reconnect.initial_delay` | duration | `1s` | Initial reconnect delay |
 | `reconnect.max_delay` | duration | `5m` | Maximum reconnect delay |
 | `reconnect.heartbeat_interval` | duration | `10s` | Heartbeat frequency |
@@ -98,6 +97,7 @@ Local filesystem paths for deployments.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
+| `data` | string | `/var/lib/vcdeploy/agent/` | Agent database and state directory |
 | `repos` | string | `/var/lib/vcdeploy/repos/` | Git repository cache directory |
 | `releases` | string | `/var/www/` | Root directory for release deployments |
 

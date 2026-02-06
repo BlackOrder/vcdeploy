@@ -651,6 +651,96 @@ func (s *MasterServer) handleDeactivatePlaybookByID(ctx context.Context, w http.
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// --- Activation Routes (documented API) ---
+
+// ActivationRequest is the request body for POST /api/v1/recipes/activations.
+type ActivationRequest struct {
+	ProjectID  int64                              `json:"project_id"`
+	PlaybookID int64                              `json:"playbook_id"`
+	Bindings   map[string]recipes.VariableBinding `json:"bindings,omitempty"`
+}
+
+// handleActivations handles POST for /api/v1/recipes/activations.
+func (s *MasterServer) handleActivations(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
+	defer cancel()
+
+	if r.Method != http.MethodPost {
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	// Check write access
+	if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
+		s.jsonError(w, status, msg)
+		return
+	}
+
+	// Limit body size to 1MB to prevent DoS
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
+	var req ActivationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.jsonError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.ProjectID == 0 {
+		s.jsonError(w, http.StatusBadRequest, "project_id is required")
+		return
+	}
+	if req.PlaybookID == 0 {
+		s.jsonError(w, http.StatusBadRequest, "playbook_id is required")
+		return
+	}
+
+	// Get user ID from context
+	var userID *int64
+	if user, ok := GetUserFromContext(ctx); ok && user != nil {
+		userID = &user.ID
+	}
+
+	svc := recipes.NewActivationService(s.store)
+	activation, err := svc.Activate(ctx, req.ProjectID, req.PlaybookID, req.Bindings, userID)
+	if err != nil {
+		s.logger.Error("Failed to activate playbook", zap.Error(err))
+		s.jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	s.logger.Info("Playbook activated",
+		zap.Int64("project_id", req.ProjectID),
+		zap.Int64("playbook_id", req.PlaybookID))
+
+	w.WriteHeader(http.StatusCreated)
+	s.jsonResponse(w, activation)
+}
+
+// handleActivation handles GET/DELETE for /api/v1/recipes/activations/{project_id}.
+func (s *MasterServer) handleActivation(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
+	defer cancel()
+
+	// Extract project ID from path: /api/v1/recipes/activations/{project_id}
+	path := strings.TrimPrefix(r.URL.Path, "/api/v1/recipes/activations/")
+	// Handle optional /detail suffix
+	path = strings.TrimSuffix(path, "/detail")
+	projectID, err := strconv.ParseInt(path, 10, 64)
+	if err != nil {
+		s.jsonError(w, http.StatusBadRequest, "invalid project ID")
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		s.handleGetProjectPlaybookByID(ctx, w, projectID)
+	case http.MethodDelete:
+		s.handleDeactivatePlaybookByID(ctx, w, projectID)
+	default:
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
 // --- RAW Approval API (Admin only) ---
 
 // handleRawApprovals handles GET/POST for /api/v1/recipes/raw-approvals.

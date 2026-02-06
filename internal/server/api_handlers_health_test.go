@@ -347,11 +347,11 @@ func TestHandleProjectHealthConfig(t *testing.T) {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
 
-		if response["auto_rollback_enabled"] != true {
-			t.Errorf("Expected auto_rollback_enabled=true, got %v", response["auto_rollback_enabled"])
+		if response["autoRollbackEnabled"] != true {
+			t.Errorf("Expected autoRollbackEnabled=true, got %v", response["autoRollbackEnabled"])
 		}
-		if response["rollback_on_health_fail"] != true {
-			t.Errorf("Expected rollback_on_health_fail=true, got %v", response["rollback_on_health_fail"])
+		if response["rollbackOnHealthFail"] != true {
+			t.Errorf("Expected rollbackOnHealthFail=true, got %v", response["rollbackOnHealthFail"])
 		}
 	})
 }

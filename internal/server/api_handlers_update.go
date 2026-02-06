@@ -246,7 +246,7 @@ func (s *MasterServer) handleAgentBinary(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
 	switch r.Method {
@@ -365,7 +365,7 @@ func (s *MasterServer) handleSetCurrentBinary(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
 	// Admin-only
@@ -406,7 +406,7 @@ func (s *MasterServer) handleAgentBinaryLatest(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
 	// Read access for checking latest version
@@ -441,7 +441,7 @@ func (s *MasterServer) handleAgentBinaryLatest(w http.ResponseWriter, r *http.Re
 
 // handleAgentUpdateConfig handles GET/PUT /api/v1/agents/{id}/update-config
 func (s *MasterServer) handleAgentUpdateConfig(w http.ResponseWriter, r *http.Request, agentID string) {
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
 	switch r.Method {
@@ -539,7 +539,7 @@ func (s *MasterServer) handleAgentUpdateHistory(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
 	// Read access
@@ -559,10 +559,10 @@ func (s *MasterServer) handleAgentUpdateHistory(w http.ResponseWriter, r *http.R
 	}
 
 	s.jsonResponse(w, RollbackListResponse{
-		Items:  history,
-		Total:  total,
-		Limit:  p.Limit,
-		Offset: p.Offset,
+		Items:      history,
+		TotalCount: total,
+		Limit:      p.Limit,
+		Offset:     p.Offset,
 	})
 }
 
@@ -573,7 +573,7 @@ func (s *MasterServer) handleTriggerAgentUpdate(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
 	// Admin-only: triggering updates
@@ -701,7 +701,7 @@ func (s *MasterServer) handleAgentsNeedingUpdate(w http.ResponseWriter, r *http.
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
 	// Read access
@@ -765,7 +765,7 @@ func (s *MasterServer) handleAllAgentUpdateHistory(w http.ResponseWriter, r *htt
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
 	// Read access
@@ -785,9 +785,9 @@ func (s *MasterServer) handleAllAgentUpdateHistory(w http.ResponseWriter, r *htt
 	}
 
 	s.jsonResponse(w, RollbackListResponse{
-		Items:  history,
-		Total:  total,
-		Limit:  p.Limit,
-		Offset: p.Offset,
+		Items:      history,
+		TotalCount: total,
+		Limit:      p.Limit,
+		Offset:     p.Offset,
 	})
 }
