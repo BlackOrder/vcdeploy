@@ -13,10 +13,10 @@ import (
 	"golang.org/x/term"
 )
 
-// credentialsCmd handles source credential management commands
-var credentialsCmd = &cobra.Command{
-	Use:     "credentials",
-	Aliases: []string{"creds", "credential"},
+// credentialCmd handles source credential management commands
+var credentialCmd = &cobra.Command{
+	Use:     "credential",
+	Aliases: []string{"credentials", "creds"},
 	Short:   "Source credential management",
 	Long: `Commands for managing source credentials.
 
@@ -33,7 +33,7 @@ All commands require API authentication via --master and --token flags.`,
 }
 
 func init() {
-	rootCmd.AddCommand(credentialsCmd)
+	rootCmd.AddCommand(credentialCmd)
 
 	// List credentials
 	listCredsCmd := &cobra.Command{
@@ -46,7 +46,7 @@ Example:
 		RunE: runCredsList,
 	}
 	listCredsCmd.Flags().StringP("type", "t", "", "Filter by credential type")
-	credentialsCmd.AddCommand(listCredsCmd)
+	credentialCmd.AddCommand(listCredsCmd)
 
 	// Create credential
 	createCredsCmd := &cobra.Command{
@@ -78,7 +78,7 @@ Examples:
 	createCredsCmd.Flags().Bool("stdin", false, "Read secret value from stdin")
 	_ = createCredsCmd.MarkFlagRequired("name")
 	_ = createCredsCmd.MarkFlagRequired("type")
-	credentialsCmd.AddCommand(createCredsCmd)
+	credentialCmd.AddCommand(createCredsCmd)
 
 	// Delete credential
 	deleteCredsCmd := &cobra.Command{
@@ -92,7 +92,7 @@ Example:
 		RunE: runCredsDelete,
 	}
 	deleteCredsCmd.Flags().BoolP("force", "f", false, "Skip confirmation")
-	credentialsCmd.AddCommand(deleteCredsCmd)
+	credentialCmd.AddCommand(deleteCredsCmd)
 
 	// Test credential
 	testCredsCmd := &cobra.Command{
@@ -106,7 +106,7 @@ Example:
 		Args: cobra.ExactArgs(2),
 		RunE: runCredsTest,
 	}
-	credentialsCmd.AddCommand(testCredsCmd)
+	credentialCmd.AddCommand(testCredsCmd)
 }
 
 // --- Credential Types ---

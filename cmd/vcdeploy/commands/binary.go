@@ -198,13 +198,23 @@ func runBinaryUpload(cmd *cobra.Command, args []string) error {
 	}
 
 	// Add metadata
-	writer.WriteField("project", project)
-	writer.WriteField("version", version)
-	writer.WriteField("platform", platform)
-	if description != "" {
-		writer.WriteField("description", description)
+	if err := writer.WriteField("project", project); err != nil {
+		return fmt.Errorf("write project field: %w", err)
 	}
-	writer.Close()
+	if err := writer.WriteField("version", version); err != nil {
+		return fmt.Errorf("write version field: %w", err)
+	}
+	if err := writer.WriteField("platform", platform); err != nil {
+		return fmt.Errorf("write platform field: %w", err)
+	}
+	if description != "" {
+		if err := writer.WriteField("description", description); err != nil {
+			return fmt.Errorf("write description field: %w", err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		return fmt.Errorf("close multipart writer: %w", err)
+	}
 
 	client, err := newAPIClient(cmd)
 	if err != nil {
@@ -302,8 +312,7 @@ func runBinaryDelete(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Printf("%s? [y/N]: ", msg)
 		var confirm string
-		fmt.Scanln(&confirm)
-		if confirm != "y" && confirm != "Y" {
+		if _, err := fmt.Scanln(&confirm); err != nil || (confirm != "y" && confirm != "Y") {
 			fmt.Println("Cancelled.")
 			return nil
 		}
