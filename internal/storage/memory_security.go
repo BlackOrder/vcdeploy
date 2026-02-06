@@ -2070,8 +2070,8 @@ func (s *MemoryStore) SaveRecoveryCodes(ctx context.Context, userID int64, codes
 	return nil
 }
 
-// GetRecoveryCodes returns all recovery codes for a user.
-func (s *MemoryStore) GetRecoveryCodes(ctx context.Context, userID int64) ([]*RecoveryCode, error) {
+// ListRecoveryCodes returns all recovery codes for a user.
+func (s *MemoryStore) ListRecoveryCodes(ctx context.Context, userID int64) ([]*RecoveryCode, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 

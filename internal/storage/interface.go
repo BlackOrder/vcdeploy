@@ -197,37 +197,37 @@ type AuditStore interface {
 type SecretStore interface {
 	SetSecretEncrypted(ctx context.Context, project, scope, key string, valueEncrypted []byte) error
 	GetSecret(ctx context.Context, project, scope, key string) (*Secret, error)
-	ListSecrets(scope string) ([]*SecretInfo, error)
+	ListSecrets(ctx context.Context, scope string) ([]*SecretInfo, error)
 	ListSecretsCtx(ctx context.Context, project string) ([]*Secret, error)
 	ListSecretsWithScope(ctx context.Context, project, scope string) ([]*Secret, error)
 	ListAllSecretsCtx(ctx context.Context) ([]*Secret, error)
-	DeleteSecret(scope, key string) error
+	DeleteSecret(ctx context.Context, scope, key string) error
 	DeleteSecretCtx(ctx context.Context, project, scope, key string) error
-	ExportAllSecrets() (map[string]map[string]string, error)
+	ExportAllSecrets(ctx context.Context) (map[string]map[string]string, error)
 }
 
 // ProjectStore defines project-related operations.
 type ProjectStore interface {
-	CreateProject(project *Project) error
+	CreateProject(ctx context.Context, project *Project) error
 	GetProjectByID(ctx context.Context, id int64) (*Project, error)
 	GetProjectByName(ctx context.Context, name string) (*Project, error)
-	ListProjects() ([]*Project, error)
+	ListProjects(ctx context.Context) ([]*Project, error)
 	ListProjectsPaginated(ctx context.Context, limit, offset int) ([]*Project, error)
 	CountProjects(ctx context.Context) (int64, error)
 	UpdateProjectByID(ctx context.Context, p *Project) error
 	UpdateProjectByName(ctx context.Context, p *Project) error
 	UpdateProjectHealthCheck(ctx context.Context, projectID int64, healthCheckID *int64, autoRollback, rollbackOnHealthFail bool) error
 	DeleteProjectByID(ctx context.Context, id int64) error
-	DeleteProject(name string) error
+	DeleteProject(ctx context.Context, name string) error
 }
 
 // ProjectTypeStore defines project type operations.
 type ProjectTypeStore interface {
-	CreateProjectType(pt *ProjectType) error
-	ListProjectTypes() ([]*ProjectType, error)
-	GetProjectTypeByName(name string) (*ProjectType, error)
-	UpdateProjectTypeByName(pt *ProjectType) error
-	DeleteProjectType(name string) error
+	CreateProjectType(ctx context.Context, pt *ProjectType) error
+	ListProjectTypes(ctx context.Context) ([]*ProjectType, error)
+	GetProjectTypeByName(ctx context.Context, name string) (*ProjectType, error)
+	UpdateProjectTypeByName(ctx context.Context, pt *ProjectType) error
+	DeleteProjectType(ctx context.Context, name string) error
 }
 
 // ProjectWebhookStore defines project webhook operations.
@@ -296,7 +296,7 @@ type ProvisionStore interface {
 // ProvisionLogStore defines provision log operations.
 type ProvisionLogStore interface {
 	SaveProvisionLog(ctx context.Context, jobID, level, message string) error
-	GetProvisionLogs(ctx context.Context, jobID string) ([]*ProvisionLog, error)
+	ListProvisionLogs(ctx context.Context, jobID string) ([]*ProvisionLog, error)
 }
 
 // ACMEStore defines ACME certificate and account storage operations.
@@ -471,8 +471,8 @@ type CertAuditStore interface {
 type RecoveryCodeStore interface {
 	// SaveRecoveryCodes saves a set of recovery codes for a user (replaces any existing).
 	SaveRecoveryCodes(ctx context.Context, userID int64, codes []*RecoveryCode) error
-	// GetRecoveryCodes returns all recovery codes for a user.
-	GetRecoveryCodes(ctx context.Context, userID int64) ([]*RecoveryCode, error)
+	// ListRecoveryCodes returns all recovery codes for a user.
+	ListRecoveryCodes(ctx context.Context, userID int64) ([]*RecoveryCode, error)
 	// UseRecoveryCode marks a recovery code as used.
 	UseRecoveryCode(ctx context.Context, codeID int64) error
 	// DeleteRecoveryCodes removes all recovery codes for a user.

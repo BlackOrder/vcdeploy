@@ -12,10 +12,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// sshKeysCmd handles SSH key management commands
-var sshKeysCmd = &cobra.Command{
-	Use:   "ssh-keys",
-	Short: "SSH key management",
+// sshKeyCmd handles SSH key management commands
+var sshKeyCmd = &cobra.Command{
+	Use:     "ssh-key",
+	Aliases: []string{"ssh-keys"},
+	Short:   "SSH key management",
 	Long: `Commands for managing SSH keys.
 
 SSH keys are used for:
@@ -29,7 +30,7 @@ All commands require API authentication via --master and --token flags.`,
 }
 
 func init() {
-	rootCmd.AddCommand(sshKeysCmd)
+	rootCmd.AddCommand(sshKeyCmd)
 
 	// List SSH keys
 	listSSHCmd := &cobra.Command{
@@ -38,10 +39,10 @@ func init() {
 		Long: `List all SSH keys with their types and fingerprints.
 
 Example:
-  vcdeploy ssh-keys list --master localhost:9000 --token <token>`,
+  vcdeploy ssh-key list --master localhost:9000 --token <token>`,
 		RunE: runSSHKeysList,
 	}
-	sshKeysCmd.AddCommand(listSSHCmd)
+	sshKeyCmd.AddCommand(listSSHCmd)
 
 	// Generate SSH key
 	genSSHCmd := &cobra.Command{
@@ -53,14 +54,14 @@ The private key is stored encrypted and never exposed.
 The public key can be retrieved using the 'public' command.
 
 Example:
-  vcdeploy ssh-keys generate --name deploy-key --comment "Deployment key" \
+  vcdeploy ssh-key generate --name deploy-key --comment "Deployment key" \
     --master localhost:9000 --token <token>`,
 		RunE: runSSHKeysGenerate,
 	}
 	genSSHCmd.Flags().StringP("name", "n", "", "Key name (required)")
 	genSSHCmd.Flags().StringP("comment", "c", "", "Key comment (appears in public key)")
 	_ = genSSHCmd.MarkFlagRequired("name")
-	sshKeysCmd.AddCommand(genSSHCmd)
+	sshKeyCmd.AddCommand(genSSHCmd)
 
 	// Import SSH key
 	importSSHCmd := &cobra.Command{
@@ -72,11 +73,11 @@ Supports OpenSSH format private keys.
 
 Examples:
   # Import from file
-  vcdeploy ssh-keys import --name my-key --file ~/.ssh/id_ed25519 \
+  vcdeploy ssh-key import --name my-key --file ~/.ssh/id_ed25519 \
     --master localhost:9000 --token <token>
 
   # Import from stdin
-  cat ~/.ssh/id_ed25519 | vcdeploy ssh-keys import --name my-key --stdin \
+  cat ~/.ssh/id_ed25519 | vcdeploy ssh-key import --name my-key --stdin \
     --master localhost:9000 --token <token>`,
 		RunE: runSSHKeysImport,
 	}
@@ -85,7 +86,7 @@ Examples:
 	importSSHCmd.Flags().Bool("stdin", false, "Read private key from stdin")
 	importSSHCmd.Flags().StringP("passphrase", "p", "", "Passphrase for encrypted key")
 	_ = importSSHCmd.MarkFlagRequired("name")
-	sshKeysCmd.AddCommand(importSSHCmd)
+	sshKeyCmd.AddCommand(importSSHCmd)
 
 	// Get public key
 	pubSSHCmd := &cobra.Command{
@@ -96,11 +97,11 @@ Examples:
 This can be used to add the key to authorized_keys or Git provider settings.
 
 Example:
-  vcdeploy ssh-keys public 123 --master localhost:9000 --token <token> > key.pub`,
+  vcdeploy ssh-key public 123 --master localhost:9000 --token <token> > key.pub`,
 		Args: cobra.ExactArgs(1),
 		RunE: runSSHKeysPublic,
 	}
-	sshKeysCmd.AddCommand(pubSSHCmd)
+	sshKeyCmd.AddCommand(pubSSHCmd)
 
 	// Delete SSH key
 	delSSHCmd := &cobra.Command{
@@ -111,12 +112,12 @@ Example:
 Warning: Deleting a key may break deployments or provisioning that depend on it.
 
 Example:
-  vcdeploy ssh-keys delete 123 --master localhost:9000 --token <token>`,
+  vcdeploy ssh-key delete 123 --master localhost:9000 --token <token>`,
 		Args: cobra.ExactArgs(1),
 		RunE: runSSHKeysDelete,
 	}
 	delSSHCmd.Flags().BoolP("force", "f", false, "Skip confirmation")
-	sshKeysCmd.AddCommand(delSSHCmd)
+	sshKeyCmd.AddCommand(delSSHCmd)
 }
 
 // --- SSH Key Types ---

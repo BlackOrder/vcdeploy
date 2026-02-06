@@ -8,7 +8,7 @@ import (
 // --- Project operations ---
 
 // CreateProject creates a new project in memory and queues persistence.
-func (s *MemoryStore) CreateProject(project *Project) error {
+func (s *MemoryStore) CreateProject(ctx context.Context, project *Project) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -64,7 +64,7 @@ func (s *MemoryStore) GetProjectByName(ctx context.Context, name string) (*Proje
 }
 
 // ListProjects returns all projects from memory.
-func (s *MemoryStore) ListProjects() ([]*Project, error) {
+func (s *MemoryStore) ListProjects(ctx context.Context) ([]*Project, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -240,7 +240,7 @@ func (s *MemoryStore) DeleteProjectByID(ctx context.Context, id int64) error {
 }
 
 // DeleteProject removes a project from memory and queues persistence.
-func (s *MemoryStore) DeleteProject(name string) error {
+func (s *MemoryStore) DeleteProject(ctx context.Context, name string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -291,7 +291,7 @@ func (s *MemoryStore) DeleteProject(name string) error {
 // --- Project Type operations ---
 
 // CreateProjectType creates a new project type in memory and queues persistence.
-func (s *MemoryStore) CreateProjectType(pt *ProjectType) error {
+func (s *MemoryStore) CreateProjectType(ctx context.Context, pt *ProjectType) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -316,7 +316,7 @@ func (s *MemoryStore) CreateProjectType(pt *ProjectType) error {
 }
 
 // ListProjectTypes returns all project types from memory.
-func (s *MemoryStore) ListProjectTypes() ([]*ProjectType, error) {
+func (s *MemoryStore) ListProjectTypes(ctx context.Context) ([]*ProjectType, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -330,7 +330,7 @@ func (s *MemoryStore) ListProjectTypes() ([]*ProjectType, error) {
 }
 
 // GetProjectTypeByName retrieves a project type by name from memory.
-func (s *MemoryStore) GetProjectTypeByName(name string) (*ProjectType, error) {
+func (s *MemoryStore) GetProjectTypeByName(ctx context.Context, name string) (*ProjectType, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -345,7 +345,7 @@ func (s *MemoryStore) GetProjectTypeByName(name string) (*ProjectType, error) {
 }
 
 // UpdateProjectTypeByName updates a project type in memory and queues persistence.
-func (s *MemoryStore) UpdateProjectTypeByName(pt *ProjectType) error {
+func (s *MemoryStore) UpdateProjectTypeByName(ctx context.Context, pt *ProjectType) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -369,7 +369,7 @@ func (s *MemoryStore) UpdateProjectTypeByName(pt *ProjectType) error {
 }
 
 // DeleteProjectType removes a project type from memory and queues persistence.
-func (s *MemoryStore) DeleteProjectType(name string) error {
+func (s *MemoryStore) DeleteProjectType(ctx context.Context, name string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -544,7 +544,7 @@ func (s *MemoryStore) GetSecret(ctx context.Context, project, scope, key string)
 }
 
 // ListSecrets returns secret metadata for a scope (legacy method without context).
-func (s *MemoryStore) ListSecrets(scope string) ([]*SecretInfo, error) {
+func (s *MemoryStore) ListSecrets(ctx context.Context, scope string) ([]*SecretInfo, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -609,7 +609,7 @@ func (s *MemoryStore) ListAllSecretsCtx(ctx context.Context) ([]*Secret, error) 
 }
 
 // DeleteSecret removes a secret from memory (legacy method without project).
-func (s *MemoryStore) DeleteSecret(scope, key string) error {
+func (s *MemoryStore) DeleteSecret(ctx context.Context, scope, key string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -651,7 +651,7 @@ func (s *MemoryStore) DeleteSecretCtx(ctx context.Context, project, scope, key s
 
 // ExportAllSecrets exports all secrets grouped by project/scope.
 // Returns map[project]map[key]scope
-func (s *MemoryStore) ExportAllSecrets() (map[string]map[string]string, error) {
+func (s *MemoryStore) ExportAllSecrets(ctx context.Context) (map[string]map[string]string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 

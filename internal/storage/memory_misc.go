@@ -360,8 +360,8 @@ func (s *MemoryStore) SaveProvisionLog(ctx context.Context, jobID, level, messag
 	return nil
 }
 
-// GetProvisionLogs retrieves all logs for a provisioning job.
-func (s *MemoryStore) GetProvisionLogs(ctx context.Context, jobID string) ([]*ProvisionLog, error) {
+// ListProvisionLogs retrieves all logs for a provisioning job.
+func (s *MemoryStore) ListProvisionLogs(ctx context.Context, jobID string) ([]*ProvisionLog, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 

@@ -12,8 +12,8 @@ import (
 // --- Project operations ---
 
 // CreateProject creates a new project.
-func (db *DB) CreateProject(project *Project) error {
-	result, err := db.conn.Exec(`
+func (db *DB) CreateProject(ctx context.Context, project *Project) error {
+	result, err := db.conn.ExecContext(ctx, `
 		INSERT INTO projects (name, repository, branch, deploy_path, type, created_at)
 		VALUES (?, ?, ?, ?, ?, ?)
 	`, project.Name, project.Repository, project.Branch, project.DeployPath, project.Type, project.CreatedAt)
@@ -54,8 +54,8 @@ func (db *DB) GetProjectByName(ctx context.Context, name string) (*Project, erro
 }
 
 // ListProjects returns all projects.
-func (db *DB) ListProjects() ([]*Project, error) {
-	rows, err := db.conn.Query(`
+func (db *DB) ListProjects(ctx context.Context) ([]*Project, error) {
+	rows, err := db.conn.QueryContext(ctx, `
 		SELECT id, name, repository, branch, deploy_path, type, created_at, last_deploy_at, last_deploy_status
 		FROM projects ORDER BY name
 	`)
@@ -122,8 +122,8 @@ func (db *DB) CountProjects(ctx context.Context) (int64, error) {
 }
 
 // DeleteProject deletes a project.
-func (db *DB) DeleteProject(name string) error {
-	_, err := db.conn.Exec(`DELETE FROM projects WHERE name = ?`, name)
+func (db *DB) DeleteProject(ctx context.Context, name string) error {
+	_, err := db.conn.ExecContext(ctx, `DELETE FROM projects WHERE name = ?`, name)
 	if err != nil {
 		return fmt.Errorf("deleting project: %w", err)
 	}
@@ -178,8 +178,8 @@ func (db *DB) DeleteProjectByID(ctx context.Context, id int64) error {
 // --- Project Type operations ---
 
 // CreateProjectType creates a new project type.
-func (db *DB) CreateProjectType(pt *ProjectType) error {
-	result, err := db.conn.Exec(`
+func (db *DB) CreateProjectType(ctx context.Context, pt *ProjectType) error {
+	result, err := db.conn.ExecContext(ctx, `
 		INSERT INTO project_types (name, description, build_cmd, created_at)
 		VALUES (?, ?, ?, ?)
 	`, pt.Name, pt.Description, pt.BuildCmd, pt.CreatedAt)
@@ -196,8 +196,8 @@ func (db *DB) CreateProjectType(pt *ProjectType) error {
 }
 
 // ListProjectTypes returns all project types.
-func (db *DB) ListProjectTypes() ([]*ProjectType, error) {
-	rows, err := db.conn.Query(`
+func (db *DB) ListProjectTypes(ctx context.Context) ([]*ProjectType, error) {
+	rows, err := db.conn.QueryContext(ctx, `
 		SELECT pt.id, pt.name, pt.description, pt.build_cmd, 
 		       (SELECT COUNT(*) FROM projects WHERE type = pt.name) as project_count,
 		       pt.created_at
@@ -220,9 +220,9 @@ func (db *DB) ListProjectTypes() ([]*ProjectType, error) {
 }
 
 // GetProjectTypeByName retrieves a project type by name.
-func (db *DB) GetProjectTypeByName(name string) (*ProjectType, error) {
+func (db *DB) GetProjectTypeByName(ctx context.Context, name string) (*ProjectType, error) {
 	var pt ProjectType
-	err := db.conn.QueryRow(`
+	err := db.conn.QueryRowContext(ctx, `
 		SELECT pt.id, pt.name, pt.description, pt.build_cmd, 
 		       (SELECT COUNT(*) FROM projects WHERE type = pt.name) as project_count,
 		       pt.created_at
@@ -238,8 +238,8 @@ func (db *DB) GetProjectTypeByName(name string) (*ProjectType, error) {
 }
 
 // UpdateProjectTypeByName updates a project type by name.
-func (db *DB) UpdateProjectTypeByName(pt *ProjectType) error {
-	_, err := db.conn.Exec(`
+func (db *DB) UpdateProjectTypeByName(ctx context.Context, pt *ProjectType) error {
+	_, err := db.conn.ExecContext(ctx, `
 		UPDATE project_types SET description = ?, build_cmd = ?
 		WHERE name = ?
 	`, pt.Description, pt.BuildCmd, pt.Name)
@@ -250,8 +250,8 @@ func (db *DB) UpdateProjectTypeByName(pt *ProjectType) error {
 }
 
 // DeleteProjectType deletes a project type.
-func (db *DB) DeleteProjectType(name string) error {
-	_, err := db.conn.Exec(`DELETE FROM project_types WHERE name = ?`, name)
+func (db *DB) DeleteProjectType(ctx context.Context, name string) error {
+	_, err := db.conn.ExecContext(ctx, `DELETE FROM project_types WHERE name = ?`, name)
 	if err != nil {
 		return fmt.Errorf("deleting project type: %w", err)
 	}
@@ -259,8 +259,8 @@ func (db *DB) DeleteProjectType(name string) error {
 }
 
 // ExportAllSecrets exports all secrets (for backup)
-func (db *DB) ExportAllSecrets() (map[string]map[string]string, error) {
-	rows, err := db.conn.Query(`SELECT project, key, value_encrypted FROM secrets`)
+func (db *DB) ExportAllSecrets(ctx context.Context) (map[string]map[string]string, error) {
+	rows, err := db.conn.QueryContext(ctx, `SELECT project, key, value_encrypted FROM secrets`)
 	if err != nil {
 		return nil, fmt.Errorf("querying secrets for export: %w", err)
 	}

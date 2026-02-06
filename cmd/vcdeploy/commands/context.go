@@ -254,7 +254,7 @@ func NewProjectListRunner(ctx *AppContext) *ProjectListRunner {
 
 // Run executes the project list command.
 func (r *ProjectListRunner) Run() error {
-	projects, err := r.ctx.Storage.ListProjects()
+	projects, err := r.ctx.Storage.ListProjects(context.Background())
 	if err != nil {
 		return fmt.Errorf("list projects: %w", err)
 	}

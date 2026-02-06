@@ -13,10 +13,11 @@ import (
 	"golang.org/x/term"
 )
 
-// credsCmd handles source credential management commands
-var credsCmd = &cobra.Command{
-	Use:   "creds",
-	Short: "Source credential management",
+// credentialsCmd handles source credential management commands
+var credentialsCmd = &cobra.Command{
+	Use:     "credentials",
+	Aliases: []string{"creds", "credential"},
+	Short:   "Source credential management",
 	Long: `Commands for managing source credentials.
 
 Source credentials are used for authenticating with Git repositories
@@ -32,7 +33,7 @@ All commands require API authentication via --master and --token flags.`,
 }
 
 func init() {
-	rootCmd.AddCommand(credsCmd)
+	rootCmd.AddCommand(credentialsCmd)
 
 	// List credentials
 	listCredsCmd := &cobra.Command{
@@ -41,42 +42,43 @@ func init() {
 		Long: `List all configured source credentials.
 
 Example:
-  vcdeploy creds list --master localhost:9000 --token <token>`,
+  vcdeploy credentials list --master localhost:9000 --token <token>`,
 		RunE: runCredsList,
 	}
 	listCredsCmd.Flags().StringP("type", "t", "", "Filter by credential type")
-	credsCmd.AddCommand(listCredsCmd)
+	credentialsCmd.AddCommand(listCredsCmd)
 
-	// Add credential
-	addCredsCmd := &cobra.Command{
-		Use:   "add",
-		Short: "Add a new source credential",
-		Long: `Add a new source credential for Git authentication.
+	// Create credential
+	createCredsCmd := &cobra.Command{
+		Use:     "create",
+		Aliases: []string{"add"},
+		Short:   "Create a new source credential",
+		Long: `Create a new source credential for Git authentication.
 
 Examples:
-  # Add a personal access token for GitHub
-  vcdeploy creds add --name github-token --type token --url-pattern "github.com/*" \
+  # Create a personal access token for GitHub
+  vcdeploy credentials create --name github-token --type token --url-pattern "github.com/*" \
     --master localhost:9000 --token <token>
 
-  # Add basic auth credentials
-  vcdeploy creds add --name gitlab-creds --type basic --url-pattern "gitlab.com/myorg/*" \
+  # Create basic auth credentials
+  vcdeploy credentials create --name gitlab-creds --type basic --url-pattern "gitlab.com/myorg/*" \
     --username myuser --master localhost:9000 --token <token>
 
-  # Add SSH key reference
-  vcdeploy creds add --name ssh-deploy --type ssh --url-pattern "git@github.com:myorg/*" \
+  # Create SSH key reference
+  vcdeploy credentials create --name ssh-deploy --type ssh --url-pattern "git@github.com:myorg/*" \
     --ssh-key-id 123 --master localhost:9000 --token <token>`,
 		RunE: runCredsAdd,
 	}
-	addCredsCmd.Flags().StringP("name", "n", "", "Credential name (required)")
-	addCredsCmd.Flags().StringP("type", "t", "", "Credential type: basic, ssh, token, deploy-key (required)")
-	addCredsCmd.Flags().StringP("url-pattern", "u", "", "URL pattern to match (e.g., github.com/*)")
-	addCredsCmd.Flags().String("username", "", "Username for basic auth")
-	addCredsCmd.Flags().String("password", "", "Password for basic auth (will prompt if not provided)")
-	addCredsCmd.Flags().String("ssh-key-id", "", "SSH key ID for ssh type")
-	addCredsCmd.Flags().Bool("stdin", false, "Read secret value from stdin")
-	_ = addCredsCmd.MarkFlagRequired("name")
-	_ = addCredsCmd.MarkFlagRequired("type")
-	credsCmd.AddCommand(addCredsCmd)
+	createCredsCmd.Flags().StringP("name", "n", "", "Credential name (required)")
+	createCredsCmd.Flags().StringP("type", "t", "", "Credential type: basic, ssh, token, deploy-key (required)")
+	createCredsCmd.Flags().StringP("url-pattern", "u", "", "URL pattern to match (e.g., github.com/*)")
+	createCredsCmd.Flags().String("username", "", "Username for basic auth")
+	createCredsCmd.Flags().String("password", "", "Password for basic auth (will prompt if not provided)")
+	createCredsCmd.Flags().String("ssh-key-id", "", "SSH key ID for ssh type")
+	createCredsCmd.Flags().Bool("stdin", false, "Read secret value from stdin")
+	_ = createCredsCmd.MarkFlagRequired("name")
+	_ = createCredsCmd.MarkFlagRequired("type")
+	credentialsCmd.AddCommand(createCredsCmd)
 
 	// Delete credential
 	deleteCredsCmd := &cobra.Command{
@@ -85,12 +87,12 @@ Examples:
 		Long: `Delete a source credential by ID.
 
 Example:
-  vcdeploy creds delete 123 --master localhost:9000 --token <token>`,
+  vcdeploy credentials delete 123 --master localhost:9000 --token <token>`,
 		Args: cobra.ExactArgs(1),
 		RunE: runCredsDelete,
 	}
 	deleteCredsCmd.Flags().BoolP("force", "f", false, "Skip confirmation")
-	credsCmd.AddCommand(deleteCredsCmd)
+	credentialsCmd.AddCommand(deleteCredsCmd)
 
 	// Test credential
 	testCredsCmd := &cobra.Command{
@@ -99,12 +101,12 @@ Example:
 		Long: `Test if a credential can authenticate with a repository.
 
 Example:
-  vcdeploy creds test 123 https://github.com/myorg/myrepo.git \
+  vcdeploy credentials test 123 https://github.com/myorg/myrepo.git \
     --master localhost:9000 --token <token>`,
 		Args: cobra.ExactArgs(2),
 		RunE: runCredsTest,
 	}
-	credsCmd.AddCommand(testCredsCmd)
+	credentialsCmd.AddCommand(testCredsCmd)
 }
 
 // --- Credential Types ---

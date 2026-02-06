@@ -24,7 +24,7 @@ func TestMemoryStore_LoadFromDB(t *testing.T) {
 	}
 
 	project := &Project{Name: "test-project"}
-	if err := db.CreateProject(project); err != nil {
+	if err := db.CreateProject(ctx, project); err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 
@@ -101,7 +101,7 @@ func TestMemoryStore_LoadProjects(t *testing.T) {
 
 	// Create project type and projects
 	pt := &ProjectType{Name: "web", Description: "Web apps"}
-	db.CreateProjectType(pt)
+	db.CreateProjectType(ctx, pt)
 
 	for i := 0; i < 3; i++ {
 		project := &Project{
@@ -109,7 +109,7 @@ func TestMemoryStore_LoadProjects(t *testing.T) {
 			Type:       pt.Name,
 			Repository: "git@example.com:test.git",
 		}
-		db.CreateProject(project)
+		db.CreateProject(ctx, project)
 	}
 
 	memStore := NewMemoryStore(nil)
@@ -119,12 +119,12 @@ func TestMemoryStore_LoadProjects(t *testing.T) {
 		t.Fatalf("LoadFromDB() error = %v", err)
 	}
 
-	projects, _ := memStore.ListProjects()
+	projects, _ := memStore.ListProjects(ctx)
 	if len(projects) != 3 {
 		t.Errorf("len(projects) = %d, want 3", len(projects))
 	}
 
-	types, _ := memStore.ListProjectTypes()
+	types, _ := memStore.ListProjectTypes(ctx)
 	if len(types) != 1 {
 		t.Errorf("len(types) = %d, want 1", len(types))
 	}

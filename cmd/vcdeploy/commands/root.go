@@ -74,7 +74,7 @@ func init() {
 	rootCmd.AddCommand(typeCmd)
 	rootCmd.AddCommand(secretCmd)
 	rootCmd.AddCommand(versionCmd)
-	rootCmd.AddCommand(RecipesCmd)
+	rootCmd.AddCommand(recipeCmd)
 }
 
 var versionCmd = &cobra.Command{
@@ -1964,7 +1964,7 @@ func runSecretBackup(cmd *cobra.Command, args []string) error {
 	fmt.Printf("\nBacking up secrets to %s...\n", output)
 
 	// Export all secrets
-	secrets, err := db.ExportAllSecrets()
+	secrets, err := db.ExportAllSecrets(context.Background())
 	if err != nil {
 		return fmt.Errorf("export secrets: %w", err)
 	}

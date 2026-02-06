@@ -50,9 +50,10 @@ func (s *TestMemoryStore) MustCreateUser(username, email, passwordHash string) *
 func (s *TestMemoryStore) MustCreateProject(name string) *Project {
 	s.t.Helper()
 
+	ctx := context.Background()
 	project := &Project{Name: name}
 
-	if err := s.CreateProject(project); err != nil {
+	if err := s.CreateProject(ctx, project); err != nil {
 		s.t.Fatalf("MustCreateProject() error = %v", err)
 	}
 

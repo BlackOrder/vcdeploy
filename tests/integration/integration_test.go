@@ -97,6 +97,7 @@ func (f *TestFixture) CreateTestUser(username, password string) {
 // CreateTestProject creates a test project in the database.
 func (f *TestFixture) CreateTestProject(name, repo, branch string) *storage.Project {
 	f.T.Helper()
+	ctx := context.Background()
 
 	project := &storage.Project{
 		Name:       name,
@@ -107,7 +108,7 @@ func (f *TestFixture) CreateTestProject(name, repo, branch string) *storage.Proj
 		CreatedAt:  time.Now(),
 	}
 
-	if err := f.DB.CreateProject(project); err != nil {
+	if err := f.DB.CreateProject(ctx, project); err != nil {
 		f.T.Fatalf("Failed to create project: %v", err)
 	}
 
@@ -577,12 +578,13 @@ func TestSecretsStorage(t *testing.T) {
 func TestProjectCRUD(t *testing.T) {
 	f := NewTestFixture(t)
 	defer f.Close()
+	ctx := context.Background()
 
 	// Create
 	project := f.CreateTestProject("crud-project", "https://github.com/test/crud.git", "develop")
 
 	// Read by name
-	readProject, err := f.DB.GetProjectByName(context.Background(), project.Name)
+	readProject, err := f.DB.GetProjectByName(ctx, project.Name)
 	if err != nil {
 		t.Fatalf("Failed to get project: %v", err)
 	}
@@ -594,7 +596,7 @@ func TestProjectCRUD(t *testing.T) {
 	}
 
 	// List projects
-	projects, err := f.DB.ListProjects()
+	projects, err := f.DB.ListProjects(ctx)
 	if err != nil {
 		t.Fatalf("Failed to list projects: %v", err)
 	}
@@ -603,13 +605,13 @@ func TestProjectCRUD(t *testing.T) {
 	}
 
 	// Delete
-	err = f.DB.DeleteProject(project.Name)
+	err = f.DB.DeleteProject(ctx, project.Name)
 	if err != nil {
 		t.Fatalf("Failed to delete project: %v", err)
 	}
 
 	// Verify deletion
-	_, err = f.DB.GetProjectByName(context.Background(), project.Name)
+	_, err = f.DB.GetProjectByName(ctx, project.Name)
 	if err == nil {
 		t.Error("Expected error when getting deleted project")
 	}
@@ -723,7 +725,7 @@ func TestE2EDeploymentWorkflow(t *testing.T) {
 		BuildCmd:    "npm ci && npm run build",
 		CreatedAt:   time.Now(),
 	}
-	err := f.DB.CreateProjectType(projectType)
+	err := f.DB.CreateProjectType(ctx, projectType)
 	if err != nil {
 		t.Fatalf("Failed to create project type: %v", err)
 	}
@@ -737,7 +739,7 @@ func TestE2EDeploymentWorkflow(t *testing.T) {
 		Type:       "nodejs-e2e",
 		CreatedAt:  time.Now(),
 	}
-	err = f.DB.CreateProject(project)
+	err = f.DB.CreateProject(ctx, project)
 	if err != nil {
 		t.Fatalf("Failed to create project: %v", err)
 	}
@@ -852,7 +854,7 @@ func TestE2ESecretsManagement(t *testing.T) {
 	}
 
 	// Step 2: List secrets (project name is used as scope for ListSecrets)
-	storedSecrets, err := f.DB.ListSecrets(project.Name)
+	storedSecrets, err := f.DB.ListSecrets(ctx, project.Name)
 	if err != nil {
 		t.Fatalf("Failed to list secrets: %v", err)
 	}
@@ -874,13 +876,13 @@ func TestE2ESecretsManagement(t *testing.T) {
 	}
 
 	// Step 4: Delete a secret
-	err = f.DB.DeleteSecret(project.Name, "API_KEY")
+	err = f.DB.DeleteSecret(ctx, project.Name, "API_KEY")
 	if err != nil {
 		t.Fatalf("Failed to delete secret: %v", err)
 	}
 
 	// Step 5: Verify deletion
-	storedSecrets, err = f.DB.ListSecrets(project.Name)
+	storedSecrets, err = f.DB.ListSecrets(ctx, project.Name)
 	if err != nil {
 		t.Fatalf("Failed to list secrets after deletion: %v", err)
 	}
@@ -903,6 +905,8 @@ func TestE2EProjectTypeManagement(t *testing.T) {
 	f := NewTestFixture(t)
 	defer f.Close()
 
+	ctx := context.Background()
+
 	// Step 1: Create project types
 	types := []*storage.ProjectType{
 		{Name: "nodejs", Description: "Node.js application", BuildCmd: "npm ci && npm run build", CreatedAt: time.Now()},
@@ -911,14 +915,14 @@ func TestE2EProjectTypeManagement(t *testing.T) {
 	}
 
 	for _, pt := range types {
-		err := f.DB.CreateProjectType(pt)
+		err := f.DB.CreateProjectType(ctx, pt)
 		if err != nil {
 			t.Fatalf("Failed to create project type %s: %v", pt.Name, err)
 		}
 	}
 
 	// Step 2: List all types
-	storedTypes, err := f.DB.ListProjectTypes()
+	storedTypes, err := f.DB.ListProjectTypes(ctx)
 	if err != nil {
 		t.Fatalf("Failed to list project types: %v", err)
 	}
@@ -928,7 +932,7 @@ func TestE2EProjectTypeManagement(t *testing.T) {
 	}
 
 	// Step 3: Get specific type
-	goType, err := f.DB.GetProjectTypeByName("go")
+	goType, err := f.DB.GetProjectTypeByName(ctx, "go")
 	if err != nil {
 		t.Fatalf("Failed to get project type 'go': %v", err)
 	}
@@ -938,13 +942,13 @@ func TestE2EProjectTypeManagement(t *testing.T) {
 
 	// Step 4: Update a type
 	goType.BuildCmd = "go build -ldflags '-s -w' -o app ./..."
-	err = f.DB.UpdateProjectTypeByName(goType)
+	err = f.DB.UpdateProjectTypeByName(ctx, goType)
 	if err != nil {
 		t.Fatalf("Failed to update project type: %v", err)
 	}
 
 	// Step 5: Verify update
-	goType, err = f.DB.GetProjectTypeByName("go")
+	goType, err = f.DB.GetProjectTypeByName(ctx, "go")
 	if err != nil {
 		t.Fatalf("Failed to get updated project type: %v", err)
 	}
@@ -953,13 +957,13 @@ func TestE2EProjectTypeManagement(t *testing.T) {
 	}
 
 	// Step 6: Delete a type
-	err = f.DB.DeleteProjectType("python")
+	err = f.DB.DeleteProjectType(ctx, "python")
 	if err != nil {
 		t.Fatalf("Failed to delete project type: %v", err)
 	}
 
 	// Step 7: Verify deletion
-	storedTypes, err = f.DB.ListProjectTypes()
+	storedTypes, err = f.DB.ListProjectTypes(ctx)
 	if err != nil {
 		t.Fatalf("Failed to list project types after deletion: %v", err)
 	}
@@ -1005,7 +1009,7 @@ func TestE2EAgentDeploymentWithLogs(t *testing.T) {
 		Type:       "web",
 		CreatedAt:  time.Now(),
 	}
-	err = f.DB.CreateProject(project)
+	err = f.DB.CreateProject(ctx, project)
 	if err != nil {
 		t.Fatalf("Failed to create project: %v", err)
 	}
@@ -1191,7 +1195,7 @@ func TestE2EDeploymentFailureWorkflow(t *testing.T) {
 		Type:       "web",
 		CreatedAt:  time.Now(),
 	}
-	err := f.DB.CreateProject(project)
+	err := f.DB.CreateProject(ctx, project)
 	if err != nil {
 		t.Fatalf("Failed to create project: %v", err)
 	}
@@ -1401,7 +1405,7 @@ func TestE2EMultiAgentDeployment(t *testing.T) {
 		Type:       "web",
 		CreatedAt:  time.Now(),
 	}
-	err := f.DB.CreateProject(project)
+	err := f.DB.CreateProject(ctx, project)
 	if err != nil {
 		t.Fatalf("Failed to create project: %v", err)
 	}

@@ -268,7 +268,7 @@ func TestMemoryStore_CleanupOrphanedWebhooks(t *testing.T) {
 
 	// Create a project
 	project := &Project{Name: "test-project"}
-	s.CreateProject(project)
+	s.CreateProject(context.Background(), project)
 
 	// Create webhook for the project
 	s.SetProjectWebhook(ctx, project.ID, "github", []byte("secret"), true, true)
