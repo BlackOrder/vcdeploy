@@ -220,6 +220,9 @@ func (s *MasterServer) handleBulkDeployPost(w http.ResponseWriter, r *http.Reque
 		result.Status = "accepted"
 		response.Deployments = append(response.Deployments, result)
 		response.Succeeded++
+
+		// Publish SSE event
+		s.publishDeploymentEvent(deploymentID, project.Name, string(deployment.Status), target, branch, "Bulk deploy")
 	}
 
 	s.logAudit(r, "bulk_deploy", "deployment", fmt.Sprintf("Bulk deploy: %d succeeded, %d failed", response.Succeeded, response.Failed), "success")
@@ -295,6 +298,9 @@ func (s *MasterServer) handleBulkCancelDeployments(w http.ResponseWriter, r *htt
 		result.Status = "cancelled"
 		response.Results = append(response.Results, result)
 		response.Succeeded++
+
+		// Publish SSE event
+		s.publishDeploymentEvent(deployment.ID, deployment.Project, "cancelled", deployment.Target, deployment.Branch, "Bulk cancel")
 	}
 
 	s.logAudit(r, "bulk_cancel", "deployment", fmt.Sprintf("Bulk cancel: %d succeeded, %d failed", response.Succeeded, response.Failed), "success")

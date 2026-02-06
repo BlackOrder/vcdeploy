@@ -1594,6 +1594,9 @@ func (s *MasterServer) handleDeploymentAPI(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
+		// Publish SSE event
+		s.publishDeploymentEvent(deployment.ID, deployment.Project, "cancelled", deployment.Target, deployment.Branch, "Deployment cancelled")
+
 		s.logAudit(r, "cancel", "deployment", fmt.Sprintf("Cancelled deployment: %s", deploymentID), "success")
 		s.jsonResponse(w, StatusResponse{Status: "cancelled"})
 
@@ -1644,6 +1647,9 @@ func (s *MasterServer) handleDeploymentRollback(w http.ResponseWriter, r *http.R
 		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
+
+	// Publish SSE event for new rollback deployment
+	s.publishDeploymentEvent(rollback.ID, rollback.Project, "pending", rollback.Target, rollback.Branch, "Rollback initiated")
 
 	// Try to send rollback command to agent
 	if s.agentServer != nil {
@@ -1759,6 +1765,9 @@ func (s *MasterServer) handleDeploymentRetry(w http.ResponseWriter, r *http.Requ
 		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
+
+	// Publish SSE event for retry deployment
+	s.publishDeploymentEvent(newDeployment.ID, newDeployment.Project, "pending", newDeployment.Target, newDeployment.Branch, "Retry initiated")
 
 	// Try to send deploy command to agent
 	if s.agentServer != nil {
