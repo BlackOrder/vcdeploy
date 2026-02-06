@@ -384,3 +384,115 @@ func (s *MasterServer) handleBulkSecrets(w http.ResponseWriter, r *http.Request)
 	s.logAudit(r, "bulk_import", "secret", fmt.Sprintf("Bulk import: %d succeeded, %d failed", response.Succeeded, response.Failed), "success")
 	s.jsonResponse(w, response)
 }
+
+// BulkAgentsRequest represents a request to update multiple agents.
+type BulkAgentsRequest struct {
+	Agents []BulkAgentItem `json:"agents"`
+}
+
+// BulkAgentItem represents a single agent update in a bulk request.
+type BulkAgentItem struct {
+	ID           string            `json:"id"`
+	Labels       map[string]string `json:"labels,omitempty"`
+	UpdatePolicy string            `json:"update_policy,omitempty"`
+}
+
+// BulkAgentsResponse represents the response from a bulk agents operation.
+type BulkAgentsResponse struct {
+	Results   []BulkAgentResult `json:"results"`
+	Succeeded int               `json:"succeeded"`
+	Failed    int               `json:"failed"`
+}
+
+// BulkAgentResult represents the result of a single agent update in a bulk operation.
+type BulkAgentResult struct {
+	ID     string `json:"id"`
+	Status string `json:"status"`
+	Error  string `json:"error,omitempty"`
+}
+
+// handleBulkAgents handles POST /api/v1/agents/bulk to update multiple agents.
+func (s *MasterServer) handleBulkAgents(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
+	defer cancel()
+
+	// Check write access
+	if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
+		s.jsonError(w, status, msg)
+		return
+	}
+
+	var req BulkAgentsRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
+		s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
+		return
+	}
+
+	if len(req.Agents) == 0 {
+		s.jsonError(w, http.StatusBadRequest, "At least one agent is required")
+		return
+	}
+
+	if len(req.Agents) > 100 {
+		s.jsonError(w, http.StatusBadRequest, "Maximum 100 agents per bulk update")
+		return
+	}
+
+	response := BulkAgentsResponse{
+		Results: make([]BulkAgentResult, 0, len(req.Agents)),
+	}
+
+	for _, item := range req.Agents {
+		result := BulkAgentResult{
+			ID: item.ID,
+		}
+
+		if item.ID == "" {
+			result.Status = "failed"
+			result.Error = "Agent ID is required"
+			response.Results = append(response.Results, result)
+			response.Failed++
+			continue
+		}
+
+		agent, err := s.agentService.GetByID(ctx, item.ID)
+		if err != nil || agent == nil {
+			result.Status = "failed"
+			result.Error = "Agent not found"
+			response.Results = append(response.Results, result)
+			response.Failed++
+			continue
+		}
+
+		// Apply updates
+		if item.Labels != nil {
+			agent.Labels = item.Labels
+		}
+		if item.UpdatePolicy != "" {
+			agent.UpdatePolicy = item.UpdatePolicy
+		}
+
+		if err := s.agentService.Upsert(ctx, agent); err != nil {
+			result.Status = "failed"
+			result.Error = "Failed to update agent"
+			response.Results = append(response.Results, result)
+			response.Failed++
+			continue
+		}
+
+		result.Status = "updated"
+		response.Results = append(response.Results, result)
+		response.Succeeded++
+
+		// Publish SSE event
+		s.publishAgentEvent(agent.ID, agent.Hostname, "updated", "Bulk update")
+	}
+
+	s.logAudit(r, "bulk_update", "agent", fmt.Sprintf("Bulk update: %d succeeded, %d failed", response.Succeeded, response.Failed), "success")
+	s.jsonResponse(w, response)
+}

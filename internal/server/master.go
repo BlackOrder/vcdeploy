@@ -802,6 +802,7 @@ func (s *MasterServer) buildMainHandler() (http.Handler, error) {
 	mux.HandleFunc("/api/v1/deployments/", s.withAuth(s.handleDeploymentAPI))
 
 	// Agents API
+	mux.HandleFunc("/api/v1/agents/bulk", s.withAuth(s.handleBulkAgents))
 	mux.HandleFunc("/api/v1/agents", s.withAuth(s.handleAgentsAPI))
 	mux.HandleFunc("/api/v1/agents/", s.withAuth(s.handleAgentAPI))
 

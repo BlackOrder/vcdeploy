@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -16,33 +15,27 @@ import (
 var deploymentCmd = &cobra.Command{
 	Use:   "deploy",
 	Short: "Deployment commands",
-	Long:  "Commands for managing and triggering deployments.",
+	Long: `Commands for viewing and managing deployment records.
+
+To trigger a new deployment, use 'project deploy' instead:
+  vcdeploy project deploy myproject --branch main`,
 }
 
 func init() {
 	rootCmd.AddCommand(deploymentCmd)
 
-	// Deployment subcommands
-	triggerCmd := &cobra.Command{
-		Use:   "trigger [project]",
-		Short: "Trigger a deployment",
-		Args:  cobra.ExactArgs(1),
-		RunE:  runDeploymentTrigger,
-	}
-	triggerCmd.Flags().StringP("branch", "b", "", "Branch to deploy")
-	triggerCmd.Flags().StringP("target", "t", "", "Target environment")
-	triggerCmd.Flags().String("schedule", "", "Schedule deployment (RFC3339 format)")
-	deploymentCmd.AddCommand(triggerCmd)
-
-	deploymentCmd.AddCommand(&cobra.Command{
+	// Deployment subcommands (view-only operations)
+	listCmd := &cobra.Command{
 		Use:   "list",
 		Short: "List recent deployments",
 		RunE:  runDeploymentList,
-	})
+	}
+	listCmd.Flags().IntP("limit", "n", 20, "Maximum number of deployments to show")
+	deploymentCmd.AddCommand(listCmd)
 
 	deploymentCmd.AddCommand(&cobra.Command{
-		Use:   "status [deployment-id]",
-		Short: "Get deployment status",
+		Use:   "show [deployment-id]",
+		Short: "Show deployment details",
 		Args:  cobra.ExactArgs(1),
 		RunE:  runDeploymentStatus,
 	})
@@ -62,64 +55,14 @@ func init() {
 	})
 }
 
-func runDeploymentTrigger(cmd *cobra.Command, args []string) error {
-	project := args[0]
-	branch, _ := cmd.Flags().GetString("branch")
-	target, _ := cmd.Flags().GetString("target")
-	schedule, _ := cmd.Flags().GetString("schedule")
-
-	client, err := newAPIClient(cmd)
-	if err != nil {
-		return err
-	}
-
-	data := map[string]interface{}{
-		"project": project,
-	}
-	if branch != "" {
-		data["branch"] = branch
-	}
-	if target != "" {
-		data["target"] = target
-	}
-	if schedule != "" {
-		data["scheduled_at"] = schedule
-	}
-
-	body, _ := json.Marshal(data)
-	resp, err := client.post("/api/v1/projects/"+project+"/deploy", strings.NewReader(string(body)))
-	if err != nil {
-		return fmt.Errorf("API request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("API error: %s - %s", resp.Status, string(bodyBytes))
-	}
-
-	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return fmt.Errorf("decode response: %w", err)
-	}
-
-	if schedule != "" {
-		fmt.Printf("Deployment scheduled: %s\n", result["id"])
-		fmt.Printf("Scheduled for: %s\n", result["scheduled_at"])
-	} else {
-		fmt.Printf("Deployment triggered: %s\n", result["id"])
-		fmt.Printf("Status: %s\n", result["status"])
-	}
-	return nil
-}
-
 func runDeploymentList(cmd *cobra.Command, args []string) error {
+	limit, _ := cmd.Flags().GetInt("limit")
 	client, err := newAPIClient(cmd)
 	if err != nil {
 		return err
 	}
 
-	resp, err := client.get("/api/v1/deployments?limit=20")
+	resp, err := client.get(fmt.Sprintf("/api/v1/deployments?limit=%d", limit))
 	if err != nil {
 		return fmt.Errorf("API request failed: %w", err)
 	}
