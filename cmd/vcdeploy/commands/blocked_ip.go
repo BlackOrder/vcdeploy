@@ -119,7 +119,7 @@ func runBlockedIPList(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
 			ip.IP, ip.Reason, ip.BlockedAt, expires, ip.BlockedBy)
 	}
-	w.Flush()
+	_ = w.Flush() // #nosec G104 - best effort output flush
 	return nil
 }
 

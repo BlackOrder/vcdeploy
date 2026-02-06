@@ -233,6 +233,7 @@ Use --dry-run to validate without actually deploying.`,
 	deployProjectCmd.Flags().String("target", "", "Target to deploy to")
 	deployProjectCmd.Flags().Bool("dry-run", false, "Validate without deploying")
 	deployProjectCmd.Flags().Bool("force", false, "Force deploy (bypass lock)")
+	deployProjectCmd.Flags().BoolP("follow", "f", false, "Follow deployment logs in real-time")
 	projectCmd.AddCommand(deployProjectCmd)
 
 	rollbackProjectCmd := &cobra.Command{
@@ -895,7 +896,7 @@ func runBackupList(cmd *cobra.Command, args []string) error {
 			info.ModTime().Format("2006-01-02 15:04:05"),
 		)
 	}
-	w.Flush()
+	_ = w.Flush() // #nosec G104 - best effort output flush
 
 	return nil
 }
@@ -1002,7 +1003,7 @@ func runProjectList(cmd *cobra.Command, args []string) error {
 			status,
 		)
 	}
-	w.Flush()
+	_ = w.Flush() // #nosec G104 - best effort output flush
 
 	return nil
 }
@@ -1256,6 +1257,7 @@ func runProjectDeploy(cmd *cobra.Command, args []string) error {
 	target, _ := cmd.Flags().GetString("target")
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	force, _ := cmd.Flags().GetBool("force")
+	follow, _ := cmd.Flags().GetBool("follow")
 
 	// Get master address
 	masterAddr, _ := cmd.Flags().GetString("master")
@@ -1359,6 +1361,22 @@ func runProjectDeploy(cmd *cobra.Command, args []string) error {
 	fmt.Printf("   Deployment ID: %s\n", deployResp.ID)
 	fmt.Println()
 
+	// If --follow is specified, stream logs via SSE
+	if follow {
+		// Ensure protocol prefix for API client
+		apiBaseURL := masterAddr
+		if !strings.HasPrefix(apiBaseURL, "http://") && !strings.HasPrefix(apiBaseURL, "https://") {
+			apiBaseURL = "http://" + apiBaseURL
+		}
+		apiClient := &apiClient{
+			baseURL: apiBaseURL,
+			token:   apiToken,
+			client:  &http.Client{},
+		}
+		fmt.Println("📜 Streaming deployment logs...")
+		return streamDeploymentLogs(cmd.Context(), apiClient, deployResp.ID, false)
+	}
+
 	// Poll for deployment status (interruptible with Ctrl+C)
 	fmt.Println("⏳ Waiting for deployment to complete...")
 	for i := 0; i < 120; i++ { // Max 10 minutes
@@ -1385,8 +1403,8 @@ func runProjectDeploy(cmd *cobra.Command, args []string) error {
 		var status struct {
 			Status string `json:"status"`
 		}
-		_ = json.NewDecoder(statusResp.Body).Decode(&status)
-		statusResp.Body.Close()
+		_ = json.NewDecoder(statusResp.Body).Decode(&status) //nolint:errcheck // best effort decode
+		_ = statusResp.Body.Close()                          // #nosec G104 - best effort cleanup
 
 		switch status.Status {
 		case "success", "completed":
@@ -1577,7 +1595,7 @@ func runTypeList(cmd *cobra.Command, args []string) error {
 	for _, t := range types {
 		fmt.Fprintf(w, "%s\t%s\t%d\n", t.Name, t.Description, t.ProjectCount)
 	}
-	w.Flush()
+	_ = w.Flush() // #nosec G104 - best effort output flush
 
 	return nil
 }
@@ -1815,7 +1833,7 @@ func runSecretList(cmd *cobra.Command, args []string) error {
 	for _, s := range secretsMetadata {
 		fmt.Fprintf(w, "%s\t%s\t%s\n", s.Key, s.UpdatedAt.Format("2006-01-02 15:04"), s.Scope)
 	}
-	w.Flush()
+	_ = w.Flush() // #nosec G104 - best effort output flush
 
 	return nil
 }

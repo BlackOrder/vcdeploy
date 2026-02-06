@@ -141,7 +141,7 @@ func runHealthCheckList(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
 			hc.Name, hc.Type, hc.Target, statusIcon(hc.Status), hc.LastRun, msg)
 	}
-	w.Flush()
+	_ = w.Flush() // #nosec G104 - best effort output flush
 	return nil
 }
 
@@ -178,7 +178,7 @@ func runHealthCheckRun(cmd *cobra.Command, args []string) error {
 	for _, r := range result.Results {
 		fmt.Fprintf(w, "%s\t%s\t%s\n", r.Name, statusIcon(r.Status), r.Message)
 	}
-	w.Flush()
+	_ = w.Flush() // #nosec G104 - best effort output flush
 	return nil
 }
 
@@ -252,7 +252,7 @@ func runHealthCheckStatus(cmd *cobra.Command, args []string) error {
 		for _, c := range status.Components {
 			fmt.Fprintf(w, "  %s\t%s\t%s\n", c.Name, statusIcon(c.Status), c.Message)
 		}
-		w.Flush()
+		_ = w.Flush() // #nosec G104 - best effort output flush
 	}
 	return nil
 }

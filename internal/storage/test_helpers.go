@@ -20,7 +20,7 @@ func NewTestMemoryStore(t *testing.T) *TestMemoryStore {
 	store := NewMemoryStore(nil)
 
 	t.Cleanup(func() {
-		store.Close()
+		_ = store.Close() // #nosec G104 - best effort cleanup in test
 	})
 
 	return &TestMemoryStore{

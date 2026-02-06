@@ -155,9 +155,9 @@ func (s *MasterServer) handleAgentBinaries(w http.ResponseWriter, r *http.Reques
 		hasher := sha256.New()
 		multiWriter := io.MultiWriter(dest, hasher)
 		size, err := io.Copy(multiWriter, file)
-		dest.Close()
+		_ = dest.Close() // #nosec G104 - best effort close after write
 		if err != nil {
-			os.Remove(destPath)
+			_ = os.Remove(destPath) // #nosec G104 - best effort cleanup
 			s.logger.Error("Failed to save binary file", zap.Error(err))
 			s.jsonError(w, http.StatusInternalServerError, "internal server error")
 			return
@@ -184,7 +184,7 @@ func (s *MasterServer) handleAgentBinaries(w http.ResponseWriter, r *http.Reques
 		}
 
 		if err := s.store.CreateAgentBinary(ctx, binary); err != nil {
-			os.Remove(destPath)
+			_ = os.Remove(destPath) // #nosec G104 - best effort cleanup
 			s.logger.Error("Failed to create binary record", zap.Error(err))
 			s.jsonError(w, http.StatusInternalServerError, "internal server error")
 			return

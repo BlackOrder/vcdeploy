@@ -78,6 +78,11 @@ Examples:
 
   # Import from stdin
   cat ~/.ssh/id_ed25519 | vcdeploy ssh-key import --name my-key --stdin \
+    --master localhost:9000 --token <token>
+
+  # Import with passphrase from file (more secure than command line)
+  vcdeploy ssh-key import --name my-key --file ~/.ssh/id_ed25519 \
+    --passphrase-file /run/secrets/key-passphrase \
     --master localhost:9000 --token <token>`,
 		RunE: runSSHKeysImport,
 	}
@@ -85,6 +90,7 @@ Examples:
 	importSSHCmd.Flags().StringP("file", "f", "", "Path to private key file")
 	importSSHCmd.Flags().Bool("stdin", false, "Read private key from stdin")
 	importSSHCmd.Flags().StringP("passphrase", "p", "", "Passphrase for encrypted key")
+	importSSHCmd.Flags().String("passphrase-file", "", "Path to file containing passphrase (more secure than --passphrase)")
 	_ = importSSHCmd.MarkFlagRequired("name")
 	sshKeyCmd.AddCommand(importSSHCmd)
 
@@ -178,7 +184,7 @@ func runSSHKeysList(cmd *cobra.Command, args []string) error {
 			key.CreatedAt.Format("2006-01-02"),
 		)
 	}
-	w.Flush()
+	_ = w.Flush() // #nosec G104 - best effort output flush
 
 	return nil
 }
@@ -238,6 +244,16 @@ func runSSHKeysImport(cmd *cobra.Command, args []string) error {
 	filePath, _ := cmd.Flags().GetString("file")
 	useStdin, _ := cmd.Flags().GetBool("stdin")
 	passphrase, _ := cmd.Flags().GetString("passphrase")
+	passphraseFile, _ := cmd.Flags().GetString("passphrase-file")
+
+	// Handle passphrase from file (takes precedence if both specified)
+	if passphraseFile != "" {
+		data, err := os.ReadFile(passphraseFile) // #nosec G304 - user-specified file path
+		if err != nil {
+			return fmt.Errorf("read passphrase file: %w", err)
+		}
+		passphrase = strings.TrimRight(string(data), "\r\n")
+	}
 
 	var privateKey string
 

@@ -220,7 +220,8 @@ func saveCredentials(master, token string) error {
 
 	// Read existing config
 	config := make(map[string]string)
-	if data, err := os.ReadFile(configPath); err == nil {
+	data, readErr := os.ReadFile(configPath) // #nosec G304 - configPath is user's config directory
+	if readErr == nil {
 		// Parse simple key=value format
 		scanner := bufio.NewScanner(strings.NewReader(string(data)))
 		for scanner.Scan() {
@@ -267,7 +268,7 @@ func loadCredentials() (master, token string, err error) {
 		return "", "", err
 	}
 
-	data, err := os.ReadFile(configPath)
+	data, err := os.ReadFile(configPath) // #nosec G304 - configPath is user's config directory
 	if err != nil {
 		return "", "", err
 	}

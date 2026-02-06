@@ -333,10 +333,10 @@ func runAdminRemote(cmd *cobra.Command, username, password, email string) error 
 
 	var result paginatedResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		resp.Body.Close()
+		_ = resp.Body.Close() // #nosec G104 - best effort cleanup
 		return fmt.Errorf("failed to decode users list: %w", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close() // #nosec G104 - best effort cleanup
 
 	// Look for user by username
 	var userID float64
@@ -402,7 +402,7 @@ func isServerRunning(_ *config.SystemConfig) bool {
 	for _, port := range ports {
 		conn, err := net.DialTimeout("tcp", "localhost"+port, 500*time.Millisecond)
 		if err == nil {
-			conn.Close()
+			_ = conn.Close() // #nosec G104 - best effort cleanup
 			return true
 		}
 	}

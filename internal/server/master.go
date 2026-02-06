@@ -1156,7 +1156,7 @@ func (s *MasterServer) startUnixSocket(ctx context.Context) error {
 	// This allows: root users, and users in vcdeploy group
 	// #nosec G302 - Unix socket intentionally allows group access (0660)
 	if err := os.Chmod(socketPath, 0o660); err != nil {
-		listener.Close()
+		_ = listener.Close() // #nosec G104 - best effort cleanup
 		return fmt.Errorf("set socket permissions: %w", err)
 	}
 
@@ -1171,7 +1171,7 @@ func (s *MasterServer) startUnixSocket(ctx context.Context) error {
 
 	handler, err := s.buildMainHandler()
 	if err != nil {
-		listener.Close()
+		_ = listener.Close() // #nosec G104 - best effort cleanup
 		return fmt.Errorf("build handler: %w", err)
 	}
 

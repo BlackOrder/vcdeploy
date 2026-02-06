@@ -164,7 +164,7 @@ func runUserList(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(w, "%.0f\t%s\t%s\t%s\t%s\n",
 			u["id"], u["username"], u["email"], u["role"], u["createdAt"])
 	}
-	w.Flush()
+	_ = w.Flush() // #nosec G104 - best effort output flush
 	return nil
 }
 
@@ -246,10 +246,10 @@ func runUserDelete(cmd *cobra.Command, args []string) error {
 
 	var result paginatedResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		resp.Body.Close()
+		_ = resp.Body.Close() // #nosec G104 - best effort cleanup
 		return fmt.Errorf("failed to decode users list: %w", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close() // #nosec G104 - best effort cleanup
 
 	var userID float64
 	for _, u := range result.Items {
@@ -324,10 +324,10 @@ func runUserPasswd(cmd *cobra.Command, args []string) error {
 
 	var result paginatedResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		resp.Body.Close()
+		_ = resp.Body.Close() // #nosec G104 - best effort cleanup
 		return fmt.Errorf("decode response: %w", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close() // #nosec G104 - best effort cleanup
 
 	var userID float64
 	for _, u := range result.Items {
@@ -413,7 +413,7 @@ func runUserTOTPListLocal() error {
 	for _, u := range totpUsers {
 		fmt.Fprintf(w, "%d\t%s\t%s\t%s\n", u.ID, u.Username, u.Email, u.Role)
 	}
-	w.Flush()
+	_ = w.Flush() // #nosec G104 - best effort output flush
 
 	fmt.Printf("\nTotal: %d users with TOTP enabled\n", len(totpUsers))
 	return nil
@@ -459,7 +459,7 @@ func runUserTOTPListRemote(cmd *cobra.Command) error {
 	for _, u := range result.Users {
 		fmt.Fprintf(w, "%d\t%s\t%s\t%s\n", u.ID, u.Username, u.Email, u.Role)
 	}
-	w.Flush()
+	_ = w.Flush() // #nosec G104 - best effort output flush
 
 	fmt.Printf("\nTotal: %d users with TOTP enabled\n", len(result.Users))
 	return nil

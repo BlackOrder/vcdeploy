@@ -123,20 +123,20 @@ func NewAgentStore(dataDir string) (*AgentStore, error) {
 	// Derive machine key
 	machineKey, err := deriveMachineKey()
 	if err != nil {
-		db.Close()
+		_ = db.Close() // #nosec G104 - best effort cleanup on error path
 		return nil, fmt.Errorf("derive machine key: %w", err)
 	}
 
 	// Create AES-GCM cipher
 	block, err := aes.NewCipher(machineKey)
 	if err != nil {
-		db.Close()
+		_ = db.Close() // #nosec G104 - best effort cleanup on error path
 		return nil, fmt.Errorf("create cipher: %w", err)
 	}
 
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		db.Close()
+		_ = db.Close() // #nosec G104 - best effort cleanup on error path
 		return nil, fmt.Errorf("create GCM: %w", err)
 	}
 
@@ -169,7 +169,7 @@ func checkAndArchiveIncompatible(db *sql.DB, dbPath string) (*sql.DB, error) {
 
 	// Incompatible version - archive and recreate
 	log.Printf("Database version mismatch (have %d, need %d), archiving old database", version, dbSchemaVersion)
-	db.Close()
+	_ = db.Close() // #nosec G104 - intentional close before rename
 
 	archivePath := fmt.Sprintf("%s.archived.%d", dbPath, time.Now().Unix())
 	if err := os.Rename(dbPath, archivePath); err != nil {
@@ -200,7 +200,7 @@ func checkAndArchiveIncompatible(db *sql.DB, dbPath string) (*sql.DB, error) {
 
 	_, err = newDB.Exec(fmt.Sprintf("PRAGMA user_version = %d", dbSchemaVersion))
 	if err != nil {
-		newDB.Close()
+		_ = newDB.Close() // #nosec G104 - best effort cleanup on error path
 		return nil, fmt.Errorf("set schema version: %w", err)
 	}
 
@@ -238,7 +238,7 @@ func cleanOldArchives(dir string, keep int) error {
 		}
 		// Remove associated WAL and SHM files
 		for _, suffix := range []string{"-wal", "-shm"} {
-			os.Remove(path + suffix) // Ignore errors - files may not exist
+			_ = os.Remove(path + suffix) // #nosec G104 - best effort cleanup, files may not exist
 		}
 	}
 

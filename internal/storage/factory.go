@@ -82,7 +82,7 @@ func NewCachedStore(dbPath string, logger *zap.Logger) (*CachedStore, error) {
 		// Clean up on failure
 		close(memStore.done) // Signal workers to stop
 		memStore.wg.Wait()   // Wait for workers to finish
-		db.Close()           //nolint:errcheck // cleanup on error path
+		_ = db.Close()       // #nosec G104 - cleanup on error path
 		return nil, fmt.Errorf("loading data into memory: %w", err)
 	}
 

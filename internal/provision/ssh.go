@@ -371,7 +371,7 @@ func (p *SSHProvisioner) runInstallScript(_ context.Context, client *ssh.Client,
 	if err != nil {
 		return "", fmt.Errorf("write script: %w", err)
 	}
-	stdin.Close()
+	_ = stdin.Close() // #nosec G104 - best effort close after writing
 
 	// Wait for completion
 	err = session.Wait()

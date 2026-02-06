@@ -32,7 +32,7 @@ func NewTestDB(t *testing.T) (*storage.DB, func()) {
 	}
 
 	cleanup := func() {
-		db.Close()
+		_ = db.Close() // #nosec G104 - best effort cleanup in test
 	}
 
 	return db, cleanup
@@ -62,7 +62,7 @@ func SetupBenchDB(b *testing.B) (*storage.DB, func()) {
 	}
 
 	cleanup := func() {
-		db.Close()
+		_ = db.Close() // #nosec G104 - best effort cleanup in benchmark
 	}
 
 	return db, cleanup

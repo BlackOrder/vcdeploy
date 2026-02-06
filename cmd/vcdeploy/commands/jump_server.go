@@ -139,7 +139,7 @@ func runJumpServerList(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\t%s\n",
 			js.Name, js.Hostname, js.Port, js.Username, keyID, js.CreatedAt)
 	}
-	w.Flush()
+	_ = w.Flush() // #nosec G104 - best effort output flush
 	return nil
 }
 

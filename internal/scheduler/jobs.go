@@ -393,8 +393,8 @@ func (j *LogRotationJob) rotateFile(src, dst string) error {
 	}
 
 	// Close files before truncating
-	srcFile.Close()
-	dstFile.Close()
+	_ = srcFile.Close() // #nosec G104 - intentional close before truncate
+	_ = dstFile.Close() // #nosec G104 - intentional close before truncate
 
 	// Truncate original file
 	if err := os.Truncate(src, 0); err != nil {

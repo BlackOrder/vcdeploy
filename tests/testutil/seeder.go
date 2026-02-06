@@ -270,7 +270,7 @@ func (c *Cleanup) DeleteUser(id interface{}) error {
 	if err != nil {
 		return err
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close() // #nosec G104 - best effort cleanup in test
 	return nil
 }
 
@@ -280,7 +280,7 @@ func (c *Cleanup) DeleteProject(id interface{}) error {
 	if err != nil {
 		return err
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close() // #nosec G104 - best effort cleanup in test
 	return nil
 }
 
@@ -290,7 +290,7 @@ func (c *Cleanup) DeleteSecret(id interface{}) error {
 	if err != nil {
 		return err
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close() // #nosec G104 - best effort cleanup in test
 	return nil
 }
 
@@ -300,7 +300,7 @@ func (c *Cleanup) DeleteAPIKey(id interface{}) error {
 	if err != nil {
 		return err
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close() // #nosec G104 - best effort cleanup in test
 	return nil
 }
 
@@ -412,10 +412,10 @@ func (s *Seeder) WaitForDeploymentStatus(deploymentID, expectedStatus string, ti
 
 		var deployment map[string]interface{}
 		if err := DecodeJSON(resp, &deployment); err != nil {
-			resp.Body.Close()
+			_ = resp.Body.Close() // #nosec G104 - best effort cleanup in test
 			return fmt.Errorf("failed to decode deployment: %w", err)
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close() // #nosec G104 - best effort cleanup in test
 
 		status, ok := deployment["status"].(string)
 		if !ok {
@@ -453,10 +453,10 @@ func (s *Seeder) WaitForDeploymentComplete(deploymentID string, timeout time.Dur
 
 		var deployment map[string]interface{}
 		if err := DecodeJSON(resp, &deployment); err != nil {
-			resp.Body.Close()
+			_ = resp.Body.Close() // #nosec G104 - best effort cleanup in test
 			return "", nil, fmt.Errorf("failed to decode deployment: %w", err)
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close() // #nosec G104 - best effort cleanup in test
 
 		status, ok := deployment["status"].(string)
 		if !ok {

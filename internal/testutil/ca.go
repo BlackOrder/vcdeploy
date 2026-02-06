@@ -62,7 +62,7 @@ func NewTestCA(t *testing.T) *TestCABundle {
 	}
 	bundle.Store = store
 	bundle.CleanupFuncs = append(bundle.CleanupFuncs, func() {
-		store.Close()
+		_ = store.Close() // #nosec G104 - best effort cleanup in test
 	})
 
 	// Create and initialize KMS

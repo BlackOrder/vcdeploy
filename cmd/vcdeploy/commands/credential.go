@@ -177,7 +177,7 @@ func runCredsList(cmd *cobra.Command, args []string) error {
 			cred.UsageCount,
 		)
 	}
-	w.Flush()
+	_ = w.Flush() // #nosec G104 - best effort output flush
 
 	return nil
 }

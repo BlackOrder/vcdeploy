@@ -40,7 +40,7 @@ func New(path string, logger *zap.Logger) (*DB, error) {
 
 	// Test connection
 	if err := conn.Ping(); err != nil {
-		conn.Close() //nolint:errcheck // cleanup on error path
+		_ = conn.Close() // #nosec G104 - cleanup on error path
 		return nil, fmt.Errorf("connecting to database: %w", err)
 	}
 
@@ -48,13 +48,13 @@ func New(path string, logger *zap.Logger) (*DB, error) {
 
 	// Handle migration from legacy inline schema
 	if err := db.migrateFromLegacy(); err != nil {
-		conn.Close() //nolint:errcheck // cleanup on error path
+		_ = conn.Close() // #nosec G104 - cleanup on error path
 		return nil, fmt.Errorf("legacy migration check: %w", err)
 	}
 
 	// Run versioned migrations
 	if err := db.MigrateUp(context.Background()); err != nil {
-		conn.Close() //nolint:errcheck // cleanup on error path
+		_ = conn.Close() // #nosec G104 - cleanup on error path
 		return nil, fmt.Errorf("running migrations: %w", err)
 	}
 

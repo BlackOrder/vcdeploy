@@ -39,15 +39,3 @@ func (s *MasterServer) requireAdminAccess(ctx context.Context, w http.ResponseWr
 	}
 	return true
 }
-
-// requireReadAccessJSON is an alias for requireReadAccess for backward compatibility.
-// Deprecated: Use requireReadAccess instead. Will be removed in a future release.
-func (s *MasterServer) requireReadAccessJSON(ctx context.Context, w http.ResponseWriter) bool {
-	return s.requireReadAccess(ctx, w)
-}
-
-// requireAdminAccessJSON is an alias for requireAdminAccess for backward compatibility.
-// Deprecated: Use requireAdminAccess instead. Will be removed in a future release.
-func (s *MasterServer) requireAdminAccessJSON(ctx context.Context, w http.ResponseWriter) bool {
-	return s.requireAdminAccess(ctx, w)
-}

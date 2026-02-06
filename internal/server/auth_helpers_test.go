@@ -68,38 +68,6 @@ func TestAuthHelpers(t *testing.T) {
 		}
 	})
 
-	t.Run("requireReadAccessJSON returns JSON error", func(t *testing.T) {
-		// No t.Parallel() - shares server instance
-
-		rec := httptest.NewRecorder()
-		ctx := context.Background()
-
-		result := server.requireReadAccessJSON(ctx, rec)
-
-		if result {
-			t.Error("expected requireReadAccessJSON to return false without user context")
-		}
-		if rec.Header().Get("Content-Type") != "application/json" {
-			t.Error("expected JSON content type")
-		}
-	})
-
-	t.Run("requireAdminAccessJSON returns JSON error", func(t *testing.T) {
-		// No t.Parallel() - shares server instance
-
-		rec := httptest.NewRecorder()
-		ctx := context.Background()
-
-		result := server.requireAdminAccessJSON(ctx, rec)
-
-		if result {
-			t.Error("expected requireAdminAccessJSON to return false without user context")
-		}
-		if rec.Header().Get("Content-Type") != "application/json" {
-			t.Error("expected JSON content type")
-		}
-	})
-
 	t.Run("requireReadAccess allows with valid admin context", func(t *testing.T) {
 		t.Parallel()
 

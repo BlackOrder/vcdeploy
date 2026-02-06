@@ -1,12 +1,18 @@
 package commands
 
 import (
+	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"os/signal"
+	"strings"
+	"syscall"
 	"text/tabwriter"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -47,12 +53,17 @@ func init() {
 		RunE:  runDeploymentCancel,
 	})
 
-	deploymentCmd.AddCommand(&cobra.Command{
+	logsCmd := &cobra.Command{
 		Use:   "logs [deployment-id]",
 		Short: "View deployment logs",
-		Args:  cobra.ExactArgs(1),
-		RunE:  runDeploymentLogs,
-	})
+		Long: `View deployment logs for a specific deployment.
+
+Use --follow to stream logs in real-time as they are generated.`,
+		Args: cobra.ExactArgs(1),
+		RunE: runDeploymentLogs,
+	}
+	logsCmd.Flags().BoolP("follow", "f", false, "Follow log output in real-time")
+	deploymentCmd.AddCommand(logsCmd)
 }
 
 func runDeploymentList(cmd *cobra.Command, args []string) error {
@@ -83,7 +94,7 @@ func runDeploymentList(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
 			d["id"], d["project"], d["branch"], d["status"], d["startedAt"])
 	}
-	w.Flush()
+	_ = w.Flush() // #nosec G104 - best effort output flush
 	return nil
 }
 
@@ -153,12 +164,22 @@ func runDeploymentCancel(cmd *cobra.Command, args []string) error {
 
 func runDeploymentLogs(cmd *cobra.Command, args []string) error {
 	deploymentID := args[0]
+	follow, _ := cmd.Flags().GetBool("follow")
 
 	client, err := newAPIClient(cmd)
 	if err != nil {
 		return err
 	}
 
+	if follow {
+		return followDeploymentLogs(cmd.Context(), client, deploymentID)
+	}
+
+	return showDeploymentLogs(client, deploymentID)
+}
+
+// showDeploymentLogs fetches and displays logs once
+func showDeploymentLogs(client *apiClient, deploymentID string) error {
 	resp, err := client.get("/api/v1/deployments/" + deploymentID + "/logs")
 	if err != nil {
 		return fmt.Errorf("API request failed: %w", err)
@@ -183,6 +204,173 @@ func runDeploymentLogs(cmd *cobra.Command, args []string) error {
 
 	if len(result.Items) == 0 {
 		fmt.Println("No logs available for this deployment.")
+	}
+	return nil
+}
+
+// sseEvent represents a Server-Sent Events message
+type sseEvent struct {
+	Event string
+	Data  string
+}
+
+// followDeploymentLogs streams logs in real-time via SSE
+func followDeploymentLogs(ctx context.Context, client *apiClient, deploymentID string) error {
+	return streamDeploymentLogs(ctx, client, deploymentID, true)
+}
+
+// streamDeploymentLogs connects to the SSE stream for deployment logs
+func streamDeploymentLogs(ctx context.Context, client *apiClient, deploymentID string, showHeader bool) error {
+	// Set up signal handler for graceful exit
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
+
+	// Create context that can be cancelled
+	streamCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Handle signals in a goroutine
+	go func() {
+		select {
+		case <-sigCh:
+			cancel()
+		case <-streamCtx.Done():
+		}
+	}()
+
+	// Use a buffered writer for efficient output
+	writer := bufio.NewWriter(os.Stdout)
+	defer func() { _ = writer.Flush() }() // #nosec G104 - best effort flush
+
+	if showHeader {
+		fmt.Fprintln(writer, "Following deployment logs... (Ctrl+C to exit)")
+		_ = writer.Flush() // #nosec G104 - best effort flush
+	}
+
+	// Build SSE streaming URL
+	url := client.baseURL + "/api/v1/deployments/" + deploymentID + "/logs?stream=true"
+
+	// Create request with streaming context (no timeout for SSE)
+	req, err := http.NewRequestWithContext(streamCtx, "GET", url, http.NoBody)
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+client.token)
+	req.Header.Set("Accept", "text/event-stream")
+	req.Header.Set("Cache-Control", "no-cache")
+
+	// Use a client without timeout for SSE streaming
+	streamClient := &http.Client{}
+	resp, err := streamClient.Do(req)
+	if err != nil {
+		if streamCtx.Err() != nil {
+			fmt.Fprintln(writer, "\nInterrupted.")
+			_ = writer.Flush() // #nosec G104 - best effort flush
+			return nil
+		}
+		return fmt.Errorf("connect to log stream: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("stream error: %s - %s", resp.Status, string(body))
+	}
+
+	// Parse SSE stream
+	reader := bufio.NewReader(resp.Body)
+	var currentEvent sseEvent
+
+	for {
+		select {
+		case <-streamCtx.Done():
+			fmt.Fprintln(writer, "\nInterrupted.")
+			_ = writer.Flush() // #nosec G104 - best effort flush
+			return nil
+		default:
+		}
+
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			if err == io.EOF || streamCtx.Err() != nil {
+				break
+			}
+			return fmt.Errorf("read stream: %w", err)
+		}
+
+		line = strings.TrimRight(line, "\r\n")
+
+		// Empty line marks end of event
+		if line == "" {
+			if currentEvent.Data != "" {
+				if err := handleSSEEvent(writer, currentEvent); err != nil {
+					return err
+				}
+				_ = writer.Flush() // #nosec G104 - best effort flush
+			}
+			currentEvent = sseEvent{}
+			continue
+		}
+
+		// Parse SSE fields
+		if strings.HasPrefix(line, "event:") {
+			currentEvent.Event = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+		} else if strings.HasPrefix(line, "data:") {
+			currentEvent.Data = strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		}
+	}
+
+	return nil
+}
+
+// handleSSEEvent processes a single SSE event and outputs to writer
+func handleSSEEvent(writer *bufio.Writer, event sseEvent) error {
+	switch event.Event {
+	case "log":
+		var logEntry struct {
+			Timestamp string `json:"timestamp"`
+			Level     string `json:"level"`
+			Message   string `json:"message"`
+		}
+		if err := json.Unmarshal([]byte(event.Data), &logEntry); err != nil {
+			// Try simpler format
+			fmt.Fprintln(writer, event.Data)
+			return nil
+		}
+		ts := logEntry.Timestamp
+		if t, err := time.Parse(time.RFC3339, ts); err == nil {
+			ts = t.Format("15:04:05")
+		}
+		fmt.Fprintf(writer, "[%s] %s: %s\n", ts, logEntry.Level, logEntry.Message)
+
+	case "status":
+		var status struct {
+			Status string `json:"status"`
+		}
+		if err := json.Unmarshal([]byte(event.Data), &status); err == nil {
+			switch status.Status {
+			case "completed", "success":
+				fmt.Fprintln(writer, "\n✅ Deployment completed successfully!")
+			case "failed", "error":
+				fmt.Fprintln(writer, "\n❌ Deployment failed!")
+			case "cancelled":
+				fmt.Fprintln(writer, "\n⚠️  Deployment cancelled.")
+			}
+		}
+
+	case "done":
+		// Stream complete
+		return nil
+
+	case "error":
+		fmt.Fprintf(writer, "\nError: %s\n", event.Data)
+
+	default:
+		// Unknown event, print data if present
+		if event.Data != "" {
+			fmt.Fprintln(writer, event.Data)
+		}
 	}
 	return nil
 }

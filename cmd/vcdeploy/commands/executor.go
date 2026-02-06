@@ -188,6 +188,7 @@ func checkDirectModeAccess() error {
 			}
 		}
 		// Group doesn't exist and DB not accessible
+		//nolint:staticcheck,ST1005 // Multi-line error message intentional for CLI UX
 		return fmt.Errorf("permission denied: vcdeploy group not found\n" +
 			"Options:\n" +
 			"  1. Run with sudo\n" +
@@ -201,6 +202,7 @@ func checkDirectModeAccess() error {
 	}
 
 	// Not root, not in vcdeploy group
+	//nolint:staticcheck,ST1005 // Multi-line error message intentional for CLI UX
 	return fmt.Errorf("permission denied: direct mode requires root or vcdeploy group membership\n"+
 		"Options:\n"+
 		"  1. Run with sudo\n"+
@@ -218,7 +220,7 @@ func isLocalServerRunning() bool {
 			// Socket exists, try to connect
 			conn, err := net.DialTimeout("unix", socketPath, 500*time.Millisecond)
 			if err == nil {
-				conn.Close()
+				_ = conn.Close() // #nosec G104 - best effort cleanup
 				return true
 			}
 		}
@@ -229,7 +231,7 @@ func isLocalServerRunning() bool {
 	for _, port := range ports {
 		conn, err := net.DialTimeout("tcp", "localhost"+port, 500*time.Millisecond)
 		if err == nil {
-			conn.Close()
+			_ = conn.Close() // #nosec G104 - best effort cleanup
 			return true
 		}
 	}
