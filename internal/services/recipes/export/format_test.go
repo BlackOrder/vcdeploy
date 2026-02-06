@@ -39,6 +39,15 @@ func TestComponentExport_Structure(t *testing.T) {
 	if ce.Slug != "test-comp" {
 		t.Errorf("Slug = %v, want test-comp", ce.Slug)
 	}
+	if ce.Version != "v1.0.0" {
+		t.Errorf("Version = %v, want v1.0.0", ce.Version)
+	}
+	if ce.Name != "Test" {
+		t.Errorf("Name = %v, want Test", ce.Name)
+	}
+	if ce.ComponentType != "command" {
+		t.Errorf("ComponentType = %v, want command", ce.ComponentType)
+	}
 	if ce.IsRaw != false {
 		t.Error("Default IsRaw should be false")
 	}
@@ -54,6 +63,12 @@ func TestPlaybookExport_Structure(t *testing.T) {
 
 	if pe.Slug != "test-playbook" {
 		t.Errorf("Slug = %v, want test-playbook", pe.Slug)
+	}
+	if pe.Version != "v1.0.0" {
+		t.Errorf("Version = %v, want v1.0.0", pe.Version)
+	}
+	if pe.Name != "Test Playbook" {
+		t.Errorf("Name = %v, want Test Playbook", pe.Name)
 	}
 	if pe.KeepReleases != 5 {
 		t.Errorf("KeepReleases = %d, want 5", pe.KeepReleases)

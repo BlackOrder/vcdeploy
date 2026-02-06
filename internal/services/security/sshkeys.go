@@ -10,6 +10,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"time"
 
@@ -18,6 +19,9 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/crypto/ssh"
 )
+
+// ErrKMSNotConfigured is returned when a KMS operation is attempted but KMS is nil.
+var ErrKMSNotConfigured = errors.New("KMS not configured: encryption/decryption operations are unavailable")
 
 // SSHKeyService provides business logic for SSH key operations.
 type SSHKeyService struct {
@@ -33,6 +37,14 @@ func NewSSHKeyService(store storage.Store, kms SecretEncryptor, logger *zap.Logg
 		kms:    kms,
 		logger: logger,
 	}
+}
+
+// requireKMS returns an error if KMS is not configured.
+func (s *SSHKeyService) requireKMS() error {
+	if s.kms == nil {
+		return ErrKMSNotConfigured
+	}
+	return nil
 }
 
 // SSHKeyInfo represents SSH key info for API responses (without private key).
@@ -57,7 +69,8 @@ type GenerateSSHKeyRequest struct {
 type ImportSSHKeyRequest struct {
 	Name       string `json:"name"`
 	PrivateKey string `json:"private_key"`
-	CreatedBy  string `json:"-"` // Set by handler from auth context
+	Passphrase string `json:"passphrase,omitempty"` // Optional passphrase for encrypted keys
+	CreatedBy  string `json:"-"`                    // Set by handler from auth context
 }
 
 // Validate validates the generate request.
@@ -95,10 +108,26 @@ func (r *ImportSSHKeyRequest) Validate() error {
 		return services.NewInputError("private_key is required", "private_key")
 	}
 
-	// Validate private key format
-	_, err := ssh.ParsePrivateKey([]byte(r.PrivateKey))
-	if err != nil {
-		return services.NewInputError("invalid private key format", "private_key")
+	// Validate private key format - try with passphrase first if provided
+	var err error
+	if r.Passphrase != "" {
+		_, err = ssh.ParsePrivateKeyWithPassphrase([]byte(r.PrivateKey), []byte(r.Passphrase))
+		if err != nil {
+			// Check if it's a wrong passphrase error
+			if err.Error() == "ssh: this private key is passphrase protected" {
+				return services.NewInputError("invalid passphrase for encrypted key", "passphrase")
+			}
+			return services.NewInputError("invalid private key format or passphrase", "private_key")
+		}
+	} else {
+		_, err = ssh.ParsePrivateKey([]byte(r.PrivateKey))
+		if err != nil {
+			// Check if the key requires a passphrase
+			if err.Error() == "ssh: this private key is passphrase protected" {
+				return services.NewInputError("private key is encrypted, passphrase required", "passphrase")
+			}
+			return services.NewInputError("invalid private key format", "private_key")
+		}
 	}
 
 	return nil
@@ -175,6 +204,9 @@ func (s *SSHKeyService) GetPublicKey(ctx context.Context, id int64) (string, err
 
 // GenerateSSHKey generates a new SSH key pair.
 func (s *SSHKeyService) GenerateSSHKey(ctx context.Context, req GenerateSSHKeyRequest) (*SSHKeyInfo, error) {
+	if err := s.requireKMS(); err != nil {
+		return nil, err
+	}
 	if err := req.Validate(); err != nil {
 		return nil, err
 	}
@@ -246,6 +278,9 @@ func (s *SSHKeyService) GenerateSSHKey(ctx context.Context, req GenerateSSHKeyRe
 
 // ImportSSHKey imports an existing SSH key.
 func (s *SSHKeyService) ImportSSHKey(ctx context.Context, req ImportSSHKeyRequest) (*SSHKeyInfo, error) {
+	if err := s.requireKMS(); err != nil {
+		return nil, err
+	}
 	if err := req.Validate(); err != nil {
 		return nil, err
 	}
@@ -257,7 +292,13 @@ func (s *SSHKeyService) ImportSSHKey(ctx context.Context, req ImportSSHKeyReques
 	}
 
 	// Parse the private key to get key type and public key
-	privateKey, err := ssh.ParsePrivateKey([]byte(req.PrivateKey))
+	// Handle passphrase-protected keys
+	var privateKey ssh.Signer
+	if req.Passphrase != "" {
+		privateKey, err = ssh.ParsePrivateKeyWithPassphrase([]byte(req.PrivateKey), []byte(req.Passphrase))
+	} else {
+		privateKey, err = ssh.ParsePrivateKey([]byte(req.PrivateKey))
+	}
 	if err != nil {
 		return nil, services.NewInputError("invalid private key format", "private_key")
 	}
@@ -271,7 +312,7 @@ func (s *SSHKeyService) ImportSSHKey(ctx context.Context, req ImportSSHKeyReques
 	// Determine key type
 	keyType := determineKeyType(privateKey.PublicKey())
 
-	// Encrypt the private key
+	// Encrypt the private key (store original with passphrase for re-import scenarios)
 	encrypted, err := s.kms.Encrypt(ctx, []byte(req.PrivateKey))
 	if err != nil {
 		return nil, fmt.Errorf("encrypting private key: %w", err)
@@ -331,6 +372,10 @@ func (s *SSHKeyService) DeleteSSHKey(ctx context.Context, id int64) error {
 
 // GetSigner returns an ssh.Signer for a key (for use in SSH connections).
 func (s *SSHKeyService) GetSigner(ctx context.Context, id int64) (ssh.Signer, error) {
+	if err := s.requireKMS(); err != nil {
+		return nil, err
+	}
+
 	key, err := s.store.GetSSHKey(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("getting SSH key: %w", err)

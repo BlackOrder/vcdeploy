@@ -185,9 +185,10 @@ func parseCertBundle(domain string, data []byte) (*storage.ACMECertificate, erro
 
 // extractEmailFromKey attempts to extract an email from the autocert cache key.
 // autocert may use formats like "acme_account+key" where we need to map to our email-keyed storage.
-func extractEmailFromKey(key string) string {
+func extractEmailFromKey(_ string) string {
 	// autocert doesn't include email in the key, so we use a sentinel
 	// The actual email is set when configuring the manager
+	// key parameter reserved for future key-to-email parsing
 	return ""
 }
 

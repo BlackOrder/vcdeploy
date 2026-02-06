@@ -2206,7 +2206,7 @@ paths:
                   count:
                     type: integer
 
-  /api/v1/blocked:
+  /api/v1/blocked-ips:
     get:
       tags: [Settings]
       summary: List blocked IPs
@@ -2246,7 +2246,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /api/v1/blocked/{ip}:
+  /api/v1/blocked-ips/{ip}:
     parameters:
       - name: ip
         in: path

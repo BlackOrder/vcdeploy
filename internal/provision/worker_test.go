@@ -15,7 +15,8 @@ type mockWorkerStore struct {
 	pendingJobs []*storage.ProvisionJob
 }
 
-func newMockWorkerStore(t *testing.T) *mockWorkerStore {
+func newMockWorkerStore(_ *testing.T) *mockWorkerStore {
+	// t reserved for future test-specific assertions/cleanup
 	ms := storage.NewMemoryStore(&storage.MemoryStoreConfig{})
 	return &mockWorkerStore{
 		MemoryStore: ms,

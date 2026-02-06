@@ -282,7 +282,8 @@ func (p *SSHProvisioner) SSHProvision(ctx context.Context, req *SSHProvisionRequ
 }
 
 // checkAgentInstalled checks if the agent binary exists on the target.
-func (p *SSHProvisioner) checkAgentInstalled(ctx context.Context, client *ssh.Client, installPath string) (bool, error) {
+func (p *SSHProvisioner) checkAgentInstalled(_ context.Context, client *ssh.Client, installPath string) (bool, error) {
+	// ctx reserved for future timeout/cancellation support
 	session, err := client.NewSession()
 	if err != nil {
 		return false, err
@@ -299,7 +300,8 @@ func (p *SSHProvisioner) checkAgentInstalled(ctx context.Context, client *ssh.Cl
 }
 
 // detectPlatform detects the target's OS and architecture.
-func (p *SSHProvisioner) detectPlatform(ctx context.Context, client *ssh.Client) (osType, arch string, err error) {
+func (p *SSHProvisioner) detectPlatform(_ context.Context, client *ssh.Client) (osType, arch string, err error) {
+	// ctx reserved for future timeout/cancellation support
 	session, err := client.NewSession()
 	if err != nil {
 		return "", "", err
@@ -336,7 +338,8 @@ func (p *SSHProvisioner) detectPlatform(ctx context.Context, client *ssh.Client)
 }
 
 // runInstallScript executes the installation script on the target.
-func (p *SSHProvisioner) runInstallScript(ctx context.Context, client *ssh.Client, script string, useSudo bool) (string, error) {
+func (p *SSHProvisioner) runInstallScript(_ context.Context, client *ssh.Client, script string, useSudo bool) (string, error) {
+	// ctx reserved for future timeout/cancellation support
 	session, err := client.NewSession()
 	if err != nil {
 		return "", err
@@ -382,7 +385,8 @@ func (p *SSHProvisioner) runInstallScript(ctx context.Context, client *ssh.Clien
 }
 
 // checkAgentRunning checks if the agent service is running.
-func (p *SSHProvisioner) checkAgentRunning(ctx context.Context, client *ssh.Client, useSudo bool) (bool, error) {
+func (p *SSHProvisioner) checkAgentRunning(_ context.Context, client *ssh.Client, useSudo bool) (bool, error) {
+	// ctx reserved for future timeout/cancellation support
 	session, err := client.NewSession()
 	if err != nil {
 		return false, err

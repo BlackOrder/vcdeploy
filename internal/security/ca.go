@@ -138,6 +138,14 @@ func NewCAManager(store storage.Store, kms *KMS, logger *zap.Logger) (*CAManager
 	return mgr, nil
 }
 
+// requireKMS returns an error if KMS is not configured.
+func (m *CAManager) requireKMS() error {
+	if m.kms == nil {
+		return ErrKMSNotConfigured
+	}
+	return nil
+}
+
 // Initialize creates the initial CA if none exists.
 func (m *CAManager) Initialize(ctx context.Context, config CAConfig) error {
 	m.mu.Lock()
@@ -443,6 +451,10 @@ func (m *CAManager) ProcessExpiredCertificates(ctx context.Context) (int, error)
 // --- Internal methods ---
 
 func (m *CAManager) generateCA(ctx context.Context, config CAConfig) (*CertificateAuthority, error) {
+	if err := m.requireKMS(); err != nil {
+		return nil, err
+	}
+
 	// Generate key pair
 	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -573,6 +585,10 @@ func (m *CAManager) decryptCAKey(ctx context.Context, ca *CertificateAuthority) 
 	// If key is already loaded (from generation), use it
 	if ca.PrivateKey != nil {
 		return ca.PrivateKey, nil
+	}
+
+	if err := m.requireKMS(); err != nil {
+		return nil, err
 	}
 
 	// Decrypt from KMS

@@ -1568,7 +1568,7 @@ Some features are intentionally available only via the REST API or Web UI, not t
 
 | API Endpoint | Feature | Reason |
 |--------------|---------|--------|
-| `/api/v1/blocked` | IP blocking/unblocking | Security feature best managed via UI for audit visibility |
+| `/api/v1/blocked-ips` | IP blocking/unblocking | Security feature best managed via UI for audit visibility |
 | `/api/v1/host-keys` | SSH host key management | Low-frequency admin operation |
 | `/api/v1/jump-servers` | Jump server configuration | Low-frequency admin operation |
 | `/api/v1/binaries` | Agent binary management | Internal system feature |
@@ -1580,13 +1580,13 @@ If you need CLI access to these features, use `curl` or similar tools with an AP
 ```bash
 # Example: List blocked IPs
 curl -H "Authorization: Bearer $VCDEPLOY_TOKEN" \
-     https://vcdeploy.example.com/api/v1/blocked
+     https://vcdeploy.example.com/api/v1/blocked-ips
 
 # Example: Block an IP
 curl -X POST -H "Authorization: Bearer $VCDEPLOY_TOKEN" \
      -H "Content-Type: application/json" \
      -d '{"ip":"192.168.1.100","reason":"suspicious activity"}' \
-     https://vcdeploy.example.com/api/v1/blocked
+     https://vcdeploy.example.com/api/v1/blocked-ips
 ```
 
 ---

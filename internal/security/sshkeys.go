@@ -113,8 +113,20 @@ func NewSSHKeyManager(db *sql.DB, kms *KMS) *SSHKeyManager {
 	}
 }
 
+// requireKMS returns an error if KMS is not configured.
+func (m *SSHKeyManager) requireKMS() error {
+	if m.kms == nil {
+		return ErrKMSNotConfigured
+	}
+	return nil
+}
+
 // GenerateKey creates a new Ed25519 SSH key pair and stores it in the database.
 func (m *SSHKeyManager) GenerateKey(ctx context.Context, name string) (*SSHKey, error) {
+	if err := m.requireKMS(); err != nil {
+		return nil, err
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -289,6 +301,10 @@ func (m *SSHKeyManager) DeleteKey(ctx context.Context, name string) error {
 
 // GetSigner returns an SSH signer for the key, decrypting if necessary.
 func (m *SSHKeyManager) GetSigner(ctx context.Context, name string) (ssh.Signer, error) {
+	if err := m.requireKMS(); err != nil {
+		return nil, err
+	}
+
 	key, err := m.GetKey(ctx, name)
 	if err != nil {
 		return nil, err

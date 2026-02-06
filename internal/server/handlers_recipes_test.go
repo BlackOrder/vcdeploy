@@ -324,7 +324,7 @@ func TestHandleMigrationPreview(t *testing.T) {
 		Name: "test-project",
 		Type: "laravel",
 	}
-	if err := server.store.CreateProject(project); err != nil {
+	if err := server.store.CreateProject(context.Background(), project); err != nil {
 		t.Fatalf("failed to create project: %v", err)
 	}
 

@@ -220,7 +220,7 @@ func (s *MasterServer) handleGetProvisionLogs(w http.ResponseWriter, r *http.Req
 	}
 
 	// Get the actual logs from storage
-	logs, err := s.store.GetProvisionLogs(ctx, jobID)
+	logs, err := s.store.ListProvisionLogs(ctx, jobID)
 	if err != nil {
 		s.logger.Error("Failed to get provision logs", zap.Error(err), zap.String("job_id", jobID))
 		s.jsonError(w, http.StatusInternalServerError, "failed to retrieve logs")

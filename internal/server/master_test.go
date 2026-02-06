@@ -902,7 +902,7 @@ func TestHandleProjectType(t *testing.T) {
 		BuildCmd:    "pip install -r requirements.txt",
 		CreatedAt:   time.Now(),
 	}
-	if err := server.store.CreateProjectType(pt); err != nil {
+	if err := server.store.CreateProjectType(context.Background(), pt); err != nil {
 		t.Fatalf("failed to create project type: %v", err)
 	}
 
@@ -939,7 +939,7 @@ func TestHandleProjectTypeDelete(t *testing.T) {
 		Description: "To be deleted",
 		CreatedAt:   time.Now(),
 	}
-	if err := server.store.CreateProjectType(pt); err != nil {
+	if err := server.store.CreateProjectType(context.Background(), pt); err != nil {
 		t.Fatalf("failed to create project type: %v", err)
 	}
 
@@ -955,7 +955,7 @@ func TestHandleProjectTypeDelete(t *testing.T) {
 	}
 
 	// Verify it was deleted
-	_, err := server.store.GetProjectTypeByName("delete-me")
+	_, err := server.store.GetProjectTypeByName(context.Background(), "delete-me")
 	if err == nil {
 		t.Error("project type should have been deleted")
 	}
@@ -974,7 +974,7 @@ func TestHandleProjectTypePut(t *testing.T) {
 		BuildCmd:    "npm build",
 		CreatedAt:   time.Now(),
 	}
-	if err := server.store.CreateProjectType(pt); err != nil {
+	if err := server.store.CreateProjectType(context.Background(), pt); err != nil {
 		t.Fatalf("failed to create project type: %v", err)
 	}
 
@@ -992,7 +992,7 @@ func TestHandleProjectTypePut(t *testing.T) {
 	}
 
 	// Verify the update
-	updated, err := server.store.GetProjectTypeByName("update-me")
+	updated, err := server.store.GetProjectTypeByName(context.Background(), "update-me")
 	if err != nil {
 		t.Fatalf("failed to get updated project type: %v", err)
 	}
@@ -1050,7 +1050,7 @@ func TestHandleProjectType_MethodNotAllowed(t *testing.T) {
 		Description: "Test",
 		CreatedAt:   time.Now(),
 	}
-	if err := server.store.CreateProjectType(pt); err != nil {
+	if err := server.store.CreateProjectType(context.Background(), pt); err != nil {
 		t.Fatalf("failed to create project type: %v", err)
 	}
 
@@ -1077,7 +1077,7 @@ func TestHandleProjectType_InvalidJSON(t *testing.T) {
 		Description: "Test",
 		CreatedAt:   time.Now(),
 	}
-	if err := server.store.CreateProjectType(pt); err != nil {
+	if err := server.store.CreateProjectType(context.Background(), pt); err != nil {
 		t.Fatalf("failed to create project type: %v", err)
 	}
 
@@ -1102,7 +1102,7 @@ func TestHandleDeploymentLogs(t *testing.T) {
 
 	// Create a test project
 	project := &storage.Project{Name: "test-project", Repository: "https://github.com/test/test"}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
 	// Create a test deployment
 	deployment := &storage.DeploymentRecord{

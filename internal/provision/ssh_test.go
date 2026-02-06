@@ -242,8 +242,20 @@ func TestSSHProvisionResult_Fields(t *testing.T) {
 		t.Errorf("expected AgentID 'test-agent', got '%s'", result.AgentID)
 	}
 
+	if result.TargetHost != "192.168.1.100" {
+		t.Errorf("expected TargetHost '192.168.1.100', got '%s'", result.TargetHost)
+	}
+
 	if result.Status != "provisioned" {
 		t.Errorf("expected Status 'provisioned', got '%s'", result.Status)
+	}
+
+	if result.Token != "secret-token" {
+		t.Errorf("expected Token 'secret-token', got '%s'", result.Token)
+	}
+
+	if result.Output != "Installation successful" {
+		t.Errorf("expected Output 'Installation successful', got '%s'", result.Output)
 	}
 
 	duration := result.CompletedAt.Sub(result.StartedAt)

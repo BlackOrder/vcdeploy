@@ -744,7 +744,7 @@ func TestHandleProjectAPI_Get(t *testing.T) {
 		DeployPath: "/var/www/test",
 		Type:       "static",
 	}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
 	// GET specific project by ID
 	req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/projects/%d", project.ID), nil)
@@ -811,7 +811,7 @@ func TestHandleProjectAPI_Update(t *testing.T) {
 		DeployPath: "/var/www/test",
 		Type:       "static",
 	}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
 	// Update the project by ID
 	updateBody := bytes.NewBufferString(`{"branch": "develop", "deployPath": "/var/www/new"}`)
@@ -842,7 +842,7 @@ func TestHandleProjectAPI_Delete(t *testing.T) {
 		DeployPath: "/var/www/test",
 		Type:       "static",
 	}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
 	// Delete the project by ID
 	req := httptest.NewRequest("DELETE", fmt.Sprintf("/api/v1/projects/%d", project.ID), nil)
@@ -890,7 +890,7 @@ func TestHandleProjectAPI_MethodNotAllowed(t *testing.T) {
 		DeployPath: "/var/www/test",
 		Type:       "static",
 	}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
 	req := httptest.NewRequest("PATCH", fmt.Sprintf("/api/v1/projects/%d", project.ID), nil)
 	req.Header.Set("X-API-Key", apiKey)
@@ -1258,7 +1258,7 @@ func TestHandleProjectWebhooks_Get(t *testing.T) {
 		DeployPath: "/var/www/test",
 		Type:       "static",
 	}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/api/v1/projects/webhook-project/webhooks", nil)
@@ -1286,7 +1286,7 @@ func TestHandleProjectWebhooks_Post(t *testing.T) {
 		DeployPath: "/var/www/test",
 		Type:       "static",
 	}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
 	body := strings.NewReader(`{"provider":"github","secret":"test-secret","enabled":true}`)
 	w := httptest.NewRecorder()
@@ -1316,7 +1316,7 @@ func TestHandleProjectWebhooks_PostMissingFields(t *testing.T) {
 		DeployPath: "/var/www/test",
 		Type:       "static",
 	}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
 	body := strings.NewReader(`{"provider":"github"}`)
 	w := httptest.NewRecorder()
@@ -1364,7 +1364,7 @@ func TestHandleProjectWebhooks_MethodNotAllowed(t *testing.T) {
 		DeployPath: "/var/www/test",
 		Type:       "static",
 	}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("DELETE", "/api/v1/projects/webhook-method-project/webhooks", nil)
@@ -1394,7 +1394,7 @@ func TestHandleProjectDeploy_Success(t *testing.T) {
 		DeployPath: "/var/www/test",
 		Type:       "static",
 	}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
 	body := strings.NewReader(`{"branch":"main","target":"production"}`)
 	w := httptest.NewRecorder()
@@ -1424,7 +1424,7 @@ func TestHandleProjectDeploy_InvalidTarget(t *testing.T) {
 		DeployPath: "/var/www/test",
 		Type:       "static",
 	}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
 	// Try to deploy to a non-existent agent target
 	body := strings.NewReader(`{"branch":"main","target":"non-existent-agent"}`)
@@ -1497,7 +1497,7 @@ func TestHandleProjectDeploy_ScheduledDeployment(t *testing.T) {
 		DeployPath: "/var/www/test",
 		Type:       "static",
 	}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
 	scheduledTime := time.Now().Add(1 * time.Hour).Format(time.RFC3339)
 	body := strings.NewReader(fmt.Sprintf(`{"branch":"main","target":"production","scheduledAt":"%s"}`, scheduledTime))
@@ -1528,7 +1528,7 @@ func TestHandleProjectDeploy_InvalidScheduledTime(t *testing.T) {
 		DeployPath: "/var/www/test",
 		Type:       "static",
 	}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
 	body := strings.NewReader(`{"branch":"main","target":"production","scheduledAt":"invalid-time"}`)
 	w := httptest.NewRecorder()
@@ -2528,7 +2528,7 @@ func TestHandleDeploymentRollback_Success(t *testing.T) {
 		Branch:     "main",
 		DeployPath: "/var/www/test",
 	}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
 	// Create a deployment to rollback
 	deployment := &storage.DeploymentRecord{
@@ -2709,7 +2709,7 @@ func TestHandleProjectAPI_UpdateInvalidJSON(t *testing.T) {
 		Repository: "https://github.com/test/repo",
 		Branch:     "main",
 	}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
 	body := strings.NewReader(`{invalid}`)
 	req := httptest.NewRequest("PUT", fmt.Sprintf("/api/v1/projects/%d", project.ID), body)
@@ -2759,7 +2759,7 @@ func TestHandleProjectWebhooks_PostInvalidJSON(t *testing.T) {
 		Repository: "https://github.com/test/repo",
 		Branch:     "main",
 	}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
 	body := strings.NewReader(`{invalid}`)
 	req := httptest.NewRequest("POST", "/api/v1/projects/webhook-invalid-json/webhooks", body)
@@ -2787,7 +2787,7 @@ func TestHandleStats_WithData(t *testing.T) {
 
 	// Create some test data
 	project := &storage.Project{Name: "stats-project", Repository: "https://github.com/test/repo"}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
 	agent := &storage.Agent{ID: "stats-agent", Status: "connected"}
 	_ = server.store.UpsertAgent(ctx, agent)
@@ -2845,7 +2845,7 @@ func TestHandleDeploymentRollback_WithUserContext(t *testing.T) {
 		Branch:     "main",
 		DeployPath: "/var/www/test",
 	}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
 	// Create a deployment to rollback
 	deployment := &storage.DeploymentRecord{

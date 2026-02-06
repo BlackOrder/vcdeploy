@@ -95,7 +95,7 @@ All error responses follow this format:
 | Audit | `/api/v1/audit` | Admin |
 | Host Keys | `/api/v1/host-keys`, `/api/v1/host-keys/{id}` | Yes/Admin |
 | Jump Servers | `/api/v1/jump-servers`, `/api/v1/jump-servers/{id}` | Yes/Admin |
-| Blocked IPs | `/api/v1/blocked`, `/api/v1/blocked/{ip}` | Admin |
+| Blocked IPs | `/api/v1/blocked-ips`, `/api/v1/blocked-ips/{ip}` | Admin |
 | Provision | `/api/v1/provision`, `/api/v1/provision/{id}` | Admin |
 | Agent Binaries | `/api/v1/binaries`, `/api/v1/binaries/latest` | Yes |
 | Certificates | `/api/v1/certificates`, `/api/v1/certificates/{id}` | Admin |
@@ -975,7 +975,7 @@ GET|PUT|DELETE /api/v1/jump-servers/{id}
 ### List Blocked IPs
 
 ```
-GET /api/v1/blocked
+GET /api/v1/blocked-ips
 ```
 
 **Admin only.**
@@ -983,7 +983,7 @@ GET /api/v1/blocked
 ### Block IP
 
 ```
-POST /api/v1/blocked
+POST /api/v1/blocked-ips
 ```
 
 **Admin only.**
@@ -1000,7 +1000,7 @@ POST /api/v1/blocked
 ### Unblock IP
 
 ```
-DELETE /api/v1/blocked/{ip}
+DELETE /api/v1/blocked-ips/{ip}
 ```
 
 **Admin only.**
