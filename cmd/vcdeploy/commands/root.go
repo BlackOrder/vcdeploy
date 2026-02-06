@@ -161,19 +161,33 @@ func init() {
 	projectCmd.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List all projects",
-		RunE:  runProjectList,
+		Long:  "Display all configured deployment projects with their status.",
+		Example: `  vcdeploy project list
+  vcdeploy project list --master localhost:9000 --token <token>`,
+		RunE: runProjectList,
 	})
 	projectCmd.AddCommand(&cobra.Command{
-		Use:   "add [name]",
-		Short: "Add a new project",
-		Args:  cobra.ExactArgs(1),
-		RunE:  runProjectAdd,
+		Use:   "create [name]",
+		Short: "Create a new project",
+		Long: `Create a new deployment project configuration.
+
+The project name must be unique and will be used as the identifier
+for all deployment operations.`,
+		Example: `  vcdeploy project create myapp
+  vcdeploy project create myapp --repo https://github.com/org/repo`,
+		Args: cobra.ExactArgs(1),
+		RunE: runProjectAdd,
 	})
 	editProjectCmd := &cobra.Command{
-		Use:   "edit [name]",
-		Short: "Edit a project",
-		Args:  cobra.ExactArgs(1),
-		RunE:  runProjectEdit,
+		Use:   "update [name]",
+		Short: "Update a project",
+		Long: `Update an existing project's configuration.
+
+Use flags to specify which fields to update.`,
+		Example: `  vcdeploy project update myapp --branch main
+  vcdeploy project update myapp --repo https://github.com/org/new-repo --path /var/www`,
+		Args: cobra.ExactArgs(1),
+		RunE: runProjectEdit,
 	}
 	editProjectCmd.Flags().String("repo", "", "Set repository URL")
 	editProjectCmd.Flags().String("branch", "", "Set default branch")
@@ -183,36 +197,60 @@ func init() {
 	projectCmd.AddCommand(&cobra.Command{
 		Use:   "delete [name]",
 		Short: "Delete a project",
-		Args:  cobra.ExactArgs(1),
-		RunE:  runProjectDelete,
+		Long: `Delete a deployment project configuration.
+
+This removes the project from vcdeploy but does not affect
+deployed files on target servers.`,
+		Example: `  vcdeploy project delete myapp`,
+		Args:    cobra.ExactArgs(1),
+		RunE:    runProjectDelete,
 	})
 	projectCmd.AddCommand(&cobra.Command{
 		Use:   "validate [name]",
 		Short: "Validate a project configuration",
-		Args:  cobra.ExactArgs(1),
-		RunE:  runProjectValidate,
+		Long: `Validate a project's configuration without deploying.
+
+Checks repository access, target connectivity, and configuration syntax.`,
+		Example: `  vcdeploy project validate myapp`,
+		Args:    cobra.ExactArgs(1),
+		RunE:    runProjectValidate,
 	})
 
-	deployCmd := &cobra.Command{
+	deployProjectCmd := &cobra.Command{
 		Use:   "deploy [name]",
 		Short: "Deploy a project",
-		Args:  cobra.ExactArgs(1),
-		RunE:  runProjectDeploy,
-	}
-	deployCmd.Flags().String("target", "", "Target to deploy to")
-	deployCmd.Flags().Bool("dry-run", false, "Validate without deploying")
-	deployCmd.Flags().Bool("force", false, "Force deploy (bypass lock)")
-	projectCmd.AddCommand(deployCmd)
+		Long: `Deploy a project to its configured targets.
 
-	rollbackCmd := &cobra.Command{
+This triggers a deployment using the project's configuration.
+Use --dry-run to validate without actually deploying.`,
+		Example: `  vcdeploy project deploy myapp
+  vcdeploy project deploy myapp --branch feature-x
+  vcdeploy project deploy myapp --target staging --dry-run`,
+		Args: cobra.ExactArgs(1),
+		RunE: runProjectDeploy,
+	}
+	deployProjectCmd.Flags().StringP("branch", "b", "", "Branch to deploy")
+	deployProjectCmd.Flags().String("target", "", "Target to deploy to")
+	deployProjectCmd.Flags().Bool("dry-run", false, "Validate without deploying")
+	deployProjectCmd.Flags().Bool("force", false, "Force deploy (bypass lock)")
+	projectCmd.AddCommand(deployProjectCmd)
+
+	rollbackProjectCmd := &cobra.Command{
 		Use:   "rollback [name]",
 		Short: "Rollback a project to previous release",
-		Args:  cobra.ExactArgs(1),
-		RunE:  runProjectRollback,
+		Long: `Rollback a project to a previous release version.
+
+By default, rolls back to the previous release. Use --release to
+specify a specific release number.`,
+		Example: `  vcdeploy project rollback myapp
+  vcdeploy project rollback myapp --release 5
+  vcdeploy project rollback myapp --target production`,
+		Args: cobra.ExactArgs(1),
+		RunE: runProjectRollback,
 	}
-	rollbackCmd.Flags().String("target", "", "Target to rollback")
-	rollbackCmd.Flags().Int("release", 0, "Specific release number to rollback to")
-	projectCmd.AddCommand(rollbackCmd)
+	rollbackProjectCmd.Flags().String("target", "", "Target to rollback")
+	rollbackProjectCmd.Flags().Int("release", 0, "Specific release number to rollback to")
+	projectCmd.AddCommand(rollbackProjectCmd)
 
 	// Type subcommands
 	typeCmd.AddCommand(&cobra.Command{
@@ -298,37 +336,6 @@ func init() {
 	healthCheckCmd.Flags().String("url", "", "Override health check URL")
 	healthCheckCmd.Flags().Int("timeout", 30, "Health check timeout in seconds")
 	projectCmd.AddCommand(healthCheckCmd)
-
-	// Settings subcommands
-	settingsCmd := &cobra.Command{
-		Use:   "settings",
-		Short: "Settings management",
-		Long:  "Commands for managing vcdeploy settings (appearance, security, notifications, etc.).",
-	}
-	rootCmd.AddCommand(settingsCmd)
-
-	settingsCmd.AddCommand(&cobra.Command{
-		Use:   "list [category]",
-		Short: "List settings in a category",
-		Long:  "List all settings in a category (e.g., appearance, security, notifications, server, logs).",
-		Args:  cobra.ExactArgs(1),
-		RunE:  runSettingsList,
-	})
-
-	settingsCmd.AddCommand(&cobra.Command{
-		Use:   "get [category] [key]",
-		Short: "Get a setting value",
-		Args:  cobra.ExactArgs(2),
-		RunE:  runSettingsGet,
-	})
-
-	settingsSetCmd := &cobra.Command{
-		Use:   "set [category] [key] [value]",
-		Short: "Set a setting value",
-		Args:  cobra.ExactArgs(3),
-		RunE:  runSettingsSet,
-	}
-	settingsCmd.AddCommand(settingsSetCmd)
 }
 
 var masterBackupCmd = &cobra.Command{
@@ -2225,171 +2232,6 @@ func runProjectHealthCheck(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("❌ Health check FAILED (expected: %d, got: %d)\n", expectedStatus, resp.StatusCode)
 	return fmt.Errorf("health check failed: expected status %d, got %d", expectedStatus, resp.StatusCode)
-}
-
-// runSettingsList lists settings in a category
-func runSettingsList(cmd *cobra.Command, args []string) error {
-	category := args[0]
-
-	// Get master address
-	masterAddr, _ := cmd.Flags().GetString("master")
-	if masterAddr == "" {
-		masterAddr = os.Getenv("VCDEPLOY_MASTER")
-	}
-	if masterAddr == "" {
-		masterAddr = "localhost:9000"
-	}
-
-	// Get API token
-	apiToken, _ := cmd.Flags().GetString("token")
-	if apiToken == "" {
-		apiToken = os.Getenv("VCDEPLOY_TOKEN")
-	}
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	baseURL := "http://" + masterAddr
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	req, _ := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/v1/settings/"+category, http.NoBody)
-	if apiToken != "" {
-		req.Header.Set("Authorization", "Bearer "+apiToken)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("master not reachable at %s: %w", masterAddr, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusUnauthorized {
-		return fmt.Errorf("authentication required. Provide --token or set VCDEPLOY_TOKEN")
-	}
-
-	var settings map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&settings); err != nil {
-		return fmt.Errorf("failed to parse settings: %w", err)
-	}
-
-	fmt.Printf("Settings for category '%s':\n\n", category)
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "KEY\tVALUE")
-	fmt.Fprintln(w, "---\t-----")
-	for key, value := range settings {
-		fmt.Fprintf(w, "%s\t%v\n", key, value)
-	}
-	w.Flush()
-
-	return nil
-}
-
-// runSettingsGet gets a single setting value
-func runSettingsGet(cmd *cobra.Command, args []string) error {
-	category := args[0]
-	key := args[1]
-
-	// Get master address
-	masterAddr, _ := cmd.Flags().GetString("master")
-	if masterAddr == "" {
-		masterAddr = os.Getenv("VCDEPLOY_MASTER")
-	}
-	if masterAddr == "" {
-		masterAddr = "localhost:9000"
-	}
-
-	// Get API token
-	apiToken, _ := cmd.Flags().GetString("token")
-	if apiToken == "" {
-		apiToken = os.Getenv("VCDEPLOY_TOKEN")
-	}
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	baseURL := "http://" + masterAddr
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	req, _ := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/v1/settings/"+category, http.NoBody)
-	if apiToken != "" {
-		req.Header.Set("Authorization", "Bearer "+apiToken)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("master not reachable at %s: %w", masterAddr, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusUnauthorized {
-		return fmt.Errorf("authentication required. Provide --token or set VCDEPLOY_TOKEN")
-	}
-
-	var settings map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&settings); err != nil {
-		return fmt.Errorf("failed to parse settings: %w", err)
-	}
-
-	if value, ok := settings[key]; ok {
-		fmt.Printf("%v\n", value)
-	} else {
-		return fmt.Errorf("setting '%s.%s' not found", category, key)
-	}
-
-	return nil
-}
-
-// runSettingsSet sets a single setting value
-func runSettingsSet(cmd *cobra.Command, args []string) error {
-	category := args[0]
-	key := args[1]
-	value := args[2]
-
-	// Get master address
-	masterAddr, _ := cmd.Flags().GetString("master")
-	if masterAddr == "" {
-		masterAddr = os.Getenv("VCDEPLOY_MASTER")
-	}
-	if masterAddr == "" {
-		masterAddr = "localhost:9000"
-	}
-
-	// Get API token
-	apiToken, _ := cmd.Flags().GetString("token")
-	if apiToken == "" {
-		apiToken = os.Getenv("VCDEPLOY_TOKEN")
-	}
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	baseURL := "http://" + masterAddr
-
-	// Build request body
-	body := map[string]string{key: value}
-	bodyBytes, _ := json.Marshal(body)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	req, _ := http.NewRequestWithContext(ctx, "PUT", baseURL+"/api/v1/settings/"+category, strings.NewReader(string(bodyBytes)))
-	req.Header.Set("Content-Type", "application/json")
-	if apiToken != "" {
-		req.Header.Set("Authorization", "Bearer "+apiToken)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("master not reachable at %s: %w", masterAddr, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusUnauthorized {
-		return fmt.Errorf("authentication required. Provide --token or set VCDEPLOY_TOKEN")
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("failed to set setting: %s", string(body))
-	}
-
-	fmt.Printf("✅ Setting '%s.%s' updated to '%s'\n", category, key, value)
-	return nil
 }
 
 // runAgentUpdate updates an agent to the latest version

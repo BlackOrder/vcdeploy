@@ -1264,75 +1264,6 @@ func TestRunAPIKeyCreate(t *testing.T) {
 	}
 }
 
-// TestRunDeploymentTrigger tests the runDeploymentTrigger function.
-func TestRunDeploymentTrigger(t *testing.T) {
-	server := newMockAPIServer(t)
-	defer server.Close()
-
-	cmd := createTestCommand(server.URL)
-	cmd.Flags().String("branch", "main", "")
-	cmd.Flags().String("target", "production", "")
-	cmd.Flags().String("schedule", "", "")
-
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := runDeploymentTrigger(cmd, []string{"webapp"})
-
-	w.Close()
-	var stdout bytes.Buffer
-	_, _ = io.Copy(&stdout, r)
-	os.Stdout = oldStdout
-
-	if err != nil {
-		t.Fatalf("runDeploymentTrigger() error = %v", err)
-	}
-
-	output := stdout.String()
-	if !strings.Contains(output, "triggered") {
-		t.Errorf("output should confirm trigger, got: %s", output)
-	}
-}
-
-// TestRunDeploymentTriggerScheduled tests scheduled deployment.
-func TestRunDeploymentTriggerScheduled(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusAccepted)
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"id":           "deploy-scheduled-1",
-			"status":       "scheduled",
-			"scheduled_at": "2025-01-01T00:00:00Z",
-		})
-	}))
-	defer server.Close()
-
-	cmd := createTestCommand(server.URL)
-	cmd.Flags().String("branch", "", "")
-	cmd.Flags().String("target", "", "")
-	cmd.Flags().String("schedule", "2025-01-01T00:00:00Z", "")
-
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := runDeploymentTrigger(cmd, []string{"webapp"})
-
-	w.Close()
-	var stdout bytes.Buffer
-	_, _ = io.Copy(&stdout, r)
-	os.Stdout = oldStdout
-
-	if err != nil {
-		t.Fatalf("runDeploymentTrigger() error = %v", err)
-	}
-
-	output := stdout.String()
-	if !strings.Contains(output, "scheduled") {
-		t.Errorf("output should mention scheduled, got: %s", output)
-	}
-}
-
 // TestNewAPIClientEnvVars tests that newAPIClient falls back to environment variables.
 func TestNewAPIClientEnvVars(t *testing.T) {
 	// Save and restore env vars
@@ -1417,7 +1348,7 @@ func TestUserCmdStructure(t *testing.T) {
 		t.Fatal("userCmd is nil")
 	}
 
-	expectedSubcmds := []string{"list", "create", "delete", "passwd"}
+	expectedSubcmds := []string{"list", "create", "delete", "password", "totp"}
 	subcommands := make(map[string]bool)
 	for _, cmd := range userCmd.Commands() {
 		subcommands[cmd.Name()] = true
@@ -1459,7 +1390,7 @@ func TestDeploymentCmdStructure(t *testing.T) {
 		t.Fatal("deploymentCmd is nil")
 	}
 
-	expectedSubcmds := []string{"trigger", "list", "status", "cancel", "logs"}
+	expectedSubcmds := []string{"list", "show", "cancel", "logs"}
 	subcommands := make(map[string]bool)
 	for _, cmd := range deploymentCmd.Commands() {
 		subcommands[cmd.Name()] = true

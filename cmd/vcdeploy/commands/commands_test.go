@@ -303,7 +303,7 @@ func TestProjectCmdStructure(t *testing.T) {
 		subcommands[cmd.Name()] = true
 	}
 
-	expectedCommands := []string{"list", "add", "edit", "delete", "validate", "deploy"}
+	expectedCommands := []string{"list", "create", "update", "delete", "validate", "deploy", "rollback"}
 	for _, name := range expectedCommands {
 		if !subcommands[name] {
 			t.Errorf("expected project subcommand %q not found", name)
@@ -397,28 +397,28 @@ func TestGlobalFlags(t *testing.T) {
 	}
 }
 
-// TestEditProjectFlags tests the edit project command has expected flags.
-func TestEditProjectFlags(t *testing.T) {
+// TestUpdateProjectFlags tests the update project command has expected flags.
+func TestUpdateProjectFlags(t *testing.T) {
 	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
-	// Find the edit command under project
-	var editCmd *cobra.Command
+	// Find the update command under project
+	var updateCmd *cobra.Command
 	for _, cmd := range projectCmd.Commands() {
-		if cmd.Name() == "edit" {
-			editCmd = cmd
+		if cmd.Name() == "update" {
+			updateCmd = cmd
 			break
 		}
 	}
 
-	if editCmd == nil {
-		t.Fatal("project edit command not found")
+	if updateCmd == nil {
+		t.Fatal("project update command not found")
 	}
 
 	expectedFlags := []string{"repo", "branch", "path", "type"}
 	for _, name := range expectedFlags {
-		flag := editCmd.Flags().Lookup(name)
+		flag := updateCmd.Flags().Lookup(name)
 		if flag == nil {
-			t.Errorf("expected flag --%s not found on project edit", name)
+			t.Errorf("expected flag --%s not found on project update", name)
 		}
 	}
 }
@@ -446,127 +446,6 @@ func TestDeployFlags(t *testing.T) {
 		if flag == nil {
 			t.Errorf("expected flag --%s not found on project deploy", name)
 		}
-	}
-}
-
-// TestShowCommandStructure tests the show command has expected subcommands.
-func TestShowCommandStructure(t *testing.T) {
-	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
-
-	// Verify showCmd exists
-	if showCmd == nil {
-		t.Fatal("show command not initialized")
-	}
-
-	// Check subcommands are present
-	expectedSubcmds := map[string]int{
-		"project":    1, // requires 1 arg
-		"agent":      1, // requires 1 arg
-		"deployment": 1, // requires 1 arg
-	}
-
-	for name, expectedArgs := range expectedSubcmds {
-		var subCmd *cobra.Command
-		for _, cmd := range showCmd.Commands() {
-			if cmd.Name() == name {
-				subCmd = cmd
-				break
-			}
-		}
-
-		if subCmd == nil {
-			t.Errorf("show subcommand %q not found", name)
-			continue
-		}
-
-		// Check args validation
-		if err := subCmd.Args(subCmd, []string{}); err == nil && expectedArgs > 0 {
-			t.Errorf("show %s should require %d arguments", name, expectedArgs)
-		}
-	}
-}
-
-// TestShowProjectCommand tests the show project command.
-func TestShowProjectCommand(t *testing.T) {
-	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
-
-	var projectShowCmd *cobra.Command
-	for _, cmd := range showCmd.Commands() {
-		if cmd.Name() == "project" {
-			projectShowCmd = cmd
-			break
-		}
-	}
-
-	if projectShowCmd == nil {
-		t.Fatal("show project command not found")
-	}
-
-	// Test args validation - should fail with no args
-	if err := projectShowCmd.Args(projectShowCmd, []string{}); err == nil {
-		t.Error("show project should require exactly 1 argument")
-	}
-
-	// Test args validation - should fail with too many args
-	if err := projectShowCmd.Args(projectShowCmd, []string{"arg1", "arg2"}); err == nil {
-		t.Error("show project should fail with more than 1 argument")
-	}
-
-	// Test args validation - should succeed with exactly 1 arg
-	if err := projectShowCmd.Args(projectShowCmd, []string{"my-project"}); err != nil {
-		t.Errorf("show project should accept 1 argument, got error: %v", err)
-	}
-}
-
-// TestShowAgentCommand tests the show agent command.
-func TestShowAgentCommand(t *testing.T) {
-	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
-
-	var agentShowCmd *cobra.Command
-	for _, cmd := range showCmd.Commands() {
-		if cmd.Name() == "agent" {
-			agentShowCmd = cmd
-			break
-		}
-	}
-
-	if agentShowCmd == nil {
-		t.Fatal("show agent command not found")
-	}
-
-	// Test args validation
-	if err := agentShowCmd.Args(agentShowCmd, []string{}); err == nil {
-		t.Error("show agent should require exactly 1 argument")
-	}
-
-	if err := agentShowCmd.Args(agentShowCmd, []string{"agent-123"}); err != nil {
-		t.Errorf("show agent should accept 1 argument, got error: %v", err)
-	}
-}
-
-// TestShowDeploymentCommand tests the show deployment command.
-func TestShowDeploymentCommand(t *testing.T) {
-	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
-
-	var deploymentShowCmd *cobra.Command
-	for _, cmd := range showCmd.Commands() {
-		if cmd.Name() == "deployment" {
-			deploymentShowCmd = cmd
-			break
-		}
-	}
-
-	if deploymentShowCmd == nil {
-		t.Fatal("show deployment command not found")
-	}
-
-	// Test args validation
-	if err := deploymentShowCmd.Args(deploymentShowCmd, []string{}); err == nil {
-		t.Error("show deployment should require exactly 1 argument")
-	}
-
-	if err := deploymentShowCmd.Args(deploymentShowCmd, []string{"deploy-456"}); err != nil {
-		t.Errorf("show deployment should accept 1 argument, got error: %v", err)
 	}
 }
 
@@ -662,25 +541,19 @@ func TestAuditExportFlags(t *testing.T) {
 	}
 }
 
-// TestRootCommandHasShowAndAudit tests that root command has show and audit.
-func TestRootCommandHasShowAndAudit(t *testing.T) {
+// TestRootCommandHasAudit tests that root command has the audit command.
+func TestRootCommandHasAudit(t *testing.T) {
 	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
-	foundShow := false
 	foundAudit := false
 
 	for _, cmd := range rootCmd.Commands() {
-		switch cmd.Name() {
-		case "show":
-			foundShow = true
-		case "audit":
+		if cmd.Name() == "audit" {
 			foundAudit = true
+			break
 		}
 	}
 
-	if !foundShow {
-		t.Error("root command should have 'show' subcommand")
-	}
 	if !foundAudit {
 		t.Error("root command should have 'audit' subcommand")
 	}
@@ -1554,28 +1427,6 @@ func TestCredentialsCmdStructure(t *testing.T) {
 	}
 }
 
-// TestProvisionCmdStructure tests the provision command structure.
-func TestProvisionCmdStructure(t *testing.T) {
-	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
-
-	if provisionCmd == nil {
-		t.Fatal("provisionCmd is nil")
-	}
-
-	// Check subcommands exist
-	subcommands := make(map[string]bool)
-	for _, cmd := range provisionCmd.Commands() {
-		subcommands[cmd.Name()] = true
-	}
-
-	expectedCommands := []string{"list", "status", "logs"}
-	for _, name := range expectedCommands {
-		if !subcommands[name] {
-			t.Errorf("expected provision subcommand %q not found", name)
-		}
-	}
-}
-
 // TestRecipeCmdStructure tests the recipe command structure.
 func TestRecipeCmdStructure(t *testing.T) {
 	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
@@ -1677,32 +1528,6 @@ func TestCredentialsCreateFlags(t *testing.T) {
 	urlPatternFlag := createCmd.Flags().Lookup("url-pattern")
 	if urlPatternFlag == nil {
 		t.Error("expected flag --url-pattern not found on credentials create")
-	}
-}
-
-// TestProvisionFlags tests the provision command flags.
-func TestProvisionFlags(t *testing.T) {
-	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
-
-	// Check required flags exist on main provision command
-	hostFlag := provisionCmd.Flags().Lookup("host")
-	if hostFlag == nil {
-		t.Error("expected flag --host not found on provision")
-	}
-
-	userFlag := provisionCmd.Flags().Lookup("user")
-	if userFlag == nil {
-		t.Error("expected flag --user not found on provision")
-	}
-
-	sshKeyFlag := provisionCmd.Flags().Lookup("ssh-key")
-	if sshKeyFlag == nil {
-		t.Error("expected flag --ssh-key not found on provision")
-	}
-
-	portFlag := provisionCmd.Flags().Lookup("port")
-	if portFlag == nil {
-		t.Error("expected flag --port not found on provision")
 	}
 }
 

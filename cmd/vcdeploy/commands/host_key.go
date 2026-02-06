@@ -39,35 +39,35 @@ Example:
 	}
 	hostKeyCmd.AddCommand(listCmd)
 
-	// Add host key
-	addCmd := &cobra.Command{
-		Use:   "add",
-		Short: "Add a host key",
-		Long: `Add a host key for a server.
+	// Create host key
+	createCmd := &cobra.Command{
+		Use:   "create",
+		Short: "Create a host key entry",
+		Long: `Create a host key entry for a server.
 
 Example:
-  vcdeploy host-key add --host server.example.com --key "ssh-ed25519 AAAA..." \
+  vcdeploy host-key create --host server.example.com --key "ssh-ed25519 AAAA..." \
     --master localhost:9000 --token <token>`,
 		RunE: runHostKeyAdd,
 	}
-	addCmd.Flags().String("host", "", "Hostname (required)")
-	addCmd.Flags().StringP("key", "k", "", "Public key in OpenSSH format")
-	addCmd.Flags().Int("port", 22, "SSH port")
-	_ = addCmd.MarkFlagRequired("host")
-	hostKeyCmd.AddCommand(addCmd)
+	createCmd.Flags().String("host", "", "Hostname (required)")
+	createCmd.Flags().StringP("key", "k", "", "Public key in OpenSSH format")
+	createCmd.Flags().Int("port", 22, "SSH port")
+	_ = createCmd.MarkFlagRequired("host")
+	hostKeyCmd.AddCommand(createCmd)
 
-	// Remove host key
-	removeCmd := &cobra.Command{
-		Use:   "remove <id>",
-		Short: "Remove a host key",
-		Long: `Remove a stored host key by ID.
+	// Delete host key
+	deleteCmd := &cobra.Command{
+		Use:   "delete <id>",
+		Short: "Delete a host key",
+		Long: `Delete a stored host key by ID.
 
 Example:
-  vcdeploy host-key remove 123 --master localhost:9000 --token <token>`,
+  vcdeploy host-key delete 123 --master localhost:9000 --token <token>`,
 		Args: cobra.ExactArgs(1),
 		RunE: runHostKeyRemove,
 	}
-	hostKeyCmd.AddCommand(removeCmd)
+	hostKeyCmd.AddCommand(deleteCmd)
 
 	// Scan host
 	scanCmd := &cobra.Command{
