@@ -102,3 +102,4 @@ mem.out
 plan-template.md
 seeds.test
 storage.test
+server.test

@@ -1641,45 +1641,27 @@ func TestHandleDeploymentLogs_MethodNotAllowed(t *testing.T) {
 	}
 }
 
-// --- Deployment Cancel Tests ---
+// --- Deployment Cancel via DELETE Tests ---
 
-func TestHandleDeploymentCancel_NotFound(t *testing.T) {
+func TestHandleDeploymentDelete_NotFound(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
 	defer server.store.Close()
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest("POST", "/api/v1/deployments/nonexistent/cancel", nil)
+	req := httptest.NewRequest("DELETE", "/api/v1/deployments/nonexistent", nil)
 	req.Header.Set("X-API-Key", apiKey)
 
 	req = requestWithUserContext(req, userID)
-	server.handleDeploymentCancel(w, req, "nonexistent")
+	server.handleDeploymentAPI(w, req)
 
 	if w.Code != http.StatusNotFound {
 		t.Errorf("expected status %d, got %d", http.StatusNotFound, w.Code)
 	}
 }
 
-func TestHandleDeploymentCancel_MethodNotAllowed(t *testing.T) {
-	t.Parallel()
-
-	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.store.Close()
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/api/v1/deployments/test/cancel", nil)
-	req.Header.Set("X-API-Key", apiKey)
-
-	req = requestWithUserContext(req, userID)
-	server.handleDeploymentCancel(w, req, "test")
-
-	if w.Code != http.StatusMethodNotAllowed {
-		t.Errorf("expected status %d, got %d", http.StatusMethodNotAllowed, w.Code)
-	}
-}
-
-func TestHandleDeploymentCancel_NotCancellable(t *testing.T) {
+func TestHandleDeploymentDelete_NotCancellable(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
@@ -1695,18 +1677,18 @@ func TestHandleDeploymentCancel_NotCancellable(t *testing.T) {
 	_ = server.store.CreateDeployment(ctx, deployment)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest("POST", "/api/v1/deployments/cancel-completed-deploy/cancel", nil)
+	req := httptest.NewRequest("DELETE", "/api/v1/deployments/cancel-completed-deploy", nil)
 	req.Header.Set("X-API-Key", apiKey)
 
 	req = requestWithUserContext(req, userID)
-	server.handleDeploymentCancel(w, req, "cancel-completed-deploy")
+	server.handleDeploymentAPI(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected status %d, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
 	}
 }
 
-func TestHandleDeploymentCancel_Success(t *testing.T) {
+func TestHandleDeploymentDelete_Success(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
@@ -1722,11 +1704,11 @@ func TestHandleDeploymentCancel_Success(t *testing.T) {
 	_ = server.store.CreateDeployment(ctx, deployment)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest("POST", "/api/v1/deployments/cancel-running-deploy/cancel", nil)
+	req := httptest.NewRequest("DELETE", "/api/v1/deployments/cancel-running-deploy", nil)
 	req.Header.Set("X-API-Key", apiKey)
 
 	req = requestWithUserContext(req, userID)
-	server.handleDeploymentCancel(w, req, "cancel-running-deploy")
+	server.handleDeploymentAPI(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())

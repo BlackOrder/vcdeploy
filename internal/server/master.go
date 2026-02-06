@@ -839,20 +839,12 @@ func (s *MasterServer) buildMainHandler() (http.Handler, error) {
 	mux.HandleFunc("/api/v1/blocked-ips", s.withAuth(s.handleBlockedIPs))
 	mux.HandleFunc("/api/v1/blocked-ips/", s.withAuth(s.handleBlockedIP))
 
-	// Admin TOTP Management API
-	mux.HandleFunc("/api/v1/admin/totp/users", s.withAuth(s.handleAdminTOTPUsers))
-	mux.HandleFunc("/api/v1/admin/totp/status/", s.withAuth(s.handleAdminTOTPStatus))
-	mux.HandleFunc("/api/v1/admin/totp/disable", s.withAuth(s.handleAdminTOTPDisable))
+	// TOTP API - consolidated under /users
+	// User self-service: /users/me/totp/*
+	// Admin management: /users/{id}/totp
+	// NOTE: Old /totp/* and /admin/totp/* routes removed
 
-	// User TOTP Recovery Codes API
-	mux.HandleFunc("/api/v1/totp/recovery/regenerate", s.withAuth(s.handleRegenerateRecoveryCodes))
-
-	// User TOTP Self-Service API
-	mux.HandleFunc("/api/v1/totp/setup", s.withAuth(s.handleTOTPSetup))
-	mux.HandleFunc("/api/v1/totp/enable", s.withAuth(s.handleTOTPEnable))
-	mux.HandleFunc("/api/v1/totp/disable", s.withAuth(s.handleTOTPDisable))
-
-	// Provision API
+	// Provision API (canonical name: provision-jobs)
 	mux.HandleFunc("/api/v1/provision", s.withAuth(s.handleProvisionJobs))
 	mux.HandleFunc("/api/v1/provision/", s.withAuth(s.handleProvisionJob))
 
@@ -865,10 +857,11 @@ func (s *MasterServer) buildMainHandler() (http.Handler, error) {
 	mux.HandleFunc("/api/v1/certificates/server/", s.withAuth(s.handleServerCertificate))
 	mux.HandleFunc("/api/v1/certificates/audit", s.withAuth(s.handleCertAudit))
 
-	// Security - TLS Status API
-	mux.HandleFunc("/api/v1/tls/status", s.withAuth(s.handleGetTLSStatus))
+	// Security - TLS API (consolidated)
+	// GET /tls - status, PUT /tls - settings
+	mux.HandleFunc("/api/v1/tls", s.withAuth(s.handleTLS))
 	mux.HandleFunc("/api/v1/tls/renew", s.withAuth(s.handleForceACMERenewal))
-	mux.HandleFunc("/api/v1/tls/settings", s.withAuth(s.handleUpdateTLSSettings))
+	// NOTE: /tls/status and /tls/settings removed - use GET/PUT /tls instead
 
 	// TLS Partials (for HTMX)
 	mux.HandleFunc("/partials/tls/status", s.withAuth(s.handleTLSStatusPartial))
@@ -881,9 +874,7 @@ func (s *MasterServer) buildMainHandler() (http.Handler, error) {
 	mux.HandleFunc("/api/v1/ssh-keys", s.withAuth(s.handleSSHKeys))
 	mux.HandleFunc("/api/v1/ssh-keys/", s.withAuth(s.handleSSHKeys))
 
-	// Security - Agent Provisioning API
-	mux.HandleFunc("/api/v1/agents/provision", s.withAuth(s.handleProvisionAgent))
-	mux.HandleFunc("/api/v1/agents/provision/", s.withAuth(s.handleProvisionAgent))
+	// NOTE: /agents/provision shortcuts removed - use /provision-jobs instead
 
 	// Agent Binaries API
 	mux.HandleFunc("/api/v1/binaries", s.withAuth(s.handleAgentBinaries))
@@ -892,12 +883,10 @@ func (s *MasterServer) buildMainHandler() (http.Handler, error) {
 
 	// Health Check Configuration API
 	mux.HandleFunc("/api/v1/health-checks", s.withAuth(s.handleHealthCheckConfigs))
-	mux.HandleFunc("/api/v1/health-checks/global", s.withAuth(s.handleGlobalHealthCheck))
+	// NOTE: /health-checks/global removed - use GET /health-checks?scope=global instead
 	mux.HandleFunc("/api/v1/health-checks/", s.withAuth(s.handleHealthCheckConfig))
 
-	// Rollback Records API
-	mux.HandleFunc("/api/v1/rollbacks", s.withAuth(s.handleRollbackRecords))
-	mux.HandleFunc("/api/v1/rollbacks/", s.withAuth(s.handleRollbackRecord))
+	// NOTE: /rollbacks resource removed - use GET /deployments?type=rollback instead
 
 	// Webhooks
 	mux.HandleFunc("/webhook/github/", s.handleGitHubWebhook)

@@ -47,7 +47,14 @@ func (s *MasterServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 // handleHealthzLive handles /healthz and /livez (Kubernetes liveness probe).
 // Returns 200 if the process is alive.
+// Note: /healthz is deprecated; use /livez for liveness or /health for detailed status.
 func (s *MasterServer) handleHealthzLive(w http.ResponseWriter, r *http.Request) {
+	// Add deprecation header for legacy /healthz endpoint
+	if r.URL.Path == "/healthz" {
+		w.Header().Set("Deprecation", "true")
+		w.Header().Set("Link", "</livez>; rel=\"successor-version\", </health>; rel=\"alternate\"")
+		w.Header().Set("Sunset", "2025-06-01")
+	}
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("ok"))
 }

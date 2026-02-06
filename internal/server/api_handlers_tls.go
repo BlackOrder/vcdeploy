@@ -40,13 +40,20 @@ type ACMEStatusInfo struct {
 	DaysLeft   int      `json:"days_remaining"`
 }
 
+// handleTLS handles GET /tls (status) and PUT /tls (settings).
+func (s *MasterServer) handleTLS(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		s.handleGetTLSStatus(w, r)
+	case http.MethodPut:
+		s.handleUpdateTLSSettings(w, r)
+	default:
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
 // handleGetTLSStatus returns the current TLS configuration status.
 func (s *MasterServer) handleGetTLSStatus(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
 	status := &TLSStatus{
 		Mode:          string(s.config.Server.TLS.Mode),
 		Enabled:       s.config.Server.TLS.Mode != config.TLSModeDisabled,
