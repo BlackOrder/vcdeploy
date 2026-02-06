@@ -21,15 +21,15 @@ var webhookCmd = &cobra.Command{
 
 // webhookAddCmd adds a webhook configuration to a project.
 var webhookAddCmd = &cobra.Command{
-	Use:   "add <project> <provider>",
-	Short: "Add a webhook configuration to a project",
-	Long: `Add a webhook configuration for a Git provider to a project.
+	Use:   "create <project> <provider>",
+	Short: "Create a webhook configuration for a project",
+	Long: `Create a webhook configuration for a Git provider to a project.
 
 Supported providers: github, gitlab, bitbucket
 
 Examples:
-  vcdeploy webhook add myproject github
-  vcdeploy webhook add myproject gitlab --secret "mysecret"`,
+  vcdeploy webhook create myproject github
+  vcdeploy webhook create myproject gitlab --secret "mysecret"`,
 	Args: cobra.ExactArgs(2),
 	RunE: runWebhookAdd,
 }
