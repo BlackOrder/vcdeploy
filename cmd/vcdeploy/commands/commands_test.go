@@ -958,11 +958,11 @@ func TestE2E_APIKeyListCommand(t *testing.T) {
 	defer server.Close()
 
 	cmd := &cobra.Command{Use: "vcdeploy"}
-	apikeyCmdTest := &cobra.Command{
+	apiKeyCmdTest := &cobra.Command{
 		Use:   "apikey",
 		Short: "API key management",
 	}
-	apikeyCmdTest.AddCommand(&cobra.Command{
+	apiKeyCmdTest.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List all API keys",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -987,7 +987,7 @@ func TestE2E_APIKeyListCommand(t *testing.T) {
 			return nil
 		},
 	})
-	cmd.AddCommand(apikeyCmdTest)
+	cmd.AddCommand(apiKeyCmdTest)
 	cmd.PersistentFlags().String("master", server.URL, "Master server URL")
 	cmd.PersistentFlags().String("token", "test-token", "API token")
 
@@ -1007,7 +1007,7 @@ func TestE2E_APIKeyCreateCommand(t *testing.T) {
 	defer server.Close()
 
 	cmd := &cobra.Command{Use: "vcdeploy"}
-	apikeyCmdTest := &cobra.Command{
+	apiKeyCmdTest := &cobra.Command{
 		Use:   "apikey",
 		Short: "API key management",
 	}
@@ -1045,8 +1045,8 @@ func TestE2E_APIKeyCreateCommand(t *testing.T) {
 			return nil
 		},
 	}
-	apikeyCmdTest.AddCommand(createCmd)
-	cmd.AddCommand(apikeyCmdTest)
+	apiKeyCmdTest.AddCommand(createCmd)
+	cmd.AddCommand(apiKeyCmdTest)
 	cmd.PersistentFlags().String("master", server.URL, "Master server URL")
 	cmd.PersistentFlags().String("token", "test-token", "API token")
 
@@ -1387,13 +1387,13 @@ func TestE2E_ConnectionTimeout(t *testing.T) {
 func TestCertsCmdStructure(t *testing.T) {
 	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
-	if certsCmd == nil {
-		t.Fatal("certsCmd is nil")
+	if certCmd == nil {
+		t.Fatal("certCmd is nil")
 	}
 
 	// Check subcommands exist
 	subcommands := make(map[string]bool)
-	for _, cmd := range certsCmd.Commands() {
+	for _, cmd := range certCmd.Commands() {
 		subcommands[cmd.Name()] = true
 	}
 
@@ -1477,7 +1477,7 @@ func TestCertsAddFlags(t *testing.T) {
 	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
 	var showCmd *cobra.Command
-	for _, cmd := range certsCmd.Commands() {
+	for _, cmd := range certCmd.Commands() {
 		if cmd.Name() == "show" {
 			showCmd = cmd
 			break

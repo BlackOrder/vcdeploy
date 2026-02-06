@@ -11,9 +11,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// certsCmd handles certificate management commands
-var certsCmd = &cobra.Command{
-	Use:   "certs",
+// certCmd handles certificate management commands
+var certCmd = &cobra.Command{
+	Use:   "cert",
 	Short: "Certificate management",
 	Long: `Commands for managing TLS certificates.
 
@@ -22,10 +22,10 @@ All commands require API authentication via --master and --token flags.`,
 }
 
 func init() {
-	rootCmd.AddCommand(certsCmd)
+	rootCmd.AddCommand(certCmd)
 
 	// List certificates
-	certsCmd.AddCommand(&cobra.Command{
+	certCmd.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List all agent certificates",
 		Long: `List all agent certificates with their status.
@@ -46,7 +46,7 @@ Example:
 		Args: cobra.ExactArgs(1),
 		RunE: runCertsShow,
 	}
-	certsCmd.AddCommand(showCertCmd)
+	certCmd.AddCommand(showCertCmd)
 
 	// Revoke certificate
 	revokeCertCmd := &cobra.Command{
@@ -60,7 +60,7 @@ Example:
 		RunE: runCertsRevoke,
 	}
 	revokeCertCmd.Flags().StringP("reason", "r", "", "Reason for revocation")
-	certsCmd.AddCommand(revokeCertCmd)
+	certCmd.AddCommand(revokeCertCmd)
 
 	// CA subcommand
 	caCmd := &cobra.Command{
@@ -68,7 +68,7 @@ Example:
 		Short: "Certificate Authority management",
 		Long:  "Commands for managing the Certificate Authority.",
 	}
-	certsCmd.AddCommand(caCmd)
+	certCmd.AddCommand(caCmd)
 
 	caCmd.AddCommand(&cobra.Command{
 		Use:   "list",
@@ -110,7 +110,7 @@ Example:
 	auditCmd.Flags().IntP("limit", "n", 100, "Maximum number of entries to show")
 	auditCmd.Flags().String("agent", "", "Filter by agent ID")
 	auditCmd.Flags().String("action", "", "Filter by action (issue, revoke, renew)")
-	certsCmd.AddCommand(auditCmd)
+	certCmd.AddCommand(auditCmd)
 }
 
 // --- Certificate List ---
@@ -424,7 +424,7 @@ func init() {
 		Short: "Server TLS configuration",
 		Long:  "Commands for managing server TLS settings and certificates.",
 	}
-	certsCmd.AddCommand(tlsCmd)
+	certCmd.AddCommand(tlsCmd)
 
 	// TLS status
 	tlsCmd.AddCommand(&cobra.Command{

@@ -1428,13 +1428,13 @@ func TestConfigCmdStructure(t *testing.T) {
 func TestAPIKeyCmdStructure(t *testing.T) {
 	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
-	if apikeyCmd == nil {
-		t.Fatal("apikeyCmd is nil")
+	if apiKeyCmd == nil {
+		t.Fatal("apiKeyCmd is nil")
 	}
 
 	expectedSubcmds := []string{"list", "create", "revoke"}
 	subcommands := make(map[string]bool)
-	for _, cmd := range apikeyCmd.Commands() {
+	for _, cmd := range apiKeyCmd.Commands() {
 		subcommands[cmd.Name()] = true
 	}
 
