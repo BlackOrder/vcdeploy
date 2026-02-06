@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/BlackOrder/vcdeploy/internal/services"
@@ -178,6 +179,82 @@ func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
 
 		s.logAudit(r, "delete", "secret", fmt.Sprintf("project=%s scope=%s key=%s", project, scope, key), "success")
 
+		w.WriteHeader(http.StatusNoContent)
+
+	default:
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+// handleSecret handles GET/DELETE for /api/v1/secrets/{project}/{scope}/{key}
+func (s *MasterServer) handleSecret(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
+	defer cancel()
+
+	// Parse path: /api/v1/secrets/{project}/{scope}/{key}
+	path := strings.TrimPrefix(r.URL.Path, "/api/v1/secrets/")
+	parts := strings.SplitN(path, "/", 3)
+	if len(parts) < 3 {
+		s.jsonError(w, http.StatusBadRequest, "path must be /secrets/{project}/{scope}/{key}")
+		return
+	}
+
+	project, scope, key := parts[0], parts[1], parts[2]
+
+	if project == "" || scope == "" || key == "" {
+		s.jsonError(w, http.StatusBadRequest, "project, scope and key are required")
+		return
+	}
+
+	if s.secretService == nil {
+		s.jsonError(w, http.StatusInternalServerError, "secret service not configured")
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		// Read access: viewer role + read scope
+		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
+			s.jsonError(w, status, msg)
+			return
+		}
+
+		value, err := s.secretService.Get(ctx, project, scope, key)
+		if err != nil {
+			if services.IsNotFound(err) {
+				s.jsonError(w, http.StatusNotFound, "secret not found")
+				return
+			}
+			s.logger.Error("Failed to get secret", zap.Error(err))
+			s.jsonError(w, http.StatusInternalServerError, "failed to get secret")
+			return
+		}
+
+		s.jsonResponse(w, map[string]string{
+			"project": project,
+			"scope":   scope,
+			"key":     key,
+			"value":   value,
+		})
+
+	case http.MethodDelete:
+		// Write access: user role + write scope
+		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
+			s.jsonError(w, status, msg)
+			return
+		}
+
+		if err := s.secretService.Delete(ctx, project, scope, key); err != nil {
+			if services.IsNotFound(err) {
+				s.jsonError(w, http.StatusNotFound, "secret not found")
+				return
+			}
+			s.logger.Error("Failed to delete secret", zap.Error(err))
+			s.jsonError(w, http.StatusInternalServerError, "failed to delete secret")
+			return
+		}
+
+		s.logAudit(r, "delete", "secret", fmt.Sprintf("project=%s scope=%s key=%s", project, scope, key), "success")
 		w.WriteHeader(http.StatusNoContent)
 
 	default:

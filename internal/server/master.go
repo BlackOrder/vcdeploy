@@ -776,12 +776,18 @@ func (s *MasterServer) buildMainHandler() (http.Handler, error) {
 	mux.HandleFunc("/api/v1/settings/export", s.withAuth(s.handleSettingsExport))
 	mux.HandleFunc("/api/v1/settings/import", s.withAuth(s.handleSettingsImport))
 	mux.HandleFunc("/api/v1/settings/", s.withAuth(s.handleSettingsCategory))
+	mux.HandleFunc("/api/v1/settings", s.withAuth(s.handleSettingsAll))
+
+	// Stats API
+	mux.HandleFunc("/api/v1/stats/deployments", s.withAuth(s.handleDeploymentStats))
+	mux.HandleFunc("/api/v1/stats/agents", s.withAuth(s.handleAgentStats))
 
 	// Projects API
 	mux.HandleFunc("/api/v1/projects", s.withAuth(s.handleProjectsAPI))
 	mux.HandleFunc("/api/v1/projects/", s.withAuth(s.handleProjectAPI))
 
 	// Deployments API
+	mux.HandleFunc("/api/v1/deployments/bulk", s.withAuth(s.handleBulkDeploy))
 	mux.HandleFunc("/api/v1/deployments", s.withAuth(s.handleDeploymentsAPI))
 	mux.HandleFunc("/api/v1/deployments/", s.withAuth(s.handleDeploymentAPI))
 
@@ -790,7 +796,9 @@ func (s *MasterServer) buildMainHandler() (http.Handler, error) {
 	mux.HandleFunc("/api/v1/agents/", s.withAuth(s.handleAgentAPI))
 
 	// Secrets API
+	mux.HandleFunc("/api/v1/secrets/bulk", s.withAuth(s.handleBulkSecrets))
 	mux.HandleFunc("/api/v1/secrets", s.withAuth(s.handleSecrets))
+	mux.HandleFunc("/api/v1/secrets/", s.withAuth(s.handleSecret))
 
 	// Recipes API - Components
 	mux.HandleFunc("/api/v1/recipes/components", s.withAuth(s.handleRecipeComponents))
