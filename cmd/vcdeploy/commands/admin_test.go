@@ -1348,7 +1348,7 @@ func TestUserCmdStructure(t *testing.T) {
 		t.Fatal("userCmd is nil")
 	}
 
-	expectedSubcmds := []string{"list", "create", "delete", "password", "totp"}
+	expectedSubcmds := []string{"list", "create", "delete", "password", "recovery", "totp"}
 	subcommands := make(map[string]bool)
 	for _, cmd := range userCmd.Commands() {
 		subcommands[cmd.Name()] = true
@@ -1390,7 +1390,7 @@ func TestDeploymentCmdStructure(t *testing.T) {
 		t.Fatal("deploymentCmd is nil")
 	}
 
-	expectedSubcmds := []string{"list", "show", "cancel", "logs"}
+	expectedSubcmds := []string{"list", "show", "cancel", "logs", "create", "rollback"}
 	subcommands := make(map[string]bool)
 	for _, cmd := range deploymentCmd.Commands() {
 		subcommands[cmd.Name()] = true
@@ -1445,30 +1445,38 @@ func TestAPIKeyCmdStructure(t *testing.T) {
 	}
 }
 
-// --- Admin Command Tests ---
+// --- Recovery Command Tests (formerly Admin) ---
 
-// TestAdminCmdStructure tests the admin command structure and flags.
-func TestAdminCmdStructure(t *testing.T) {
+// TestRecoveryCmdStructure tests the recovery command structure and flags.
+func TestRecoveryCmdStructure(t *testing.T) {
 	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
-	if adminCmd == nil {
-		t.Fatal("adminCmd is nil")
+	// Find recovery subcommand under userCmd
+	var cmd *cobra.Command
+	for _, c := range userCmd.Commands() {
+		if c.Name() == "recovery" {
+			cmd = c
+			break
+		}
+	}
+	if cmd == nil {
+		t.Fatal("recovery subcommand not found under userCmd")
 	}
 
 	// Test flags exist
-	usernameFlag := adminCmd.Flags().Lookup("username")
+	usernameFlag := cmd.Flags().Lookup("username")
 	if usernameFlag == nil {
 		t.Error("expected --username flag not found")
 	} else if usernameFlag.DefValue != "admin" {
 		t.Errorf("username default = %q, want %q", usernameFlag.DefValue, "admin")
 	}
 
-	passwordFlag := adminCmd.Flags().Lookup("password")
+	passwordFlag := cmd.Flags().Lookup("password")
 	if passwordFlag == nil {
 		t.Error("expected --password flag not found")
 	}
 
-	emailFlag := adminCmd.Flags().Lookup("email")
+	emailFlag := cmd.Flags().Lookup("email")
 	if emailFlag == nil {
 		t.Error("expected --email flag not found")
 	} else if emailFlag.DefValue != "admin@localhost" {

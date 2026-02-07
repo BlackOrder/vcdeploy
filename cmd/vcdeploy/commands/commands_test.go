@@ -303,7 +303,7 @@ func TestProjectCmdStructure(t *testing.T) {
 		subcommands[cmd.Name()] = true
 	}
 
-	expectedCommands := []string{"list", "create", "update", "delete", "validate", "deploy", "rollback"}
+	expectedCommands := []string{"list", "create", "update", "delete", "validate"}
 	for _, name := range expectedCommands {
 		if !subcommands[name] {
 			t.Errorf("expected project subcommand %q not found", name)
@@ -423,28 +423,28 @@ func TestUpdateProjectFlags(t *testing.T) {
 	}
 }
 
-// TestDeployFlags tests the deploy command has expected flags.
-func TestDeployFlags(t *testing.T) {
+// TestDeployCreateFlags tests the deploy create command has expected flags.
+func TestDeployCreateFlags(t *testing.T) {
 	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
-	// Find the deploy command under project
-	var deployCmd *cobra.Command
-	for _, cmd := range projectCmd.Commands() {
-		if cmd.Name() == "deploy" {
-			deployCmd = cmd
+	// Find the create command under deploy
+	var createCmd *cobra.Command
+	for _, cmd := range deploymentCmd.Commands() {
+		if cmd.Name() == "create" {
+			createCmd = cmd
 			break
 		}
 	}
 
-	if deployCmd == nil {
-		t.Fatal("project deploy command not found")
+	if createCmd == nil {
+		t.Fatal("deploy create command not found")
 	}
 
-	expectedFlags := []string{"target", "dry-run", "force"}
+	expectedFlags := []string{"project", "target", "dry-run", "force", "branch", "follow"}
 	for _, name := range expectedFlags {
-		flag := deployCmd.Flags().Lookup(name)
+		flag := createCmd.Flags().Lookup(name)
 		if flag == nil {
-			t.Errorf("expected flag --%s not found on project deploy", name)
+			t.Errorf("expected flag --%s not found on deploy create", name)
 		}
 	}
 }

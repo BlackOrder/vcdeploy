@@ -13,9 +13,8 @@ import (
 
 // blockedIPCmd handles IP blocking management commands
 var blockedIPCmd = &cobra.Command{
-	Use:     "blocked-ip",
-	Aliases: []string{"blocked"},
-	Short:   "IP blocking management",
+	Use:   "blocked-ip",
+	Short: "IP blocking management",
 	Long: `Commands for managing blocked IP addresses.
 
 Blocked IPs are denied access to all API endpoints and UI.

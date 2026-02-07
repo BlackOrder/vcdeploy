@@ -16,7 +16,7 @@ import (
 // credentialCmd handles source credential management commands
 var credentialCmd = &cobra.Command{
 	Use:     "credential",
-	Aliases: []string{"credentials", "creds"},
+	Aliases: []string{"creds"},
 	Short:   "Source credential management",
 	Long: `Commands for managing source credentials.
 
@@ -42,7 +42,7 @@ func init() {
 		Long: `List all configured source credentials.
 
 Example:
-  vcdeploy credentials list --master localhost:9000 --token <token>`,
+  vcdeploy credential list --master localhost:9000 --token <token>`,
 		RunE: runCredsList,
 	}
 	listCredsCmd.Flags().StringP("type", "t", "", "Filter by credential type")
@@ -50,22 +50,21 @@ Example:
 
 	// Create credential
 	createCredsCmd := &cobra.Command{
-		Use:     "create",
-		Aliases: []string{"add"},
-		Short:   "Create a new source credential",
+		Use:   "create",
+		Short: "Create a new source credential",
 		Long: `Create a new source credential for Git authentication.
 
 Examples:
   # Create a personal access token for GitHub
-  vcdeploy credentials create --name github-token --type token --url-pattern "github.com/*" \
+  vcdeploy credential create --name github-token --type token --url-pattern "github.com/*" \
     --master localhost:9000 --token <token>
 
   # Create basic auth credentials
-  vcdeploy credentials create --name gitlab-creds --type basic --url-pattern "gitlab.com/myorg/*" \
+  vcdeploy credential create --name gitlab-creds --type basic --url-pattern "gitlab.com/myorg/*" \
     --username myuser --master localhost:9000 --token <token>
 
   # Create SSH key reference
-  vcdeploy credentials create --name ssh-deploy --type ssh --url-pattern "git@github.com:myorg/*" \
+  vcdeploy credential create --name ssh-deploy --type ssh --url-pattern "git@github.com:myorg/*" \
     --ssh-key-id 123 --master localhost:9000 --token <token>`,
 		RunE: runCredsAdd,
 	}
@@ -87,7 +86,7 @@ Examples:
 		Long: `Delete a source credential by ID.
 
 Example:
-  vcdeploy credentials delete 123 --master localhost:9000 --token <token>`,
+  vcdeploy credential delete 123 --master localhost:9000 --token <token>`,
 		Args: cobra.ExactArgs(1),
 		RunE: runCredsDelete,
 	}
@@ -101,7 +100,7 @@ Example:
 		Long: `Test if a credential can authenticate with a repository.
 
 Example:
-  vcdeploy credentials test 123 https://github.com/myorg/myrepo.git \
+  vcdeploy credential test 123 https://github.com/myorg/myrepo.git \
     --master localhost:9000 --token <token>`,
 		Args: cobra.ExactArgs(2),
 		RunE: runCredsTest,
