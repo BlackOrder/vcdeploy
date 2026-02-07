@@ -253,7 +253,7 @@ func TestSecurityMiddleware_IsExemptPath(t *testing.T) {
 		{"/api/v1/agents/", true},
 		{"/api/v1/agents/abc123", true},
 		{"/api/v1/users", false},
-		{"/dashboard", false},
+		{"/stats", false},
 		{"/", false},
 	}
 

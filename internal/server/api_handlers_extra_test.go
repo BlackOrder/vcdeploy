@@ -804,7 +804,7 @@ func TestHandleProvisionJobs_List(t *testing.T) {
 	}
 	_ = server.provisionService.CreateJob(ctx, job)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/provision", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/provision-jobs", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -827,7 +827,7 @@ func TestHandleProvisionJobs_Create(t *testing.T) {
 		"targetUser": "admin"
 	}`)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/provision", body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/provision-jobs", body)
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
@@ -855,7 +855,7 @@ func TestHandleProvisionJob_Get(t *testing.T) {
 	}
 	_ = server.provisionService.CreateJob(ctx, job)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/provision/"+job.ID, http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/provision-jobs/"+job.ID, http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -882,7 +882,7 @@ func TestHandleProvisionJob_Cancel(t *testing.T) {
 	}
 	_ = server.provisionService.CreateJob(ctx, job)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/provision/"+job.ID, http.NoBody)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/provision-jobs/"+job.ID, http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -952,7 +952,7 @@ func TestHandleProvisionJob_GetNotFound(t *testing.T) {
 	server := newTestServer(t)
 	adminUserID := createTestAdminUser(t, server)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/provision/nonexistent-job-id", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/provision-jobs/nonexistent-job-id", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -969,7 +969,7 @@ func TestHandleProvisionJob_EmptyID(t *testing.T) {
 	server := newTestServer(t)
 	adminUserID := createTestAdminUser(t, server)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/provision/", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/provision-jobs/", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -986,7 +986,7 @@ func TestHandleProvisionJob_MethodNotAllowed(t *testing.T) {
 	server := newTestServer(t)
 	adminUserID := createTestAdminUser(t, server)
 
-	req := httptest.NewRequest(http.MethodPatch, "/api/v1/provision/some-id", http.NoBody)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/provision-jobs/some-id", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -1022,8 +1022,8 @@ func TestNewEndpoints_RequireAdminAccess(t *testing.T) {
 	}{
 		{http.MethodGet, "/api/v1/blocked-ips"},
 		{http.MethodPost, "/api/v1/blocked-ips"},
-		{http.MethodGet, "/api/v1/provision"},
-		{http.MethodPost, "/api/v1/provision"},
+		{http.MethodGet, "/api/v1/provision-jobs"},
+		{http.MethodPost, "/api/v1/provision-jobs"},
 	}
 
 	for _, ep := range endpoints {
@@ -1046,7 +1046,7 @@ func TestNewEndpoints_RequireAdminAccess(t *testing.T) {
 			switch ep.path {
 			case "/api/v1/blocked-ips":
 				server.handleBlockedIPs(rec, req)
-			case "/api/v1/provision":
+			case "/api/v1/provision-jobs":
 				server.handleProvisionJobs(rec, req)
 			}
 

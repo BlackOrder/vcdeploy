@@ -402,7 +402,7 @@ func TestWithUIAuth_NoCookie(t *testing.T) {
 		called = true
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	req := httptest.NewRequest(http.MethodGet, "/stats", nil)
 	rec := httptest.NewRecorder()
 
 	handler(rec, req)
@@ -425,7 +425,7 @@ func TestWithUIAuth_ValidCookie(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	req := httptest.NewRequest(http.MethodGet, "/stats", nil)
 	req.AddCookie(&http.Cookie{Name: "session", Value: sessionToken})
 	rec := httptest.NewRecorder()
 
@@ -1263,9 +1263,9 @@ func TestUIAgentsPage(t *testing.T) {
 	if !strings.Contains(body, "Agents") {
 		t.Error("response should contain 'Agents' title")
 	}
-	// Check for stats dashboard elements
+	// Check for stats page elements
 	if !strings.Contains(body, "stats-card") {
-		t.Error("response should contain stats dashboard")
+		t.Error("response should contain stats page")
 	}
 }
 
@@ -1295,15 +1295,15 @@ func TestUIDeploymentsPage(t *testing.T) {
 	}
 }
 
-func TestUIDashboardPage(t *testing.T) {
+func TestUIStatsPage(t *testing.T) {
 	t.Parallel()
 
 	server := newTestServer(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	req := httptest.NewRequest(http.MethodGet, "/stats", nil)
 	rec := httptest.NewRecorder()
 
-	server.handleDashboard(rec, req)
+	server.handleStatsUI(rec, req)
 
 	skipIfNoTemplates(t, rec)
 
@@ -1312,8 +1312,8 @@ func TestUIDashboardPage(t *testing.T) {
 	}
 
 	body := rec.Body.String()
-	if !strings.Contains(body, "Dashboard") {
-		t.Error("response should contain 'Dashboard' title")
+	if !strings.Contains(body, "Stats") {
+		t.Error("response should contain 'Stats' title")
 	}
 }
 
@@ -1514,7 +1514,7 @@ func TestWithUIAuth_ExpiredSession(t *testing.T) {
 		called = true
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	req := httptest.NewRequest(http.MethodGet, "/stats", nil)
 	req.AddCookie(&http.Cookie{Name: "session", Value: "expired-session-token"})
 	rec := httptest.NewRecorder()
 
@@ -1537,7 +1537,7 @@ func TestWithUIAuth_InvalidSession(t *testing.T) {
 		called = true
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	req := httptest.NewRequest(http.MethodGet, "/stats", nil)
 	req.AddCookie(&http.Cookie{Name: "session", Value: "invalid-session-token"})
 	rec := httptest.NewRecorder()
 
@@ -2182,7 +2182,7 @@ func TestSetupRequiredMiddleware_RedirectsWhenSetupRequired(t *testing.T) {
 		wantRedirect   bool
 		wantStatusCode int
 	}{
-		{"dashboard redirects", "/dashboard", true, http.StatusSeeOther},
+		{"stats redirects", "/stats", true, http.StatusSeeOther},
 		{"login redirects", "/login", true, http.StatusSeeOther},
 		{"api redirects", "/api/v1/users", true, http.StatusSeeOther},
 		{"setup allowed", "/setup", false, http.StatusOK},
@@ -2231,7 +2231,7 @@ func TestSetupRequiredMiddleware_PassesThroughWhenNotRequired(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	req := httptest.NewRequest(http.MethodGet, "/stats", nil)
 	rec := httptest.NewRecorder()
 
 	handler.ServeHTTP(rec, req)
@@ -2282,13 +2282,13 @@ func TestHandleSetup_POST_CreatesAdminUser(t *testing.T) {
 
 	server.handleSetup(rec, req)
 
-	// Should redirect to dashboard on success
+	// Should redirect to stats on success
 	if rec.Code != http.StatusSeeOther {
 		t.Errorf("status = %d, want %d (body: %s)", rec.Code, http.StatusSeeOther, rec.Body.String())
 	}
 	location := rec.Header().Get("Location")
-	if location != "/dashboard" {
-		t.Errorf("Location = %q, want /dashboard", location)
+	if location != "/stats" {
+		t.Errorf("Location = %q, want /stats", location)
 	}
 
 	// Verify user was created
@@ -2512,13 +2512,13 @@ func TestHandleLogin_POST_ValidCredentials(t *testing.T) {
 
 	server.handleLogin(rec, req)
 
-	// Should redirect to dashboard
+	// Should redirect to stats
 	if rec.Code != http.StatusSeeOther {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusSeeOther)
 	}
 	location := rec.Header().Get("Location")
-	if location != "/dashboard" {
-		t.Errorf("Location = %q, want /dashboard", location)
+	if location != "/stats" {
+		t.Errorf("Location = %q, want /stats", location)
 	}
 
 	// Should set session cookie
@@ -2714,13 +2714,13 @@ func TestHandleLogin_POST_TOTPValid(t *testing.T) {
 
 	server.handleLogin(rec, req)
 
-	// Should redirect to dashboard
+	// Should redirect to stats
 	if rec.Code != http.StatusSeeOther {
 		t.Errorf("status = %d, want %d; body = %s", rec.Code, http.StatusSeeOther, rec.Body.String())
 	}
 	location := rec.Header().Get("Location")
-	if location != "/dashboard" {
-		t.Errorf("Location = %q, want /dashboard", location)
+	if location != "/stats" {
+		t.Errorf("Location = %q, want /stats", location)
 	}
 }
 
@@ -3181,13 +3181,13 @@ func TestHandleChangePassword_POST_Success(t *testing.T) {
 
 	server.handleChangePassword(rec, req)
 
-	// Should redirect to dashboard
+	// Should redirect to stats
 	if rec.Code != http.StatusSeeOther {
 		t.Errorf("status = %d, want %d; body = %s", rec.Code, http.StatusSeeOther, rec.Body.String())
 	}
 	location := rec.Header().Get("Location")
-	if location != "/dashboard" {
-		t.Errorf("Location = %q, want /dashboard", location)
+	if location != "/stats" {
+		t.Errorf("Location = %q, want /stats", location)
 	}
 
 	// Verify password was actually changed - should be able to verify new password
@@ -3234,7 +3234,7 @@ func TestHandleChangePassword_POST_ClearsMustChangeFlag(t *testing.T) {
 
 	server.handleChangePassword(rec, req)
 
-	// Should redirect to dashboard
+	// Should redirect to stats
 	if rec.Code != http.StatusSeeOther {
 		t.Errorf("status = %d, want %d; body = %s", rec.Code, http.StatusSeeOther, rec.Body.String())
 	}
@@ -3292,7 +3292,7 @@ func TestHandleChangePassword_POST_InvalidatesSessions(t *testing.T) {
 
 	server.handleChangePassword(rec, req)
 
-	// Should redirect to dashboard
+	// Should redirect to stats
 	if rec.Code != http.StatusSeeOther {
 		t.Errorf("status = %d, want %d; body = %s", rec.Code, http.StatusSeeOther, rec.Body.String())
 	}
@@ -3555,7 +3555,7 @@ func TestAuthFlow_WithUIAuth_ExpiredSession(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	req := httptest.NewRequest(http.MethodGet, "/stats", nil)
 	req.AddCookie(&http.Cookie{Name: "session", Value: expiredSession.ID})
 	rec := httptest.NewRecorder()
 
