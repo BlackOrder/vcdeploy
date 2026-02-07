@@ -297,6 +297,7 @@ type ProvisionStore interface {
 type ProvisionLogStore interface {
 	SaveProvisionLog(ctx context.Context, jobID, level, message string) error
 	ListProvisionLogs(ctx context.Context, jobID string) ([]*ProvisionLog, error)
+	ListProvisionLogsAfter(ctx context.Context, jobID string, afterID int64) ([]*ProvisionLog, error)
 }
 
 // ACMEStore defines ACME certificate and account storage operations.

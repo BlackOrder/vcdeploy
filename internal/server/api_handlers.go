@@ -207,8 +207,7 @@ func (s *MasterServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 
 		s.logAudit(r, "create", "user", fmt.Sprintf("Created user: %s", req.Username), "success")
 
-		w.WriteHeader(http.StatusCreated)
-		s.jsonResponse(w, UserCreateResponse{
+		s.writeJSON(w, http.StatusCreated, UserCreateResponse{
 			ID:        user.ID,
 			Username:  user.Username,
 			Email:     user.Email,
@@ -764,8 +763,7 @@ func (s *MasterServer) handleProjectsAPI(w http.ResponseWriter, r *http.Request)
 		}
 
 		s.logAudit(r, "create", "project", fmt.Sprintf("Created project: %s", req.Name), "success")
-		w.WriteHeader(http.StatusCreated)
-		s.jsonResponse(w, project)
+		s.writeJSON(w, http.StatusCreated, project)
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -979,8 +977,7 @@ func (s *MasterServer) handleProjectClone(w http.ResponseWriter, r *http.Request
 	}
 
 	s.logAudit(r, "clone", "project", fmt.Sprintf("Cloned project %s from %s (ID: %d)", req.Name, source.Name, projectID), "success")
-	w.WriteHeader(http.StatusCreated)
-	s.jsonResponse(w, newProject)
+	s.writeJSON(w, http.StatusCreated, newProject)
 }
 
 // handleProjectWebhooks handles webhook configuration for a project.
@@ -1072,15 +1069,24 @@ func (s *MasterServer) handleProjectWebhooksInternal(ctx context.Context, w http
 		}
 
 		s.logAudit(r, "create", "webhook", fmt.Sprintf("Configured %s webhook for project: %s", req.Provider, project.Name), "success")
-		w.WriteHeader(http.StatusCreated)
-		s.jsonResponse(w, StatusResponse{Status: "created"})
+		s.writeJSON(w, http.StatusCreated, StatusResponse{Status: "created"})
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
 }
 
+// deployRequest holds parsed deployment parameters.
+// Used to pass pre-decoded request data between handlers, avoiding double body reads.
+type deployRequest struct {
+	Branch      string `json:"branch"`
+	Commit      string `json:"commit"`
+	Target      string `json:"target"`
+	ScheduledAt string `json:"scheduledAt,omitempty"`
+}
+
 // handleProjectDeploy triggers a deployment for a project.
+// Called from webhook handlers where the body has not been pre-consumed.
 func (s *MasterServer) handleProjectDeploy(w http.ResponseWriter, r *http.Request, projectName string) {
 	if r.Method != http.MethodPost {
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -1096,20 +1102,23 @@ func (s *MasterServer) handleProjectDeploy(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	s.handleProjectDeployInternal(ctx, w, r, project)
+	// Body not yet consumed — pass nil so handleProjectDeployInternal reads it
+	s.handleProjectDeployInternal(ctx, w, r, project, nil)
 }
 
 // handleProjectDeployInternal is the shared implementation for deployment triggering.
-func (s *MasterServer) handleProjectDeployInternal(ctx context.Context, w http.ResponseWriter, r *http.Request, project *storage.Project) {
-	var req struct {
-		Branch      string `json:"branch"`
-		Target      string `json:"target"`
-		ScheduledAt string `json:"scheduledAt,omitempty"`
-	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
-		// Empty body is OK - use defaults
-		req.Branch = project.Branch
-		req.Target = "production"
+// If parsed is non-nil, the request body has already been decoded (e.g. from handleDeploymentsAPI).
+// If parsed is nil, the body is read directly from r.
+func (s *MasterServer) handleProjectDeployInternal(ctx context.Context, w http.ResponseWriter, r *http.Request, project *storage.Project, parsed *deployRequest) {
+	var req deployRequest
+	if parsed != nil {
+		req = *parsed
+	} else {
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
+			// Empty body is OK - use defaults
+			req.Branch = project.Branch
+			req.Target = "production"
+		}
 	}
 
 	if req.Branch == "" {
@@ -1172,6 +1181,7 @@ func (s *MasterServer) handleProjectDeployInternal(ctx context.Context, w http.R
 		Project:     project.Name,
 		Target:      req.Target,
 		Branch:      req.Branch,
+		CommitHash:  req.Commit,
 		Status:      "pending",
 		TriggeredBy: username,
 		StartedAt:   time.Now(),
@@ -1454,7 +1464,9 @@ func (s *MasterServer) handleDeploymentsAPI(w http.ResponseWriter, r *http.Reque
 		var req struct {
 			Project     string `json:"project"`
 			Branch      string `json:"branch"`
+			Commit      string `json:"commit"`
 			Target      string `json:"target"`
+			Force       bool   `json:"force"`
 			ScheduledAt string `json:"scheduledAt,omitempty"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
@@ -1467,8 +1479,22 @@ func (s *MasterServer) handleDeploymentsAPI(w http.ResponseWriter, r *http.Reque
 			return
 		}
 
-		// Forward to project deploy handler
-		s.handleProjectDeploy(w, r, req.Project)
+		// Forward parsed request to project deploy handler (avoids re-decoding consumed body)
+		ctx2, cancel2 := context.WithTimeout(ctx, TimeoutDefault)
+		defer cancel2()
+
+		project, err := s.projectService.GetByName(ctx2, req.Project)
+		if err != nil {
+			s.jsonError(w, http.StatusNotFound, "Project not found")
+			return
+		}
+
+		s.handleProjectDeployInternal(ctx2, w, r, project, &deployRequest{
+			Branch:      req.Branch,
+			Commit:      req.Commit,
+			Target:      req.Target,
+			ScheduledAt: req.ScheduledAt,
+		})
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -1845,99 +1871,46 @@ func (s *MasterServer) handleDeploymentLogs(w http.ResponseWriter, r *http.Reque
 // handleDeploymentLogsStream streams deployment logs using Server-Sent Events (SSE).
 // This allows real-time log streaming without WebSocket dependencies.
 func (s *MasterServer) handleDeploymentLogsStream(w http.ResponseWriter, r *http.Request, deploymentID string) {
-	if r.Method != http.MethodGet {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	// Set SSE headers
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		s.jsonError(w, http.StatusInternalServerError, "Streaming not supported")
-		return
-	}
-
-	// Send initial logs
 	ctx := r.Context()
-	logs, err := s.deploymentService.ListLogs(ctx, deploymentID)
-	if err != nil {
-		fmt.Fprintf(w, "event: error\ndata: %s\n\n", err.Error())
-		flusher.Flush()
-		return
-	}
-
-	// Send existing logs
-	for _, log := range logs {
-		logJSON, err := json.Marshal(log)
-		if err != nil {
-			s.logger.Error("Failed to marshal log", zap.Error(err))
-			continue
-		}
-		fmt.Fprintf(w, "data: %s\n\n", logJSON)
-	}
-	flusher.Flush()
-
-	// Track the last log ID we've seen
-	lastID := int64(0)
-	if len(logs) > 0 {
-		lastID = logs[len(logs)-1].ID
-	}
-
-	// Poll for new logs until deployment completes or client disconnects
-	// Max streaming duration prevents resource exhaustion from abandoned connections
-	const maxStreamDuration = 30 * time.Minute
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-	timeout := time.NewTimer(maxStreamDuration)
-	defer timeout.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			// Client disconnected
-			return
-		case <-timeout.C:
-			// Max streaming duration reached
-			fmt.Fprintf(w, "event: timeout\ndata: {\"message\":\"Max streaming duration reached\"}\n\n")
-			flusher.Flush()
-			return
-		case <-ticker.C:
-			// Check for new logs
-			newLogs, err := s.deploymentService.ListLogsAfter(ctx, deploymentID, lastID)
+	s.streamLogs(w, r, streamLogsConfig{
+		listLogs: func() ([]interface{}, int64, error) {
+			logs, err := s.deploymentService.ListLogs(ctx, deploymentID)
 			if err != nil {
-				s.logger.Error("Failed to poll logs", zap.Error(err))
-				continue
+				return nil, 0, err
 			}
-
-			for _, log := range newLogs {
-				logJSON, err := json.Marshal(log)
-				if err != nil {
-					s.logger.Error("Failed to marshal log", zap.Error(err))
-					continue
-				}
-				fmt.Fprintf(w, "data: %s\n\n", logJSON)
-				lastID = log.ID
+			result := make([]interface{}, len(logs))
+			var lastID int64
+			for i, l := range logs {
+				result[i] = l
+				lastID = l.ID
 			}
-			flusher.Flush()
-
-			// Check if deployment is complete
+			return result, lastID, nil
+		},
+		listLogsAfter: func(afterID int64) ([]interface{}, int64, error) {
+			logs, err := s.deploymentService.ListLogsAfter(ctx, deploymentID, afterID)
+			if err != nil {
+				return nil, afterID, err
+			}
+			result := make([]interface{}, len(logs))
+			newLastID := afterID
+			for i, l := range logs {
+				result[i] = l
+				newLastID = l.ID
+			}
+			return result, newLastID, nil
+		},
+		isComplete: func() (bool, string) {
 			deployment, err := s.deploymentService.GetByID(ctx, deploymentID)
-			if err != nil {
-				continue
+			if err != nil || deployment == nil {
+				return false, ""
 			}
-			if deployment != nil && (deployment.Status == "success" || deployment.Status == "failed" || deployment.Status == "cancelled") {
-				// Send completion event
-				fmt.Fprintf(w, "event: complete\ndata: {\"status\":\"%s\"}\n\n", deployment.Status)
-				flusher.Flush()
-				return
+			switch deployment.Status {
+			case "success", "failed", "cancelled":
+				return true, string(deployment.Status)
 			}
-		}
-	}
+			return false, ""
+		},
+	})
 }
 
 // --- API Keys API ---
@@ -2056,8 +2029,7 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 		s.logAudit(r, "create", "apikey", fmt.Sprintf("Created API key: %s", req.Name), "success")
 
 		// Return the raw key (only time it's visible)
-		w.WriteHeader(http.StatusCreated)
-		s.jsonResponse(w, APIKeyCreateResponse{
+		s.writeJSON(w, http.StatusCreated, APIKeyCreateResponse{
 			ID:        apiKey.ID,
 			Name:      apiKey.Name,
 			Key:       rawKey, // Only returned on creation!

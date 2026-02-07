@@ -379,6 +379,29 @@ func (s *MemoryStore) ListProvisionLogs(ctx context.Context, jobID string) ([]*P
 	return result, nil
 }
 
+// ListProvisionLogsAfter retrieves logs for a provisioning job with ID greater than afterID.
+func (s *MemoryStore) ListProvisionLogsAfter(ctx context.Context, jobID string, afterID int64) ([]*ProvisionLog, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	logs := s.provisionLogs[jobID]
+	if logs == nil {
+		return []*ProvisionLog{}, nil
+	}
+
+	var result []*ProvisionLog
+	for _, log := range logs {
+		if log.ID > afterID {
+			cp := *log
+			result = append(result, &cp)
+		}
+	}
+	if result == nil {
+		result = []*ProvisionLog{}
+	}
+	return result, nil
+}
+
 // --- HealthCheckConfig methods ---
 
 // CreateHealthCheckConfig creates a new health check configuration.
