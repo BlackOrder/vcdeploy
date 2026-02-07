@@ -29,6 +29,7 @@ server:
 grpc:
   listen: ":9001"
 
+# SSH settings (for provisioning and git repo access — not used for deployment)
 ssh:
   default_user: deploy
   default_key: /etc/vcdeploy/keys/default.pem
@@ -86,6 +87,13 @@ webhooks:
   bitbucket:
     enabled: true
     path: /webhook/bitbucket
+
+# Archive settings
+archive:
+  storage_dir: /var/lib/vcdeploy/archives
+  keep_count: 10                    # Max cached archives per project
+  max_total_size: 5GB               # Max total cache size
+  signed_url_expiry: 10m            # HMAC signed URL expiry
 
 notifications:
   providers:

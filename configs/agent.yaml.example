@@ -19,8 +19,12 @@ agent:
     # role: web
 
 paths:
-  repos: /var/lib/vcdeploy/repos/
   releases: /var/www/
+
+# Archive cache settings
+archive:
+  cache_dir: /var/lib/vcdeploy/cache/archives
+  keep_count: 5    # Max cached archives per project
 
 execution:
   user: www-data
