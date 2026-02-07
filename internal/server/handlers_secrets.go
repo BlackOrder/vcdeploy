@@ -144,8 +144,7 @@ func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
 
 		s.logAudit(r, "create", "secret", fmt.Sprintf("project=%s scope=%s key=%s", req.Project, req.Scope, req.Key), "success")
 
-		w.WriteHeader(http.StatusCreated)
-		s.jsonResponse(w, map[string]string{
+		s.writeJSON(w, http.StatusCreated, map[string]string{
 			"status":  "created",
 			"project": req.Project,
 			"scope":   req.Scope,
