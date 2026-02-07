@@ -291,7 +291,7 @@ vcdeploy certs audit --limit 100
 
 ### Network Security
 
-1. **Firewall**: Restrict master port (9090) to agent networks only
+1. **Firewall**: Restrict master port (9001) to agent networks only
 2. **TLS Version**: TLS 1.2+ enforced, TLS 1.3 preferred
 3. **Cipher Suites**: Only modern, secure cipher suites allowed
 4. **Certificate Validation**: Never disable certificate validation

@@ -56,7 +56,7 @@ services:
       - ./deploy:/deploy
     environment:
       - TZ=${TZ:-UTC}
-      - VCDEPLOY_MASTER_ADDR=master:9090
+      - VCDEPLOY_MASTER_ADDR=master:9001
     networks:
       - vcdeploy
     # Agent runs as root for deployment capabilities

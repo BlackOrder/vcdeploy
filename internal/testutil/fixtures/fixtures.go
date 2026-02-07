@@ -16,7 +16,7 @@ func AgentConfigFixture() string {
     - unit
 
 master:
-  address: "localhost:9090"
+  address: "localhost:9001"
   cert: ""
   reconnect:
     heartbeat_interval: 30s
@@ -58,7 +58,7 @@ func MasterConfigFixture() string {
     enabled: false
 
 grpc:
-  listen: ":9090"
+  listen: ":9001"
 
 ssh:
   default_user: deploy

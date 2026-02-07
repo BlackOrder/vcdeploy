@@ -105,7 +105,7 @@ server:
     key: ""
 
 grpc:
-  listen: ":9090"
+  listen: ":9001"
 
 ssh:
   default_user: deploy
