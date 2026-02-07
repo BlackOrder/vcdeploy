@@ -1,17 +1,17 @@
 import { test, expect } from '../fixtures/test-fixtures';
-import { DashboardPage } from '../pages';
+import { StatsPage } from '../pages';
 
 test.describe('Dashboard', () => {
-  let dashboardPage: DashboardPage;
+  let statsPage: StatsPage;
 
   test.beforeEach(async ({ page, auth }) => {
     await auth.loginAsAdmin();
-    dashboardPage = new DashboardPage(page);
-    await dashboardPage.goto();
+    statsPage = new StatsPage(page);
+    await statsPage.goto();
   });
 
   test('should display dashboard after login', async () => {
-    await dashboardPage.verifyPage();
+    await statsPage.verifyPage();
   });
 
   test('should display navigation elements', async ({ page }) => {
@@ -31,23 +31,23 @@ test.describe('Dashboard', () => {
   });
 
   test('should navigate to projects page', async ({ page }) => {
-    await dashboardPage.goToProjects();
+    await statsPage.goToProjects();
     await expect(page).toHaveURL(/.*projects/);
   });
 
   test('should navigate to agents page', async ({ page }) => {
-    await dashboardPage.goToAgents();
+    await statsPage.goToAgents();
     await expect(page).toHaveURL(/.*agents/);
   });
 });
 
 test.describe('Dashboard - Statistics', () => {
-  let dashboardPage: DashboardPage;
+  let statsPage: StatsPage;
 
   test.beforeEach(async ({ page, auth }) => {
     await auth.loginAsAdmin();
-    dashboardPage = new DashboardPage(page);
-    await dashboardPage.goto();
+    statsPage = new StatsPage(page);
+    await statsPage.goto();
   });
 
   test('should display dashboard statistics', async ({ page }) => {
@@ -59,7 +59,7 @@ test.describe('Dashboard - Statistics', () => {
   });
 
   test('should display projects count if available', async () => {
-    const projectsStat = await dashboardPage.getStatValue('Projects');
+    const projectsStat = await statsPage.getStatValue('Projects');
     // Projects stat might not exist, just check it doesn't error
     if (projectsStat) {
       expect(projectsStat).toBeDefined();
@@ -67,7 +67,7 @@ test.describe('Dashboard - Statistics', () => {
   });
 
   test('should display agents count if available', async () => {
-    const agentsStat = await dashboardPage.getStatValue('Agents');
+    const agentsStat = await statsPage.getStatValue('Agents');
     if (agentsStat) {
       expect(agentsStat).toBeDefined();
     }

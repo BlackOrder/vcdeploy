@@ -118,20 +118,20 @@ func (s *MasterServer) handleSetup(w http.ResponseWriter, r *http.Request) {
 			MaxAge:   86400 * 7, // 7 days
 		})
 
-		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+		http.Redirect(w, r, "/stats", http.StatusSeeOther)
 		return
 	}
 
 	s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 }
 
-// handleIndex redirects the root path to the dashboard.
+// handleIndex redirects the root path to the stats page.
 func (s *MasterServer) handleIndex(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return
 	}
-	http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+	http.Redirect(w, r, "/stats", http.StatusSeeOther)
 }
 
 // handleAPILogin handles JSON-based authentication for API clients.
@@ -429,7 +429,7 @@ func (s *MasterServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 			zap.String("username", username),
 			zap.String("ip", session.IPAddress))
 
-		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+		http.Redirect(w, r, "/stats", http.StatusSeeOther)
 		return
 	}
 	s.renderTemplate(w, "login", nil)
@@ -537,8 +537,8 @@ func (s *MasterServer) handleChangePassword(w http.ResponseWriter, r *http.Reque
 			zap.String("username", user.Username),
 			zap.Bool("was_forced", user.MustChangePassword))
 
-		// Redirect to dashboard
-		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+		// Redirect to stats
+		http.Redirect(w, r, "/stats", http.StatusSeeOther)
 		return
 	}
 

@@ -564,7 +564,7 @@ func (s *MasterServer) handleBlockedIP(w http.ResponseWriter, r *http.Request) {
 
 // --- Provision API Handlers ---
 
-// handleProvisionJobs handles GET /api/v1/provision (list) and POST /api/v1/provision (create job).
+// handleProvisionJobs handles GET /api/v1/provision-jobs (list) and POST /api/v1/provision-jobs (create job).
 func (s *MasterServer) handleProvisionJobs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -661,10 +661,27 @@ func (s *MasterServer) handleProvisionJobs(w http.ResponseWriter, r *http.Reques
 func (s *MasterServer) handleProvisionJob(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// Extract ID from path
-	jobID := strings.TrimPrefix(r.URL.Path, "/api/v1/provision/")
-	if jobID == "" {
+	// Extract ID and sub-path from path: /api/v1/provision-jobs/{id}[/action]
+	path := strings.TrimPrefix(r.URL.Path, "/api/v1/provision-jobs/")
+	if path == "" {
 		s.jsonError(w, http.StatusBadRequest, "job ID required")
+		return
+	}
+
+	parts := strings.SplitN(path, "/", 2)
+	jobID := parts[0]
+
+	// Handle sub-routes
+	if len(parts) == 2 {
+		if parts[1] == "logs" {
+			if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
+				s.jsonError(w, status, msg)
+				return
+			}
+			s.handleGetProvisionLogs(w, r, jobID)
+			return
+		}
+		s.jsonError(w, http.StatusNotFound, "not found")
 		return
 	}
 

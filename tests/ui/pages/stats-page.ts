@@ -2,9 +2,9 @@ import { Page, Locator, expect } from '@playwright/test';
 import { BasePage } from './base-page';
 
 /**
- * Dashboard page object
+ * Stats page object
  */
-export class DashboardPage extends BasePage {
+export class StatsPage extends BasePage {
   readonly welcomeMessage: Locator;
   readonly statsCards: Locator;
   readonly recentActivity: Locator;
@@ -16,7 +16,7 @@ export class DashboardPage extends BasePage {
   constructor(page: Page) {
     super(page);
     this.welcomeMessage = page.locator('h1, .welcome, .greeting');
-    this.statsCards = page.locator('.stats-card, .stat-card, .dashboard-stat');
+    this.statsCards = page.locator('.stats-card, .stat-card, .stats-stat');
     this.recentActivity = page.locator('.recent-activity, .activity-list');
     this.quickActions = page.locator('.quick-actions, .action-buttons');
     this.projectsLink = page.locator('a:has-text("Projects"), [href*="projects"]');
@@ -25,17 +25,17 @@ export class DashboardPage extends BasePage {
   }
 
   /**
-   * Navigate to dashboard
+   * Navigate to stats
    */
   async goto() {
     await super.goto('/');
   }
 
   /**
-   * Navigate to dashboard via explicit path
+   * Navigate to stats via explicit path
    */
-  async gotoDashboard() {
-    await super.goto('/dashboard');
+  async gotoStats() {
+    await super.goto('/stats');
   }
 
   /**
@@ -82,13 +82,13 @@ export class DashboardPage extends BasePage {
   }
 
   /**
-   * Verify dashboard is displayed
+   * Verify stats page is displayed
    */
   async verifyPage() {
-    // Dashboard should have some content
+    // Stats page should have some content
     await expect(this.page.locator('body')).not.toBeEmpty();
-    // URL should be dashboard or root
+    // URL should be stats or root
     const url = this.page.url();
-    expect(url.includes('/dashboard') || url.endsWith('/')).toBeTruthy();
+    expect(url.includes('/stats') || url.endsWith('/')).toBeTruthy();
   }
 }
