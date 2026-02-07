@@ -11,7 +11,7 @@ vcdeploy supports private repositories through source credentials:
 - **SSH Keys**: For SSH-based Git access
 - **Deploy Keys**: Repository-specific SSH keys
 
-**Important**: Credentials are stored only on the master server, never on agents. The master clones repositories and streams code to agents securely over mTLS.
+**Important**: Credentials are stored only on the master server, never on agents. The master clones repositories, creates deployment archives, and distributes them to agents via mTLS gRPC (or HMAC-signed HTTP fallback).
 
 ## How It Works
 
@@ -24,7 +24,7 @@ vcdeploy supports private repositories through source credentials:
 │             │     │    (creds)  │     │             │
 │             │     │             │     │             │
 │             │     │  2. Archive │ ──► │  3. Extract │
-│             │     │    (mTLS)   │     │    & Deploy │
+│             │     │ (mTLS/HMAC) │     │    & Deploy │
 └─────────────┘     └─────────────┘     └─────────────┘
 ```
 
