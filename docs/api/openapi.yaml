@@ -47,6 +47,8 @@ tags:
     description: Deployment operations
   - name: Agents
     description: Agent management
+  - name: Targets
+    description: Deployment target management
   - name: Secrets
     description: Secret management
   - name: Settings
@@ -856,6 +858,183 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+
+  # Target endpoints
+  /api/v1/targets:
+    get:
+      tags: [Targets]
+      summary: List targets
+      description: Returns a list of all deployment targets, optionally filtered by project or agent.
+      operationId: listTargets
+      parameters:
+        - name: project
+          in: query
+          schema:
+            type: string
+          description: Filter by project name
+        - name: agent
+          in: query
+          schema:
+            type: string
+          description: Filter by agent name
+        - $ref: '#/components/parameters/OffsetParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: List of targets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Target'
+
+  /api/v1/projects/{projectName}/targets:
+    parameters:
+      - name: projectName
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Targets]
+      summary: List project targets
+      description: Returns targets for a specific project.
+      operationId: listProjectTargets
+      responses:
+        '200':
+          description: List of project targets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Target'
+    post:
+      tags: [Targets]
+      summary: Create target
+      description: Create a new deployment target for a project.
+      operationId: createTarget
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TargetCreate'
+      responses:
+        '201':
+          description: Target created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Target'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/targets/{targetId}:
+    parameters:
+      - name: targetId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Targets]
+      summary: Get target
+      description: Get target details by ID.
+      operationId: getTarget
+      responses:
+        '200':
+          description: Target details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Target'
+        '404':
+          description: Target not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags: [Targets]
+      summary: Update target
+      description: Update an existing deployment target.
+      operationId: updateTarget
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TargetUpdate'
+      responses:
+        '200':
+          description: Target updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Target'
+        '404':
+          description: Target not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Targets]
+      summary: Delete target
+      description: Delete a deployment target.
+      operationId: deleteTarget
+      responses:
+        '204':
+          description: Target deleted
+        '404':
+          description: Target not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/deployments/{deploymentId}/archive:
+    parameters:
+      - name: deploymentId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Deployments]
+      summary: Download deployment archive
+      description: Download deployment archive via HMAC-signed URL. Used by agents as fallback when gRPC streaming fails.
+      operationId: getDeploymentArchive
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+          description: HMAC signature token
+        - name: expires
+          in: query
+          required: true
+          schema:
+            type: string
+          description: URL expiration timestamp
+      security: []
+      responses:
+        '200':
+          description: Archive binary stream
+          content:
+            application/gzip:
+              schema:
+                type: string
+                format: binary
+        '403':
+          description: Invalid or expired signature
 
   /api/v1/secrets:
     get:
@@ -2922,10 +3101,9 @@ components:
           type: string
         projectTypeId:
           type: string
-        agents:
-          type: array
-          items:
-            type: string
+        archived:
+          type: boolean
+          default: false
         createdAt:
           type: string
           format: date-time
@@ -2950,10 +3128,6 @@ components:
           type: string
         projectTypeId:
           type: string
-        agents:
-          type: array
-          items:
-            type: string
 
     ProjectUpdate:
       type: object
@@ -2970,10 +3144,6 @@ components:
           type: string
         projectTypeId:
           type: string
-        agents:
-          type: array
-          items:
-            type: string
 
     Deployment:
       type: object
@@ -3012,9 +3182,78 @@ components:
           type: string
         commit:
           type: string
-        force:
+        target:
+          type: string
+          description: Single target name (shorthand for targets array)
+        targets:
+          type: array
+          items:
+            type: string
+          description: Multiple target names
+        all_targets:
           type: boolean
           default: false
+          description: Deploy to all targets in the project (mutually exclusive with target/targets)
+        wait:
+          type: integer
+          default: 30
+          description: Wait for deployment to complete in seconds
+        dry_run:
+          type: boolean
+          default: false
+
+    Target:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        project_id:
+          type: integer
+        project_name:
+          type: string
+        agent_id:
+          type: integer
+          nullable: true
+          description: Agent ID (null for master-local targets)
+        agent_name:
+          type: string
+          nullable: true
+          description: Agent name (null for master-local targets)
+        path:
+          type: string
+          description: Deployment path on target server
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    TargetCreate:
+      type: object
+      required: [name, path]
+      properties:
+        name:
+          type: string
+        path:
+          type: string
+        agent_id:
+          type: integer
+          nullable: true
+          description: Agent ID (omit for master-local deployment)
+
+    TargetUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        path:
+          type: string
+        agent_id:
+          type: integer
+          nullable: true
 
     DeploymentLog:
       type: object
