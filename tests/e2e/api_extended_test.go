@@ -182,7 +182,7 @@ func TestAPIProvisionJobs(t *testing.T) {
 	}
 
 	t.Run("list provision jobs", func(t *testing.T) {
-		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/provision", nil, cfg.APIToken)
+		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/provision-jobs", nil, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to list provision jobs: %v", err)
 		}
@@ -198,7 +198,7 @@ func TestAPIProvisionJobs(t *testing.T) {
 			"target_user": "deploy",
 		}
 
-		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/provision", job, cfg.APIToken)
+		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/provision-jobs", job, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to create provision job: %v", err)
 		}
@@ -209,7 +209,7 @@ func TestAPIProvisionJobs(t *testing.T) {
 
 	t.Run("get provision job status", func(t *testing.T) {
 		// Try to get a job status (may not exist)
-		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/provision/test-job-id", nil, cfg.APIToken)
+		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/provision-jobs/test-job-id", nil, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to get provision job: %v", err)
 		}

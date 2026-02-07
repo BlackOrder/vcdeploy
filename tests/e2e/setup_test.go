@@ -18,7 +18,7 @@ func TestSetupFlow(t *testing.T) {
 	t.Run("check setup status", func(t *testing.T) {
 		// Try to access a protected endpoint without auth
 		noAuthClient := testutil.NewHTTPClient(ctx.Config.MasterHTTPURL, "")
-		resp, err := noAuthClient.GetWithRedirects("/dashboard")
+		resp, err := noAuthClient.GetWithRedirects("/stats")
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
@@ -125,7 +125,7 @@ func TestSetupValidation(t *testing.T) {
 
 		// Should not redirect to dashboard (setup not complete)
 		finalURL := resp.Request.URL.String()
-		if containsAny(finalURL, "/dashboard") {
+		if containsAny(finalURL, "/stats") {
 			t.Error("setup should not succeed with mismatched passwords")
 		}
 	})
@@ -144,7 +144,7 @@ func TestSetupValidation(t *testing.T) {
 
 		// Should not redirect to dashboard
 		finalURL := resp.Request.URL.String()
-		if containsAny(finalURL, "/dashboard") {
+		if containsAny(finalURL, "/stats") {
 			t.Error("setup should not succeed with weak password")
 		}
 	})
