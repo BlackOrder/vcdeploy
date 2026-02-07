@@ -56,11 +56,13 @@ Common issues and their solutions.
 
 ### "Repository not found"
 
-**Cause:** Cannot access Git repository
+**Cause:** Cannot access Git repository on the master
+
+> **Note:** Git access is required only on the master server. Agents receive pre-built archives and never clone repositories.
 
 **Solutions:**
 1. Verify repository URL is correct
-2. Check SSH key is configured:
+2. Check SSH key is configured on the master:
    ```bash
    vcdeploy secret set DEPLOY_KEY "$(cat ~/.ssh/deploy_key)"
    ```
@@ -99,7 +101,7 @@ Common issues and their solutions.
 3. Cancel and retry:
    ```bash
    vcdeploy deploy cancel <deployment-id>
-   vcdeploy deploy trigger myapp
+   vcdeploy deploy create --project myapp --target production
    ```
 
 ### Symlink Not Updated
