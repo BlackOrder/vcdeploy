@@ -31,7 +31,14 @@ server:
 grpc:
   listen: ":9001"              # gRPC address for agents
 
-# SSH settings (for SSH-based deployments)
+# Archive settings (deployment archive management)
+archive:
+  storage_dir: /var/lib/vcdeploy/archives    # Archive storage directory
+  keep_count: 10                              # Max cached archives per project
+  max_total_size: 5GB                         # Max total archive cache size
+  signed_url_expiry: 10m                      # HMAC signed URL expiry
+
+# SSH settings (for provisioning and git repo access — not used for deployment)
 ssh:
   default_user: "deploy"                      # Default SSH username
   default_key: "/etc/vcdeploy/keys/default.pem"  # Default SSH private key
@@ -193,7 +200,7 @@ gRPC server for agent connections.
 
 ### SSH
 
-SSH connection settings for SSH-based deployments (alternative to agents).
+SSH connection settings for provisioning and git repository access. Not used for deployment.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
