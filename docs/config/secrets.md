@@ -139,6 +139,9 @@ During deployment, vcdeploy:
 2. Looks up each `${SECRET_NAME}` in the project's scope
 3. Decrypts and substitutes the values
 4. Writes the final `.env` file to the deployment
+5. Captures an encrypted env snapshot for this deployment
+
+> **Env Snapshots:** Secrets resolved at deployment time are captured in an encrypted env snapshot. On rollback, the snapshot from the original deployment is restored, ensuring the correct environment is used regardless of current secret values.
 
 ### Secret Resolution
 

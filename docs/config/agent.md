@@ -31,8 +31,12 @@ agent:
 # Local paths
 paths:
   data: /var/lib/vcdeploy/agent/       # Agent database directory
-  repos: /var/lib/vcdeploy/repos/      # Git repository cache
   releases: /var/www/                  # Release deployment root
+
+# Archive cache settings
+archive:
+  cache_dir: /var/lib/vcdeploy/cache/archives  # Archive cache directory
+  keep_count: 5                                 # Max cached archives per project
 
 # Command execution settings
 execution:
@@ -98,8 +102,16 @@ Local filesystem paths for deployments.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `data` | string | `/var/lib/vcdeploy/agent/` | Agent database and state directory |
-| `repos` | string | `/var/lib/vcdeploy/repos/` | Git repository cache directory |
 | `releases` | string | `/var/www/` | Root directory for release deployments |
+
+### Archive
+
+Archive caching configuration for deployment archives.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `cache_dir` | string | `/var/lib/vcdeploy/cache/archives` | Local archive cache directory |
+| `keep_count` | int | `5` | Maximum cached archives per project |
 
 ### Execution
 
@@ -314,7 +326,7 @@ sudo launchctl load /Library/LaunchDaemons/com.blackorder.vcdeploy-agent.plist
 | Reconnect max delay | `5m` |
 | Heartbeat interval | `10s` |
 | Update policy | `immediate` |
-| Repos path | `/var/lib/vcdeploy/repos/` |
+| Archive cache dir | `/var/lib/vcdeploy/cache/archives` |\n| Archive keep count | `5` |
 | Releases path | `/var/www/` |
 | Execution user | `www-data` |
 | Execution timeout | `10 minutes` |
@@ -351,7 +363,7 @@ sudo launchctl load /Library/LaunchDaemons/com.blackorder.vcdeploy-agent.plist
 
 2. Verify paths exist and are writable:
    ```bash
-   ls -la /var/lib/vcdeploy/repos/
+   ls -la /var/lib/vcdeploy/cache/archives/
    ls -la /var/www/
    ```
 
