@@ -134,7 +134,7 @@ hooks:
 
 # Health checks
 health:
-  url: "http://localhost:8080/health"
+  url: "http://localhost:8080/health"    # Your application's port, not vcdeploy's
   timeout: "30s"
   retries: 3
   rollback_on_fail: true         # Auto-rollback if health check fails
@@ -314,7 +314,7 @@ Post-deployment health verification:
 
 ```yaml
 health:
-  url: "http://localhost:8080/health"
+  url: "http://localhost:8080/health"    # Your application's port, not vcdeploy's
   timeout: "30s"                 # Timeout per check attempt
   retries: 3                     # Number of retry attempts
   rollback_on_fail: true         # Auto-rollback on health check failure

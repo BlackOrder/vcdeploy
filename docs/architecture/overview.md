@@ -321,6 +321,6 @@ For high-availability requirements exceeding single-master capacity, consider de
 
 ## Next Steps
 
-- [Master Server](architecture/master.md) - Detailed master architecture
-- [Agents](architecture/agents.md) - Agent architecture and lifecycle
-- [gRPC Communication](architecture/grpc.md) - Protocol details
+- [Master Server](master.md) - Detailed master architecture
+- [Agents](agents.md) - Agent architecture and lifecycle
+- [gRPC Communication](grpc.md) - Protocol details

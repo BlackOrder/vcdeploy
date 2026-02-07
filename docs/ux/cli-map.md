@@ -2074,7 +2074,7 @@ These commands are **removed** in favor of the canonical patterns documented abo
 | Removed Command | Replacement | Reason |
 |-----------------|-------------|--------|
 | `vcdeploy admin` | `vcdeploy user reset` | Scoped under user |
-| `vcdeploy user recovery` | `vcdeploy user reset` | Verb standardization |
+| `vcdeploy user recovery` | `vcdeploy user reset` | Verb standardization (distinct from `user totp recovery` which remains) |
 | `vcdeploy status` | `vcdeploy stats` | Consolidated under stats |
 | `vcdeploy project deploy` | `vcdeploy deploy create --project` | Deployment actions belong under `deploy` |
 | `vcdeploy project rollback` | `vcdeploy deploy rollback --project` | Deployment actions belong under `deploy` |
