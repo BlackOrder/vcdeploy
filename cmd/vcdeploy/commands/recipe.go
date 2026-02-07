@@ -17,10 +17,9 @@ import (
 
 // recipeCmd represents the recipe command group.
 var recipeCmd = &cobra.Command{
-	Use:     "recipe",
-	Aliases: []string{"recipes"},
-	Short:   "Recipe and playbook management commands",
-	Long:    `Commands for managing deployment recipes, playbooks, and migrations.`,
+	Use:   "recipe",
+	Short: "Recipe and playbook management commands",
+	Long:  `Commands for managing deployment recipes, playbooks, and migrations.`,
 }
 
 // ImportYAMLCmd migrates a YAML project configuration to a playbook.

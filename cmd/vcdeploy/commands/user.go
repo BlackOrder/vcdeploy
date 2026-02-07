@@ -127,6 +127,29 @@ This action is logged for audit purposes.`,
 	_ = totpDisableCmd.MarkFlagRequired("user")
 	_ = totpDisableCmd.MarkFlagRequired("reason")
 	userTOTPCmd.AddCommand(totpDisableCmd)
+
+	// Recovery subcommand - emergency lockout recovery
+	recoveryCmd := &cobra.Command{
+		Use:   "recovery",
+		Short: "Emergency lockout recovery",
+		Long: `Emergency credential recovery when locked out.
+
+Requires direct server access and master config file.
+Used when locked out of the web UI or CLI.
+
+Local mode (lockout recovery):
+  vcdeploy user recovery --username admin --email admin@example.com
+
+Remote mode (requires authentication):
+  vcdeploy user recovery --master localhost:9000 --token <api-token> --username admin
+
+When --password is not provided, you will be prompted to enter it interactively.`,
+		RunE: runAdmin,
+	}
+	recoveryCmd.Flags().StringP("username", "u", "admin", "Admin username")
+	recoveryCmd.Flags().StringP("password", "p", "", "Admin password (if not set, will prompt)")
+	recoveryCmd.Flags().StringP("email", "e", "admin@localhost", "Admin email address")
+	userCmd.AddCommand(recoveryCmd)
 }
 
 // paginatedResponse represents a paginated API response.
