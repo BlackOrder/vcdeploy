@@ -29,11 +29,11 @@ func TestCLIExecutor_ModeString(t *testing.T) {
 	t.Run("API mode with URL", func(t *testing.T) {
 		exec := &CLIExecutor{
 			mode: ModeAPI,
-			api:  &apiClient{baseURL: "http://localhost:8080"},
+			api:  &apiClient{baseURL: "http://localhost:9000"},
 		}
 		got := exec.ModeString()
-		if got != "API (http://localhost:8080)" {
-			t.Errorf("ModeString() = %v, want API (http://localhost:8080)", got)
+		if got != "API (http://localhost:9000)" {
+			t.Errorf("ModeString() = %v, want API (http://localhost:9000)", got)
 		}
 	})
 

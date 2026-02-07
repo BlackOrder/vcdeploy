@@ -1021,7 +1021,7 @@ func (s *MasterServer) startHTTPApplication() error {
 
 	addr := s.config.Server.Listen
 	if addr == "" {
-		addr = ":8080"
+		addr = config.DefaultHTTPAddr
 	}
 	s.logger.Info("Starting HTTP server (application mode)", zap.String("addr", addr))
 

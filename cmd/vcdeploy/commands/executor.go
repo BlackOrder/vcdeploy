@@ -192,7 +192,7 @@ func checkDirectModeAccess() error {
 		return fmt.Errorf("permission denied: vcdeploy group not found\n" +
 			"Options:\n" +
 			"  1. Run with sudo\n" +
-			"  2. Use API mode: vcdeploy --master=http://localhost:8080 --token=<token> ...")
+			"  2. Use API mode: vcdeploy --master=http://localhost:9000 --token=<token> ...")
 	}
 
 	for _, gid := range groups {
@@ -207,7 +207,7 @@ func checkDirectModeAccess() error {
 		"Options:\n"+
 		"  1. Run with sudo\n"+
 		"  2. Add yourself to vcdeploy group: sudo usermod -aG vcdeploy %s\n"+
-		"  3. Use API mode: vcdeploy --master=http://localhost:8080 --token=<token> ...",
+		"  3. Use API mode: vcdeploy --master=http://localhost:9000 --token=<token> ...",
 		currentUser.Username)
 }
 
@@ -287,7 +287,7 @@ func newLocalTCPClient(cmd *cobra.Command) (*apiClient, error) {
 	}
 
 	return &apiClient{
-		baseURL: "http://localhost:8080",
+		baseURL: "http://localhost:9000",
 		token:   token,
 		client:  &http.Client{Timeout: 30 * time.Second},
 	}, nil

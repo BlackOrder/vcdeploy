@@ -511,7 +511,7 @@ func TestService_GetInt_ExistingValue(t *testing.T) {
 	ctx := context.Background()
 
 	// Set an integer value
-	err := svc.SetInt(ctx, "general", "port", 8080)
+	err := svc.SetInt(ctx, "general", "port", 9000)
 	if err != nil {
 		t.Fatalf("SetInt() error = %v", err)
 	}
@@ -521,8 +521,8 @@ func TestService_GetInt_ExistingValue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetInt() error = %v", err)
 	}
-	if value != 8080 {
-		t.Errorf("GetInt() = %v, want %v", value, 8080)
+	if value != 9000 {
+		t.Errorf("GetInt() = %v, want %v", value, 9000)
 	}
 }
 

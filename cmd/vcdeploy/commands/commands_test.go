@@ -683,7 +683,7 @@ func mockAPIServer(t *testing.T) *httptest.Server {
 	mux.HandleFunc("/api/v1/config", func(w http.ResponseWriter, r *http.Request) {
 		config := map[string]interface{}{
 			"server": map[string]interface{}{
-				"port": 8080,
+				"port": 9000,
 				"host": "0.0.0.0",
 			},
 			"security": map[string]interface{}{
@@ -947,8 +947,8 @@ func TestE2E_ConfigShowCommand(t *testing.T) {
 	if !strings.Contains(stdout, "server") {
 		t.Errorf("expected 'server' in output, got: %s", stdout)
 	}
-	if !strings.Contains(stdout, "8080") {
-		t.Errorf("expected '8080' in output, got: %s", stdout)
+	if !strings.Contains(stdout, "9000") {
+		t.Errorf("expected '9000' in output, got: %s", stdout)
 	}
 }
 

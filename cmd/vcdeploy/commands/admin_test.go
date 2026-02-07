@@ -447,7 +447,7 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 	mux.HandleFunc("/api/v1/settings/export", func(w http.ResponseWriter, r *http.Request) {
 		settings := map[string]map[string]interface{}{
 			"server": {
-				"port": 8080,
+				"port": 9000,
 				"host": "0.0.0.0",
 			},
 			"security": {
@@ -1274,7 +1274,7 @@ func TestNewAPIClientEnvVars(t *testing.T) {
 		os.Setenv("VCDEPLOY_TOKEN", origToken)
 	}()
 
-	os.Setenv("VCDEPLOY_MASTER", "http://env-master:8080")
+	os.Setenv("VCDEPLOY_MASTER", "http://env-master:9000")
 	os.Setenv("VCDEPLOY_TOKEN", "env-token")
 
 	cmd := &cobra.Command{}
@@ -1286,8 +1286,8 @@ func TestNewAPIClientEnvVars(t *testing.T) {
 		t.Fatalf("newAPIClient() with env vars error = %v", err)
 	}
 
-	if client.baseURL != "http://env-master:8080" {
-		t.Errorf("baseURL = %q, want %q", client.baseURL, "http://env-master:8080")
+	if client.baseURL != "http://env-master:9000" {
+		t.Errorf("baseURL = %q, want %q", client.baseURL, "http://env-master:9000")
 	}
 	if client.token != "env-token" {
 		t.Errorf("token = %q, want %q", client.token, "env-token")
@@ -1773,10 +1773,10 @@ func TestAPIClientURLNormalization(t *testing.T) {
 		input   string
 		wantURL string
 	}{
-		{"with http", "http://localhost:8080", "http://localhost:8080"},
-		{"with https", "https://localhost:8080", "https://localhost:8080"},
-		{"without scheme", "localhost:8080", "http://localhost:8080"},
-		{"with trailing slash", "http://localhost:8080/", "http://localhost:8080"},
+		{"with http", "http://localhost:9000", "http://localhost:9000"},
+		{"with https", "https://localhost:9000", "https://localhost:9000"},
+		{"without scheme", "localhost:9000", "http://localhost:9000"},
+		{"with trailing slash", "http://localhost:9000/", "http://localhost:9000"},
 	}
 
 	for _, tt := range tests {
@@ -1838,7 +1838,7 @@ func TestAdminCmdFlagPrecedence(t *testing.T) {
 
 	cmd := &cobra.Command{}
 	// Explicit flag values should take precedence
-	cmd.Flags().String("master", "http://flag-server:8080", "")
+	cmd.Flags().String("master", "http://flag-server:9000", "")
 	cmd.Flags().String("token", "flag-token", "")
 
 	master, _ := cmd.Flags().GetString("master")
@@ -1852,8 +1852,8 @@ func TestAdminCmdFlagPrecedence(t *testing.T) {
 		token = os.Getenv("VCDEPLOY_TOKEN")
 	}
 
-	if master != "http://flag-server:8080" {
-		t.Errorf("master = %q, want %q", master, "http://flag-server:8080")
+	if master != "http://flag-server:9000" {
+		t.Errorf("master = %q, want %q", master, "http://flag-server:9000")
 	}
 	if token != "flag-token" {
 		t.Errorf("token = %q, want %q", token, "flag-token")

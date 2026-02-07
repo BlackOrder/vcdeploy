@@ -53,7 +53,7 @@ func TestLoadMasterConfig(t *testing.T) {
 			name: "valid config",
 			content: `
 server:
-  listen: ":8080"
+  listen: ":9000"
   tls:
     enabled: false
 grpc:
@@ -67,7 +67,7 @@ security:
 `,
 			wantErr: false,
 			checkFunc: func(t *testing.T, c *MasterConfig) {
-				if c.Server.Listen != ":8080" {
+				if c.Server.Listen != ":9000" {
 					t.Errorf("unexpected server listen: %s", c.Server.Listen)
 				}
 				if c.GRPC.Listen != ":9001" {
@@ -115,7 +115,7 @@ grpc:
 			name: "webhooks config",
 			content: `
 server:
-  listen: ":8080"
+  listen: ":9000"
 grpc:
   listen: ":9001"
 webhooks:
@@ -148,7 +148,7 @@ webhooks:
 			name: "backup config",
 			content: `
 server:
-  listen: ":8080"
+  listen: ":9000"
 grpc:
   listen: ":9001"
 backup:
@@ -336,7 +336,7 @@ func TestMasterConfigValidate(t *testing.T) {
 			name: "minimal valid config",
 			config: &MasterConfig{
 				Server: ServerConfig{
-					Listen: ":8080",
+					Listen: ":9000",
 				},
 				GRPC: GRPCConfig{
 					Listen: ":9001",

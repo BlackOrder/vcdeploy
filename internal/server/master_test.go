@@ -196,7 +196,7 @@ func TestNewMasterServer(t *testing.T) {
 	t.Cleanup(func() { db.Close() })
 
 	cfg := &config.MasterConfig{
-		Server: config.ServerConfig{Listen: ":8080"},
+		Server: config.ServerConfig{Listen: ":9000"},
 		GRPC:   config.GRPCConfig{Listen: ":9001"},
 	}
 
@@ -1976,7 +1976,7 @@ func TestNewMasterServer_WithRateLimiter(t *testing.T) {
 	t.Cleanup(func() { db.Close() })
 
 	cfg := &config.MasterConfig{
-		Server: config.ServerConfig{Listen: ":8080"},
+		Server: config.ServerConfig{Listen: ":9000"},
 		GRPC:   config.GRPCConfig{Listen: ":9001"},
 	}
 
@@ -2007,7 +2007,7 @@ func TestNewMasterServer_WithSecurityMiddleware(t *testing.T) {
 	t.Cleanup(func() { db.Close() })
 
 	cfg := &config.MasterConfig{
-		Server: config.ServerConfig{Listen: ":8080"},
+		Server: config.ServerConfig{Listen: ":9000"},
 		GRPC:   config.GRPCConfig{Listen: ":9001"},
 	}
 

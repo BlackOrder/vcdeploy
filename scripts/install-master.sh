@@ -98,7 +98,7 @@ create_config() {
         cat > $CONFIG_DIR/master.yaml << 'EOF'
 # VCDeploy Master Configuration
 server:
-  listen: ":8080"
+  listen: ":9000"
   tls:
     enabled: false
     cert: ""
@@ -250,7 +250,7 @@ complete() {
     echo "  sudo systemctl enable vcdeploy-master"
     echo ""
     echo "Configuration file: $CONFIG_DIR/master.yaml"
-    echo "Web UI will be available at: http://$(hostname -I | awk '{print $1}'):8080"
+    echo "Web UI will be available at: http://$(hostname -I | awk '{print $1}'):9000"
     echo ""
     echo "For first-time setup:"
     echo "  1. Edit $CONFIG_DIR/master.yaml to configure TLS, notifications, etc."
