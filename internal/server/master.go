@@ -866,9 +866,9 @@ func (s *MasterServer) buildMainHandler() (http.Handler, error) {
 	// Admin management: /users/{id}/totp
 	// NOTE: Old /totp/* and /admin/totp/* routes removed
 
-	// Provision API (canonical name: provision-jobs)
-	mux.HandleFunc("/api/v1/provision", s.withAuth(s.handleProvisionJobs))
-	mux.HandleFunc("/api/v1/provision/", s.withAuth(s.handleProvisionJob))
+	// Provision API
+	mux.HandleFunc("/api/v1/provision-jobs", s.withAuth(s.handleProvisionJobs))
+	mux.HandleFunc("/api/v1/provision-jobs/", s.withAuth(s.handleProvisionJob))
 
 	// Security - Certificates API
 	mux.HandleFunc("/api/v1/certificates/agents", s.withAuth(s.handleCertificates))
@@ -921,7 +921,7 @@ func (s *MasterServer) buildMainHandler() (http.Handler, error) {
 	mux.HandleFunc("/logout", s.handleLogout)
 	mux.HandleFunc("/setup", s.handleSetup)
 	mux.HandleFunc("/change-password", s.withUIAuth(s.handleChangePassword))
-	mux.HandleFunc("/dashboard", s.withUIAuth(s.handleDashboard))
+	mux.HandleFunc("/stats", s.withUIAuth(s.handleStatsUI))
 	mux.HandleFunc("/projects", s.withUIAuth(s.handleProjectsUI))
 	mux.HandleFunc("/projects/", s.withUIAuth(s.handleProjectDetailUI))
 	mux.HandleFunc("/deployments", s.withUIAuth(s.handleDeploymentsUI))

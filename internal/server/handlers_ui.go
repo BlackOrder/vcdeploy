@@ -11,8 +11,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// handleDashboard renders the main dashboard page.
-func (s *MasterServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
+// handleStatsUI renders the main stats page.
+func (s *MasterServer) handleStatsUI(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	// Fetch stats
@@ -47,7 +47,7 @@ func (s *MasterServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		stats["ConnectedAgents"] = connectedCount
 	}
 
-	// Get recent deployments and calculate stats (limited to 5 for dashboard display)
+	// Get recent deployments and calculate stats (limited to 5 for stats display)
 	deployments, err := s.deploymentService.ListRecent(ctx, 5)
 	var recentDeployments []map[string]interface{}
 	if err == nil {
@@ -79,7 +79,7 @@ func (s *MasterServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Get recent audit logs (limited to 5 for dashboard)
+	// Get recent audit logs (limited to 5 for stats)
 	auditLogs, err := s.auditService.List(ctx, 5, 0)
 	var recentActivity []map[string]interface{}
 	if err == nil {
@@ -93,15 +93,15 @@ func (s *MasterServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := s.withCommonData(r, map[string]interface{}{
-		"Title":             "Dashboard",
-		"Active":            "dashboard",
+		"Title":             "Stats",
+		"Active":            "stats",
 		"Stats":             stats,
 		"RecentDeployments": recentDeployments,
 		"Agents":            agentData,
 		"RecentActivity":    recentActivity,
 	})
 
-	s.renderTemplate(w, "dashboard", data)
+	s.renderTemplate(w, "stats", data)
 }
 
 // handleProjectsUI renders the projects list page.

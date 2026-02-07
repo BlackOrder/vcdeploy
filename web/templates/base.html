@@ -138,11 +138,11 @@
             <div class="flex items-center justify-between h-16">
                 <div class="flex items-center">
                     <div class="flex-shrink-0">
-                        <a href="/dashboard"><img src="/static/images/logo.svg" alt="vcdeploy" class="h-8"></a>
+                        <a href="/stats"><img src="/static/images/logo.svg" alt="vcdeploy" class="h-8"></a>
                     </div>
                     <div class="hidden md:block ml-10">
                         <div class="flex items-baseline space-x-4">
-                            <a href="/dashboard" class="{{if eq .Active "dashboard"}}bg-dark-border text-white dark:text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white dark:hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Dashboard</a>
+                            <a href="/stats" class="{{if eq .Active "stats"}}bg-dark-border text-white dark:text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white dark:hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Stats</a>
                             <a href="/projects" class="{{if eq .Active "projects"}}bg-dark-border text-white dark:text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white dark:hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Projects</a>
                             <a href="/deployments" class="{{if eq .Active "deployments"}}bg-dark-border text-white dark:text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white dark:hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Deployments</a>
                             <a href="/recipes" class="{{if or (eq .Active "recipes") (eq .Active "playbooks")}}bg-dark-border text-white dark:text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white dark:hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Recipes</a>
