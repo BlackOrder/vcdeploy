@@ -3,7 +3,6 @@ package server
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -45,6 +44,7 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/storage/seeds"
 	webhookshandler "github.com/BlackOrder/vcdeploy/internal/webhooks"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/rs/xid"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
@@ -1799,18 +1799,9 @@ func (s *MasterServer) requestIDMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// generateRequestID creates a unique request ID using timestamp and random suffix.
+// generateRequestID creates a unique request ID using XID.
 func generateRequestID() string {
-	// Use timestamp in microseconds + random suffix for uniqueness
-	// Format: timestamp_random (e.g., "1706529600123456_a1b2c3d4")
-	timestamp := time.Now().UnixMicro()
-	random := make([]byte, 4)
-	if _, err := rand.Read(random); err != nil {
-		// C3 FIX: Fallback to timestamp-only ID if crypto/rand fails
-		// This is extremely unlikely but we must handle it to avoid predictable IDs
-		return fmt.Sprintf("%d_%d", timestamp, time.Now().UnixNano()%100000000)
-	}
-	return fmt.Sprintf("%d_%x", timestamp, random)
+	return xid.New().String()
 }
 
 func (s *MasterServer) loggingMiddleware(next http.Handler) http.Handler {

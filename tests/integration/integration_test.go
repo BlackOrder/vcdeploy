@@ -18,6 +18,7 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/security"
 	"github.com/BlackOrder/vcdeploy/internal/server"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
+	"github.com/rs/xid"
 	"go.uber.org/zap"
 )
 
@@ -668,7 +669,7 @@ func TestDeploymentFlow(t *testing.T) {
 	project := f.CreateTestProject("deploy-project", "https://github.com/test/deploy.git", "main")
 
 	// Create a deployment
-	deploymentID := fmt.Sprintf("deploy-%d", time.Now().UnixNano())
+	deploymentID := xid.New().String()
 	deployment := &storage.DeploymentRecord{
 		ID:          deploymentID,
 		Project:     project.Name,
@@ -762,7 +763,7 @@ func TestE2EDeploymentWorkflow(t *testing.T) {
 	}
 
 	// Step 4: Create a deployment
-	deploymentID := fmt.Sprintf("e2e-deploy-%d", time.Now().UnixNano())
+	deploymentID := xid.New().String()
 	deployment := &storage.DeploymentRecord{
 		ID:            deploymentID,
 		Project:       project.Name,
@@ -1029,7 +1030,7 @@ func TestE2EAgentDeploymentWithLogs(t *testing.T) {
 	t.Log("Step 3: Agent heartbeat updated")
 
 	// Step 4: Create a deployment
-	deploymentID := fmt.Sprintf("workflow-deploy-%d", time.Now().UnixNano())
+	deploymentID := xid.New().String()
 	deployment := &storage.DeploymentRecord{
 		ID:            deploymentID,
 		Project:       project.Name,
@@ -1205,7 +1206,7 @@ func TestE2EDeploymentFailureWorkflow(t *testing.T) {
 	}
 
 	// Step 2: Create a successful previous deployment (for rollback target)
-	prevDeploymentID := fmt.Sprintf("prev-deploy-%d", time.Now().UnixNano())
+	prevDeploymentID := xid.New().String()
 	prevCompletedAt := time.Now().Add(-1 * time.Hour)
 	prevDeployment := &storage.DeploymentRecord{
 		ID:            prevDeploymentID,
@@ -1226,7 +1227,7 @@ func TestE2EDeploymentFailureWorkflow(t *testing.T) {
 	}
 
 	// Step 3: Create new deployment that will fail
-	failedDeploymentID := fmt.Sprintf("failed-deploy-%d", time.Now().UnixNano())
+	failedDeploymentID := xid.New().String()
 	failedDeployment := &storage.DeploymentRecord{
 		ID:            failedDeploymentID,
 		Project:       project.Name,
@@ -1313,7 +1314,7 @@ func TestE2EDeploymentFailureWorkflow(t *testing.T) {
 	}
 
 	// Step 9: Create rollback deployment
-	rollbackDeploymentID := fmt.Sprintf("rollback-deploy-%d", time.Now().UnixNano())
+	rollbackDeploymentID := xid.New().String()
 	rollbackDeployment := &storage.DeploymentRecord{
 		ID:            rollbackDeploymentID,
 		Project:       project.Name,
@@ -1417,8 +1418,8 @@ func TestE2EMultiAgentDeployment(t *testing.T) {
 
 	// Step 3: Create deployment for each agent target
 	deploymentIDs := make([]string, 0)
-	for i, agent := range agents {
-		deploymentID := fmt.Sprintf("multi-deploy-%d-%d", i, time.Now().UnixNano())
+	for _, agent := range agents {
+		deploymentID := xid.New().String()
 		deployment := &storage.DeploymentRecord{
 			ID:            deploymentID,
 			Project:       project.Name,
