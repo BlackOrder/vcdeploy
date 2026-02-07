@@ -6,6 +6,8 @@
 
 This document defines the canonical REST API surface. All endpoints follow REST conventions with consistent request/response patterns.
 
+> **Note:** All resource identifiers use XID format (20-character, time-sortable, globally unique). Deployment IDs, provision job IDs, and archive IDs are XIDs. Resources also have a `uid` field (XID) for cross-server identity used in import/export.
+
 ---
 
 ## Table of Contents
@@ -228,11 +230,16 @@ Self-service (current user):
 | DELETE | `/projects/{name}/webhooks/{provider}` | Remove webhook |
 | POST | `/projects/{name}/webhooks/{provider}/test` | Test webhook |
 | POST | `/projects/{name}/webhooks/{provider}/rotate` | Rotate webhook secret |
+| POST | `/projects/{name}/archive` | Archive project (hide from listings, prevent deployments) |
+| POST | `/projects/{name}/unarchive` | Unarchive project (restore to active state) |
 
 Query params for list:
 - `search`: Search by name
 - `type`: Filter by project type
 - `agent`: Filter by assigned agent
+- `archived`: Filter by archived status (`true`, `false`)
+
+Project objects include an `archived` boolean field.
 
 ### Project Types
 
@@ -259,6 +266,48 @@ Query params for list:
 - `status`: `online`, `offline`, `all`
 - `group`: Filter by group name
 - `search`: Search by name
+
+### Targets
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/targets` | List all targets (global, with `?project=` filter) |
+| GET | `/projects/{name}/targets` | List targets for a project |
+| POST | `/projects/{name}/targets` | Create target for a project |
+| GET | `/targets/{id}` | Get target details |
+| PUT | `/targets/{id}` | Update target |
+| DELETE | `/targets/{id}` | Delete target |
+
+Query params for list:
+- `project`: Filter by project name
+- `agent`: Filter by agent name
+- `search`: Search by target name
+
+Target object:
+```json
+{
+  "id": 1,
+  "name": "production",
+  "project_id": 1,
+  "project_name": "myapp",
+  "agent_id": 5,
+  "agent_name": "web-1",
+  "path": "/var/www/myapp",
+  "created_at": "2025-01-15T10:00:00Z",
+  "updated_at": "2025-01-15T10:00:00Z"
+}
+```
+
+Create target request:
+```json
+{
+  "name": "production",
+  "path": "/var/www/myapp",
+  "agent_id": 5
+}
+```
+
+Note: Omitting `agent_id` creates a master-local target (deployed directly by the master server).
 
 ### Settings
 
@@ -324,14 +373,30 @@ Query params:
 | GET | `/deployments/{id}` | Get deployment |
 | DELETE | `/deployments/{id}` | Cancel deployment |
 | POST | `/deployments/{id}/retry` | Retry failed deployment |
+| GET | `/deployments/{id}/archive` | Download deployment archive (HMAC-signed URL) |
 | GET | `/deployments/{id}/logs` | Get deployment logs |
 | GET | `/deployments/{id}/logs/stream` | SSE stream of logs |
+
+Retry request body:
+```json
+{
+  "wait": 30    // Optional, wait for completion in seconds
+}
+```
+Note: Retries all targets from the original deployment. No target, branch, or commit overrides are supported.
+
+Archive download:
+```
+GET /deployments/{id}/archive?token={hmac}&expires={timestamp}
+```
+- Response: `application/gzip` binary stream
+- Auth: HMAC signature (not standard JWT/API key)
 
 Query params for list:
 - `project`: Filter by project name
 - `type`: `deploy`, `rollback`
 - `status`: `pending`, `running`, `success`, `failed`, `cancelled`
-- `agent`: Filter by agent ID
+- `target`: Filter by target name
 - `from`, `to`: Date range
 
 Create deployment request:
@@ -342,11 +407,16 @@ Create deployment request:
   "branch": "main",           // Optional, defaults to project default
   "commit": "abc123",         // Optional, specific commit
   "rollback_to": "deploy-42", // Required if type=rollback
-  "agents": ["agent-1"],      // Optional, override project agents
+  "target": "production",     // Single target (shorthand for targets array)
+  "targets": ["production", "staging"],  // Multiple targets
+  "all_targets": true,        // Deploy to all project targets (mutex with target/targets)
   "dry_run": false,           // Optional, simulate only
+  "wait": 30,                 // Optional, wait for completion in seconds (default: 30)
   "scheduled_at": "..."       // Optional, RFC3339 timestamp
 }
 ```
+
+Note: `target` (string) is shorthand for `targets` (array) with one element. `all_targets` is mutually exclusive with `target`/`targets`. If the project has exactly one target, it is used implicitly.
 
 ### Provision Jobs
 
@@ -530,7 +600,10 @@ Query params:
 Event format:
 ```
 event: deployment
-data: {"id": "deploy-123", "status": "running", "project": "myapp"}
+data: {"id": "deploy-123", "status": "running", "project": "myapp", "target": "production"}
+
+event: target_result
+data: {"deployment_id": "deploy-123", "target": "production", "status": "success"}
 
 event: agent
 data: {"id": "agent-1", "status": "online"}
@@ -569,8 +642,22 @@ POST /deployments/bulk
 Request:
 ```json
 {
-  "projects": ["app-1", "app-2", "app-3"],
-  "branch": "main",
+  "projects": [
+    {
+      "name": "app-1",
+      "branch": "main",
+      "targets": ["production"]
+    },
+    {
+      "name": "app-2",
+      "targets": ["staging", "production"]
+    },
+    {
+      "name": "app-3",
+      "all_targets": true
+    }
+  ],
+  "wait": 30,
   "dry_run": false
 }
 ```
@@ -579,9 +666,9 @@ Response:
 ```json
 {
   "deployments": [
-    { "project": "app-1", "id": "deploy-101", "status": "pending" },
-    { "project": "app-2", "id": "deploy-102", "status": "pending" },
-    { "project": "app-3", "id": "deploy-103", "status": "pending" }
+    { "project": "app-1", "id": "deploy-101", "status": "pending", "targets": ["production"] },
+    { "project": "app-2", "id": "deploy-102", "status": "pending", "targets": ["staging", "production"] },
+    { "project": "app-3", "id": "deploy-103", "status": "pending", "targets": ["web-1", "web-2"] }
   ]
 }
 ```
@@ -635,6 +722,90 @@ Request:
 ```
 
 Actions: `update`, `delete`, `provision`
+---
+
+## Admin Resources
+
+### Backup
+
+All backup endpoints require admin role.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/admin/backup/export` | Start backup export |
+| GET | `/admin/backup/download/{token}` | Download export file |
+| POST | `/admin/backup/import/upload` | Upload backup + compute diff |
+| POST | `/admin/backup/import/execute` | Execute import with strategies |
+
+Export request:
+```json
+{
+  "passphrase": "my-secret-passphrase"
+}
+```
+
+Export response:
+```json
+{
+  "download_url": "/api/v1/admin/backup/download/abc123",
+  "expires": "2025-01-15T11:00:00Z"
+}
+```
+
+Import upload: `multipart/form-data` with `file` and `passphrase` fields.
+
+Upload response:
+```json
+{
+  "session_id": "import-abc123",
+  "diff": {
+    "tables": [
+      { "name": "projects", "new": 3, "changed": 1, "only_in_current": 0 },
+      { "name": "targets", "new": 5, "changed": 0, "only_in_current": 2 }
+    ]
+  }
+}
+```
+
+Execute import request:
+```json
+{
+  "session_id": "import-abc123",
+  "strategies": {
+    "projects": "merge",
+    "targets": "replace",
+    "secrets": "skip"
+  }
+}
+```
+
+Strategies: `merge` (add new, update changed), `replace` (drop + reimport), `skip` (ignore table).
+
+### Maintenance
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/admin/maintenance` | Get maintenance mode status |
+| POST | `/admin/maintenance` | Toggle maintenance mode |
+
+Toggle request:
+```json
+{
+  "enabled": true
+}
+```
+
+Status response:
+```json
+{
+  "enabled": true,
+  "since": "2025-01-15T10:00:00Z",
+  "message": "System backup in progress"
+}
+```
+
+During maintenance: all mutation endpoints return `503 Service Unavailable` with `Retry-After: 1800` header. GET endpoints and maintenance/backup endpoints remain accessible.
+
 ---
 
 ## Appendix: Removed Endpoints
