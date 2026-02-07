@@ -101,6 +101,8 @@ The service layer encapsulates business logic:
 | `SecretService` | Encrypted secret management |
 | `UserService` | User account management |
 | `AgentService` | Agent registration and status |
+| `TargetService` | Deployment target management |
+| `ArchiveService` | Archive creation and caching |
 | `APIKeyService` | API key lifecycle |
 | `SessionService` | User session management |
 | `WebhookService` | Webhook configuration |
@@ -119,6 +121,8 @@ SQLite database with multiple logical stores:
 ├─────────────────────────────────────────────────┤
 │  • Users & Sessions    • Projects & Types       │
 │  • Agents & Status     • Deployments & Logs     │
+│  • Targets             • Deployment Targets     │
+│  • Deployment Env Snapshots • Archive Cache       │
 │  • Secrets (encrypted) • Settings               │
 │  • API Keys            • Audit Trail            │
 │  • SSH Host Keys       • Encryption Keys        │
@@ -175,7 +179,7 @@ Multi-channel notification delivery:
 Lightweight daemons running on deployment targets:
 
 - **Connection**: Persistent gRPC stream to master
-- **Execution**: Git operations, scripts, service restarts
+- **Execution**: Archive extraction, scripts, service restarts
 - **Reporting**: Health metrics, deployment status
 - **Self-Update**: Remote binary updates from master
 
@@ -210,7 +214,7 @@ Lightweight daemons running on deployment targets:
      │              │              │              │              │
   CLI/API/      Project        Queue for      Commands       Slack/
   Webhook       config &       target         via gRPC       Discord/
-                secrets        agents         stream         Email
+                secrets        dispatch       stream         Email
 ```
 
 ### Webhook Flow

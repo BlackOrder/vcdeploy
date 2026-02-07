@@ -24,24 +24,50 @@ Agents are lightweight daemons that run on deployment targets, executing command
 │  ┌─────────────┬───────────┴───────────┬────────────────────┐  │
 │  │  Executor   │   File Manager        │  Metrics Collector │  │
 │  │             │                       │                    │  │
-│  │  • Git ops  │  • Symlink mgmt      │  • CPU/Memory      │  │
-│  │  • Scripts  │  • Directory ops     │  • Disk usage      │  │
-│  │  • Commands │  • Permissions       │  • Process info    │  │
+│  │  • Archive  │  • Symlink mgmt      │  • CPU/Memory      │  │
+│  │    extract │  • Directory ops     │  • Disk usage      │  │
+│  │  • Scripts  │  • Permissions       │  • Process info    │  │
+│  │  • Commands │                       │                    │  │
 │  └─────────────┴───────────────────────┴────────────────────┘  │
 │                                                                  │
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │                    Local Storage                          │  │
 │  │           • Releases    • Shared files   • Logs          │  │
+│  │           • Archive Cache                              │  │
 │  └──────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+## Archive Caching
+
+Agents cache deployment archives locally for fast rollback:
+
+- Archives are stored by commit hash in the cache directory
+- Configurable `keep_count` limits per-project cache size
+- On rollback, if the archive is cached, no download is needed
+- Cache is checked before requesting archive from master
+
+```yaml
+archive:
+  cache_dir: /var/lib/vcdeploy/cache/archives
+  keep_count: 5    # Max cached archives per project
+```
+
+## Archive Delivery
+
+Deployment archives are delivered from master to agent via two secure channels:
+
+1. **gRPC Streaming (primary)** — Archive streamed over the mTLS-authenticated gRPC connection via `StreamRepoArchive` RPC
+2. **HMAC-Signed HTTP (fallback)** — If gRPC streaming fails, agent downloads via time-limited signed URL provided in `DeployCommand.archive_download_url`
+
+Signed URLs use HMAC-SHA256 with the agent's authentication secret. Default expiry: 10 minutes.
 
 ## Deployment Process
 
 When an agent receives a deployment command:
 
 1. **Prepare**: Create release directory
-2. **Fetch**: Clone repository or pull updates
+2. **Extract**: Download and extract deployment archive
 3. **Build**: Run build commands (if configured)
 4. **Link**: Atomically update symlink to new release
 5. **Cleanup**: Remove old releases (keep configurable number)
@@ -75,6 +101,7 @@ Agents maintain a persistent gRPC connection with automatic:
 - Sandboxed command execution
 - File system restrictions
 - No inbound network ports required
+- Agent does NOT need git credentials — archives are received from master
 
 ## Init System Integration
 
