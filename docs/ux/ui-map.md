@@ -67,11 +67,12 @@ Every resource page follows the same pattern:
 
 ```
 ┌─ Sidebar ──────────┐
-│ Dashboard          │
+│ Stats              │
 │ ───────────────    │
 │ Projects           │
 │ Deployments        │
 │ Agents             │
+│   └─ Provision     │
 │ ───────────────    │
 │ Recipes            │
 │   ├─ Components    │
@@ -82,6 +83,8 @@ Every resource page follows the same pattern:
 │   ├─ Certificates  │
 │   ├─ Credentials   │
 │   ├─ SSH Keys      │
+│   ├─ Host Keys     │
+│   ├─ Jump Servers  │
 │   └─ Blocked IPs   │
 │ ───────────────    │
 │ Settings           │
@@ -94,9 +97,9 @@ Every resource page follows the same pattern:
 
 ### Pages
 
-#### Dashboard (`/`)
+#### Stats (`/stats`)
 
-**Purpose:** System overview with key metrics and recent activity.
+**Purpose:** System statistics dashboard with key metrics and recent activity.
 
 **Sections:**
 | Section | Description | API Endpoint |
@@ -361,6 +364,127 @@ Every resource page follows the same pattern:
 | Update | PUT | `/credentials/{id}` |
 | Delete | DELETE | `/credentials/{id}` |
 | Test | POST | `/credentials/{id}/test` |
+
+---
+
+#### SSH Keys (`/security/ssh-keys`)
+
+**Purpose:** Manage SSH keys for repository access and provisioning.
+
+**List View:**
+| Column | Description |
+|--------|-------------|
+| Name | Key name |
+| Type | RSA/Ed25519 badge |
+| Fingerprint | Key fingerprint (truncated) |
+| Has Passphrase | Yes/No indicator |
+| Created | Creation date |
+| Actions | Copy Public Key, Delete |
+
+**API Endpoints:**
+| Action | Method | Endpoint |
+|--------|--------|----------|
+| List | GET | `/ssh-keys` |
+| Generate | POST | `/ssh-keys/generate` |
+| Import | POST | `/ssh-keys` |
+| Delete | DELETE | `/ssh-keys/{id}` |
+| Show Public | GET | `/ssh-keys/{id}` |
+
+**Create Modal:**
+- Tab: Generate New (name, type, passphrase)
+- Tab: Import Existing (name, private key, passphrase)
+
+---
+
+#### Host Keys (`/security/host-keys`)
+
+**Purpose:** Manage known host keys for SSH verification.
+
+**List View:**
+| Column | Description |
+|--------|-------------|
+| Host | Hostname/IP |
+| Key Type | RSA/Ed25519/ECDSA |
+| Fingerprint | Key fingerprint |
+| Added | When added |
+| Actions | Delete |
+
+**API Endpoints:**
+| Action | Method | Endpoint |
+|--------|--------|----------|
+| List | GET | `/host-keys` |
+| Scan | POST | `/host-keys/scan` |
+| Create | POST | `/host-keys` |
+| Delete | DELETE | `/host-keys/{id}` |
+
+**Create Modal:**
+- Tab: Scan Host (hostname, port)
+- Tab: Add Manually (hostname, key type, key data)
+
+---
+
+#### Jump Servers (`/security/jump-servers`)
+
+**Purpose:** Manage SSH jump/bastion servers.
+
+**List View:**
+| Column | Description |
+|--------|-------------|
+| Name | Server name |
+| Host | Hostname:port |
+| User | SSH username |
+| Key | Associated SSH key |
+| Status | Connected/Error badge |
+| Actions | Test, Edit, Delete |
+
+**API Endpoints:**
+| Action | Method | Endpoint |
+|--------|--------|----------|
+| List | GET | `/jump-servers` |
+| Create | POST | `/jump-servers` |
+| Update | PUT | `/jump-servers/{id}` |
+| Delete | DELETE | `/jump-servers/{id}` |
+| Test | POST | `/jump-servers/{id}/test` |
+
+---
+
+#### Provision Jobs (`/agents/provision`)
+
+**Purpose:** Manage agent provisioning jobs.
+
+**List View:**
+| Column | Description |
+|--------|-------------|
+| ID | Job ID (link to detail) |
+| Target | Host:port |
+| Status | Pending/Running/Success/Failed |
+| Agent | Resulting agent name |
+| Started | Start timestamp |
+| Duration | Time taken |
+| Actions | Logs, Cancel |
+
+**API Endpoints:**
+| Action | Method | Endpoint |
+|--------|--------|----------|
+| List | GET | `/provision-jobs` |
+| Create | POST | `/provision-jobs` |
+| Cancel | DELETE | `/provision-jobs/{id}` |
+| Show | GET | `/provision-jobs/{id}` |
+| Logs | GET | `/provision-jobs/{id}/logs` |
+
+**Detail View (`/agents/provision/{id}`):**
+| Section | Description | API |
+|---------|-------------|-----|
+| Summary | Status, target, config | `GET /provision-jobs/{id}` |
+| Logs | Live log stream | SSE `/provision-jobs/{id}/logs/stream` |
+| Resulting Agent | Link to agent (if success) | Included in job |
+
+**Create Modal:**
+- Target host and port
+- SSH user and key selection
+- Jump server (optional)
+- Agent name and groups
+- Binary version selection
 
 ---
 
