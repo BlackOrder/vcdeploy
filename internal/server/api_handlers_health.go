@@ -145,8 +145,7 @@ func (s *MasterServer) handleCreateHealthCheckConfig(w http.ResponseWriter, r *h
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
-	s.jsonResponse(w, config)
+	s.writeJSON(w, http.StatusCreated, config)
 }
 
 // handleGetHealthCheckConfig retrieves a health check configuration.

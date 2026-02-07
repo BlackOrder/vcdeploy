@@ -175,8 +175,7 @@ func (s *MasterServer) handleCreateComponent(ctx context.Context, w http.Respons
 		zap.String("slug", component.Slug),
 		zap.String("version", component.Version))
 
-	w.WriteHeader(http.StatusCreated)
-	s.jsonResponse(w, component)
+	s.writeJSON(w, http.StatusCreated, component)
 }
 
 func (s *MasterServer) handleUpdateComponent(ctx context.Context, w http.ResponseWriter, r *http.Request, id int64) {
@@ -438,8 +437,7 @@ func (s *MasterServer) handleCreatePlaybook(ctx context.Context, w http.Response
 		zap.String("slug", playbook.Slug),
 		zap.String("version", playbook.Version))
 
-	w.WriteHeader(http.StatusCreated)
-	s.jsonResponse(w, playbook)
+	s.writeJSON(w, http.StatusCreated, playbook)
 }
 
 func (s *MasterServer) handleUpdatePlaybook(ctx context.Context, w http.ResponseWriter, r *http.Request, id int64) {
@@ -628,8 +626,7 @@ func (s *MasterServer) handleActivatePlaybookByID(ctx context.Context, w http.Re
 		zap.Int64("project_id", projectID),
 		zap.Int64("playbook_id", req.PlaybookID))
 
-	w.WriteHeader(http.StatusCreated)
-	s.jsonResponse(w, activation)
+	s.writeJSON(w, http.StatusCreated, activation)
 }
 
 func (s *MasterServer) handleDeactivatePlaybookByID(ctx context.Context, w http.ResponseWriter, projectID int64) {
@@ -712,8 +709,7 @@ func (s *MasterServer) handleActivations(w http.ResponseWriter, r *http.Request)
 		zap.Int64("project_id", req.ProjectID),
 		zap.Int64("playbook_id", req.PlaybookID))
 
-	w.WriteHeader(http.StatusCreated)
-	s.jsonResponse(w, activation)
+	s.writeJSON(w, http.StatusCreated, activation)
 }
 
 // handleActivation handles GET/DELETE for /api/v1/recipes/activations/{project_id}.
@@ -854,8 +850,7 @@ func (s *MasterServer) handleApproveRaw(ctx context.Context, w http.ResponseWrit
 		zap.Int64("component_id", req.ComponentID),
 		zap.Int64("approved_by", user.ID))
 
-	w.WriteHeader(http.StatusCreated)
-	s.jsonResponse(w, map[string]interface{}{
+	s.writeJSON(w, http.StatusCreated, map[string]interface{}{
 		"component_id": req.ComponentID,
 		"approved_by":  user.ID,
 		"message":      "RAW component approved",

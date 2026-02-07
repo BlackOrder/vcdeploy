@@ -208,8 +208,7 @@ func (s *MasterServer) handleAgentBinaries(w http.ResponseWriter, r *http.Reques
 			zap.String("filename", header.Filename),
 		)
 
-		w.WriteHeader(http.StatusCreated)
-		s.jsonResponse(w, binary)
+		s.writeJSON(w, http.StatusCreated, binary)
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
