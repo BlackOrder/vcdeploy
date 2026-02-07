@@ -143,7 +143,7 @@ fuzz-quick: ## Run quick fuzz tests (10 seconds each)
 	go test -fuzz=FuzzValidateHostname -fuzztime=10s ./internal/security/...
 
 # ============================================================================
-# Testing - Integration Tests (Starts own SSH container)
+# Testing - Integration Tests (Starts own SSH container for provisioning tests)
 # ============================================================================
 
 .PHONY: test-integration
@@ -173,7 +173,7 @@ test-integration: ## Run integration tests (mirrors CI 'integration' job)
 # ============================================================================
 
 .PHONY: test-e2e
-test-e2e: build ## Run E2E API tests with agent and SSH target (complete tests)
+test-e2e: build ## Run E2E tests with agent (provisioning tests use SSH target)
 	@echo "=== E2E API Tests (full mode with agent + SSH target) ==="
 	@echo "Server logs: $(TEST_LOG_FILE)"
 	@$(MAKE) -s _test-env-start SERVICES="master agent ssh-target"
@@ -211,7 +211,7 @@ test-e2e-short: build ## Run E2E API tests (fast mode, skips agent/SSH-dependent
 # ============================================================================
 
 .PHONY: test-cli
-test-cli: build ## Run CLI tests with agent and SSH target (complete tests)
+test-cli: build ## Run CLI tests with agent and SSH target (provisioning)
 	@echo "=== CLI Tests (full mode with agent + SSH target) ==="
 	@echo "Server logs: $(TEST_LOG_FILE)"
 	@$(MAKE) -s _test-env-start SERVICES="master agent ssh-target"
@@ -250,7 +250,7 @@ test-cli-short: build ## Run CLI tests (fast mode, skips agent/SSH-dependent tes
 # ============================================================================
 
 .PHONY: test-ui
-test-ui: build ## Run Playwright UI tests with agent and SSH target (complete tests)
+test-ui: build ## Run Playwright UI tests with agent and SSH target (provisioning)
 	@echo "=== UI Tests (full mode with agent + SSH target) ==="
 	@echo "Server logs: $(TEST_LOG_FILE)"
 	@cd tests/ui && npm ci && npx playwright install --with-deps chromium
