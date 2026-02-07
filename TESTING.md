@@ -201,7 +201,7 @@ func TestConfigValidation(t *testing.T) {
         {
             name: "valid config",
             config: Config{
-                Server: ServerConfig{Port: 8080},
+                Server: ServerConfig{Port: 9000},
             },
             wantErr: false,
         },

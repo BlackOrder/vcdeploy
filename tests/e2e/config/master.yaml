@@ -1,7 +1,7 @@
 # vcdeploy Master E2E Test Configuration
 
 server:
-  listen: ":8080"
+  listen: ":19000"
   tls:
     enabled: false
 

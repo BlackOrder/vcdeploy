@@ -470,7 +470,7 @@ func TestSettingsStorage(t *testing.T) {
 		valueType string
 		encrypted bool
 	}{
-		{"server", "listen", ":8080", "string", false},
+		{"server", "listen", ":9000", "string", false},
 		{"server", "tls_enabled", "true", "bool", false},
 		{"security", "session_timeout", "3600", "int", false},
 		{"deploy", "keep_releases", "5", "int", false},
@@ -491,8 +491,8 @@ func TestSettingsStorage(t *testing.T) {
 	if setting == nil {
 		t.Fatal("Expected setting to exist")
 	}
-	if setting.Value != ":8080" {
-		t.Errorf("Expected :8080, got %s", setting.Value)
+	if setting.Value != ":9000" {
+		t.Errorf("Expected :9000, got %s", setting.Value)
 	}
 
 	// List settings by category

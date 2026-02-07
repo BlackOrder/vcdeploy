@@ -53,7 +53,7 @@ health:
 // MasterConfigFixture returns a valid master configuration YAML string.
 func MasterConfigFixture() string {
 	return `server:
-  listen: ":8080"
+  listen: ":9000"
   tls:
     enabled: false
 

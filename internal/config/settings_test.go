@@ -165,7 +165,7 @@ func TestSettingsService_GetRequiredInt(t *testing.T) {
 	ctx := context.Background()
 
 	// Set an integer
-	if err := svc.SetInt(ctx, "test", "port", 8080); err != nil {
+	if err := svc.SetInt(ctx, "test", "port", 9000); err != nil {
 		t.Fatalf("SetInt failed: %v", err)
 	}
 
@@ -174,8 +174,8 @@ func TestSettingsService_GetRequiredInt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetRequiredInt failed: %v", err)
 	}
-	if val != 8080 {
-		t.Errorf("expected 8080, got %d", val)
+	if val != 9000 {
+		t.Errorf("expected 9000, got %d", val)
 	}
 
 	// Test with non-existent
@@ -555,7 +555,7 @@ func TestSettingsService_ExportImport(t *testing.T) {
 	ctx := context.Background()
 
 	// Set some values
-	if err := svc.Set(ctx, "server", "listen", ":8080", false); err != nil {
+	if err := svc.Set(ctx, "server", "listen", ":9000", false); err != nil {
 		t.Fatalf("Set failed: %v", err)
 	}
 	if err := svc.SetBool(ctx, "server", "tls_enabled", true); err != nil {
