@@ -73,6 +73,7 @@ Every resource page follows the same pattern:
 │ Deployments        │
 │ Agents             │
 │   └─ Provision     │
+│ Targets            │
 │ ───────────────    │
 │ Recipes            │
 │   ├─ Components    │
@@ -146,11 +147,21 @@ Every resource page follows the same pattern:
 | Section | Description | API |
 |---------|-------------|-----|
 | Overview | Project config, repo, branch | `GET /projects/{name}` |
+| Targets | Targets belonging to this project (create/edit/delete) | `GET /projects/{name}/targets` |
 | Deployment History | Recent deployments | `GET /deployments?project={name}` |
 | Webhooks | Configured webhooks | `GET /projects/{name}/webhooks` |
 | Health Checks | Health check config | `GET /health-checks?project={name}` |
 | Secrets | Project secrets | `GET /secrets?project={name}` |
 | Recipe Activation | Active recipe | `GET /recipes/activations?project={name}` |
+
+**Actions:**
+- Deploy (disabled for archived projects)
+- Edit
+- Clone
+- Archive / Unarchive (toggle action button)
+- Delete
+
+Archived projects show a visual indicator (badge, muted styling) in the projects list.
 
 ---
 
@@ -185,7 +196,7 @@ Every resource page follows the same pattern:
 |---------|-------------|-----|
 | Summary | Status, timing, commit | `GET /deployments/{id}` |
 | Logs | Live log stream | SSE `/deployments/{id}/logs/stream` |
-| Agent Results | Per-agent status | Included in deployment |
+| Target Results | Per-target status | Included in deployment |
 
 **Real-time:**
 - Deployment status updates via SSE
@@ -231,6 +242,46 @@ Every resource page follows the same pattern:
 **Real-time:**
 - Agent status via SSE
 - Heartbeat indicator
+
+---
+
+#### Targets (`/targets`)
+
+**Purpose:** Manage deployment targets across projects.
+
+**List View:**
+| Column | Description |
+|--------|-------------|
+| ☐ | Selection checkbox |
+| Name | Target name (link to detail) |
+| Project | Project name |
+| Agent | Agent name (or "Local" for master-local) |
+| Path | Deployment path |
+| Last Deploy | Most recent deployment status/time |
+| Actions | Edit, Delete |
+
+**Filters:**
+- Project dropdown
+- Agent dropdown
+- Search by name
+
+**API Endpoints:**
+| Action | Method | Endpoint |
+|--------|--------|----------|
+| List | GET | `/targets` |
+| Filter | GET | `/targets?project=...&agent=...` |
+| Create | POST | `/projects/{name}/targets` |
+| Update | PUT | `/targets/{id}` |
+| Delete | DELETE | `/targets/{id}` |
+
+**Create/Edit Modal:**
+
+| Field | Type | Notes |
+|-------|------|-------|
+| Name | text input | Required, unique per project |
+| Project | dropdown | Required (preselected if navigating from project) |
+| Agent | dropdown | Optional (empty = master-local deployment) |
+| Path | text input | Required |
 
 ---
 
@@ -689,6 +740,58 @@ document.body.addEventListener('htmx:responseError', function(evt) {
 - Screen reader announcements for async updates
 ---
 
+## Appendix: Admin Pages
+
+### Maintenance (`/admin/maintenance`)
+
+**Purpose:** Control system maintenance mode.
+
+**Components:**
+| Component | Description | API |
+|-----------|-------------|-----|
+| Status Display | Current mode, time entered, active connections | `GET /admin/maintenance` |
+| Toggle Button | Enable/Disable maintenance mode | `POST /admin/maintenance` |
+
+**Behavior:**
+- When maintenance is active, a warning banner is shown on ALL pages
+- During maintenance: all mutation endpoints return 503
+- GET endpoints and maintenance/backup endpoints remain accessible
+
+### Backup Export (`/admin/backup/export`)
+
+**Purpose:** Export encrypted database backup.
+
+**Components:**
+| Component | Description | API |
+|-----------|-------------|-----|
+| Passphrase Input | Password field with confirmation | — |
+| Export Button | Start export process | `POST /admin/backup/export` |
+| Progress Display | Export progress indicator | Polling |
+| Download Link | Time-limited download URL | `GET /admin/backup/download/{token}` |
+
+**Note:** Sensitive data is encrypted with your passphrase. Key material is never exported.
+
+### Backup Import (`/admin/backup/import`)
+
+**Purpose:** Import and restore from encrypted backup.
+
+**Components:**
+| Component | Description | API |
+|-----------|-------------|-----|
+| File Upload | Drag-and-drop or file picker | `POST /admin/backup/import/upload` |
+| Passphrase Input | Decryption passphrase | — |
+| Diff Table | Per-table counts (new/changed/only-in-current) | Response from upload |
+| Strategy Dropdowns | Per-table: Replace / Merge / Skip | — |
+| Bulk Buttons | "Apply All: Replace" and "Apply All: Merge" | — |
+| Execute Button | Execute import with chosen strategies | `POST /admin/backup/import/execute` |
+| Result Summary | Import results per table | Response from execute |
+
+**Requirements:**
+- Requires maintenance mode (prompt to enable if not active)
+- Admin role required
+
+---
+
 ## Appendix: Additional Pages
 
 ### Analytics Dashboard (`/analytics`)
@@ -759,6 +862,7 @@ While data loads, show animated skeleton placeholders:
 | `g p` | Go to Projects | Global |
 | `g d` | Go to Deployments | Global |
 | `g a` | Go to Agents | Global |
+| `g t` | Go to Targets | Global |
 | `n` | New (context-aware) | List pages |
 | `j` / `k` | Navigate rows | Tables |
 | `x` | Toggle selection | Tables |
