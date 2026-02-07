@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/BlackOrder/vcdeploy/internal/config"
 	"github.com/BlackOrder/vcdeploy/internal/security"
 	"github.com/BlackOrder/vcdeploy/internal/services"
 	"github.com/BlackOrder/vcdeploy/internal/services/agents"
@@ -111,8 +112,20 @@ func InitCLIServices(dbPath string) (*CLIServices, func(), error) {
 	// Use the db as a Store interface (DB implements storage.Store)
 	var store storage.Store = db
 
+	// Load master key for envelope encryption
+	sysCfg, err := config.GetSystemConfig()
+	if err != nil {
+		_ = db.Close()
+		return nil, nil, fmt.Errorf("load system config: %w", err)
+	}
+	masterKey, err := security.LoadOrGenerateMasterKey(sysCfg.Paths.DataDir)
+	if err != nil {
+		_ = db.Close()
+		return nil, nil, fmt.Errorf("load master key: %w", err)
+	}
+
 	// Initialize KMS for encrypted operations (secrets, settings)
-	kms, err := security.NewKMS(context.Background(), store, logger)
+	kms, err := security.NewKMS(context.Background(), store, logger, masterKey)
 	if err != nil {
 		_ = db.Close() // #nosec G104 - best effort cleanup on error path
 		return nil, nil, fmt.Errorf("initialize KMS: %w", err)

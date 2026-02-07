@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/bcrypt"
@@ -261,4 +262,29 @@ func GenerateSecureToken(length int) (string, error) {
 		return "", fmt.Errorf("generating secure token: %w", err)
 	}
 	return hex.EncodeToString(bytes), nil
+}
+
+// LoadOrGenerateMasterKey loads the master key from the default location (DataDir/master.key),
+// or generates a new one on first boot. This is the standard way to obtain a MasterKey
+// for both server and CLI operations.
+func LoadOrGenerateMasterKey(dataDir string) (*MasterKey, error) {
+	keyPath := filepath.Join(dataDir, "master.key")
+	mk, err := LoadMasterKey(keyPath)
+	if err == nil {
+		return mk, nil
+	}
+
+	// First boot — auto-generate
+	mk, err = GenerateMasterKey()
+	if err != nil {
+		return nil, fmt.Errorf("generate master key: %w", err)
+	}
+	// Ensure data directory exists (first boot)
+	if err := os.MkdirAll(dataDir, 0700); err != nil {
+		return nil, fmt.Errorf("create data directory %s: %w", dataDir, err)
+	}
+	if err := mk.SaveToFile(keyPath); err != nil {
+		return nil, fmt.Errorf("save master key to %s: %w", keyPath, err)
+	}
+	return mk, nil
 }

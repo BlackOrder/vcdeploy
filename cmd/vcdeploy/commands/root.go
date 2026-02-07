@@ -760,8 +760,14 @@ func runMasterRotateKey(cmd *cobra.Command, args []string) error {
 
 	ctx := context.Background()
 
+	// Load master key for envelope encryption
+	masterKey, err := security.LoadOrGenerateMasterKey(sysCfg.Paths.DataDir)
+	if err != nil {
+		return fmt.Errorf("load master key: %w", err)
+	}
+
 	// Initialize KMS (db implements storage.Store interface)
-	kms, err := security.NewKMS(ctx, db, globalLogger)
+	kms, err := security.NewKMS(ctx, db, globalLogger, masterKey)
 	if err != nil {
 		return fmt.Errorf("initialize KMS: %w", err)
 	}
@@ -1758,8 +1764,18 @@ func runSecretRestore(cmd *cobra.Command, args []string) error {
 
 	ctx := context.Background()
 
+	// Load master key for envelope encryption
+	restoreSysCfg, err := config.GetSystemConfig()
+	if err != nil {
+		return fmt.Errorf("load system config: %w", err)
+	}
+	masterKey, err := security.LoadOrGenerateMasterKey(restoreSysCfg.Paths.DataDir)
+	if err != nil {
+		return fmt.Errorf("load master key: %w", err)
+	}
+
 	// Initialize KMS for encryption (db implements storage.Store interface)
-	kms, err := security.NewKMS(ctx, db, globalLogger)
+	kms, err := security.NewKMS(ctx, db, globalLogger, masterKey)
 	if err != nil {
 		return fmt.Errorf("initialize KMS: %w", err)
 	}

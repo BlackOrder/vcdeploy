@@ -24,7 +24,7 @@ func setupTestSSHDB(t *testing.T) (*sql.DB, *KMS) {
 	}
 
 	// Create KMS using storage interface
-	kms, err := NewKMS(context.Background(), store, nil)
+	kms, err := NewKMS(context.Background(), store, nil, testMasterKey(t))
 	if err != nil {
 		t.Fatalf("NewKMS: %v", err)
 	}

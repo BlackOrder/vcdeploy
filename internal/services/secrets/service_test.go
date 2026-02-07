@@ -17,7 +17,8 @@ func newTestService(t *testing.T) (*Service, storage.Store) {
 	t.Cleanup(cleanup)
 
 	// db implements storage.Store interface
-	kms, err := security.NewKMS(context.Background(), db, nil)
+	masterKey := testutil.NewTestMasterKey(t)
+	kms, err := security.NewKMS(context.Background(), db, nil, masterKey)
 	if err != nil {
 		t.Fatalf("Failed to create KMS: %v", err)
 	}
@@ -791,7 +792,8 @@ func TestNew(t *testing.T) {
 	defer cleanup()
 
 	// db implements storage.Store interface
-	kms, err := security.NewKMS(context.Background(), db, nil)
+	masterKey := testutil.NewTestMasterKey(t)
+	kms, err := security.NewKMS(context.Background(), db, nil, masterKey)
 	if err != nil {
 		t.Fatalf("Failed to create KMS: %v", err)
 	}

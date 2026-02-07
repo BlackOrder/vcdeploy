@@ -23,7 +23,8 @@ func setupTestWithKMS(t *testing.T) (*Service, storage.Store, func()) {
 	db, cleanup := testutil.NewTestStore(t)
 
 	// db implements storage.Store interface
-	kms, err := security.NewKMS(context.Background(), db, nil)
+	masterKey := testutil.NewTestMasterKey(t)
+	kms, err := security.NewKMS(context.Background(), db, nil, masterKey)
 	if err != nil {
 		t.Fatalf("Failed to create KMS: %v", err)
 	}

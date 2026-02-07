@@ -2,9 +2,11 @@
 package testutil
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 
+	"github.com/BlackOrder/vcdeploy/internal/security"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"go.uber.org/zap"
 )
@@ -74,4 +76,29 @@ func SetupBenchStore(b *testing.B) (storage.Store, func()) {
 	b.Helper()
 	db, cleanup := SetupBenchDB(b)
 	return db, cleanup
+}
+
+// NewTestMasterKey generates a random MasterKey for test use.
+func NewTestMasterKey(t testing.TB) *security.MasterKey {
+	t.Helper()
+	mk, err := security.GenerateMasterKey()
+	if err != nil {
+		t.Fatalf("testutil.NewTestMasterKey: %v", err)
+	}
+	return mk
+}
+
+// NewTestKMS creates a KMS instance backed by a test store with a random MasterKey.
+// Returns the KMS instance already initialized with an encryption key.
+func NewTestKMS(t testing.TB, store storage.Store) *security.KMS {
+	t.Helper()
+	mk := NewTestMasterKey(t)
+	kms, err := security.NewKMS(context.Background(), store, nil, mk)
+	if err != nil {
+		t.Fatalf("testutil.NewTestKMS: NewKMS: %v", err)
+	}
+	if err := kms.Initialize(context.Background()); err != nil {
+		t.Fatalf("testutil.NewTestKMS: Initialize: %v", err)
+	}
+	return kms
 }

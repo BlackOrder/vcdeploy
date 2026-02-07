@@ -22,7 +22,7 @@ func setupTestCADB(t *testing.T) (storage.Store, *KMS) {
 	}
 
 	// Create KMS
-	kms, err := NewKMS(context.Background(), store, nil)
+	kms, err := NewKMS(context.Background(), store, nil, testMasterKey(t))
 	if err != nil {
 		t.Fatalf("NewKMS: %v", err)
 	}
@@ -414,7 +414,7 @@ func TestCAManagerPersistence(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	kms1, _ := NewKMS(ctx, store1, nil)
+	kms1, _ := NewKMS(ctx, store1, nil, testMasterKey(t))
 	_ = kms1.Initialize(ctx)
 
 	mgr1, _ := NewCAManager(store1, kms1, nil)
@@ -434,7 +434,7 @@ func TestCAManagerPersistence(t *testing.T) {
 	}
 	defer store2.Close()
 
-	kms2, _ := NewKMS(ctx, store2, nil)
+	kms2, _ := NewKMS(ctx, store2, nil, testMasterKey(t))
 	mgr2, err := NewCAManager(store2, kms2, nil)
 	if err != nil {
 		t.Fatalf("NewCAManager() after reopen error: %v", err)

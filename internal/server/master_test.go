@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -31,6 +32,21 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"go.uber.org/zap"
 )
+
+// TestMain sets up a temp data directory so NewMasterServer can save/load
+// the master key without requiring /var/lib/vcdeploy to exist.
+func TestMain(m *testing.M) {
+	tmpDir, err := os.MkdirTemp("", "vcdeploy-server-test-*")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to create temp dir: %v\n", err)
+		os.Exit(1)
+	}
+	os.Setenv("VCDEPLOY_DATA_DIR", tmpDir)
+	config.ResetSystemConfig() // reset singleton so it picks up the env var
+	code := m.Run()
+	os.RemoveAll(tmpDir)
+	os.Exit(code)
+}
 
 // loadTemplatesOrSkip loads templates for a server, skipping the test if templates aren't available.
 func loadTemplatesOrSkip(t *testing.T, server *MasterServer) {
@@ -74,16 +90,8 @@ func newTestServer(t *testing.T) *MasterServer {
 		db.Close()       //nolint:errcheck
 	})
 
-	// Set up KMS for tests (db implements storage.Store interface)
-	kms, err := security.NewKMS(context.Background(), db, nil)
-	if err != nil {
-		t.Fatalf("failed to create KMS: %v", err)
-	}
-	// Initialize KMS with an encryption key for tests
-	if err := kms.Initialize(context.Background()); err != nil {
-		t.Fatalf("failed to initialize KMS: %v", err)
-	}
-	server.kms = kms
+	// Use the KMS already initialized by NewMasterServer
+	kms := server.kms
 
 	// Initialize all services for tests
 	server.secretService = secrets.New(db, kms)
@@ -201,15 +209,15 @@ func TestNewMasterServer(t *testing.T) {
 	}
 
 	server, err := NewMasterServer(cfg, db, logger)
+	if err != nil {
+		t.Fatalf("NewMasterServer() error = %v", err)
+	}
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		server.Stop(ctx) //nolint:errcheck
 	})
 
-	if err != nil {
-		t.Fatalf("NewMasterServer() error = %v", err)
-	}
 	if server == nil {
 		t.Fatal("NewMasterServer() returned nil")
 	}
