@@ -197,7 +197,7 @@ func TestNewMasterServer(t *testing.T) {
 
 	cfg := &config.MasterConfig{
 		Server: config.ServerConfig{Listen: ":8080"},
-		GRPC:   config.GRPCConfig{Listen: ":9090"},
+		GRPC:   config.GRPCConfig{Listen: ":9001"},
 	}
 
 	server, err := NewMasterServer(cfg, db, logger)
@@ -1977,7 +1977,7 @@ func TestNewMasterServer_WithRateLimiter(t *testing.T) {
 
 	cfg := &config.MasterConfig{
 		Server: config.ServerConfig{Listen: ":8080"},
-		GRPC:   config.GRPCConfig{Listen: ":9090"},
+		GRPC:   config.GRPCConfig{Listen: ":9001"},
 	}
 
 	server, err := NewMasterServer(cfg, db, logger)
@@ -2008,7 +2008,7 @@ func TestNewMasterServer_WithSecurityMiddleware(t *testing.T) {
 
 	cfg := &config.MasterConfig{
 		Server: config.ServerConfig{Listen: ":8080"},
-		GRPC:   config.GRPCConfig{Listen: ":9090"},
+		GRPC:   config.GRPCConfig{Listen: ":9001"},
 	}
 
 	server, err := NewMasterServer(cfg, db, logger)

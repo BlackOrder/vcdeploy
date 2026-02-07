@@ -57,7 +57,7 @@ server:
   tls:
     enabled: false
 grpc:
-  listen: ":9090"
+  listen: ":9001"
 ssh:
   default_user: testuser
   connection_timeout: 60s
@@ -70,7 +70,7 @@ security:
 				if c.Server.Listen != ":8080" {
 					t.Errorf("unexpected server listen: %s", c.Server.Listen)
 				}
-				if c.GRPC.Listen != ":9090" {
+				if c.GRPC.Listen != ":9001" {
 					t.Errorf("unexpected gRPC listen: %s", c.GRPC.Listen)
 				}
 				if c.Server.TLS.Enabled {
@@ -117,7 +117,7 @@ grpc:
 server:
   listen: ":8080"
 grpc:
-  listen: ":9090"
+  listen: ":9001"
 webhooks:
   github:
     enabled: true
@@ -150,7 +150,7 @@ webhooks:
 server:
   listen: ":8080"
 grpc:
-  listen: ":9090"
+  listen: ":9001"
 backup:
   database:
     enabled: true
@@ -339,7 +339,7 @@ func TestMasterConfigValidate(t *testing.T) {
 					Listen: ":8080",
 				},
 				GRPC: GRPCConfig{
-					Listen: ":9090",
+					Listen: ":9001",
 				},
 				Backup: BackupConfig{
 					Config: ConfigBackupConfig{

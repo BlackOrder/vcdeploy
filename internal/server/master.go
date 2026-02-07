@@ -1209,7 +1209,7 @@ func getVCDeployGID() int {
 func (s *MasterServer) startGRPC() error {
 	addr := s.config.GRPC.Listen
 	if addr == "" {
-		addr = ":9090"
+		addr = config.DefaultGRPCAddr
 	}
 	s.logger.Info("Starting gRPC server with mandatory mTLS", zap.String("addr", addr))
 

@@ -19,7 +19,7 @@ Before provisioning, ensure:
 - **SSH Access**: The master can reach the target server via SSH
 - **SSH Key**: An SSH key is configured in vcdeploy for authentication
 - **Root/Sudo**: SSH user has root or sudo access for installation
-- **Network**: Target server can connect back to the master on port 9090
+- **Network**: Target server can connect back to the master on port 9001
 
 ## SSH Key Setup
 
@@ -289,7 +289,7 @@ echo "All provisioning jobs started"
 
 **"Agent not connecting"**
 - Verify master is reachable from target
-- Check firewall allows port 9090
+- Check firewall allows port 9001
 - Verify certificate is valid
 
 ### Recovery

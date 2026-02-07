@@ -227,7 +227,7 @@ func isLocalServerRunning() bool {
 	}
 
 	// Fall back to TCP check on default ports
-	ports := []string{":8080", ":9090"}
+	ports := []string{":9000", ":9001"}
 	for _, port := range ports {
 		conn, err := net.DialTimeout("tcp", "localhost"+port, 500*time.Millisecond)
 		if err == nil {

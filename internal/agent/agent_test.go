@@ -25,7 +25,7 @@ func testAgentConfig(t *testing.T) *config.AgentConfig {
 			ID: "test-agent",
 		},
 		Master: config.AgentMasterConfig{
-			Address: "localhost:9090",
+			Address: "localhost:9001",
 		},
 		Paths: config.AgentPathsConfig{
 			Data:     tmpDir,
