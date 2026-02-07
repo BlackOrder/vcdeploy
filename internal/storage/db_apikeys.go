@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/rs/xid"
 	"go.uber.org/zap"
 )
 
@@ -14,10 +15,13 @@ import (
 
 // CreateAPIKey creates a new API key.
 func (db *DB) CreateAPIKey(ctx context.Context, key *APIKey) error {
+	if key.UID == "" {
+		key.UID = xid.New().String()
+	}
 	result, err := db.conn.ExecContext(ctx, `
-		INSERT INTO api_keys (user_id, name, key_hash, key_prefix, scopes, expires_at, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, key.UserID, key.Name, key.KeyHash, key.KeyPrefix, key.Scopes, key.ExpiresAt, key.CreatedAt)
+		INSERT INTO api_keys (uid, user_id, name, key_hash, key_prefix, scopes, expires_at, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, key.UID, key.UserID, key.Name, key.KeyHash, key.KeyPrefix, key.Scopes, key.ExpiresAt, key.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("create API key: %w", err)
 	}
@@ -37,10 +41,10 @@ func (db *DB) GetAPIKeyByID(ctx context.Context, keyID int64) (*APIKey, error) {
 	var scopes, keyPrefix sql.NullString
 
 	err := db.conn.QueryRowContext(ctx, `
-		SELECT id, user_id, name, key_hash, key_prefix, scopes, expires_at, last_used_at, created_at
+		SELECT id, uid, user_id, name, key_hash, key_prefix, scopes, expires_at, last_used_at, created_at
 		FROM api_keys WHERE id = ?
 	`, keyID).Scan(
-		&key.ID, &key.UserID, &key.Name, &key.KeyHash,
+		&key.ID, &key.UID, &key.UserID, &key.Name, &key.KeyHash,
 		&keyPrefix, &scopes, &expiresAt, &lastUsedAt, &key.CreatedAt,
 	)
 	if err == sql.ErrNoRows {
@@ -69,10 +73,10 @@ func (db *DB) GetAPIKeyByHash(ctx context.Context, keyHash string) (*APIKey, err
 	var scopes, keyPrefix sql.NullString
 
 	err := db.conn.QueryRowContext(ctx, `
-		SELECT id, user_id, name, key_hash, key_prefix, scopes, expires_at, last_used_at, created_at
+		SELECT id, uid, user_id, name, key_hash, key_prefix, scopes, expires_at, last_used_at, created_at
 		FROM api_keys WHERE key_hash = ?
 	`, keyHash).Scan(
-		&key.ID, &key.UserID, &key.Name, &key.KeyHash,
+		&key.ID, &key.UID, &key.UserID, &key.Name, &key.KeyHash,
 		&keyPrefix, &scopes, &expiresAt, &lastUsedAt, &key.CreatedAt,
 	)
 	if err == sql.ErrNoRows {
@@ -117,7 +121,7 @@ func (db *DB) DeleteAPIKey(ctx context.Context, keyID int64) error {
 // ListAPIKeys returns all API keys for a user.
 func (db *DB) ListAPIKeys(ctx context.Context, userID int64) ([]*APIKey, error) {
 	rows, err := db.conn.QueryContext(ctx, `
-		SELECT id, user_id, name, key_hash, scopes, expires_at, last_used_at, created_at
+		SELECT id, uid, user_id, name, key_hash, scopes, expires_at, last_used_at, created_at
 		FROM api_keys WHERE user_id = ?
 		ORDER BY created_at DESC
 	`, userID)
@@ -132,7 +136,7 @@ func (db *DB) ListAPIKeys(ctx context.Context, userID int64) ([]*APIKey, error) 
 		var expiresAt, lastUsedAt sql.NullTime
 		var scopes sql.NullString
 
-		err := rows.Scan(&key.ID, &key.UserID, &key.Name, &key.KeyHash,
+		err := rows.Scan(&key.ID, &key.UID, &key.UserID, &key.Name, &key.KeyHash,
 			&scopes, &expiresAt, &lastUsedAt, &key.CreatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("scanning API key: %w", err)

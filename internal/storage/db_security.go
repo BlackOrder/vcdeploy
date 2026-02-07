@@ -7,16 +7,21 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/rs/xid"
 )
 
 // --- SSH Host Key operations ---
 
 // CreateSSHHostKey creates a new SSH host key record.
 func (db *DB) CreateSSHHostKey(ctx context.Context, key *SSHHostKey) error {
+	if key.UID == "" {
+		key.UID = xid.New().String()
+	}
 	result, err := db.conn.ExecContext(ctx, `
-		INSERT INTO ssh_host_keys (hostname, port, key_type, public_key, fingerprint, trusted, added_by, verified_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, key.Hostname, key.Port, key.KeyType, key.PublicKey, key.Fingerprint, key.Trusted, key.AddedBy, key.VerifiedAt)
+		INSERT INTO ssh_host_keys (uid, hostname, port, key_type, public_key, fingerprint, trusted, added_by, verified_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, key.UID, key.Hostname, key.Port, key.KeyType, key.PublicKey, key.Fingerprint, key.Trusted, key.AddedBy, key.VerifiedAt)
 	if err != nil {
 		return fmt.Errorf("creating ssh host key: %w", err)
 	}
@@ -33,11 +38,11 @@ func (db *DB) GetSSHHostKey(ctx context.Context, hostname string, port int, keyT
 	key := &SSHHostKey{}
 	var verifiedAt sql.NullTime
 	err := db.conn.QueryRowContext(ctx, `
-		SELECT id, hostname, port, key_type, public_key, fingerprint, trusted, added_by, verified_at, created_at, updated_at
+		SELECT id, uid, hostname, port, key_type, public_key, fingerprint, trusted, added_by, verified_at, created_at, updated_at
 		FROM ssh_host_keys
 		WHERE hostname = ? AND port = ? AND key_type = ?
 	`, hostname, port, keyType).Scan(
-		&key.ID, &key.Hostname, &key.Port, &key.KeyType, &key.PublicKey, &key.Fingerprint,
+		&key.ID, &key.UID, &key.Hostname, &key.Port, &key.KeyType, &key.PublicKey, &key.Fingerprint,
 		&key.Trusted, &key.AddedBy, &verifiedAt, &key.CreatedAt, &key.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
@@ -55,7 +60,7 @@ func (db *DB) GetSSHHostKey(ctx context.Context, hostname string, port int, keyT
 // GetSSHHostKeysByHost retrieves all SSH host keys for a hostname and port.
 func (db *DB) GetSSHHostKeysByHost(ctx context.Context, hostname string, port int) ([]*SSHHostKey, error) {
 	rows, err := db.conn.QueryContext(ctx, `
-		SELECT id, hostname, port, key_type, public_key, fingerprint, trusted, added_by, verified_at, created_at, updated_at
+		SELECT id, uid, hostname, port, key_type, public_key, fingerprint, trusted, added_by, verified_at, created_at, updated_at
 		FROM ssh_host_keys
 		WHERE hostname = ? AND port = ?
 		ORDER BY key_type
@@ -70,7 +75,7 @@ func (db *DB) GetSSHHostKeysByHost(ctx context.Context, hostname string, port in
 		key := &SSHHostKey{}
 		var verifiedAt sql.NullTime
 		if err := rows.Scan(
-			&key.ID, &key.Hostname, &key.Port, &key.KeyType, &key.PublicKey, &key.Fingerprint,
+			&key.ID, &key.UID, &key.Hostname, &key.Port, &key.KeyType, &key.PublicKey, &key.Fingerprint,
 			&key.Trusted, &key.AddedBy, &verifiedAt, &key.CreatedAt, &key.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scanning ssh host key: %w", err)
@@ -86,7 +91,7 @@ func (db *DB) GetSSHHostKeysByHost(ctx context.Context, hostname string, port in
 // ListSSHHostKeys retrieves all SSH host keys.
 func (db *DB) ListSSHHostKeys(ctx context.Context) ([]*SSHHostKey, error) {
 	rows, err := db.conn.QueryContext(ctx, `
-		SELECT id, hostname, port, key_type, public_key, fingerprint, trusted, added_by, verified_at, created_at, updated_at
+		SELECT id, uid, hostname, port, key_type, public_key, fingerprint, trusted, added_by, verified_at, created_at, updated_at
 		FROM ssh_host_keys
 		ORDER BY hostname, port, key_type
 	`)
@@ -100,7 +105,7 @@ func (db *DB) ListSSHHostKeys(ctx context.Context) ([]*SSHHostKey, error) {
 		key := &SSHHostKey{}
 		var verifiedAt sql.NullTime
 		if err := rows.Scan(
-			&key.ID, &key.Hostname, &key.Port, &key.KeyType, &key.PublicKey, &key.Fingerprint,
+			&key.ID, &key.UID, &key.Hostname, &key.Port, &key.KeyType, &key.PublicKey, &key.Fingerprint,
 			&key.Trusted, &key.AddedBy, &verifiedAt, &key.CreatedAt, &key.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scanning ssh host key: %w", err)
@@ -160,10 +165,13 @@ func (db *DB) DeleteSSHHostKeysByHost(ctx context.Context, hostname string, port
 
 // CreateJumpServer creates a new SSH jump server.
 func (db *DB) CreateJumpServer(ctx context.Context, js *SSHJumpServer) error {
+	if js.UID == "" {
+		js.UID = xid.New().String()
+	}
 	result, err := db.conn.ExecContext(ctx, `
-		INSERT INTO ssh_jump_servers (name, host, port, username, ssh_key_id)
-		VALUES (?, ?, ?, ?, ?)
-	`, js.Name, js.Host, js.Port, js.Username, js.SSHKeyID)
+		INSERT INTO ssh_jump_servers (uid, name, host, port, username, ssh_key_id)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, js.UID, js.Name, js.Host, js.Port, js.Username, js.SSHKeyID)
 	if err != nil {
 		return fmt.Errorf("creating jump server: %w", err)
 	}
@@ -180,10 +188,10 @@ func (db *DB) GetJumpServer(ctx context.Context, id int64) (*SSHJumpServer, erro
 	js := &SSHJumpServer{}
 	var sshKeyID sql.NullInt64
 	err := db.conn.QueryRowContext(ctx, `
-		SELECT id, name, host, port, username, ssh_key_id, created_at
+		SELECT id, uid, name, host, port, username, ssh_key_id, created_at
 		FROM ssh_jump_servers
 		WHERE id = ?
-	`, id).Scan(&js.ID, &js.Name, &js.Host, &js.Port, &js.Username, &sshKeyID, &js.CreatedAt)
+	`, id).Scan(&js.ID, &js.UID, &js.Name, &js.Host, &js.Port, &js.Username, &sshKeyID, &js.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
@@ -201,10 +209,10 @@ func (db *DB) GetJumpServerByName(ctx context.Context, name string) (*SSHJumpSer
 	js := &SSHJumpServer{}
 	var sshKeyID sql.NullInt64
 	err := db.conn.QueryRowContext(ctx, `
-		SELECT id, name, host, port, username, ssh_key_id, created_at
+		SELECT id, uid, name, host, port, username, ssh_key_id, created_at
 		FROM ssh_jump_servers
 		WHERE name = ?
-	`, name).Scan(&js.ID, &js.Name, &js.Host, &js.Port, &js.Username, &sshKeyID, &js.CreatedAt)
+	`, name).Scan(&js.ID, &js.UID, &js.Name, &js.Host, &js.Port, &js.Username, &sshKeyID, &js.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
@@ -220,7 +228,7 @@ func (db *DB) GetJumpServerByName(ctx context.Context, name string) (*SSHJumpSer
 // ListJumpServers retrieves all jump servers.
 func (db *DB) ListJumpServers(ctx context.Context) ([]*SSHJumpServer, error) {
 	rows, err := db.conn.QueryContext(ctx, `
-		SELECT id, name, host, port, username, ssh_key_id, created_at
+		SELECT id, uid, name, host, port, username, ssh_key_id, created_at
 		FROM ssh_jump_servers
 		ORDER BY name
 	`)
@@ -233,7 +241,7 @@ func (db *DB) ListJumpServers(ctx context.Context) ([]*SSHJumpServer, error) {
 	for rows.Next() {
 		js := &SSHJumpServer{}
 		var sshKeyID sql.NullInt64
-		if err := rows.Scan(&js.ID, &js.Name, &js.Host, &js.Port, &js.Username, &sshKeyID, &js.CreatedAt); err != nil {
+		if err := rows.Scan(&js.ID, &js.UID, &js.Name, &js.Host, &js.Port, &js.Username, &sshKeyID, &js.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scanning jump server: %w", err)
 		}
 		if sshKeyID.Valid {
@@ -422,10 +430,10 @@ func (db *DB) GetACMECertificate(ctx context.Context, domain string) (*ACMECerti
 	var issuer sql.NullString
 
 	err := db.conn.QueryRowContext(ctx, `
-		SELECT id, domain, certificate_pem, private_key_encrypted, issuer, 
+		SELECT id, uid, domain, certificate_pem, private_key_encrypted, issuer, 
 			not_before, not_after, last_renewal, auto_renew, created_at, updated_at
 		FROM acme_certificates WHERE domain = ?
-	`, domain).Scan(&cert.ID, &cert.Domain, &cert.CertificatePEM, &cert.PrivateKeyEncrypted,
+	`, domain).Scan(&cert.ID, &cert.UID, &cert.Domain, &cert.CertificatePEM, &cert.PrivateKeyEncrypted,
 		&issuer, &cert.NotBefore, &cert.NotAfter, &lastRenewal, &cert.AutoRenew, &cert.CreatedAt, &cert.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
@@ -443,10 +451,13 @@ func (db *DB) GetACMECertificate(ctx context.Context, domain string) (*ACMECerti
 
 // SaveACMECertificate creates or updates an ACME certificate.
 func (db *DB) SaveACMECertificate(ctx context.Context, cert *ACMECertificate) error {
+	if cert.UID == "" {
+		cert.UID = xid.New().String()
+	}
 	result, err := db.conn.ExecContext(ctx, `
-		INSERT INTO acme_certificates (domain, certificate_pem, private_key_encrypted, issuer, 
+		INSERT INTO acme_certificates (uid, domain, certificate_pem, private_key_encrypted, issuer, 
 			not_before, not_after, last_renewal, auto_renew, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 		ON CONFLICT(domain) DO UPDATE SET 
 			certificate_pem = excluded.certificate_pem,
 			private_key_encrypted = excluded.private_key_encrypted,
@@ -456,7 +467,7 @@ func (db *DB) SaveACMECertificate(ctx context.Context, cert *ACMECertificate) er
 			last_renewal = excluded.last_renewal,
 			auto_renew = excluded.auto_renew,
 			updated_at = CURRENT_TIMESTAMP
-	`, cert.Domain, cert.CertificatePEM, cert.PrivateKeyEncrypted, cert.Issuer,
+	`, cert.UID, cert.Domain, cert.CertificatePEM, cert.PrivateKeyEncrypted, cert.Issuer,
 		cert.NotBefore, cert.NotAfter, cert.LastRenewal, cert.AutoRenew)
 	if err != nil {
 		return fmt.Errorf("saving ACME certificate: %w", err)
@@ -490,7 +501,7 @@ func (db *DB) DeleteACMECertificate(ctx context.Context, domain string) error {
 // ListACMECertificates returns all stored ACME certificates.
 func (db *DB) ListACMECertificates(ctx context.Context) ([]*ACMECertificate, error) {
 	rows, err := db.conn.QueryContext(ctx, `
-		SELECT id, domain, certificate_pem, private_key_encrypted, issuer, 
+		SELECT id, uid, domain, certificate_pem, private_key_encrypted, issuer, 
 			not_before, not_after, last_renewal, auto_renew, created_at, updated_at
 		FROM acme_certificates ORDER BY domain ASC
 	`)
@@ -505,7 +516,7 @@ func (db *DB) ListACMECertificates(ctx context.Context) ([]*ACMECertificate, err
 		var lastRenewal sql.NullTime
 		var issuer sql.NullString
 
-		if err := rows.Scan(&cert.ID, &cert.Domain, &cert.CertificatePEM, &cert.PrivateKeyEncrypted,
+		if err := rows.Scan(&cert.ID, &cert.UID, &cert.Domain, &cert.CertificatePEM, &cert.PrivateKeyEncrypted,
 			&issuer, &cert.NotBefore, &cert.NotAfter, &lastRenewal, &cert.AutoRenew,
 			&cert.CreatedAt, &cert.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scanning ACME certificate: %w", err)
@@ -527,9 +538,9 @@ func (db *DB) GetACMEAccount(ctx context.Context, email string) (*ACMEAccount, e
 	var accountURL sql.NullString
 
 	err := db.conn.QueryRowContext(ctx, `
-		SELECT id, email, account_url, private_key_encrypted, directory_url, created_at
+		SELECT id, uid, email, account_url, private_key_encrypted, directory_url, created_at
 		FROM acme_accounts WHERE email = ?
-	`, email).Scan(&account.ID, &account.Email, &accountURL, &account.PrivateKeyEncrypted,
+	`, email).Scan(&account.ID, &account.UID, &account.Email, &accountURL, &account.PrivateKeyEncrypted,
 		&account.DirectoryURL, &account.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
@@ -549,11 +560,14 @@ func (db *DB) SaveACMEAccount(ctx context.Context, account *ACMEAccount) error {
 	err := db.conn.QueryRowContext(ctx, `SELECT id FROM acme_accounts WHERE email = ?`, account.Email).Scan(&existingID)
 
 	if errors.Is(err, sql.ErrNoRows) {
+		if account.UID == "" {
+			account.UID = xid.New().String()
+		}
 		// Insert new
 		result, err := db.conn.ExecContext(ctx, `
-			INSERT INTO acme_accounts (email, account_url, private_key_encrypted, directory_url, created_at)
-			VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-		`, account.Email, account.AccountURL, account.PrivateKeyEncrypted, account.DirectoryURL)
+			INSERT INTO acme_accounts (uid, email, account_url, private_key_encrypted, directory_url, created_at)
+			VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		`, account.UID, account.Email, account.AccountURL, account.PrivateKeyEncrypted, account.DirectoryURL)
 		if err != nil {
 			return fmt.Errorf("inserting ACME account: %w", err)
 		}

@@ -3,6 +3,8 @@ package storage
 import (
 	"context"
 	"time"
+
+	"github.com/rs/xid"
 )
 
 // --- SSHHostKey methods ---
@@ -19,6 +21,9 @@ func (s *MemoryStore) CreateSSHHostKey(ctx context.Context, key *SSHHostKey) err
 		}
 	}
 
+	if key.UID == "" {
+		key.UID = xid.New().String()
+	}
 	key.ID = nextID(&s.nextSSHHostKeyID)
 	now := time.Now()
 	key.CreatedAt = now
@@ -138,6 +143,9 @@ func (s *MemoryStore) CreateJumpServer(ctx context.Context, js *SSHJumpServer) e
 		}
 	}
 
+	if js.UID == "" {
+		js.UID = xid.New().String()
+	}
 	js.ID = nextID(&s.nextJumpServerID)
 	js.CreatedAt = time.Now()
 
@@ -409,6 +417,9 @@ func (s *MemoryStore) CreateHealthCheckConfig(ctx context.Context, config *Healt
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if config.UID == "" {
+		config.UID = xid.New().String()
+	}
 	config.ID = nextID(&s.nextHealthCheckID)
 	now := time.Now()
 	config.CreatedAt = now

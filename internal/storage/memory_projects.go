@@ -3,6 +3,8 @@ package storage
 import (
 	"context"
 	"time"
+
+	"github.com/rs/xid"
 )
 
 // --- Project operations ---
@@ -17,6 +19,9 @@ func (s *MemoryStore) CreateProject(ctx context.Context, project *Project) error
 		return ErrDuplicate
 	}
 
+	if project.UID == "" {
+		project.UID = xid.New().String()
+	}
 	project.ID = nextID(&s.nextProjectID)
 	now := time.Now()
 	project.CreatedAt = now
@@ -302,6 +307,9 @@ func (s *MemoryStore) CreateProjectType(ctx context.Context, pt *ProjectType) er
 		}
 	}
 
+	if pt.UID == "" {
+		pt.UID = xid.New().String()
+	}
 	pt.ID = nextID(&s.nextProjectTypeID)
 	pt.CreatedAt = time.Now()
 
@@ -430,6 +438,7 @@ func (s *MemoryStore) SetProjectWebhook(ctx context.Context, projectID int64, pr
 
 	// Create new
 	webhook := &ProjectWebhook{
+		UID:             xid.New().String(),
 		ID:              nextID(&s.nextWebhookID),
 		ProjectID:       projectID,
 		Provider:        provider,
@@ -510,6 +519,7 @@ func (s *MemoryStore) SetSecretEncrypted(ctx context.Context, project, scope, ke
 
 	// Create new
 	secret := &Secret{
+		UID:            xid.New().String(),
 		ID:             nextID(&s.nextSecretID),
 		Project:        project,
 		Scope:          scope,

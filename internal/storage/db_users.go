@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/rs/xid"
 	"go.uber.org/zap"
 )
 
@@ -14,10 +15,13 @@ import (
 
 // CreateUser creates a new user.
 func (db *DB) CreateUser(ctx context.Context, user *User) error {
+	if user.UID == "" {
+		user.UID = xid.New().String()
+	}
 	result, err := db.conn.ExecContext(ctx, `
-		INSERT INTO users (username, password_hash, email, role, must_change_password, totp_secret, totp_enabled)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, user.Username, user.PasswordHash, user.Email, user.Role, user.MustChangePassword, user.TOTPSecret, user.TOTPEnabled)
+		INSERT INTO users (uid, username, password_hash, email, role, must_change_password, totp_secret, totp_enabled)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, user.UID, user.Username, user.PasswordHash, user.Email, user.Role, user.MustChangePassword, user.TOTPSecret, user.TOTPEnabled)
 	if err != nil {
 		return fmt.Errorf("inserting user: %w", err)
 	}
@@ -37,11 +41,11 @@ func (db *DB) GetUserByUsername(ctx context.Context, username string) (*User, er
 	var totpSecret sql.NullString
 
 	err := db.conn.QueryRowContext(ctx, `
-		SELECT id, username, password_hash, email, role, totp_secret, totp_enabled, 
+		SELECT id, uid, username, password_hash, email, role, totp_secret, totp_enabled, 
 		       must_change_password, created_at, updated_at
 		FROM users WHERE username = ?
 	`, username).Scan(
-		&user.ID, &user.Username, &user.PasswordHash, &user.Email, &user.Role,
+		&user.ID, &user.UID, &user.Username, &user.PasswordHash, &user.Email, &user.Role,
 		&totpSecret, &user.TOTPEnabled, &user.MustChangePassword,
 		&user.CreatedAt, &user.UpdatedAt,
 	)
@@ -155,7 +159,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64) ([]*Session, e
 // ListUsers returns all users.
 func (db *DB) ListUsers(ctx context.Context) ([]*User, error) {
 	rows, err := db.conn.QueryContext(ctx, `
-		SELECT id, username, password_hash, email, role, totp_secret, totp_enabled, 
+		SELECT id, uid, username, password_hash, email, role, totp_secret, totp_enabled, 
 		       must_change_password, created_at, updated_at
 		FROM users ORDER BY username
 	`)
@@ -169,7 +173,7 @@ func (db *DB) ListUsers(ctx context.Context) ([]*User, error) {
 		var user User
 		var totpSecret sql.NullString
 		if err := rows.Scan(
-			&user.ID, &user.Username, &user.PasswordHash, &user.Email, &user.Role,
+			&user.ID, &user.UID, &user.Username, &user.PasswordHash, &user.Email, &user.Role,
 			&totpSecret, &user.TOTPEnabled, &user.MustChangePassword,
 			&user.CreatedAt, &user.UpdatedAt,
 		); err != nil {
@@ -184,7 +188,7 @@ func (db *DB) ListUsers(ctx context.Context) ([]*User, error) {
 // ListUsersPaginated returns users with pagination support (H6).
 func (db *DB) ListUsersPaginated(ctx context.Context, limit, offset int) ([]*User, error) {
 	rows, err := db.conn.QueryContext(ctx, `
-		SELECT id, username, password_hash, email, role, totp_secret, totp_enabled, 
+		SELECT id, uid, username, password_hash, email, role, totp_secret, totp_enabled, 
 		       must_change_password, created_at, updated_at
 		FROM users ORDER BY username LIMIT ? OFFSET ?
 	`, limit, offset)
@@ -198,7 +202,7 @@ func (db *DB) ListUsersPaginated(ctx context.Context, limit, offset int) ([]*Use
 		var user User
 		var totpSecret sql.NullString
 		if err := rows.Scan(
-			&user.ID, &user.Username, &user.PasswordHash, &user.Email, &user.Role,
+			&user.ID, &user.UID, &user.Username, &user.PasswordHash, &user.Email, &user.Role,
 			&totpSecret, &user.TOTPEnabled, &user.MustChangePassword,
 			&user.CreatedAt, &user.UpdatedAt,
 		); err != nil {
@@ -226,11 +230,11 @@ func (db *DB) GetUserByID(ctx context.Context, id int64) (*User, error) {
 	var totpSecret sql.NullString
 
 	err := db.conn.QueryRowContext(ctx, `
-		SELECT id, username, password_hash, email, role, totp_secret, totp_enabled,
+		SELECT id, uid, username, password_hash, email, role, totp_secret, totp_enabled,
 		       must_change_password, created_at, updated_at
 		FROM users WHERE id = ?
 	`, id).Scan(
-		&user.ID, &user.Username, &user.PasswordHash, &user.Email, &user.Role,
+		&user.ID, &user.UID, &user.Username, &user.PasswordHash, &user.Email, &user.Role,
 		&totpSecret, &user.TOTPEnabled, &user.MustChangePassword,
 		&user.CreatedAt, &user.UpdatedAt,
 	)

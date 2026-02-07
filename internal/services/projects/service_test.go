@@ -335,13 +335,13 @@ func TestService_DeleteWithCleanup(t *testing.T) {
 	conn := db.Conn()
 
 	// Add a webhook
-	_, err := conn.ExecContext(ctx, `INSERT INTO project_webhooks (project_id, provider, enabled) VALUES (?, 'github', 1)`, project.ID)
+	_, err := conn.ExecContext(ctx, `INSERT INTO project_webhooks (uid, project_id, provider, enabled) VALUES (?, ?, 'github', 1)`, "uid-wh-cleanup", project.ID)
 	if err != nil {
 		t.Fatalf("Failed to insert webhook: %v", err)
 	}
 
 	// Add a secret
-	_, err = conn.ExecContext(ctx, `INSERT INTO secrets (project, scope, key, value_encrypted, created_at) VALUES (?, 'env', 'TEST_KEY', X'00', datetime('now'))`, project.Name)
+	_, err = conn.ExecContext(ctx, `INSERT INTO secrets (uid, project, scope, key, value_encrypted, created_at) VALUES (?, ?, 'env', 'TEST_KEY', X'00', datetime('now'))`, "uid-secret-cleanup", project.Name)
 	if err != nil {
 		t.Fatalf("Failed to insert secret: %v", err)
 	}
@@ -432,11 +432,11 @@ func TestService_DeleteWithCleanup_OnlyWebhooks(t *testing.T) {
 
 	// Add only webhooks
 	conn := db.Conn()
-	_, err := conn.ExecContext(ctx, `INSERT INTO project_webhooks (project_id, provider, enabled) VALUES (?, 'github', 1)`, project.ID)
+	_, err := conn.ExecContext(ctx, `INSERT INTO project_webhooks (uid, project_id, provider, enabled) VALUES (?, ?, 'github', 1)`, "uid-wh-only1", project.ID)
 	if err != nil {
 		t.Fatalf("Failed to insert webhook: %v", err)
 	}
-	_, err = conn.ExecContext(ctx, `INSERT INTO project_webhooks (project_id, provider, enabled) VALUES (?, 'gitlab', 0)`, project.ID)
+	_, err = conn.ExecContext(ctx, `INSERT INTO project_webhooks (uid, project_id, provider, enabled) VALUES (?, ?, 'gitlab', 0)`, "uid-wh-only2", project.ID)
 	if err != nil {
 		t.Fatalf("Failed to insert webhook: %v", err)
 	}
