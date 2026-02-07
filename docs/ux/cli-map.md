@@ -40,6 +40,20 @@ vcdeploy create-project      # Bad: verb-noun
 
 **Never use:** `add`, `remove`, `get`, `status`, `info`
 
+### Nesting Exceptions
+
+Most commands follow 2-level nesting (`resource action`). The following use 3-level nesting because they represent distinct subsystems:
+
+| Command | Reason |
+|---------|--------|
+| `cert ca *` | Certificate Authority is a distinct subsystem |
+| `cert tls *` | TLS/HTTPS configuration is a distinct subsystem |
+| `master backup *` | Backup operations are a distinct subsystem |
+| `agent provision *` | Provisioning is a distinct workflow |
+| `user totp *` | 2FA management is a distinct feature |
+| `recipe component *` | Recipe components are a sub-resource |
+| `recipe activation *` | Recipe activations are a sub-resource |
+
 ### Output Formats
 
 All commands support `--output` / `-o` flag:
@@ -62,7 +76,46 @@ Global Flags:
   -o, --output string   Output format: table, json, yaml, wide (default: table)
       --no-color        Disable colored output
   -v, --verbose         Enable verbose logging
-  -h, --help            Help for any command
+```
+
+---
+
+## Help System
+
+vcdeploy provides three tiers of help:
+
+| Method | Content | When to use |
+|--------|---------|-------------|
+| `vcdeploy <cmd> help` | Man-page style help | Detailed documentation |
+| `vcdeploy <cmd> -h` | Brief inline summary | Quick reference |
+| `man vcdeploy-<cmd>` | Full man page | Installed via packages |
+
+### Examples
+
+```bash
+# Get detailed help for project command
+vcdeploy project help
+
+# Get help for a subcommand
+vcdeploy project create help
+
+# Quick inline help
+vcdeploy project -h
+
+# System man page (if installed)
+man vcdeploy-project
+```
+
+### Man Page Installation
+
+Man pages are automatically installed when using package managers:
+- `apt install vcdeploy` → installs to `/usr/share/man/man1/`
+- `brew install vcdeploy` → installs to Homebrew's man path
+
+For binary installs, generate and install manually:
+```bash
+vcdeploy docs install         # Install to /usr/local/share/man (requires sudo)
+vcdeploy docs install --user  # Install to ~/.local/share/man
 ```
 
 ### Configuration File
@@ -146,28 +199,209 @@ Examples:
 
 ---
 
-### Dashboard
+### Stats & Dashboard
 
-#### status
+#### stats
 
 ```
-vcdeploy status [flags]
+vcdeploy stats [command] [flags]
 
-Display system dashboard with key metrics.
+Display system statistics and dashboard.
 
-Shows total projects, agents, deployments, and success rate.
-Equivalent to the web UI dashboard.
+Without a subcommand, shows the combined dashboard with key metrics
+for projects, agents, and deployments. Use subcommands for focused views.
+
+Available Commands:
+  deployments   Deployment statistics and trends
+  agents        Agent statistics and health
 
 Flags:
       --watch           Continuously update (default: false)
       --interval int    Update interval in seconds (default: 5)
+      --range string    Time range: 1h, 24h, 7d, 30d (default: 24h)
 
 Examples:
-  # Show current status
-  vcdeploy status
+  # Show combined dashboard
+  vcdeploy stats
 
-  # Watch status updates
-  vcdeploy status --watch --interval 10
+  # Watch dashboard updates
+  vcdeploy stats --watch --interval 10
+
+  # Show deployment stats for last 7 days
+  vcdeploy stats deployments --range 7d
+
+  # Show agent health stats
+  vcdeploy stats agents
+```
+
+#### stats deployments
+
+```
+vcdeploy stats deployments [flags]
+
+Show deployment statistics and trends.
+
+Displays deployment counts, success rates, average duration,
+and trends over the specified time range.
+
+Flags:
+      --range string    Time range: 1h, 24h, 7d, 30d (default: 24h)
+      --project string  Filter by project
+      --group-by string Group by: project, agent, hour, day (default: none)
+
+Examples:
+  # Deployment stats for last 24 hours
+  vcdeploy stats deployments
+
+  # Stats grouped by project
+  vcdeploy stats deployments --group-by project
+
+  # Last 7 days for specific project
+  vcdeploy stats deployments --range 7d --project myapp
+```
+
+#### stats agents
+
+```
+vcdeploy stats agents [flags]
+
+Show agent statistics and health summary.
+
+Displays agent counts by status, uptime, deployment counts,
+and resource utilization trends.
+
+Flags:
+      --range string   Time range: 1h, 24h, 7d, 30d (default: 24h)
+      --group string   Filter by agent group
+
+Examples:
+  # Agent health summary
+  vcdeploy stats agents
+
+  # Stats for specific group
+  vcdeploy stats agents --group web-servers
+```
+
+---
+
+### Server Management
+
+#### master
+
+```
+vcdeploy master <command> [flags]
+
+Manage the vcdeploy master server process.
+
+Administrative commands for starting, stopping, and monitoring
+the master server. Typically used by init systems or administrators.
+
+Available Commands:
+  start       Start the master server
+  stop        Stop the master server
+  status      Show master server status
+  rotate-key  Rotate the master encryption key
+  backup      Manage database backups
+
+Use "vcdeploy master help" for command details.
+```
+
+#### master start
+
+```
+vcdeploy master start [flags]
+
+Start the master server.
+
+Starts the vcdeploy master server in the foreground. For production,
+use systemd or another init system.
+
+Flags:
+  -c, --config string   Path to config file (default: /etc/vcdeploy/master.yaml)
+      --debug           Enable debug logging
+
+Examples:
+  # Start with default config
+  vcdeploy master start
+
+  # Start with custom config
+  vcdeploy master start -c /path/to/master.yaml
+```
+
+#### master stop
+
+```
+vcdeploy master stop [flags]
+
+Stop the master server.
+
+Sends a graceful shutdown signal to the running master server.
+
+Examples:
+  vcdeploy master stop
+```
+
+#### master status
+
+```
+vcdeploy master status [flags]
+
+Show master server status.
+
+Checks if the master server is running and displays basic health info.
+Useful for troubleshooting connectivity issues.
+
+Output includes:
+- Server status (online/offline/unhealthy)
+- Connected agents count
+- Pending/running deployments
+- Server uptime
+
+Examples:
+  # Check server status
+  vcdeploy master status
+```
+
+#### master rotate-key
+
+```
+vcdeploy master rotate-key [flags]
+
+Rotate the master encryption key.
+
+Generates a new encryption key and re-encrypts all secrets.
+Requires server restart to take effect.
+
+Flags:
+      --force   Skip confirmation prompt
+
+Examples:
+  vcdeploy master rotate-key
+```
+
+#### master backup
+
+```
+vcdeploy master backup <command> [flags]
+
+Manage database backups.
+
+Create, list, and restore database backups.
+
+Available Commands:
+  create      Create a database backup
+  list        List available backups
+  restore     Restore from a backup
+
+Examples:
+  # Create backup
+  vcdeploy master backup create
+
+  # List backups
+  vcdeploy master backup list
+
+  # Restore from backup
+  vcdeploy master backup restore backup-2026-02-06.db
 ```
 
 ---
@@ -185,19 +419,19 @@ A project defines what to deploy, where to deploy it, and how.
 Projects reference a Git repository and specify deployment hooks,
 health checks, and target agents.
 
+For deploying projects, use "vcdeploy deploy create --project <name>".
+
 Available Commands:
   list        List all projects
   show        Show project details
   create      Create a new project
   update      Update project configuration
   delete      Delete a project
-  deploy      Trigger a deployment
-  rollback    Trigger a rollback
   validate    Validate project configuration
   clone       Clone project to new name
   health      Run health check
 
-Use "vcdeploy project <command> --help" for more information.
+Use "vcdeploy project help" for command details.
 ```
 
 #### project list
@@ -329,66 +563,6 @@ Examples:
   vcdeploy project delete myapp --force
 ```
 
-#### project deploy
-
-```
-vcdeploy project deploy <name> [flags]
-
-Trigger a deployment for a project.
-
-Deploys the specified branch/commit to all configured agents.
-Use --dry-run to simulate without making changes.
-
-Flags:
-      --branch string      Branch to deploy (default: project default)
-      --commit string      Specific commit SHA
-      --agents strings     Override target agents
-      --dry-run            Simulate deployment only
-      --wait               Wait for completion
-      --follow             Follow deployment logs
-
-Examples:
-  # Deploy default branch
-  vcdeploy project deploy myapp
-
-  # Deploy specific branch
-  vcdeploy project deploy myapp --branch feature/new-ui
-
-  # Deploy specific commit
-  vcdeploy project deploy myapp --commit abc123
-
-  # Dry run
-  vcdeploy project deploy myapp --dry-run
-
-  # Deploy and watch logs
-  vcdeploy project deploy myapp --follow
-```
-
-#### project rollback
-
-```
-vcdeploy project rollback <name> [flags]
-
-Trigger a rollback to a previous deployment.
-
-Rolls back to the specified deployment or the last successful one.
-
-Flags:
-      --to string          Deployment ID to rollback to
-      --wait               Wait for completion
-      --follow             Follow rollback logs
-
-Examples:
-  # Rollback to last successful deployment
-  vcdeploy project rollback myapp
-
-  # Rollback to specific deployment
-  vcdeploy project rollback myapp --to deploy-42
-
-  # Rollback and watch logs
-  vcdeploy project rollback myapp --follow
-```
-
 #### project clone
 
 ```
@@ -420,19 +594,56 @@ Examples:
 ```
 vcdeploy deploy <command> [flags]
 
-Manage deployment records.
+Manage deployments.
 
-View, monitor, and control deployment executions. For triggering
-new deployments, use "vcdeploy project deploy".
+Create, monitor, and control deployment executions.
 
 Available Commands:
-  list        List deployment records
+  create      Create a new deployment
+  list        List deployments
   show        Show deployment details
   logs        View deployment logs
   cancel      Cancel a running deployment
   retry       Retry a failed deployment
+  rollback    Rollback to a previous deployment
 
-Use "vcdeploy deploy <command> --help" for more information.
+Use "vcdeploy deploy help" for command details.
+```
+
+#### deploy create
+
+```
+vcdeploy deploy create [flags]
+
+Create a new deployment.
+
+Deploys the specified project to its configured agents.
+Use --dry-run to simulate without making changes.
+
+Flags:
+      --project string     Project to deploy (required)
+      --branch string      Branch to deploy (default: project default)
+      --commit string      Specific commit SHA
+      --agents strings     Override target agents
+      --dry-run            Simulate deployment only
+      --wait               Wait for completion
+      --follow             Follow deployment logs via SSE
+
+Examples:
+  # Deploy a project
+  vcdeploy deploy create --project myapp
+
+  # Deploy specific branch
+  vcdeploy deploy create --project myapp --branch feature/new-ui
+
+  # Deploy specific commit
+  vcdeploy deploy create --project myapp --commit abc123
+
+  # Dry run
+  vcdeploy deploy create --project myapp --dry-run
+
+  # Deploy and watch logs
+  vcdeploy deploy create --project myapp --follow
 ```
 
 #### deploy list
@@ -440,7 +651,7 @@ Use "vcdeploy deploy <command> --help" for more information.
 ```
 vcdeploy deploy list [flags]
 
-List deployment records.
+List deployments.
 
 Shows deployment history with status, project, and timing.
 
@@ -551,6 +762,33 @@ Examples:
   vcdeploy deploy retry deploy-123 --follow
 ```
 
+#### deploy rollback
+
+```
+vcdeploy deploy rollback [flags]
+
+Rollback to a previous deployment.
+
+Creates a new deployment that reverts to a previous state.
+If --to is not specified, rolls back to the last successful deployment.
+
+Flags:
+      --project string   Project to rollback (required)
+      --to string        Deployment ID to rollback to (default: last successful)
+      --wait             Wait for completion
+      --follow           Follow rollback logs via SSE
+
+Examples:
+  # Rollback to last successful deployment
+  vcdeploy deploy rollback --project myapp
+
+  # Rollback to specific deployment
+  vcdeploy deploy rollback --project myapp --to deploy-42
+
+  # Rollback and watch logs
+  vcdeploy deploy rollback --project myapp --follow
+```
+
 ---
 
 ### Agents
@@ -573,7 +811,7 @@ Available Commands:
   token       Generate registration token
   provision   Manage agent provisioning
 
-Use "vcdeploy agent <command> --help" for more information.
+Use "vcdeploy agent help" for command details.
 ```
 
 #### agent list
@@ -744,8 +982,9 @@ Available Commands:
   delete      Delete a user
   password    Change user password
   totp        Manage two-factor authentication
+  recovery    Emergency lockout recovery
 
-Use "vcdeploy user <command> --help" for more information.
+Use "vcdeploy user help" for command details.
 ```
 
 #### user list
@@ -839,6 +1078,32 @@ Examples:
   vcdeploy user totp disable john
 ```
 
+#### user recovery
+
+```
+vcdeploy user recovery [flags]
+
+Emergency credential recovery when locked out.
+
+Requires direct server access and master config file.
+Used when locked out of the web UI or CLI.
+
+Flags:
+      --reset-password       Reset admin password
+      --unlock <user>        Unlock a locked account
+      --disable-2fa <user>   Disable 2FA for a user
+
+Examples:
+  # Reset admin password (prompts for new password)
+  vcdeploy user recovery --reset-password
+
+  # Unlock a user account
+  vcdeploy user recovery --unlock john
+
+  # Disable 2FA for locked-out user
+  vcdeploy user recovery --disable-2fa john
+```
+
 ---
 
 ### Configuration
@@ -854,13 +1119,12 @@ Configure global server settings organized by category.
 
 Available Commands:
   list        List all settings
-  show        Show settings for a category
-  get         Get a specific setting
+  show        Show settings for a category or specific key
   set         Update a setting
   export      Export settings to file
   import      Import settings from file
 
-Use "vcdeploy config <command> --help" for more information.
+Use "vcdeploy config help" for command details.
 ```
 
 #### config list
@@ -883,13 +1147,19 @@ Examples:
 #### config show
 
 ```
-vcdeploy config show <category> [flags]
+vcdeploy config show <category> [key] [flags]
 
-Show all settings in a category.
+Show settings for a category or a specific key.
+
+If key is provided, shows only that setting's value.
+If only category is provided, shows all settings in that category.
 
 Examples:
-  # Show security settings
+  # Show all security settings
   vcdeploy config show security
+
+  # Show specific setting
+  vcdeploy config show security session_timeout
 
   # Show notifications settings as YAML
   vcdeploy config show notifications -o yaml
@@ -938,7 +1208,7 @@ Available Commands:
   export      Export encrypted secrets
   import      Import encrypted secrets
 
-Use "vcdeploy secret <command> --help" for more information.
+Use "vcdeploy secret help" for command details.
 ```
 
 #### secret list
@@ -1017,7 +1287,12 @@ Examples:
 ```
 vcdeploy secret bulk [flags]
 
-Bulk import secrets from file.
+Bulk import secrets from plaintext file.
+
+Imports multiple secrets at once from a .env or JSON file.
+Values are provided in plaintext and encrypted on import.
+
+For restoring encrypted backups, use "vcdeploy secret import".
 
 File format (JSON):
 {
@@ -1062,7 +1337,7 @@ Available Commands:
   create      Create a new API key
   revoke      Revoke an API key
 
-Use "vcdeploy api-key <command> --help" for more information.
+Use "vcdeploy api-key help" for command details.
 ```
 
 #### api-key create
@@ -1110,7 +1385,7 @@ Available Commands:
   ca          Manage Certificate Authority
   tls         Manage TLS/HTTPS settings
 
-Use "vcdeploy cert <command> --help" for more information.
+Use "vcdeploy cert help" for command details.
 ```
 
 #### cert ca
@@ -1145,12 +1420,18 @@ Configure TLS mode, certificates, and ACME (Let's Encrypt).
 
 Available Commands:
   show        Show TLS configuration
-  update      Update TLS settings
+  settings    View or update TLS settings
   renew       Force ACME certificate renewal
 
 Examples:
-  # Show TLS status
+  # Show TLS configuration
   vcdeploy cert tls show
+
+  # View TLS settings
+  vcdeploy cert tls settings
+
+  # Update TLS settings
+  vcdeploy cert tls settings --min-version TLS12
 
   # Force Let's Encrypt renewal
   vcdeploy cert tls renew
@@ -1182,7 +1463,7 @@ Available Commands:
   export      Export all recipes
   import      Import recipes
 
-Use "vcdeploy recipe <command> --help" for more information.
+Use "vcdeploy recipe help" for command details.
 ```
 
 ---
@@ -1207,7 +1488,7 @@ Available Commands:
   delete      Delete credential
   test        Test credential against a repository
 
-Aliases: credentials, creds
+Alias: creds
 
 Examples:
   # Create GitHub token
@@ -1388,19 +1669,27 @@ Examples:
   vcdeploy version --short
 ```
 
-#### admin
+#### docs
 
 ```
-vcdeploy admin [flags]
+vcdeploy docs <command> [flags]
 
-Administrative lockout recovery.
+Generate and manage documentation.
 
-Used to reset admin credentials when locked out of the web UI.
-Requires direct server access.
+Available Commands:
+  man         Generate man pages
+  markdown    Generate markdown documentation
+  install     Install man pages to system
 
 Examples:
-  # Reset admin password
-  vcdeploy admin --reset-password
+  # Generate man pages to directory
+  vcdeploy docs man ./man
+
+  # Install man pages (requires sudo for system install)
+  sudo vcdeploy docs install
+
+  # Install to user directory (no sudo)
+  vcdeploy docs install --user
 ```
 
 ---
@@ -1457,9 +1746,14 @@ These commands are **removed** in favor of the canonical patterns documented abo
 
 | Removed Command | Replacement | Reason |
 |-----------------|-------------|--------|
+| `vcdeploy admin` | `vcdeploy user recovery` | Scoped under user |
+| `vcdeploy status` | `vcdeploy stats` | Consolidated under stats |
+| `vcdeploy project deploy` | `vcdeploy deploy create --project` | Deployment actions belong under `deploy` |
+| `vcdeploy project rollback` | `vcdeploy deploy rollback --project` | Deployment actions belong under `deploy` |
 | `vcdeploy settings *` | `vcdeploy config *` | Standardized naming |
-| `vcdeploy rollback *` | `vcdeploy project rollback *` | Noun-verb consistency |
-| `vcdeploy deploy trigger` | `vcdeploy project deploy` | Centralize under resource |
+| `vcdeploy config get` | `vcdeploy config show` | Redundant with show |
+| `vcdeploy rollback *` | `vcdeploy deploy rollback *` | Noun-verb consistency |
+| `vcdeploy deploy trigger` | `vcdeploy deploy create` | Verb standardization |
 | `vcdeploy totp *` | `vcdeploy user totp *` | User-scoped organization |
 | `vcdeploy provision *` | `vcdeploy agent provision *` | Agent-scoped organization |
 | `vcdeploy show <resource>` | `vcdeploy <resource> show` | Noun-verb consistency |
@@ -1474,10 +1768,17 @@ These verb changes align all commands to the standard CRUD pattern.
 |----------|----------|-------------------|
 | `add` | `create` | `blocked-ip`, `host-key`, `webhook` |
 | `remove` | `delete` | `blocked-ip`, `host-key` |
-| `status` | `show` | All resources |
+| `status` | `show` | When used as alias for showing a resource |
 | `get` | `show` | `recipe`, `secret`, `config` |
 | `public` | `show` | `ssh-key public` → `ssh-key show` |
 | `passwd` | `password` | `user passwd` → `user password` |
+
+**Note on `status`:** The verb `status` is prohibited when used as an alias for `show` (e.g., `project status` showing project details). However, genuine status commands are allowed:
+- `vcdeploy status` — System dashboard (not showing a single resource)
+- `health-check status` — Global health status summary
+- `master status` — Server process health check
+
+These are distinct from resource CRUD operations and provide aggregate/operational status.
 
 ### Command Renames
 
