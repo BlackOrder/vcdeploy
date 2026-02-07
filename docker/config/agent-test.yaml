@@ -13,3 +13,8 @@ master:
   address: "master:9001"
   token: "test-registration-token"  # Auto-registration token for test mode
   ca_cert: "/etc/vcdeploy/ca.pem"   # CA certificate for TLS
+
+# Archive cache settings (test)
+archive:
+  cache_dir: /var/lib/vcdeploy/cache/archives
+  keep_count: 3
