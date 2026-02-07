@@ -16,9 +16,8 @@ import (
 
 // binaryCmd handles binary artifact management commands
 var binaryCmd = &cobra.Command{
-	Use:     "binary",
-	Aliases: []string{"binaries"},
-	Short:   "Binary artifact management",
+	Use:   "binary",
+	Short: "Binary artifact management",
 	Long: `Commands for managing binary artifacts.
 
 Binary artifacts are compiled executables or packages that can be

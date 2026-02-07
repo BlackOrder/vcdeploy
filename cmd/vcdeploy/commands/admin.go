@@ -20,31 +20,11 @@ import (
 	"golang.org/x/term"
 )
 
-// adminCmd handles administrator account management
-var adminCmd = &cobra.Command{
-	Use:   "admin",
-	Short: "Administrator account management",
-	Long: `Manage the administrator account.
-
-This command can create or update admin credentials either locally (direct database access)
-or remotely (via API when --master and --token are provided).
-
-Local mode (lockout recovery):
-  vcdeploy admin --username admin --email admin@example.com
-
-Remote mode (requires authentication):
-  vcdeploy admin --master localhost:9000 --token <api-token> --username admin
-
-When --password is not provided, you will be prompted to enter it interactively.`,
-	RunE: runAdmin,
-}
+// adminCmd is kept for backward compatibility reference only.
+// The admin functionality has been moved to "user recovery".
 
 func init() {
-	// Admin command with flags
-	adminCmd.Flags().StringP("username", "u", "admin", "Admin username")
-	adminCmd.Flags().StringP("password", "p", "", "Admin password (if not set, will prompt)")
-	adminCmd.Flags().StringP("email", "e", "admin@localhost", "Admin email address")
-	rootCmd.AddCommand(adminCmd)
+	// apiClient and helpers remain here as shared utilities
 }
 
 // --- API Client Helper ---

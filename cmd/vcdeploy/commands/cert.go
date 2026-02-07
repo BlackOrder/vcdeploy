@@ -31,7 +31,7 @@ func init() {
 		Long: `List all agent certificates with their status.
 
 Example:
-  vcdeploy certs list --master localhost:9000 --token <token>`,
+  vcdeploy cert list --master localhost:9000 --token <token>`,
 		RunE: runCertsList,
 	})
 
@@ -42,7 +42,7 @@ Example:
 		Long: `Display detailed information about an agent's certificate.
 
 Example:
-  vcdeploy certs show agent-001 --master localhost:9000 --token <token>`,
+  vcdeploy cert show agent-001 --master localhost:9000 --token <token>`,
 		Args: cobra.ExactArgs(1),
 		RunE: runCertsShow,
 	}
@@ -55,7 +55,7 @@ Example:
 		Long: `Revoke an agent's certificate, preventing it from authenticating.
 
 Example:
-  vcdeploy certs revoke agent-001 --reason "Agent compromised" --master localhost:9000 --token <token>`,
+  vcdeploy cert revoke agent-001 --reason "Agent compromised" --master localhost:9000 --token <token>`,
 		Args: cobra.ExactArgs(1),
 		RunE: runCertsRevoke,
 	}
@@ -76,7 +76,7 @@ Example:
 		Long: `List all CA certificates with their validity periods.
 
 Example:
-  vcdeploy certs ca list --master localhost:9000 --token <token>`,
+  vcdeploy cert ca list --master localhost:9000 --token <token>`,
 		RunE: runCAList,
 	})
 
@@ -91,7 +91,7 @@ This operation:
 3. New agent certificates will use the new CA
 
 Example:
-  vcdeploy certs ca rotate --validity-days 365 --master localhost:9000 --token <token>`,
+  vcdeploy cert ca rotate --validity-days 365 --master localhost:9000 --token <token>`,
 		RunE: runCARotate,
 	}
 	rotateCACmd.Flags().IntP("validity-days", "d", 365, "CA validity period in days")
@@ -104,7 +104,7 @@ Example:
 		Long: `Display the certificate audit log showing all certificate operations.
 
 Example:
-  vcdeploy certs audit --limit 50 --master localhost:9000 --token <token>`,
+  vcdeploy cert audit --limit 50 --master localhost:9000 --token <token>`,
 		RunE: runCertsAudit,
 	}
 	auditCmd.Flags().IntP("limit", "n", 100, "Maximum number of entries to show")
@@ -426,14 +426,14 @@ func init() {
 	}
 	certCmd.AddCommand(tlsCmd)
 
-	// TLS status
+	// TLS show
 	tlsCmd.AddCommand(&cobra.Command{
-		Use:   "status",
-		Short: "Show TLS certificate status",
+		Use:   "show",
+		Short: "Show TLS configuration",
 		Long: `Display status of the server's TLS certificate.
 
 Example:
-  vcdeploy certs tls status --master localhost:9000 --token <token>`,
+  vcdeploy cert tls show --master localhost:9000 --token <token>`,
 		RunE: runTLSStatus,
 	})
 
@@ -444,7 +444,7 @@ Example:
 		Long: `Renew the server's TLS certificate (ACME/Let's Encrypt).
 
 Example:
-  vcdeploy certs tls renew --master localhost:9000 --token <token>`,
+  vcdeploy cert tls renew --master localhost:9000 --token <token>`,
 		RunE: runTLSRenew,
 	}
 	tlsRenewCmd.Flags().BoolP("force", "f", false, "Force renewal even if not near expiry")
@@ -457,8 +457,8 @@ Example:
 		Long: `View or update TLS settings.
 
 Example:
-  vcdeploy certs tls settings --master localhost:9000 --token <token>
-  vcdeploy certs tls settings --min-version TLS12 --master localhost:9000 --token <token>`,
+  vcdeploy cert tls settings --master localhost:9000 --token <token>
+  vcdeploy cert tls settings --min-version TLS12 --master localhost:9000 --token <token>`,
 		RunE: runTLSSettings,
 	}
 	tlsSettingsCmd.Flags().String("min-version", "", "Minimum TLS version (TLS10, TLS11, TLS12, TLS13)")
@@ -487,7 +487,7 @@ func runTLSStatus(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	resp, err := client.get("/api/v1/tls/status")
+	resp, err := client.get("/api/v1/tls")
 	if err != nil {
 		return fmt.Errorf("API request failed: %w", err)
 	}
