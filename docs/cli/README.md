@@ -1572,7 +1572,7 @@ Some features are intentionally available only via the REST API or Web UI, not t
 | `/api/v1/host-keys` | SSH host key management | Low-frequency admin operation |
 | `/api/v1/jump-servers` | Jump server configuration | Low-frequency admin operation |
 | `/api/v1/binaries` | Agent binary management | Internal system feature |
-| `/api/v1/tls/*` | TLS certificate management | Server configuration via UI |
+| `/api/v1/tls` | TLS certificate management | Server configuration via UI |
 | `/api/v1/recipes/*` | Full recipe CRUD | Use `recipes import-yaml` for CLI workflow |
 
 If you need CLI access to these features, use `curl` or similar tools with an API key:

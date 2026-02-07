@@ -96,10 +96,10 @@ All error responses follow this format:
 | Host Keys | `/api/v1/host-keys`, `/api/v1/host-keys/{id}` | Yes/Admin |
 | Jump Servers | `/api/v1/jump-servers`, `/api/v1/jump-servers/{id}` | Yes/Admin |
 | Blocked IPs | `/api/v1/blocked-ips`, `/api/v1/blocked-ips/{ip}` | Admin |
-| Provision | `/api/v1/provision`, `/api/v1/provision/{id}` | Admin |
+| Provision | `/api/v1/provision-jobs`, `/api/v1/provision-jobs/{id}` | Admin |
 | Agent Binaries | `/api/v1/binaries`, `/api/v1/binaries/latest` | Yes |
 | Certificates | `/api/v1/certificates`, `/api/v1/certificates/{id}` | Admin |
-| TLS | `/api/v1/tls/status`, `/api/v1/tls/renew`, `/api/v1/tls/settings` | Admin |
+| TLS | `/api/v1/tls`, `/api/v1/tls/renew` | Admin |
 | Credentials | `/api/v1/credentials`, `/api/v1/credentials/{id}` | Admin |
 | SSH Keys | `/api/v1/ssh-keys`, `/api/v1/ssh-keys/{id}` | Admin |
 | Health Checks | `/api/v1/health-checks`, `/api/v1/health-checks/global` | Yes |
@@ -1474,37 +1474,29 @@ Returns certificate issuance and revocation history.
 
 Manage TLS configuration for the master server.
 
-### Get TLS Status
+### Get TLS Status and Settings
 
 ```
-GET /api/v1/tls/status
+GET /api/v1/tls
 ```
 
-Returns current TLS configuration status.
+Returns current TLS configuration, certificate status, and ACME settings.
 
 **Response:**
 ```json
 {
-  "mode": "acme",
   "enabled": true,
-  "certExpires": "2026-06-01T00:00:00Z",
-  "domains": ["vcdeploy.example.com"],
-  "autoRenew": true
+  "mode": "acme",
+  "acme_domain": "vcdeploy.example.com",
+  "certificate_expires": "2026-06-01T00:00:00Z",
+  "certificate_issuer": "Let's Encrypt"
 }
 ```
-
-### Force ACME Renewal
-
-```
-POST /api/v1/tls/renew
-```
-
-Force renewal of ACME certificate (Let's Encrypt).
 
 ### Update TLS Settings
 
 ```
-PUT /api/v1/tls/settings
+PUT /api/v1/tls
 ```
 
 Update TLS configuration.
@@ -1512,13 +1504,20 @@ Update TLS configuration.
 **Request Body:**
 ```json
 {
+  "enabled": true,
   "mode": "acme",
-  "acme": {
-    "email": "admin@example.com",
-    "domains": ["vcdeploy.example.com"]
-  }
+  "acme_domain": "vcdeploy.example.com",
+  "acme_email": "admin@example.com"
 }
 ```
+
+### Force Certificate Renewal
+
+```
+POST /api/v1/tls/renew
+```
+
+Forces immediate ACME certificate renewal.
 
 ---
 

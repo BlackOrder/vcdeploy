@@ -421,7 +421,7 @@ Certificates are automatically renewed by the ACME client. No manual interventio
 
 Monitor renewal status via API:
 ```bash
-curl -s https://vcdeploy.example.com/api/v1/tls/status | jq
+curl -s https://vcdeploy.example.com/api/v1/tls | jq
 ```
 
 #### Static Certificate Rotation
