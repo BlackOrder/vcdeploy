@@ -186,10 +186,10 @@ func (s *MasterServer) publishAuditEvent(id, username, action, resource, ip stri
 	})
 }
 
-// publishHealthEvent publishes a health check event.
-// TODO: Integrate with background health check scheduler when implemented.
+// publishHealthEvent publishes a health check event to SSE subscribers.
+// Reserved for Phase 5: Background health check scheduler integration.
 //
-//nolint:unused // Reserved for future background health check integration
+//nolint:unused // Reserved for background health check feature
 func (s *MasterServer) publishHealthEvent(name, status, message string) {
 	if s.sseBroker == nil {
 		return
@@ -202,10 +202,10 @@ func (s *MasterServer) publishHealthEvent(name, status, message string) {
 	})
 }
 
-// publishNotificationEvent publishes a system notification event.
-// TODO: Integrate with alerting manager when implemented.
+// publishNotificationEvent publishes a system notification event to SSE subscribers.
+// Reserved for Phase 5: Alerting manager integration.
 //
-//nolint:unused // Reserved for future alerting integration
+//nolint:unused // Reserved for alerting feature
 func (s *MasterServer) publishNotificationEvent(level, title, message string) {
 	if s.sseBroker == nil {
 		return
