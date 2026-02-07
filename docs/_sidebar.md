@@ -15,6 +15,7 @@
   * [Master Configuration](config/master.md)
   * [Agent Configuration](config/agent.md)
   * [Projects](config/projects.md)
+  * [Targets](config/targets.md)
   * [Secrets Management](config/secrets.md)
 
 * **Recipe System**

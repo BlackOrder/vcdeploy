@@ -369,10 +369,11 @@ DELETE /api/v1/projects/{id}/webhooks/{provider}
 Trigger deployment via API (not via Git webhook):
 
 ```bash
-POST /api/v1/projects/{id}/deploy
+POST /api/v1/deployments
 {
+  "project": "myapp",
   "target": "production",
-  "branch": "main"
+  "ref": "main"
 }
 ```
 
