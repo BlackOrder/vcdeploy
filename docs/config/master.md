@@ -314,18 +314,6 @@ Storage and caching configuration.
 |-------|------|---------|-------------|
 | `use_memory_cache` | bool | `true` | Enable in-memory cache layer with batched SQLite persistence. Eliminates SQLITE_BUSY errors from concurrent access. |
 
-## Environment Variables
-
-Configuration can be overridden via environment variables:
-
-| Variable | Config Path | Description |
-|----------|-------------|-------------|
-| `VCDEPLOY_SERVER_LISTEN` | `server.listen` | HTTP listen address |
-| `VCDEPLOY_GRPC_LISTEN` | `grpc.listen` | gRPC listen address |
-| `VCDEPLOY_ADMIN_USERNAME` | - | Initial admin username |
-| `VCDEPLOY_ADMIN_PASSWORD` | - | Initial admin password |
-| `VCDEPLOY_LOG_LEVEL` | `logs.application.level` | Log level |
-
 ## TLS Configuration
 
 ### Generate Self-Signed Certificates (Development)
@@ -384,43 +372,49 @@ The database location is not configurable in the YAML file—it's determined by 
 
 ## Environment Variables
 
-The following environment variables can be used to configure vcdeploy:
+The following environment variables can be used to configure vcdeploy. Environment variables take precedence over config file values for the fields they override.
+
+### Server Configuration
+
+| Variable | Config Path | Default | Description |
+|----------|-------------|---------|-------------|
+| `VCDEPLOY_SERVER_LISTEN` | `server.listen` | `:9000` | HTTP listen address |
+| `VCDEPLOY_GRPC_LISTEN` | `grpc.listen` | `:9001` | gRPC listen address |
+| `VCDEPLOY_LOG_LEVEL` | `logs.application.level` | `info` | Log level |
 
 ### Directory Configuration
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `VCDEPLOY_CONFIG_DIR` | Configuration directory | `/etc/vcdeploy` |
-| `VCDEPLOY_DATA_DIR` | Data directory | `/var/lib/vcdeploy` |
-| `VCDEPLOY_LOG_DIR` | Log directory | `/var/log/vcdeploy` |
-| `VCDEPLOY_RUN_DIR` | Runtime directory | `/var/run/vcdeploy` |
-| `VCDEPLOY_SYSTEM_CONFIG` | Override system config path | - |
+| Variable | Config Path | Default | Description |
+|----------|-------------|---------|-------------|
+| `VCDEPLOY_CONFIG_DIR` | - | `/etc/vcdeploy` | Configuration directory |
+| `VCDEPLOY_DATA_DIR` | - | `/var/lib/vcdeploy` | Data directory |
+| `VCDEPLOY_LOG_DIR` | - | `/var/log/vcdeploy` | Log directory |
+| `VCDEPLOY_RUN_DIR` | - | `/var/run/vcdeploy` | Runtime directory |
+| `VCDEPLOY_SYSTEM_CONFIG` | - | - | Override system config path |
 
 ### Security
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `VCDEPLOY_MASTER_KEY` | Master encryption key (base64) | Auto-generated |
-| `VCDEPLOY_ADMIN_PASSWORD` | Initial admin password | - |
-| `VCDEPLOY_ADMIN_USERNAME` | Initial admin username | `admin` |
-| `VCDEPLOY_ADMIN_EMAIL` | Initial admin email | `admin@localhost` |
+| Variable | Config Path | Default | Description |
+|----------|-------------|---------|-------------|
+| `VCDEPLOY_MASTER_KEY` | - | Auto-generated | Master encryption key (base64) |
+| `VCDEPLOY_ADMIN_USERNAME` | - | `admin` | Initial admin username |
+| `VCDEPLOY_ADMIN_PASSWORD` | - | - | Initial admin password |
+| `VCDEPLOY_ADMIN_EMAIL` | - | `admin@localhost` | Initial admin email |
 
 ### CLI Configuration
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `VCDEPLOY_MASTER` | Master server address for remote CLI | - |
-| `VCDEPLOY_TOKEN` | API token for remote CLI authentication | - |
+| Variable | Config Path | Default | Description |
+|----------|-------------|---------|-------------|
+| `VCDEPLOY_MASTER` | - | - | Master server address for remote CLI |
+| `VCDEPLOY_TOKEN` | - | - | API token for remote CLI authentication |
 
 ### Testing (Development Only)
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `VCDEPLOY_TEST_MODE` | Enable test mode (disables some security checks) | `false` |
+| Variable | Config Path | Default | Description |
+|----------|-------------|---------|-------------|
+| `VCDEPLOY_TEST_MODE` | - | `false` | Enable test mode (disables some security checks) |
 
 > **Warning:** `VCDEPLOY_TEST_MODE` bypasses security guards. Never use in production.
-
-Environment variables take precedence over config file values for the fields they override.
 
 ## See Also
 
