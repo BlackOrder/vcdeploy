@@ -17,7 +17,7 @@ A deployment platform with master-agent architecture for automated, webhook-driv
 ## Features
 
 - **Webhook-driven deployments** from GitHub, GitLab, and Bitbucket
-- **Hybrid deployment targets**: Agent-based (real-time logs) or SSH-based (no agent required)
+- **Deployment targets**: Agent-based (real-time logs) or master-local (no agent required)
 - **Zero-downtime deployments** using symlink-based releases
 - **Centralized configuration**: Project configs and secrets stored on master
 - **Full web UI** for management with dark mode default
@@ -62,14 +62,14 @@ sudo dnf install https://github.com/BlackOrder/vcdeploy/releases/latest/download
 │  • Webhook receiver                                            │
 └────────────────────────────────────────────────────────────────┘
         │                                    │
-        │ gRPC (persistent)                  │ SSH (on-demand)
-        ▼                                    ▼
+        │ gRPC (persistent)
+        ▼
 ┌─────────────────┐                ┌─────────────────┐
-│    Agent        │                │   SSH Target    │
-│  • Real-time    │                │  • Jump server  │
-│    log stream   │                │    support      │
-│  • Health       │                │  • No agent     │
-│    metrics      │                │    required     │
+│    Agent        │                │  Master-Local  │
+│  • Real-time    │                │  • No agent     │
+│    log stream   │                │    required    │
+│  • Health       │                │  • Direct       │
+│    metrics      │                │    extraction  │
 └─────────────────┘                └─────────────────┘
 ```
 
@@ -180,7 +180,7 @@ vcdeploy-agent start
 vcdeploy type create my-custom-type
 
 # Add project
-vcdeploy project add my-app
+vcdeploy project create my-app
 
 # Set secrets
 vcdeploy secret set my-app/_default DB_HOST
@@ -188,7 +188,7 @@ vcdeploy secret set my-app/production DB_PASSWORD
 vcdeploy secret set my-app/staging DB_PASSWORD
 
 # Deploy
-vcdeploy project deploy my-app --target=staging
+vcdeploy deploy create --project my-app --target staging --wait 30
 ```
 
 ## Configuration
@@ -227,9 +227,11 @@ watch:
 
 targets:
   production:
-    agents: [prod-web-01, prod-web-02]
-    branch: main
+    agent: prod-web-01
     path: /var/www/my-app
+  staging:
+    agent: staging-01
+    path: /var/www/my-app-staging
 ```
 
 See `configs/` directory for complete examples.
@@ -243,12 +245,15 @@ vcdeploy master rotate-key
 vcdeploy master backup create|list|restore
 
 # Project management
-vcdeploy project list|add|edit|delete|validate
-vcdeploy project deploy <name> [--target=x] [--dry-run] [--force]
-vcdeploy project rollback <name> [--target=x] [--release=n]
+vcdeploy project list|create|show|update|delete|validate
+vcdeploy deploy create --project <name> [--target=x] [--dry-run] [--wait=30]
+vcdeploy deploy rollback <id> [--target=x]
 
 # Type management
 vcdeploy type list|create|edit|delete
+
+# Target management
+vcdeploy target list|create|show|update|delete --project <name>
 
 # Secrets management
 vcdeploy secret set <project/scope> <key>
@@ -258,8 +263,8 @@ vcdeploy secret import <project/scope>
 vcdeploy secret backup --output=file.vcbackup
 vcdeploy secret restore file.vcbackup
 
-# Admin management (lockout recovery)
-vcdeploy admin --username admin --email admin@example.com
+# Admin management (lockout reset)
+vcdeploy admin reset --username admin --email admin@example.com
 ```
 
 ## API Reference
@@ -480,7 +485,7 @@ On first run, vcdeploy requires admin account setup via one of these methods:
 
 2. **Setup Wizard**: If no password is set and no users exist, the web UI redirects to `/setup` for initial configuration.
 
-3. **CLI** (also for lockout recovery):
+3. **CLI** (also for lockout reset):
    ```bash
    vcdeploy admin --username admin --email admin@example.com
    # You will be prompted for a password
