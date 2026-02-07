@@ -28,8 +28,10 @@ deploy:
   shared_files:
     - .env
 
-git:
-  depth: 1
+# Archive cache settings (dev)
+archive:
+  cache_dir: /tmp/vcdeploy-agent/cache/archives
+  keep_count: 3
 
 limits:
   max_concurrent: 2
