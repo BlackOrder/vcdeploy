@@ -496,7 +496,6 @@ Flags:
       --repo string        Git repository URL (required)
       --branch string      Default branch (default: main)
       --path string        Deploy path on target (required)
-      --agents strings     Comma-separated agent names or groups
   -f, --file string        Import from YAML file
 
 Examples:
@@ -505,8 +504,7 @@ Examples:
     --type laravel \
     --repo git@github.com:org/myapp.git \
     --branch main \
-    --path /var/www/myapp \
-    --agents web-1,web-2
+    --path /var/www/myapp
 
   # Create from file
   vcdeploy project create myapp -f myapp.yaml
@@ -527,16 +525,12 @@ Only specified flags are updated; other settings remain unchanged.
 Flags:
       --branch string      Update default branch
       --path string        Update deploy path
-      --agents strings     Update assigned agents
       --enabled bool       Enable/disable project
   -f, --file string        Update from YAML file
 
 Examples:
   # Update branch
   vcdeploy project update myapp --branch develop
-
-  # Update agents
-  vcdeploy project update myapp --agents web-1,web-2,web-3
 
   # Update from file
   vcdeploy project update myapp -f myapp-updated.yaml
@@ -585,6 +579,36 @@ Examples:
   vcdeploy project clone myapp myapp-staging --branch staging
 ```
 
+#### project archive
+
+```
+vcdeploy project archive <name>
+
+Archive a project.
+
+Archived projects are hidden from default listings and cannot
+receive new deployments. Existing deployment history is preserved.
+
+Examples:
+  # Archive a project
+  vcdeploy project archive myapp
+```
+
+#### project unarchive
+
+```
+vcdeploy project unarchive <name>
+
+Unarchive a project.
+
+Restores a project to active state, making it visible in listings
+and eligible for deployments again.
+
+Examples:
+  # Unarchive a project
+  vcdeploy project unarchive myapp
+```
+
 ---
 
 ### Deployments
@@ -617,33 +641,49 @@ vcdeploy deploy create [flags]
 
 Create a new deployment.
 
-Deploys the specified project to its configured agents.
+Deploys the specified project to its configured targets.
 Use --dry-run to simulate without making changes.
 
+If the project has exactly one target, it is used implicitly.
+If multiple targets exist, --target or --all is required.
+
 Flags:
-      --project string     Project to deploy (required)
-      --branch string      Branch to deploy (default: project default)
-      --commit string      Specific commit SHA
-      --agents strings     Override target agents
-      --dry-run            Simulate deployment only
-      --wait               Wait for completion
-      --follow             Follow deployment logs via SSE
+      --project string        Project to deploy (required)
+      --target strings        Deployment target(s)
+      --all                   Deploy to all targets in the project (mutually exclusive with --target)
+      --mode string           Orchestration mode: rolling|parallel (overrides project config)
+      --continue-on-error     Continue to remaining targets on failure (rolling mode only)
+      --branch string         Branch to deploy (default: project default)
+      --commit string         Specific commit SHA
+      --dry-run               Simulate deployment only
+      --wait int              Wait for deployment to complete in seconds (default: 30)
+      --follow                Follow deployment logs via SSE
 
 Examples:
-  # Deploy a project
-  vcdeploy deploy create --project myapp
+  # Deploy to a specific target
+  vcdeploy deploy create --project myapp --target production
+
+  # Deploy to multiple targets
+  vcdeploy deploy create --project myapp --target staging --target production
+
+  # Deploy to all targets
+  vcdeploy deploy create --project myapp --all
+
+  # Deploy and wait for completion
+  vcdeploy deploy create --project myapp --target production --wait
+  vcdeploy deploy create --project myapp --target production --wait 120
 
   # Deploy specific branch
-  vcdeploy deploy create --project myapp --branch feature/new-ui
-
-  # Deploy specific commit
-  vcdeploy deploy create --project myapp --commit abc123
+  vcdeploy deploy create --project myapp --target production --branch feature/new-ui
 
   # Dry run
-  vcdeploy deploy create --project myapp --dry-run
+  vcdeploy deploy create --project myapp --target production --dry-run
 
   # Deploy and watch logs
-  vcdeploy deploy create --project myapp --follow
+  vcdeploy deploy create --project myapp --target production --follow
+
+  # Deploy to all targets with rolling orchestration
+  vcdeploy deploy create --project myapp --all --mode rolling --continue-on-error --wait 60
 ```
 
 #### deploy list
@@ -747,16 +787,19 @@ vcdeploy deploy retry <id> [flags]
 
 Retry a failed deployment.
 
-Creates a new deployment with the same configuration as the
-failed one.
+Retries all targets from the original deployment with the same
+configuration. No target, branch, or commit overrides are supported.
 
 Flags:
-      --wait     Wait for completion
-      --follow   Follow deployment logs
+      --wait int   Wait for retry to complete in seconds (default: 30)
+      --follow     Follow deployment logs via SSE
 
 Examples:
   # Retry deployment
   vcdeploy deploy retry deploy-123
+
+  # Retry and wait for completion
+  vcdeploy deploy retry deploy-123 --wait
 
   # Retry and watch logs
   vcdeploy deploy retry deploy-123 --follow
@@ -775,7 +818,7 @@ If --to is not specified, rolls back to the last successful deployment.
 Flags:
       --project string   Project to rollback (required)
       --to string        Deployment ID to rollback to (default: last successful)
-      --wait             Wait for completion
+      --wait int         Wait for rollback to complete in seconds (default: 30)
       --follow           Follow rollback logs via SSE
 
 Examples:
@@ -962,6 +1005,150 @@ Examples:
 
 ---
 
+### Targets
+
+#### target
+
+```
+vcdeploy target <command> [flags]
+
+Manage deployment targets.
+
+Targets define where a project gets deployed. Each target maps to
+a deployment destination — either an agent-managed server or the
+master itself (local deployment).
+
+Available Commands:
+  list        List all targets
+  show        Show target details
+  create      Create a new target
+  update      Update target configuration
+  delete      Delete a target
+
+Use "vcdeploy target help" for command details.
+```
+
+#### target list
+
+```
+vcdeploy target list [flags]
+
+List all targets across projects.
+
+Displays target name, project, agent, path, and last deployment.
+
+Flags:
+      --project string    Filter by project name
+      --agent string      Filter by agent name
+      --search string     Search targets by name
+
+Examples:
+  # List all targets
+  vcdeploy target list
+
+  # Filter by project
+  vcdeploy target list --project myapp
+
+  # Filter by agent
+  vcdeploy target list --agent web-1
+
+  # Output as JSON
+  vcdeploy target list -o json
+```
+
+#### target show
+
+```
+vcdeploy target show <name> [flags]
+
+Show detailed information about a target.
+
+Displays target configuration, assigned agent, deployment path,
+and recent deployment history.
+
+Flags:
+      --project string    Project name (required)
+
+Examples:
+  # Show target details
+  vcdeploy target show production --project myapp
+
+  # Show as JSON
+  vcdeploy target show production --project myapp -o json
+```
+
+#### target create
+
+```
+vcdeploy target create <name> [flags]
+
+Create a new deployment target for a project.
+
+Targets specify where deployments are executed. Omit --agent for
+master-local deployment.
+
+Flags:
+      --project string    Project name (required)
+      --path string       Deployment path on target (required)
+      --agent string      Agent name (omit for master-local deployment)
+
+Examples:
+  # Create target on an agent
+  vcdeploy target create production --project myapp --agent web-1 --path /var/www/myapp
+
+  # Create master-local target
+  vcdeploy target create local-test --project myapp --path /opt/deploy/myapp
+
+  # Create staging target
+  vcdeploy target create staging --project myapp --agent staging-1 --path /var/www/myapp-staging
+```
+
+#### target update
+
+```
+vcdeploy target update <name> [flags]
+
+Update an existing target's configuration.
+
+Only specified flags are updated; other settings remain unchanged.
+
+Flags:
+      --project string    Project name (required)
+      --path string       Deployment path
+      --agent string      Agent name
+
+Examples:
+  # Update deployment path
+  vcdeploy target update production --project myapp --path /var/www/myapp-v2
+
+  # Change assigned agent
+  vcdeploy target update production --project myapp --agent web-2
+```
+
+#### target delete
+
+```
+vcdeploy target delete <name> [flags]
+
+Delete a deployment target.
+
+Removes the target configuration. Does not affect deployed files
+on the target server.
+
+Flags:
+      --project string    Project name (required)
+      --force             Skip confirmation prompt
+
+Examples:
+  # Delete with confirmation
+  vcdeploy target delete staging --project myapp
+
+  # Force delete (no prompt)
+  vcdeploy target delete staging --project myapp --force
+```
+
+---
+
 ### Users
 
 #### user
@@ -982,7 +1169,7 @@ Available Commands:
   delete      Delete a user
   password    Change user password
   totp        Manage two-factor authentication
-  recovery    Emergency lockout recovery
+  reset       Emergency lockout reset
 
 Use "vcdeploy user help" for command details.
 ```
@@ -1078,12 +1265,12 @@ Examples:
   vcdeploy user totp disable john
 ```
 
-#### user recovery
+#### user reset
 
 ```
-vcdeploy user recovery [flags]
+vcdeploy user reset [flags]
 
-Emergency credential recovery when locked out.
+Emergency lockout reset.
 
 Requires direct server access and master config file.
 Used when locked out of the web UI or CLI.
@@ -1095,13 +1282,13 @@ Flags:
 
 Examples:
   # Reset admin password (prompts for new password)
-  vcdeploy user recovery --reset-password
+  vcdeploy user reset --reset-password
 
   # Unlock a user account
-  vcdeploy user recovery --unlock john
+  vcdeploy user reset --unlock john
 
   # Disable 2FA for locked-out user
-  vcdeploy user recovery --disable-2fa john
+  vcdeploy user reset --disable-2fa john
 ```
 
 ---
@@ -1629,6 +1816,146 @@ Examples:
 
 ---
 
+### Backup
+
+#### backup
+
+```
+vcdeploy backup <command> [flags]
+
+Manage database backups with passphrase-protected encryption.
+
+Export creates a full database backup with sensitive fields encrypted
+using Argon2id + AES-256-GCM. Import allows restoring with per-table
+strategy selection (replace, merge, skip).
+
+Available Commands:
+  export      Export database backup
+  import      Import database backup
+
+Use "vcdeploy backup help" for command details.
+```
+
+#### backup export
+
+```
+vcdeploy backup export [flags]
+
+Export a passphrase-protected database backup.
+
+Creates a full backup file with all sensitive data encrypted.
+The passphrase is prompted interactively if not provided.
+
+Flags:
+      --output string       Output file path (default: vcdeploy-backup-{date}.db)
+      --passphrase string   Encryption passphrase (prompted if omitted)
+
+Examples:
+  # Export with interactive passphrase prompt
+  vcdeploy backup export
+
+  # Export to specific file
+  vcdeploy backup export --output /backups/vcdeploy-2026-02-07.db
+
+  # Export non-interactively (for automation)
+  vcdeploy backup export --passphrase "$BACKUP_PASSPHRASE" --output /backups/latest.db
+```
+
+#### backup import
+
+```
+vcdeploy backup import [flags]
+
+Import a database backup with per-table strategy.
+
+Uploads a backup file and presents a diff of changes. You can choose
+a strategy for each table: replace, merge, or skip. Requires
+maintenance mode.
+
+Flags:
+      --input string        Input file path (required)
+      --passphrase string   Decryption passphrase (prompted if omitted)
+      --strategy string     Default strategy: merge-all | replace-all (interactive if omitted)
+
+Examples:
+  # Import interactively (prompts for passphrase and per-table strategy)
+  vcdeploy backup import --input /backups/vcdeploy-2026-02-07.db
+
+  # Import with default merge strategy
+  vcdeploy backup import --input /backups/latest.db --strategy merge-all
+
+  # Import non-interactively
+  vcdeploy backup import --input /backups/latest.db --passphrase "$PASSPHRASE" --strategy replace-all
+```
+
+---
+
+### Maintenance
+
+#### maintenance
+
+```
+vcdeploy maintenance <command> [flags]
+
+Manage maintenance mode.
+
+Maintenance mode returns 503 for all mutation endpoints while
+allowing GET requests and admin endpoints to continue operating.
+Useful during backup/restore operations.
+
+Available Commands:
+  enable      Enter maintenance mode
+  disable     Exit maintenance mode
+  status      Show current maintenance mode state
+
+Use "vcdeploy maintenance help" for command details.
+```
+
+#### maintenance enable
+
+```
+vcdeploy maintenance enable
+
+Enter maintenance mode.
+
+All mutation endpoints will return 503 with Retry-After header.
+GET endpoints and maintenance/backup endpoints remain accessible.
+
+Examples:
+  vcdeploy maintenance enable
+```
+
+#### maintenance disable
+
+```
+vcdeploy maintenance disable
+
+Exit maintenance mode.
+
+Refreshes cache from database and restores normal operation.
+All endpoints resume normal behavior.
+
+Examples:
+  vcdeploy maintenance disable
+```
+
+#### maintenance status
+
+```
+vcdeploy maintenance status
+
+Show current maintenance mode state.
+
+Displays whether maintenance mode is active, when it was enabled,
+and the number of active connections.
+
+Examples:
+  vcdeploy maintenance status
+  vcdeploy maintenance status -o json
+```
+
+---
+
 ### Utility Commands
 
 #### completion
@@ -1746,7 +2073,8 @@ These commands are **removed** in favor of the canonical patterns documented abo
 
 | Removed Command | Replacement | Reason |
 |-----------------|-------------|--------|
-| `vcdeploy admin` | `vcdeploy user recovery` | Scoped under user |
+| `vcdeploy admin` | `vcdeploy user reset` | Scoped under user |
+| `vcdeploy user recovery` | `vcdeploy user reset` | Verb standardization |
 | `vcdeploy status` | `vcdeploy stats` | Consolidated under stats |
 | `vcdeploy project deploy` | `vcdeploy deploy create --project` | Deployment actions belong under `deploy` |
 | `vcdeploy project rollback` | `vcdeploy deploy rollback --project` | Deployment actions belong under `deploy` |
@@ -1821,7 +2149,7 @@ Enter passphrase for SSH key:
 
 For non-interactive/CI usage:
 ```bash
-vcdeploy project deploy myapp --passphrase-file /path/to/passphrase
+vcdeploy agent provision create --host 192.168.1.10 --user deploy --passphrase-file /path/to/passphrase
 ```
 
 ### Environment Variable
@@ -1829,7 +2157,7 @@ vcdeploy project deploy myapp --passphrase-file /path/to/passphrase
 SSH_ASKPASS is respected:
 ```bash
 export SSH_ASKPASS=/usr/bin/ksshaskpass
-vcdeploy project deploy myapp
+vcdeploy agent provision create --host 192.168.1.10 --user deploy
 ```
 
 ### Error Handling
