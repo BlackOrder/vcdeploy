@@ -67,7 +67,7 @@ make docker-test-down
 services:
   ssh:
     image: linuxserver/openssh-server
-    # SSH server for deployment tests
+    # SSH server for provisioning tests
   
   master:
     build: .
