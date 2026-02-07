@@ -9,6 +9,7 @@ import "time"
 // Old CAs are NEVER deleted, retained forever for backward compatibility.
 type CertificateAuthority struct {
 	ID             string     `json:"id"`
+	UID            string     `json:"uid"`
 	Version        int        `json:"version"`
 	CommonName     string     `json:"common_name"`
 	CertificatePEM string     `json:"certificate_pem"`
@@ -32,6 +33,7 @@ const (
 // AgentCertificate represents a certificate issued to an agent.
 type AgentCertificate struct {
 	ID               int64      `json:"id"`
+	UID              string     `json:"uid"`
 	AgentID          string     `json:"agent_id"`
 	CAID             string     `json:"ca_id"`
 	SerialNumber     string     `json:"serial_number"`
@@ -86,6 +88,7 @@ type RegistrationToken struct {
 // Credentials are stored encrypted and never transmitted to agents.
 type SourceCredential struct {
 	ID            int64     `json:"id"`
+	UID           string    `json:"uid"`
 	Name          string    `json:"name"`
 	Type          string    `json:"type"`        // "ssh_key", "https_token", "https_basic"
 	URLPattern    string    `json:"url_pattern"` // Regex to match repo URLs
@@ -145,6 +148,7 @@ const (
 // SSHKey represents an SSH key pair for provisioning and git operations.
 type SSHKey struct {
 	ID            int64     `json:"id"`
+	UID           string    `json:"uid"`
 	Name          string    `json:"name"`
 	PublicKey     string    `json:"public_key"`
 	PrivateKeyEnc []byte    `json:"-"` // KMS-encrypted, never expose in JSON
@@ -203,6 +207,7 @@ type CertAuditFilter struct {
 // Matches schema in migration 11: acme_certificates table.
 type ACMECertificate struct {
 	ID                  int64      `json:"id"`
+	UID                 string     `json:"uid"`
 	Domain              string     `json:"domain"`                // Primary domain (unique)
 	CertificatePEM      string     `json:"certificate_pem"`       // Full certificate chain PEM
 	PrivateKeyEncrypted []byte     `json:"private_key_encrypted"` // Private key (encrypted at rest)
@@ -219,6 +224,7 @@ type ACMECertificate struct {
 // Matches schema in migration 11: acme_accounts table.
 type ACMEAccount struct {
 	ID                  int64     `json:"id"`
+	UID                 string    `json:"uid"`
 	Email               string    `json:"email"`                 // Contact email
 	AccountURL          string    `json:"account_url,omitempty"` // ACME account URL
 	PrivateKeyEncrypted []byte    `json:"private_key_encrypted"` // Account private key (encrypted)

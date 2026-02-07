@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"time"
+
+	"github.com/rs/xid"
 )
 
 // --- Audit methods ---
@@ -122,6 +124,7 @@ func (s *MemoryStore) SetSetting(ctx context.Context, category, key, value, valu
 	}
 
 	setting := &Setting{
+		UID:       xid.New().String(),
 		ID:        nextID(&s.nextSettingID),
 		Category:  category,
 		Key:       key,

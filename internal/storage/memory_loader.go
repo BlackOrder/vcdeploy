@@ -734,7 +734,7 @@ func (s *MemoryStore) loadACMEAccounts(ctx context.Context, db *DB) error {
 	// ACME accounts are loaded on-demand via email lookup
 	// We query all accounts from DB
 	rows, err := db.conn.QueryContext(ctx, `
-		SELECT id, email, account_url, private_key_encrypted, directory_url, created_at
+		SELECT id, uid, email, account_url, private_key_encrypted, directory_url, created_at
 		FROM acme_accounts ORDER BY id ASC
 	`)
 	if err != nil {
@@ -748,7 +748,7 @@ func (s *MemoryStore) loadACMEAccounts(ctx context.Context, db *DB) error {
 	for rows.Next() {
 		var account ACMEAccount
 		var accountURL string
-		if err := rows.Scan(&account.ID, &account.Email, &accountURL,
+		if err := rows.Scan(&account.ID, &account.UID, &account.Email, &accountURL,
 			&account.PrivateKeyEncrypted, &account.DirectoryURL, &account.CreatedAt); err != nil {
 			return err
 		}

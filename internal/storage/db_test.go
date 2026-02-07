@@ -3537,8 +3537,8 @@ func TestRunInTransaction(t *testing.T) {
 
 	// Successful transaction
 	err := db.RunInTransaction(ctx, func(tx *sql.Tx) error {
-		_, err := tx.Exec(`INSERT INTO users (username, password_hash, email, role) VALUES (?, ?, ?, ?)`,
-			"txuser1", "hash", "tx@example.com", "viewer")
+		_, err := tx.Exec(`INSERT INTO users (uid, username, password_hash, email, role) VALUES (?, ?, ?, ?, ?)`,
+			"uid-txuser1", "txuser1", "hash", "tx@example.com", "viewer")
 		return err
 	})
 	if err != nil {
@@ -3563,8 +3563,8 @@ func TestRunInTransactionRollback(t *testing.T) {
 
 	// Transaction that should rollback
 	err := db.RunInTransaction(ctx, func(tx *sql.Tx) error {
-		_, err := tx.Exec(`INSERT INTO users (username, password_hash, email, role) VALUES (?, ?, ?, ?)`,
-			"txuser2", "hash", "tx2@example.com", "viewer")
+		_, err := tx.Exec(`INSERT INTO users (uid, username, password_hash, email, role) VALUES (?, ?, ?, ?, ?)`,
+			"uid-txuser2", "txuser2", "hash", "tx2@example.com", "viewer")
 		if err != nil {
 			return err
 		}
@@ -3873,9 +3873,9 @@ func TestCleanupExpiredAPIKeysWithData(t *testing.T) {
 
 	// Create an expired API key using direct SQL
 	_, err := db.conn.ExecContext(ctx, `
-		INSERT INTO api_keys (user_id, name, key_hash, expires_at, created_at)
-		VALUES (?, 'expired-key', 'expiredhash', datetime('now', '-2 hours'), datetime('now', '-24 hours'))
-	`, user.ID)
+		INSERT INTO api_keys (uid, user_id, name, key_hash, expires_at, created_at)
+		VALUES (?, ?, 'expired-key', 'expiredhash', datetime('now', '-2 hours'), datetime('now', '-24 hours'))
+	`, "uid-expired-key", user.ID)
 	if err != nil {
 		t.Fatalf("Insert expired API key error = %v", err)
 	}
@@ -3898,8 +3898,8 @@ func TestCleanupOrphanedWebhooksWithData(t *testing.T) {
 
 	// Create an orphaned webhook (project_id that doesn't exist)
 	_, err := db.conn.ExecContext(ctx, `
-		INSERT INTO project_webhooks (project_id, provider, secret_encrypted, enabled)
-		VALUES (99999, 'github', X'1234', 1)
+		INSERT INTO project_webhooks (uid, project_id, provider, secret_encrypted, enabled)
+		VALUES ('uid-orphaned-wh', 99999, 'github', X'1234', 1)
 	`)
 	if err != nil {
 		t.Fatalf("Insert orphaned webhook error = %v", err)

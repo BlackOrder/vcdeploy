@@ -68,6 +68,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rs/xid"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -182,9 +183,9 @@ func (m *SSHKeyManager) GenerateKey(ctx context.Context, name string) (*SSHKey, 
 
 	// Save to database
 	result, err := m.db.ExecContext(ctx, `
-		INSERT INTO ssh_keys (name, public_key, private_key_encrypted, key_type, fingerprint, created_at)
-		VALUES (?, ?, ?, ?, ?, ?)
-	`, key.Name, key.PublicKey, key.PrivateKeyEnc, key.KeyType, key.Fingerprint, key.CreatedAt)
+		INSERT INTO ssh_keys (uid, name, public_key, private_key_encrypted, key_type, fingerprint, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, xid.New().String(), key.Name, key.PublicKey, key.PrivateKeyEnc, key.KeyType, key.Fingerprint, key.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("save key: %w", err)
 	}
@@ -354,13 +355,13 @@ func (m *SSHKeyManager) AddKnownHost(ctx context.Context, hostname string, port 
 	now := time.Now()
 
 	_, err := m.db.ExecContext(ctx, `
-		INSERT INTO known_hosts (hostname, port, key_type, public_key, fingerprint, added_at, last_verified_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO known_hosts (uid, hostname, port, key_type, public_key, fingerprint, added_at, last_verified_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(hostname, port, key_type) DO UPDATE SET
 			public_key = excluded.public_key,
 			fingerprint = excluded.fingerprint,
 			last_verified_at = excluded.last_verified_at
-	`, hostname, port, keyType, pubKeyStr, fingerprint, now, now)
+	`, xid.New().String(), hostname, port, keyType, pubKeyStr, fingerprint, now, now)
 	return err
 }
 

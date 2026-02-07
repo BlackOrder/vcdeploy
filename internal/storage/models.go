@@ -140,6 +140,7 @@ func (s ScheduledDeploymentStatus) String() string { return string(s) }
 // User represents a user in the system.
 type User struct {
 	ID                 int64
+	UID                string
 	Username           string
 	PasswordHash       string
 	Email              string
@@ -274,6 +275,7 @@ type AuditEntry struct {
 // Secret represents an encrypted secret.
 type Secret struct {
 	ID             int64
+	UID            string
 	Project        string
 	ProjectID      *int64 // FK to projects table (optional for backward compatibility)
 	Scope          string
@@ -295,6 +297,7 @@ type SecretInfo struct {
 // Project represents a deployment project.
 type Project struct {
 	ID                   int64      `json:"id"`
+	UID                  string     `json:"uid"`
 	Name                 string     `json:"name"`
 	Repository           string     `json:"repository"`
 	Branch               string     `json:"branch"`
@@ -312,6 +315,7 @@ type Project struct {
 // ProjectType represents a project type template.
 type ProjectType struct {
 	ID           int64
+	UID          string
 	Name         string
 	Description  string
 	BuildCmd     string
@@ -322,6 +326,7 @@ type ProjectType struct {
 // ProjectWebhook represents a project-specific webhook configuration.
 type ProjectWebhook struct {
 	ID              int64
+	UID             string
 	ProjectID       int64
 	Provider        string
 	SecretEncrypted []byte
@@ -350,6 +355,7 @@ type Session struct {
 // APIKey represents an API key.
 type APIKey struct {
 	ID         int64      `json:"id"`
+	UID        string     `json:"uid"`
 	UserID     int64      `json:"userId"`
 	Name       string     `json:"name"`
 	KeyHash    string     `json:"-"` // Never expose in JSON
@@ -376,6 +382,7 @@ func (key *APIKey) IsValid() bool {
 // Setting represents a configuration setting.
 type Setting struct {
 	ID          int64
+	UID         string
 	Category    string
 	Key         string
 	Value       string
@@ -391,6 +398,7 @@ type Setting struct {
 // SSHHostKey represents a stored SSH host key.
 type SSHHostKey struct {
 	ID          int64
+	UID         string
 	Hostname    string
 	Port        int
 	KeyType     string
@@ -408,6 +416,7 @@ type SSHHostKey struct {
 // SSHJumpServer represents a bastion/jump server for SSH connections.
 type SSHJumpServer struct {
 	ID        int64
+	UID       string
 	Name      string
 	Host      string
 	Port      int
@@ -485,6 +494,7 @@ type AgentBinary struct {
 // Can be global (is_global=true, project_id=nil) or per-project.
 type HealthCheckConfig struct {
 	ID                int64
+	UID               string
 	ProjectID         *int64 // nil for global config
 	Name              string
 	URL               string // Can include template vars like {{.URL}}

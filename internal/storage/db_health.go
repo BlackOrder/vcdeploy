@@ -6,17 +6,22 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+
+	"github.com/rs/xid"
 )
 
 // --- Health Check Configuration Operations ---
 
 // CreateHealthCheckConfig creates a new health check configuration.
 func (db *DB) CreateHealthCheckConfig(ctx context.Context, config *HealthCheckConfig) error {
+	if config.UID == "" {
+		config.UID = xid.New().String()
+	}
 	result, err := db.conn.ExecContext(ctx, `
-		INSERT INTO health_check_configs (project_id, name, url, method, expected_status, timeout_seconds, 
+		INSERT INTO health_check_configs (uid, project_id, name, url, method, expected_status, timeout_seconds, 
 			retries, retry_delay_seconds, headers, body, body_contains, enabled, is_global)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, config.ProjectID, config.Name, config.URL, config.Method, config.ExpectedStatus, config.TimeoutSeconds,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, config.UID, config.ProjectID, config.Name, config.URL, config.Method, config.ExpectedStatus, config.TimeoutSeconds,
 		config.Retries, config.RetryDelaySeconds, config.Headers, config.Body, config.BodyContains,
 		config.Enabled, config.IsGlobal)
 	if err != nil {
@@ -37,10 +42,10 @@ func (db *DB) GetHealthCheckConfig(ctx context.Context, id int64) (*HealthCheckC
 	var headers, body, bodyContains sql.NullString
 
 	err := db.conn.QueryRowContext(ctx, `
-		SELECT id, project_id, name, url, method, expected_status, timeout_seconds, retries, 
+		SELECT id, uid, project_id, name, url, method, expected_status, timeout_seconds, retries, 
 			retry_delay_seconds, headers, body, body_contains, enabled, is_global, created_at, updated_at
 		FROM health_check_configs WHERE id = ?
-	`, id).Scan(&config.ID, &projectID, &config.Name, &config.URL, &config.Method, &config.ExpectedStatus,
+	`, id).Scan(&config.ID, &config.UID, &projectID, &config.Name, &config.URL, &config.Method, &config.ExpectedStatus,
 		&config.TimeoutSeconds, &config.Retries, &config.RetryDelaySeconds, &headers, &body, &bodyContains,
 		&config.Enabled, &config.IsGlobal, &config.CreatedAt, &config.UpdatedAt)
 	if err == sql.ErrNoRows {
@@ -65,10 +70,10 @@ func (db *DB) GetGlobalHealthCheckConfig(ctx context.Context) (*HealthCheckConfi
 	var headers, body, bodyContains sql.NullString
 
 	err := db.conn.QueryRowContext(ctx, `
-		SELECT id, project_id, name, url, method, expected_status, timeout_seconds, retries, 
+		SELECT id, uid, project_id, name, url, method, expected_status, timeout_seconds, retries, 
 			retry_delay_seconds, headers, body, body_contains, enabled, is_global, created_at, updated_at
 		FROM health_check_configs WHERE is_global = 1 LIMIT 1
-	`).Scan(&config.ID, &projectID, &config.Name, &config.URL, &config.Method, &config.ExpectedStatus,
+	`).Scan(&config.ID, &config.UID, &projectID, &config.Name, &config.URL, &config.Method, &config.ExpectedStatus,
 		&config.TimeoutSeconds, &config.Retries, &config.RetryDelaySeconds, &headers, &body, &bodyContains,
 		&config.Enabled, &config.IsGlobal, &config.CreatedAt, &config.UpdatedAt)
 	if err == sql.ErrNoRows {
@@ -95,10 +100,10 @@ func (db *DB) GetHealthCheckConfigForProject(ctx context.Context, projectID int6
 	var headers, body, bodyContains sql.NullString
 
 	err := db.conn.QueryRowContext(ctx, `
-		SELECT id, project_id, name, url, method, expected_status, timeout_seconds, retries, 
+		SELECT id, uid, project_id, name, url, method, expected_status, timeout_seconds, retries, 
 			retry_delay_seconds, headers, body, body_contains, enabled, is_global, created_at, updated_at
 		FROM health_check_configs WHERE project_id = ? AND enabled = 1
-	`, projectID).Scan(&config.ID, &pid, &config.Name, &config.URL, &config.Method, &config.ExpectedStatus,
+	`, projectID).Scan(&config.ID, &config.UID, &pid, &config.Name, &config.URL, &config.Method, &config.ExpectedStatus,
 		&config.TimeoutSeconds, &config.Retries, &config.RetryDelaySeconds, &headers, &body, &bodyContains,
 		&config.Enabled, &config.IsGlobal, &config.CreatedAt, &config.UpdatedAt)
 	if err == nil {
@@ -138,7 +143,7 @@ func (db *DB) UpdateHealthCheckConfig(ctx context.Context, config *HealthCheckCo
 // ListHealthCheckConfigs retrieves all health check configurations.
 func (db *DB) ListHealthCheckConfigs(ctx context.Context) ([]*HealthCheckConfig, error) {
 	rows, err := db.conn.QueryContext(ctx, `
-		SELECT id, project_id, name, url, method, expected_status, timeout_seconds, retries, 
+		SELECT id, uid, project_id, name, url, method, expected_status, timeout_seconds, retries, 
 			retry_delay_seconds, headers, body, body_contains, enabled, is_global, created_at, updated_at
 		FROM health_check_configs ORDER BY is_global DESC, name
 	`)
@@ -153,7 +158,7 @@ func (db *DB) ListHealthCheckConfigs(ctx context.Context) ([]*HealthCheckConfig,
 		var projectID sql.NullInt64
 		var headers, body, bodyContains sql.NullString
 
-		if err := rows.Scan(&config.ID, &projectID, &config.Name, &config.URL, &config.Method, &config.ExpectedStatus,
+		if err := rows.Scan(&config.ID, &config.UID, &projectID, &config.Name, &config.URL, &config.Method, &config.ExpectedStatus,
 			&config.TimeoutSeconds, &config.Retries, &config.RetryDelaySeconds, &headers, &body, &bodyContains,
 			&config.Enabled, &config.IsGlobal, &config.CreatedAt, &config.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scanning health check config: %w", err)

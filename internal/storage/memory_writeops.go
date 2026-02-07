@@ -90,9 +90,10 @@ func (s *MemoryStore) executeUserOp(tx *sql.Tx, op WriteOp) error {
 			return fmt.Errorf("invalid data type for user insert")
 		}
 		_, err := tx.Exec(`
-			INSERT INTO users (id, username, password_hash, email, role, must_change_password, totp_secret, totp_enabled, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			INSERT INTO users (id, uid, username, password_hash, email, role, must_change_password, totp_secret, totp_enabled, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(id) DO UPDATE SET
+				uid = excluded.uid,
 				username = excluded.username,
 				password_hash = excluded.password_hash,
 				email = excluded.email,
@@ -101,7 +102,7 @@ func (s *MemoryStore) executeUserOp(tx *sql.Tx, op WriteOp) error {
 				totp_secret = excluded.totp_secret,
 				totp_enabled = excluded.totp_enabled,
 				updated_at = excluded.updated_at
-		`, user.ID, user.Username, user.PasswordHash, user.Email, user.Role,
+		`, user.ID, user.UID, user.Username, user.PasswordHash, user.Email, user.Role,
 			user.MustChangePassword, user.TOTPSecret, user.TOTPEnabled, user.CreatedAt, user.UpdatedAt)
 		return err
 
@@ -175,9 +176,9 @@ func (s *MemoryStore) executeAPIKeyOp(tx *sql.Tx, op WriteOp) error {
 			return fmt.Errorf("invalid data type for api_key insert")
 		}
 		_, err := tx.Exec(`
-			INSERT INTO api_keys (id, user_id, name, key_hash, key_prefix, scopes, expires_at, last_used_at, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, key.ID, key.UserID, key.Name, key.KeyHash, key.KeyPrefix, key.Scopes, key.ExpiresAt, key.LastUsedAt, key.CreatedAt)
+			INSERT INTO api_keys (id, uid, user_id, name, key_hash, key_prefix, scopes, expires_at, last_used_at, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, key.ID, key.UID, key.UserID, key.Name, key.KeyHash, key.KeyPrefix, key.Scopes, key.ExpiresAt, key.LastUsedAt, key.CreatedAt)
 		return err
 
 	case WriteOpUpdate:
@@ -223,13 +224,13 @@ func (s *MemoryStore) executeSettingOp(tx *sql.Tx, op WriteOp) error {
 			return fmt.Errorf("invalid data type for setting")
 		}
 		_, err := tx.Exec(`
-			INSERT INTO settings (id, category, key, value, value_type, encrypted, description, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+			INSERT INTO settings (id, uid, category, key, value, value_type, encrypted, description, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(category, key) DO UPDATE SET
 				value = excluded.value,
 				encrypted = excluded.encrypted,
 				updated_at = excluded.updated_at
-		`, setting.ID, setting.Category, setting.Key, setting.Value, setting.ValueType, setting.Encrypted, setting.Description, setting.CreatedAt, setting.UpdatedAt)
+		`, setting.ID, setting.UID, setting.Category, setting.Key, setting.Value, setting.ValueType, setting.Encrypted, setting.Description, setting.CreatedAt, setting.UpdatedAt)
 		return err
 
 	case WriteOpDelete:
@@ -254,10 +255,10 @@ func (s *MemoryStore) executeProjectOp(tx *sql.Tx, op WriteOp) error {
 			return fmt.Errorf("invalid data type for project insert")
 		}
 		_, err := tx.Exec(`
-			INSERT INTO projects (id, name, repository, branch, deploy_path, type, created_at, updated_at, 
+			INSERT INTO projects (id, uid, name, repository, branch, deploy_path, type, created_at, updated_at, 
 				last_deploy_at, last_deploy_status, health_check_id, auto_rollback_enabled, rollback_on_health_fail)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, p.ID, p.Name, p.Repository, p.Branch, p.DeployPath, p.Type, p.CreatedAt, p.UpdatedAt,
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, p.ID, p.UID, p.Name, p.Repository, p.Branch, p.DeployPath, p.Type, p.CreatedAt, p.UpdatedAt,
 			p.LastDeployAt, p.LastDeployStatus, p.HealthCheckID, p.AutoRollbackEnabled, p.RollbackOnHealthFail)
 		return err
 
@@ -296,9 +297,9 @@ func (s *MemoryStore) executeProjectTypeOp(tx *sql.Tx, op WriteOp) error {
 			return fmt.Errorf("invalid data type for project_type insert")
 		}
 		_, err := tx.Exec(`
-			INSERT INTO project_types (id, name, description, build_cmd, project_count, created_at)
-			VALUES (?, ?, ?, ?, ?, ?)
-		`, pt.ID, pt.Name, pt.Description, pt.BuildCmd, pt.ProjectCount, pt.CreatedAt)
+			INSERT INTO project_types (id, uid, name, description, build_cmd, project_count, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+		`, pt.ID, pt.UID, pt.Name, pt.Description, pt.BuildCmd, pt.ProjectCount, pt.CreatedAt)
 		return err
 
 	case WriteOpUpdate:
@@ -333,14 +334,14 @@ func (s *MemoryStore) executeWebhookOp(tx *sql.Tx, op WriteOp) error {
 			return fmt.Errorf("invalid data type for webhook")
 		}
 		_, err := tx.Exec(`
-			INSERT INTO project_webhooks (id, project_id, provider, secret_encrypted, enabled, require_secret, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			INSERT INTO project_webhooks (id, uid, project_id, provider, secret_encrypted, enabled, require_secret, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(project_id, provider) DO UPDATE SET
 				secret_encrypted = excluded.secret_encrypted,
 				enabled = excluded.enabled,
 				require_secret = excluded.require_secret,
 				updated_at = excluded.updated_at
-		`, wh.ID, wh.ProjectID, wh.Provider, wh.SecretEncrypted, wh.Enabled, wh.RequireSecret, wh.CreatedAt, wh.UpdatedAt)
+		`, wh.ID, wh.UID, wh.ProjectID, wh.Provider, wh.SecretEncrypted, wh.Enabled, wh.RequireSecret, wh.CreatedAt, wh.UpdatedAt)
 		return err
 
 	case WriteOpDelete:
@@ -364,12 +365,12 @@ func (s *MemoryStore) executeSecretOp(tx *sql.Tx, op WriteOp) error {
 			return fmt.Errorf("invalid data type for secret")
 		}
 		_, err := tx.Exec(`
-			INSERT INTO secrets (id, project, project_id, scope, key, value_encrypted, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			INSERT INTO secrets (id, uid, project, project_id, scope, key, value_encrypted, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(project, scope, key) DO UPDATE SET
 				value_encrypted = excluded.value_encrypted,
 				updated_at = excluded.updated_at
-		`, secret.ID, secret.Project, secret.ProjectID, secret.Scope, secret.Key, secret.ValueEncrypted, secret.CreatedAt, secret.UpdatedAt)
+		`, secret.ID, secret.UID, secret.Project, secret.ProjectID, secret.Scope, secret.Key, secret.ValueEncrypted, secret.CreatedAt, secret.UpdatedAt)
 		return err
 
 	case WriteOpDelete:
@@ -736,9 +737,9 @@ func (s *MemoryStore) executeSSHHostKeyOp(tx *sql.Tx, op WriteOp) error {
 			return fmt.Errorf("invalid data type for ssh_host_key insert")
 		}
 		_, err := tx.Exec(`
-			INSERT INTO ssh_host_keys (id, hostname, port, key_type, public_key, fingerprint, trusted, added_by, verified_at, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, k.ID, k.Hostname, k.Port, k.KeyType, k.PublicKey, k.Fingerprint, k.Trusted, k.AddedBy, k.VerifiedAt, k.CreatedAt, k.UpdatedAt)
+			INSERT INTO ssh_host_keys (id, uid, hostname, port, key_type, public_key, fingerprint, trusted, added_by, verified_at, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, k.ID, k.UID, k.Hostname, k.Port, k.KeyType, k.PublicKey, k.Fingerprint, k.Trusted, k.AddedBy, k.VerifiedAt, k.CreatedAt, k.UpdatedAt)
 		return err
 
 	case WriteOpUpdate:
@@ -773,9 +774,9 @@ func (s *MemoryStore) executeJumpServerOp(tx *sql.Tx, op WriteOp) error {
 			return fmt.Errorf("invalid data type for jump_server insert")
 		}
 		_, err := tx.Exec(`
-			INSERT INTO ssh_jump_servers (id, name, host, port, username, ssh_key_id, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?)
-		`, j.ID, j.Name, j.Host, j.Port, j.Username, j.SSHKeyID, j.CreatedAt)
+			INSERT INTO ssh_jump_servers (id, uid, name, host, port, username, ssh_key_id, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		`, j.ID, j.UID, j.Name, j.Host, j.Port, j.Username, j.SSHKeyID, j.CreatedAt)
 		return err
 
 	case WriteOpUpdate:
@@ -810,10 +811,10 @@ func (s *MemoryStore) executeHealthCheckConfigOp(tx *sql.Tx, op WriteOp) error {
 			return fmt.Errorf("invalid data type for health_check_config insert")
 		}
 		_, err := tx.Exec(`
-			INSERT INTO health_check_configs (id, project_id, name, url, method, expected_status, timeout_seconds, 
+			INSERT INTO health_check_configs (id, uid, project_id, name, url, method, expected_status, timeout_seconds, 
 				retries, retry_delay_seconds, headers, body, body_contains, enabled, is_global, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, c.ID, c.ProjectID, c.Name, c.URL, c.Method, c.ExpectedStatus, c.TimeoutSeconds,
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, c.ID, c.UID, c.ProjectID, c.Name, c.URL, c.Method, c.ExpectedStatus, c.TimeoutSeconds,
 			c.Retries, c.RetryDelaySeconds, c.Headers, c.Body, c.BodyContains, c.Enabled, c.IsGlobal, c.CreatedAt, c.UpdatedAt)
 		return err
 
@@ -851,9 +852,9 @@ func (s *MemoryStore) executeACMECertificateOp(tx *sql.Tx, op WriteOp) error {
 			return fmt.Errorf("invalid data type for acme_certificate insert")
 		}
 		_, err := tx.Exec(`
-			INSERT INTO acme_certificates (id, domain, certificate_pem, private_key_encrypted, issuer, 
+			INSERT INTO acme_certificates (id, uid, domain, certificate_pem, private_key_encrypted, issuer, 
 				not_before, not_after, last_renewal, auto_renew, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(domain) DO UPDATE SET 
 				certificate_pem = excluded.certificate_pem,
 				private_key_encrypted = excluded.private_key_encrypted,
@@ -863,7 +864,7 @@ func (s *MemoryStore) executeACMECertificateOp(tx *sql.Tx, op WriteOp) error {
 				last_renewal = excluded.last_renewal,
 				auto_renew = excluded.auto_renew,
 				updated_at = excluded.updated_at
-		`, c.ID, c.Domain, c.CertificatePEM, c.PrivateKeyEncrypted, c.Issuer,
+		`, c.ID, c.UID, c.Domain, c.CertificatePEM, c.PrivateKeyEncrypted, c.Issuer,
 			c.NotBefore, c.NotAfter, c.LastRenewal, c.AutoRenew, c.CreatedAt, c.UpdatedAt)
 		return err
 
@@ -901,9 +902,9 @@ func (s *MemoryStore) executeACMEAccountOp(tx *sql.Tx, op WriteOp) error {
 			return fmt.Errorf("invalid data type for acme_account insert")
 		}
 		_, err := tx.Exec(`
-			INSERT INTO acme_accounts (id, email, account_url, private_key_encrypted, directory_url, created_at)
-			VALUES (?, ?, ?, ?, ?, ?)
-		`, a.ID, a.Email, a.AccountURL, a.PrivateKeyEncrypted, a.DirectoryURL, a.CreatedAt)
+			INSERT INTO acme_accounts (id, uid, email, account_url, private_key_encrypted, directory_url, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+		`, a.ID, a.UID, a.Email, a.AccountURL, a.PrivateKeyEncrypted, a.DirectoryURL, a.CreatedAt)
 		return err
 
 	case WriteOpUpdate:
@@ -982,10 +983,10 @@ func (s *MemoryStore) executeRecipeComponentOp(tx *sql.Tx, op WriteOp) error {
 			return fmt.Errorf("marshal variables: %w", err)
 		}
 		_, err = tx.Exec(`
-			INSERT INTO recipe_components (id, namespace, slug, version, name, description, 
+			INSERT INTO recipe_components (id, uid, namespace, slug, version, name, description, 
 				component_type, content, variables, is_seed, is_raw, is_deprecated, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, c.ID, c.Namespace, c.Slug, c.Version, c.Name, c.Description,
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, c.ID, c.UID, c.Namespace, c.Slug, c.Version, c.Name, c.Description,
 			c.ComponentType, contentJSON, variablesJSON, c.IsSeed, c.IsRaw, c.IsDeprecated, c.CreatedAt)
 		return err
 
@@ -1052,11 +1053,11 @@ func (s *MemoryStore) executePlaybookOp(tx *sql.Tx, op WriteOp) error {
 			return fmt.Errorf("marshal validation_rules: %w", err)
 		}
 		_, err = tx.Exec(`
-			INSERT INTO playbooks (id, namespace, slug, version, name, description, framework_type,
+			INSERT INTO playbooks (id, uid, namespace, slug, version, name, description, framework_type,
 				steps, shared_dirs, shared_files, writable_dirs, keep_releases,
 				validation_rules, is_seed, is_deprecated, parent_id, parent_version, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, p.ID, p.Namespace, p.Slug, p.Version, p.Name, p.Description, p.FrameworkType,
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, p.ID, p.UID, p.Namespace, p.Slug, p.Version, p.Name, p.Description, p.FrameworkType,
 			stepsJSON, sharedDirsJSON, sharedFilesJSON, writableDirsJSON, p.KeepReleases,
 			validationRulesJSON, p.IsSeed, p.IsDeprecated, p.ParentID, p.ParentVersion, p.CreatedAt)
 		return err
@@ -1118,9 +1119,9 @@ func (s *MemoryStore) executePlaybookActivationOp(tx *sql.Tx, op WriteOp) error 
 			return fmt.Errorf("invalid data type for playbook_activation insert")
 		}
 		_, err := tx.Exec(`
-			INSERT INTO playbook_activations (id, project_id, playbook_id, activated_at, activated_by)
-			VALUES (?, ?, ?, ?, ?)
-		`, a.ID, a.ProjectID, a.PlaybookID, a.ActivatedAt, a.ActivatedBy)
+			INSERT INTO playbook_activations (id, uid, project_id, playbook_id, activated_at, activated_by)
+			VALUES (?, ?, ?, ?, ?, ?)
+		`, a.ID, a.UID, a.ProjectID, a.PlaybookID, a.ActivatedAt, a.ActivatedBy)
 		return err
 
 	case WriteOpDelete:
@@ -1144,9 +1145,9 @@ func (s *MemoryStore) executeVariableBindingOp(tx *sql.Tx, op WriteOp) error {
 			return fmt.Errorf("invalid data type for variable_binding insert")
 		}
 		_, err := tx.Exec(`
-			INSERT INTO playbook_variable_bindings (id, activation_id, variable_name, source_type, source_ref, literal_value)
-			VALUES (?, ?, ?, ?, ?, ?)
-		`, b.ID, b.ActivationID, b.VariableName, b.SourceType, b.SourceRef, b.LiteralValue)
+			INSERT INTO playbook_variable_bindings (id, uid, activation_id, variable_name, source_type, source_ref, literal_value)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+		`, b.ID, b.UID, b.ActivationID, b.VariableName, b.SourceType, b.SourceRef, b.LiteralValue)
 		return err
 
 	case WriteOpUpdate:
@@ -1182,9 +1183,9 @@ func (s *MemoryStore) executeRawApprovalOp(tx *sql.Tx, op WriteOp) error {
 			return fmt.Errorf("invalid data type for raw_approval insert")
 		}
 		_, err := tx.Exec(`
-			INSERT INTO raw_command_approvals (id, component_id, approved_by, approved_at, approval_note)
-			VALUES (?, ?, ?, ?, ?)
-		`, a.ID, a.ComponentID, a.ApprovedBy, a.ApprovedAt, a.ApprovalNote)
+			INSERT INTO raw_command_approvals (id, uid, component_id, approved_by, approved_at, approval_note)
+			VALUES (?, ?, ?, ?, ?, ?)
+		`, a.ID, a.UID, a.ComponentID, a.ApprovedBy, a.ApprovedAt, a.ApprovalNote)
 		return err
 
 	case WriteOpDelete:

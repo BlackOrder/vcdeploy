@@ -3,6 +3,8 @@ package storage
 import (
 	"context"
 	"time"
+
+	"github.com/rs/xid"
 )
 
 // --- User operations ---
@@ -18,6 +20,9 @@ func (s *MemoryStore) CreateUser(ctx context.Context, user *User) error {
 	}
 
 	// Assign ID
+	if user.UID == "" {
+		user.UID = xid.New().String()
+	}
 	user.ID = nextID(&s.nextUserID)
 	now := time.Now()
 	user.CreatedAt = now
@@ -304,6 +309,9 @@ func (s *MemoryStore) CreateAPIKey(ctx context.Context, key *APIKey) error {
 		return ErrDuplicate
 	}
 
+	if key.UID == "" {
+		key.UID = xid.New().String()
+	}
 	key.ID = nextID(&s.nextAPIKeyID)
 	key.CreatedAt = time.Now()
 

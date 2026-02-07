@@ -47,6 +47,7 @@ var migrations = []Migration{
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS users (
 					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					uid TEXT UNIQUE NOT NULL,
 					username TEXT UNIQUE NOT NULL,
 					password_hash TEXT NOT NULL,
 					email TEXT,
@@ -57,6 +58,7 @@ var migrations = []Migration{
 					created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 					updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 				);
+				CREATE INDEX IF NOT EXISTS idx_users_uid ON users(uid);
 
 				-- ============================================================
 				-- TABLE: sessions
@@ -78,6 +80,7 @@ var migrations = []Migration{
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS api_keys (
 					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					uid TEXT UNIQUE NOT NULL,
 					user_id INTEGER NOT NULL,
 					name TEXT NOT NULL,
 					key_hash TEXT UNIQUE NOT NULL,
@@ -116,17 +119,20 @@ var migrations = []Migration{
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS project_types (
 					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					uid TEXT UNIQUE NOT NULL,
 					name TEXT UNIQUE NOT NULL,
 					description TEXT,
 					build_cmd TEXT,
 					created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 				);
+				CREATE INDEX IF NOT EXISTS idx_project_types_uid ON project_types(uid);
 
 				-- ============================================================
 				-- TABLE: health_check_configs (referenced by projects)
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS health_check_configs (
 					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					uid TEXT UNIQUE NOT NULL,
 					project_id INTEGER,
 					name TEXT NOT NULL,
 					url TEXT NOT NULL,
@@ -151,6 +157,7 @@ var migrations = []Migration{
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS projects (
 					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					uid TEXT UNIQUE NOT NULL,
 					name TEXT UNIQUE NOT NULL,
 					repository TEXT,
 					branch TEXT DEFAULT 'main',
@@ -176,6 +183,7 @@ var migrations = []Migration{
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS project_webhooks (
 					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					uid TEXT UNIQUE NOT NULL,
 					project_id INTEGER NOT NULL,
 					provider TEXT NOT NULL,
 					secret_encrypted BLOB,
@@ -194,6 +202,7 @@ var migrations = []Migration{
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS secrets (
 					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					uid TEXT UNIQUE NOT NULL,
 					project TEXT NOT NULL,
 					project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
 					scope TEXT NOT NULL,
@@ -416,6 +425,7 @@ var migrations = []Migration{
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS certificate_authorities (
 					id TEXT PRIMARY KEY,
+					uid TEXT UNIQUE NOT NULL,
 					version INTEGER NOT NULL,
 					common_name TEXT NOT NULL,
 					certificate_pem TEXT NOT NULL,
@@ -436,6 +446,7 @@ var migrations = []Migration{
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS agent_certificates (
 					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					uid TEXT UNIQUE NOT NULL,
 					agent_id TEXT NOT NULL,
 					ca_id TEXT NOT NULL,
 					serial_number TEXT UNIQUE NOT NULL,
@@ -565,6 +576,7 @@ var migrations = []Migration{
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS ssh_keys (
 					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					uid TEXT UNIQUE NOT NULL,
 					name TEXT UNIQUE NOT NULL,
 					public_key TEXT NOT NULL,
 					private_key_encrypted BLOB NOT NULL,
@@ -583,6 +595,7 @@ var migrations = []Migration{
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS known_hosts (
 					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					uid TEXT UNIQUE NOT NULL,
 					hostname TEXT NOT NULL,
 					port INTEGER NOT NULL DEFAULT 22,
 					key_type TEXT NOT NULL,
@@ -599,6 +612,7 @@ var migrations = []Migration{
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS ssh_host_keys (
 					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					uid TEXT UNIQUE NOT NULL,
 					hostname TEXT NOT NULL,
 					port INTEGER NOT NULL DEFAULT 22,
 					key_type TEXT NOT NULL,
@@ -619,6 +633,7 @@ var migrations = []Migration{
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS ssh_jump_servers (
 					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					uid TEXT UNIQUE NOT NULL,
 					name TEXT UNIQUE NOT NULL,
 					host TEXT NOT NULL,
 					port INTEGER DEFAULT 22,
@@ -633,6 +648,7 @@ var migrations = []Migration{
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS source_credentials (
 					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					uid TEXT UNIQUE NOT NULL,
 					name TEXT UNIQUE NOT NULL,
 					type TEXT NOT NULL,
 					url_pattern TEXT NOT NULL,
@@ -655,6 +671,7 @@ var migrations = []Migration{
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS settings (
 					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					uid TEXT UNIQUE NOT NULL,
 					category TEXT NOT NULL,
 					key TEXT NOT NULL,
 					value TEXT NOT NULL,
@@ -721,6 +738,7 @@ var migrations = []Migration{
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS webhook_secrets (
 					provider TEXT PRIMARY KEY,
+					uid TEXT UNIQUE NOT NULL,
 					secret_encrypted BLOB NOT NULL,
 					updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 				);
@@ -750,6 +768,7 @@ var migrations = []Migration{
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS acme_certificates (
 					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					uid TEXT UNIQUE NOT NULL,
 					domain TEXT UNIQUE NOT NULL,
 					certificate_pem TEXT NOT NULL,
 					private_key_encrypted BLOB NOT NULL,
@@ -769,6 +788,7 @@ var migrations = []Migration{
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS acme_accounts (
 					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					uid TEXT UNIQUE NOT NULL,
 					email TEXT NOT NULL,
 					account_url TEXT,
 					private_key_encrypted BLOB NOT NULL,
@@ -789,6 +809,7 @@ var migrations = []Migration{
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS recipe_components (
 					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					uid TEXT UNIQUE NOT NULL,
 					namespace TEXT NOT NULL CHECK(namespace IN ('seed', 'user')),
 					slug TEXT NOT NULL,
 					version TEXT NOT NULL,
@@ -812,6 +833,7 @@ var migrations = []Migration{
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS playbooks (
 					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					uid TEXT UNIQUE NOT NULL,
 					namespace TEXT NOT NULL CHECK(namespace IN ('seed', 'user')),
 					slug TEXT NOT NULL,
 					version TEXT NOT NULL,
@@ -842,6 +864,7 @@ var migrations = []Migration{
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS playbook_activations (
 					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					uid TEXT UNIQUE NOT NULL,
 					project_id INTEGER NOT NULL,
 					playbook_id INTEGER NOT NULL,
 					activated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -858,6 +881,7 @@ var migrations = []Migration{
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS playbook_variable_bindings (
 					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					uid TEXT UNIQUE NOT NULL,
 					activation_id INTEGER NOT NULL,
 					variable_name TEXT NOT NULL,
 					source_type TEXT NOT NULL CHECK(source_type IN ('literal', 'env', 'secret')),
@@ -874,6 +898,7 @@ var migrations = []Migration{
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS raw_command_approvals (
 					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					uid TEXT UNIQUE NOT NULL,
 					component_id INTEGER NOT NULL,
 					approved_by INTEGER NOT NULL,
 					approved_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -890,10 +915,10 @@ var migrations = []Migration{
 			// Insert default global health check configuration
 			_, err = tx.Exec(`
 				INSERT OR IGNORE INTO health_check_configs (
-					name, url, method, expected_status, timeout_seconds, retries, 
+					uid, name, url, method, expected_status, timeout_seconds, retries, 
 					retry_delay_seconds, enabled, is_global
 				) VALUES (
-					'Global Default', '{{.URL}}', 'GET', 200, 10, 3, 5, 1, 1
+					'default-global-hc', 'Global Default', '{{.URL}}', 'GET', 200, 10, 3, 5, 1, 1
 				)
 			`)
 			if err != nil {

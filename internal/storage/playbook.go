@@ -9,6 +9,7 @@ import (
 // Playbook represents a deployment composition of recipe components.
 type Playbook struct {
 	ID              int64            `json:"id"`
+	UID             string           `json:"uid"`
 	Namespace       string           `json:"namespace"` // "seed" or "user"
 	Slug            string           `json:"slug"`      // unique identifier within namespace
 	Version         string           `json:"version"`   // semver with 'v' prefix
@@ -134,6 +135,7 @@ func (p *Playbook) ParseValidationRulesJSON(data string) error {
 // PlaybookActivation links a project to a specific playbook version.
 type PlaybookActivation struct {
 	ID          int64                     `json:"id"`
+	UID         string                    `json:"uid"`
 	ProjectID   int64                     `json:"project_id"`
 	PlaybookID  int64                     `json:"playbook_id"`
 	ActivatedAt time.Time                 `json:"activated_at"`
@@ -144,6 +146,7 @@ type PlaybookActivation struct {
 // PlaybookVariableBinding maps a variable to its value source.
 type PlaybookVariableBinding struct {
 	ID           int64  `json:"id"`
+	UID          string `json:"uid"`
 	ActivationID int64  `json:"activation_id"`
 	VariableName string `json:"variable_name"`
 	SourceType   string `json:"source_type"`             // literal, env, secret
@@ -154,6 +157,7 @@ type PlaybookVariableBinding struct {
 // RawCommandApproval records admin approval for RAW components.
 type RawCommandApproval struct {
 	ID           int64     `json:"id"`
+	UID          string    `json:"uid"`
 	ComponentID  int64     `json:"component_id"`
 	ApprovedBy   int64     `json:"approved_by"`
 	ApprovedAt   time.Time `json:"approved_at"`

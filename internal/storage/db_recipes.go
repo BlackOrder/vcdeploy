@@ -6,6 +6,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+
+	"github.com/rs/xid"
 )
 
 // --- Recipe Component Methods ---
@@ -21,12 +23,15 @@ func (db *DB) CreateRecipeComponent(ctx context.Context, component *RecipeCompon
 		return fmt.Errorf("marshal variables: %w", err)
 	}
 
+	if component.UID == "" {
+		component.UID = xid.New().String()
+	}
 	result, err := db.conn.ExecContext(ctx, `
 		INSERT INTO recipe_components (
-			namespace, slug, version, name, description, component_type,
+			uid, namespace, slug, version, name, description, component_type,
 			content, variables, is_seed, is_raw, is_deprecated
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, component.Namespace, component.Slug, component.Version, component.Name,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, component.UID, component.Namespace, component.Slug, component.Version, component.Name,
 		component.Description, component.ComponentType, contentJSON, variablesJSON,
 		component.IsSeed, component.IsRaw, component.IsDeprecated)
 	if err != nil {
@@ -44,7 +49,7 @@ func (db *DB) CreateRecipeComponent(ctx context.Context, component *RecipeCompon
 // GetRecipeComponent returns a component by namespace, slug, and version.
 func (db *DB) GetRecipeComponent(ctx context.Context, namespace, slug, version string) (*RecipeComponent, error) {
 	row := db.conn.QueryRowContext(ctx, `
-		SELECT id, namespace, slug, version, name, description, component_type,
+		SELECT id, uid, namespace, slug, version, name, description, component_type,
 			   content, variables, is_seed, is_raw, is_deprecated, created_at
 		FROM recipe_components
 		WHERE namespace = ? AND slug = ? AND version = ?
@@ -56,7 +61,7 @@ func (db *DB) GetRecipeComponent(ctx context.Context, namespace, slug, version s
 // GetRecipeComponentByID returns a component by ID.
 func (db *DB) GetRecipeComponentByID(ctx context.Context, id int64) (*RecipeComponent, error) {
 	row := db.conn.QueryRowContext(ctx, `
-		SELECT id, namespace, slug, version, name, description, component_type,
+		SELECT id, uid, namespace, slug, version, name, description, component_type,
 			   content, variables, is_seed, is_raw, is_deprecated, created_at
 		FROM recipe_components
 		WHERE id = ?
@@ -68,7 +73,7 @@ func (db *DB) GetRecipeComponentByID(ctx context.Context, id int64) (*RecipeComp
 // ListRecipeComponents returns all components in a namespace.
 func (db *DB) ListRecipeComponents(ctx context.Context, namespace string, includeDeprecated bool) ([]*RecipeComponent, error) {
 	query := `
-		SELECT id, namespace, slug, version, name, description, component_type,
+		SELECT id, uid, namespace, slug, version, name, description, component_type,
 			   content, variables, is_seed, is_raw, is_deprecated, created_at
 		FROM recipe_components
 		WHERE namespace = ?
@@ -92,7 +97,7 @@ func (db *DB) ListRecipeComponents(ctx context.Context, namespace string, includ
 // ListRecipeComponentVersions returns all versions of a component.
 func (db *DB) ListRecipeComponentVersions(ctx context.Context, namespace, slug string) ([]*RecipeComponent, error) {
 	rows, err := db.conn.QueryContext(ctx, `
-		SELECT id, namespace, slug, version, name, description, component_type,
+		SELECT id, uid, namespace, slug, version, name, description, component_type,
 			   content, variables, is_seed, is_raw, is_deprecated, created_at
 		FROM recipe_components
 		WHERE namespace = ? AND slug = ?
@@ -145,7 +150,7 @@ func scanRecipeComponent(row *sql.Row) (*RecipeComponent, error) {
 	var description sql.NullString
 
 	err := row.Scan(
-		&c.ID, &c.Namespace, &c.Slug, &c.Version, &c.Name, &description,
+		&c.ID, &c.UID, &c.Namespace, &c.Slug, &c.Version, &c.Name, &description,
 		&c.ComponentType, &contentJSON, &variablesJSON,
 		&c.IsSeed, &c.IsRaw, &c.IsDeprecated, &c.CreatedAt,
 	)
@@ -178,7 +183,7 @@ func scanRecipeComponents(rows *sql.Rows) ([]*RecipeComponent, error) {
 		var description sql.NullString
 
 		err := rows.Scan(
-			&c.ID, &c.Namespace, &c.Slug, &c.Version, &c.Name, &description,
+			&c.ID, &c.UID, &c.Namespace, &c.Slug, &c.Version, &c.Name, &description,
 			&c.ComponentType, &contentJSON, &variablesJSON,
 			&c.IsSeed, &c.IsRaw, &c.IsDeprecated, &c.CreatedAt,
 		)
@@ -227,13 +232,16 @@ func (db *DB) CreatePlaybook(ctx context.Context, playbook *Playbook) error {
 		return fmt.Errorf("marshal validation_rules: %w", err)
 	}
 
+	if playbook.UID == "" {
+		playbook.UID = xid.New().String()
+	}
 	result, err := db.conn.ExecContext(ctx, `
 		INSERT INTO playbooks (
-			namespace, slug, version, name, description, framework_type,
+			uid, namespace, slug, version, name, description, framework_type,
 			steps, shared_dirs, shared_files, writable_dirs, keep_releases,
 			validation_rules, is_seed, is_deprecated, parent_id, parent_version
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, playbook.Namespace, playbook.Slug, playbook.Version, playbook.Name,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, playbook.UID, playbook.Namespace, playbook.Slug, playbook.Version, playbook.Name,
 		playbook.Description, playbook.FrameworkType, stepsJSON, sharedDirsJSON,
 		sharedFilesJSON, writableDirsJSON, playbook.KeepReleases, validationRulesJSON,
 		playbook.IsSeed, playbook.IsDeprecated, playbook.ParentID, playbook.ParentVersion)
@@ -252,7 +260,7 @@ func (db *DB) CreatePlaybook(ctx context.Context, playbook *Playbook) error {
 // GetPlaybook returns a playbook by namespace, slug, and version.
 func (db *DB) GetPlaybook(ctx context.Context, namespace, slug, version string) (*Playbook, error) {
 	row := db.conn.QueryRowContext(ctx, `
-		SELECT id, namespace, slug, version, name, description, framework_type,
+		SELECT id, uid, namespace, slug, version, name, description, framework_type,
 			   steps, shared_dirs, shared_files, writable_dirs, keep_releases,
 			   validation_rules, is_seed, is_deprecated, parent_id, parent_version, created_at
 		FROM playbooks
@@ -265,7 +273,7 @@ func (db *DB) GetPlaybook(ctx context.Context, namespace, slug, version string) 
 // GetPlaybookByID returns a playbook by ID.
 func (db *DB) GetPlaybookByID(ctx context.Context, id int64) (*Playbook, error) {
 	row := db.conn.QueryRowContext(ctx, `
-		SELECT id, namespace, slug, version, name, description, framework_type,
+		SELECT id, uid, namespace, slug, version, name, description, framework_type,
 			   steps, shared_dirs, shared_files, writable_dirs, keep_releases,
 			   validation_rules, is_seed, is_deprecated, parent_id, parent_version, created_at
 		FROM playbooks
@@ -278,7 +286,7 @@ func (db *DB) GetPlaybookByID(ctx context.Context, id int64) (*Playbook, error) 
 // ListPlaybooks returns playbooks filtered by namespace and/or framework type.
 func (db *DB) ListPlaybooks(ctx context.Context, namespace, frameworkType string, includeDeprecated bool) ([]*Playbook, error) {
 	query := `
-		SELECT id, namespace, slug, version, name, description, framework_type,
+		SELECT id, uid, namespace, slug, version, name, description, framework_type,
 			   steps, shared_dirs, shared_files, writable_dirs, keep_releases,
 			   validation_rules, is_seed, is_deprecated, parent_id, parent_version, created_at
 		FROM playbooks
@@ -311,7 +319,7 @@ func (db *DB) ListPlaybooks(ctx context.Context, namespace, frameworkType string
 // ListPlaybookVersions returns all versions of a playbook.
 func (db *DB) ListPlaybookVersions(ctx context.Context, namespace, slug string) ([]*Playbook, error) {
 	rows, err := db.conn.QueryContext(ctx, `
-		SELECT id, namespace, slug, version, name, description, framework_type,
+		SELECT id, uid, namespace, slug, version, name, description, framework_type,
 			   steps, shared_dirs, shared_files, writable_dirs, keep_releases,
 			   validation_rules, is_seed, is_deprecated, parent_id, parent_version, created_at
 		FROM playbooks
@@ -380,7 +388,7 @@ func scanPlaybook(row *sql.Row) (*Playbook, error) {
 	var stepsJSON, sharedDirsJSON, sharedFilesJSON, writableDirsJSON, validationRulesJSON string
 
 	err := row.Scan(
-		&p.ID, &p.Namespace, &p.Slug, &p.Version, &p.Name, &description,
+		&p.ID, &p.UID, &p.Namespace, &p.Slug, &p.Version, &p.Name, &description,
 		&frameworkType, &stepsJSON, &sharedDirsJSON, &sharedFilesJSON,
 		&writableDirsJSON, &p.KeepReleases, &validationRulesJSON,
 		&p.IsSeed, &p.IsDeprecated, &parentID, &parentVersion, &p.CreatedAt,
@@ -433,7 +441,7 @@ func scanPlaybooks(rows *sql.Rows) ([]*Playbook, error) {
 		var stepsJSON, sharedDirsJSON, sharedFilesJSON, writableDirsJSON, validationRulesJSON string
 
 		err := rows.Scan(
-			&p.ID, &p.Namespace, &p.Slug, &p.Version, &p.Name, &description,
+			&p.ID, &p.UID, &p.Namespace, &p.Slug, &p.Version, &p.Name, &description,
 			&frameworkType, &stepsJSON, &sharedDirsJSON, &sharedFilesJSON,
 			&writableDirsJSON, &p.KeepReleases, &validationRulesJSON,
 			&p.IsSeed, &p.IsDeprecated, &parentID, &parentVersion, &p.CreatedAt,
@@ -480,10 +488,13 @@ func scanPlaybooks(rows *sql.Rows) ([]*Playbook, error) {
 
 // CreatePlaybookActivation creates a new activation linking a project to a playbook.
 func (db *DB) CreatePlaybookActivation(ctx context.Context, activation *PlaybookActivation) error {
+	if activation.UID == "" {
+		activation.UID = xid.New().String()
+	}
 	result, err := db.conn.ExecContext(ctx, `
-		INSERT INTO playbook_activations (project_id, playbook_id, activated_by)
-		VALUES (?, ?, ?)
-	`, activation.ProjectID, activation.PlaybookID, activation.ActivatedBy)
+		INSERT INTO playbook_activations (uid, project_id, playbook_id, activated_by)
+		VALUES (?, ?, ?, ?)
+	`, activation.UID, activation.ProjectID, activation.PlaybookID, activation.ActivatedBy)
 	if err != nil {
 		return fmt.Errorf("insert playbook activation: %w", err)
 	}
@@ -499,7 +510,7 @@ func (db *DB) CreatePlaybookActivation(ctx context.Context, activation *Playbook
 // GetPlaybookActivation returns the activation for a project.
 func (db *DB) GetPlaybookActivation(ctx context.Context, projectID int64) (*PlaybookActivation, error) {
 	row := db.conn.QueryRowContext(ctx, `
-		SELECT id, project_id, playbook_id, activated_at, activated_by
+		SELECT id, uid, project_id, playbook_id, activated_at, activated_by
 		FROM playbook_activations
 		WHERE project_id = ?
 	`, projectID)
@@ -510,7 +521,7 @@ func (db *DB) GetPlaybookActivation(ctx context.Context, projectID int64) (*Play
 // GetPlaybookActivationByID returns an activation by ID.
 func (db *DB) GetPlaybookActivationByID(ctx context.Context, id int64) (*PlaybookActivation, error) {
 	row := db.conn.QueryRowContext(ctx, `
-		SELECT id, project_id, playbook_id, activated_at, activated_by
+		SELECT id, uid, project_id, playbook_id, activated_at, activated_by
 		FROM playbook_activations
 		WHERE id = ?
 	`, id)
@@ -521,7 +532,7 @@ func (db *DB) GetPlaybookActivationByID(ctx context.Context, id int64) (*Playboo
 // ListActivationsByPlaybook returns all activations using a specific playbook.
 func (db *DB) ListActivationsByPlaybook(ctx context.Context, playbookID int64) ([]*PlaybookActivation, error) {
 	rows, err := db.conn.QueryContext(ctx, `
-		SELECT id, project_id, playbook_id, activated_at, activated_by
+		SELECT id, uid, project_id, playbook_id, activated_at, activated_by
 		FROM playbook_activations
 		WHERE playbook_id = ?
 	`, playbookID)
@@ -535,7 +546,7 @@ func (db *DB) ListActivationsByPlaybook(ctx context.Context, playbookID int64) (
 		var a PlaybookActivation
 		var activatedBy sql.NullInt64
 
-		err := rows.Scan(&a.ID, &a.ProjectID, &a.PlaybookID, &a.ActivatedAt, &activatedBy)
+		err := rows.Scan(&a.ID, &a.UID, &a.ProjectID, &a.PlaybookID, &a.ActivatedAt, &activatedBy)
 		if err != nil {
 			return nil, fmt.Errorf("scan activation: %w", err)
 		}
@@ -560,7 +571,7 @@ func scanPlaybookActivation(row *sql.Row) (*PlaybookActivation, error) {
 	var a PlaybookActivation
 	var activatedBy sql.NullInt64
 
-	err := row.Scan(&a.ID, &a.ProjectID, &a.PlaybookID, &a.ActivatedAt, &activatedBy)
+	err := row.Scan(&a.ID, &a.UID, &a.ProjectID, &a.PlaybookID, &a.ActivatedAt, &activatedBy)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -577,11 +588,14 @@ func scanPlaybookActivation(row *sql.Row) (*PlaybookActivation, error) {
 
 // CreateVariableBinding creates a new variable binding.
 func (db *DB) CreateVariableBinding(ctx context.Context, binding *PlaybookVariableBinding) error {
+	if binding.UID == "" {
+		binding.UID = xid.New().String()
+	}
 	result, err := db.conn.ExecContext(ctx, `
 		INSERT INTO playbook_variable_bindings (
-			activation_id, variable_name, source_type, source_ref, literal_value
-		) VALUES (?, ?, ?, ?, ?)
-	`, binding.ActivationID, binding.VariableName, binding.SourceType,
+			uid, activation_id, variable_name, source_type, source_ref, literal_value
+		) VALUES (?, ?, ?, ?, ?, ?)
+	`, binding.UID, binding.ActivationID, binding.VariableName, binding.SourceType,
 		binding.SourceRef, binding.LiteralValue)
 	if err != nil {
 		return fmt.Errorf("insert variable binding: %w", err)
@@ -598,7 +612,7 @@ func (db *DB) CreateVariableBinding(ctx context.Context, binding *PlaybookVariab
 // GetVariableBindings returns all bindings for an activation.
 func (db *DB) GetVariableBindings(ctx context.Context, activationID int64) ([]*PlaybookVariableBinding, error) {
 	rows, err := db.conn.QueryContext(ctx, `
-		SELECT id, activation_id, variable_name, source_type, source_ref, literal_value
+		SELECT id, uid, activation_id, variable_name, source_type, source_ref, literal_value
 		FROM playbook_variable_bindings
 		WHERE activation_id = ?
 	`, activationID)
@@ -635,7 +649,7 @@ func (db *DB) DeleteVariableBinding(ctx context.Context, id int64) error {
 // FindBindingsBySourceRef finds bindings that reference a specific source.
 func (db *DB) FindBindingsBySourceRef(ctx context.Context, sourceType, sourceRef string) ([]*PlaybookVariableBinding, error) {
 	rows, err := db.conn.QueryContext(ctx, `
-		SELECT id, activation_id, variable_name, source_type, source_ref, literal_value
+		SELECT id, uid, activation_id, variable_name, source_type, source_ref, literal_value
 		FROM playbook_variable_bindings
 		WHERE source_type = ? AND source_ref = ?
 	`, sourceType, sourceRef)
@@ -653,7 +667,7 @@ func scanVariableBindings(rows *sql.Rows) ([]*PlaybookVariableBinding, error) {
 		var b PlaybookVariableBinding
 		var sourceRef, literalValue sql.NullString
 
-		err := rows.Scan(&b.ID, &b.ActivationID, &b.VariableName, &b.SourceType, &sourceRef, &literalValue)
+		err := rows.Scan(&b.ID, &b.UID, &b.ActivationID, &b.VariableName, &b.SourceType, &sourceRef, &literalValue)
 		if err != nil {
 			return nil, fmt.Errorf("scan variable binding: %w", err)
 		}
@@ -672,10 +686,13 @@ func scanVariableBindings(rows *sql.Rows) ([]*PlaybookVariableBinding, error) {
 
 // CreateRawApproval creates an approval record for a RAW component.
 func (db *DB) CreateRawApproval(ctx context.Context, approval *RawCommandApproval) error {
+	if approval.UID == "" {
+		approval.UID = xid.New().String()
+	}
 	result, err := db.conn.ExecContext(ctx, `
-		INSERT INTO raw_command_approvals (component_id, approved_by, approval_note)
-		VALUES (?, ?, ?)
-	`, approval.ComponentID, approval.ApprovedBy, approval.ApprovalNote)
+		INSERT INTO raw_command_approvals (uid, component_id, approved_by, approval_note)
+		VALUES (?, ?, ?, ?)
+	`, approval.UID, approval.ComponentID, approval.ApprovedBy, approval.ApprovalNote)
 	if err != nil {
 		return fmt.Errorf("insert raw approval: %w", err)
 	}
@@ -691,7 +708,7 @@ func (db *DB) CreateRawApproval(ctx context.Context, approval *RawCommandApprova
 // GetRawApproval returns the approval for a component.
 func (db *DB) GetRawApproval(ctx context.Context, componentID int64) (*RawCommandApproval, error) {
 	row := db.conn.QueryRowContext(ctx, `
-		SELECT id, component_id, approved_by, approved_at, approval_note
+		SELECT id, uid, component_id, approved_by, approved_at, approval_note
 		FROM raw_command_approvals
 		WHERE component_id = ?
 	`, componentID)
@@ -699,7 +716,7 @@ func (db *DB) GetRawApproval(ctx context.Context, componentID int64) (*RawComman
 	var a RawCommandApproval
 	var approvalNote sql.NullString
 
-	err := row.Scan(&a.ID, &a.ComponentID, &a.ApprovedBy, &a.ApprovedAt, &approvalNote)
+	err := row.Scan(&a.ID, &a.UID, &a.ComponentID, &a.ApprovedBy, &a.ApprovedAt, &approvalNote)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -724,7 +741,7 @@ func (db *DB) DeleteRawApproval(ctx context.Context, componentID int64) error {
 // ListRawApprovals returns all RAW command approvals.
 func (db *DB) ListRawApprovals(ctx context.Context) ([]*RawCommandApproval, error) {
 	rows, err := db.conn.QueryContext(ctx, `
-		SELECT id, component_id, approved_by, approved_at, approval_note
+		SELECT id, uid, component_id, approved_by, approved_at, approval_note
 		FROM raw_command_approvals
 		ORDER BY approved_at DESC
 	`)
@@ -738,7 +755,7 @@ func (db *DB) ListRawApprovals(ctx context.Context) ([]*RawCommandApproval, erro
 		var a RawCommandApproval
 		var approvalNote sql.NullString
 
-		err := rows.Scan(&a.ID, &a.ComponentID, &a.ApprovedBy, &a.ApprovedAt, &approvalNote)
+		err := rows.Scan(&a.ID, &a.UID, &a.ComponentID, &a.ApprovedBy, &a.ApprovedAt, &approvalNote)
 		if err != nil {
 			return nil, fmt.Errorf("scan raw approval: %w", err)
 		}
