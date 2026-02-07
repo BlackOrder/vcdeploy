@@ -12,31 +12,93 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// statusCmd displays system dashboard
-var statusCmd = &cobra.Command{
-	Use:   "status",
-	Short: "Display system dashboard",
-	Long: `Display system dashboard with key metrics.
+// statsCmd displays system stats
+var statsCmd = &cobra.Command{
+	Use:   "stats",
+	Short: "Display system stats",
+	Long: `Display system stats with key metrics.
 
 Shows total projects, agents, deployments, and success rate.
-Use --watch to continuously update the display.`,
-	Example: `  # Show current status
-  vcdeploy status
+Use --watch to continuously update the display.
 
-  # Watch status updates every 5 seconds
-  vcdeploy status --watch
+Subcommands:
+  deployments  Deployment-focused analytics
+  agents       Agent health statistics`,
+	Example: `  # Show combined stats
+  vcdeploy stats
+
+  # Watch stats updates every 5 seconds
+  vcdeploy stats --watch
 
   # Watch with custom interval
-  vcdeploy status --watch --interval 10`,
+  vcdeploy stats --watch --interval 10
+
+  # Deployment analytics only
+  vcdeploy stats deployments
+
+  # Agent health only
+  vcdeploy stats agents`,
 	RunE: runStatus,
 }
 
 func init() {
-	rootCmd.AddCommand(statusCmd)
+	rootCmd.AddCommand(statsCmd)
 
-	statusCmd.Flags().BoolP("watch", "w", false, "Continuously update display")
-	statusCmd.Flags().IntP("interval", "i", 5, "Update interval in seconds (with --watch)")
-	statusCmd.Flags().StringP("output", "o", "table", "Output format: table, json")
+	statsCmd.Flags().BoolP("watch", "w", false, "Continuously update display")
+	statsCmd.Flags().IntP("interval", "i", 5, "Update interval in seconds (with --watch)")
+	statsCmd.Flags().StringP("output", "o", "table", "Output format: table, json")
+
+	// Subcommands
+	statsCmd.AddCommand(&cobra.Command{
+		Use:   "deployments",
+		Short: "Deployment-focused analytics",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := newAPIClient(cmd)
+			if err != nil {
+				return err
+			}
+			status, err := fetchStatus(client)
+			if err != nil {
+				return err
+			}
+			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "🚀 DEPLOYMENT ANALYTICS (24h)")
+			fmt.Fprintf(w, "   Total:\t%d\n", status.Deployments.Total)
+			fmt.Fprintf(w, "   Successful:\t%d ✓\n", status.Deployments.Successful)
+			fmt.Fprintf(w, "   Failed:\t%d ✗\n", status.Deployments.Failed)
+			if status.Deployments.Running > 0 {
+				fmt.Fprintf(w, "   Running:\t%d ⟳\n", status.Deployments.Running)
+			}
+			if status.Deployments.Pending > 0 {
+				fmt.Fprintf(w, "   Pending:\t%d ○\n", status.Deployments.Pending)
+			}
+			if status.Deployments.Total > 0 {
+				fmt.Fprintf(w, "   Success Rate:\t%.1f%%\n", status.Deployments.SuccessRate)
+			}
+			return w.Flush()
+		},
+	})
+
+	statsCmd.AddCommand(&cobra.Command{
+		Use:   "agents",
+		Short: "Agent health statistics",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := newAPIClient(cmd)
+			if err != nil {
+				return err
+			}
+			status, err := fetchStatus(client)
+			if err != nil {
+				return err
+			}
+			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "🖥️  AGENT HEALTH")
+			fmt.Fprintf(w, "   Total:\t%d\n", status.Agents.Total)
+			fmt.Fprintf(w, "   Online:\t%d ✓\n", status.Agents.Online)
+			fmt.Fprintf(w, "   Offline:\t%d ✗\n", status.Agents.Offline)
+			return w.Flush()
+		},
+	})
 }
 
 // statusResponse represents the aggregated status data

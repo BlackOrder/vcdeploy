@@ -114,9 +114,62 @@ Example:
 	},
 }
 
+var docsInstallCmd = &cobra.Command{
+	Use:   "install",
+	Short: "Install man pages",
+	Long: `Install man pages to the system or user man directory.
+
+By default, installs to /usr/local/share/man/man1/ (requires sudo).
+Use --user to install to ~/.local/share/man/man1/ instead.
+
+Examples:
+  sudo vcdeploy docs install       # System-wide install
+  vcdeploy docs install --user     # User-local install`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		userMode, _ := cmd.Flags().GetBool("user")
+
+		var manDir string
+		if userMode {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return fmt.Errorf("get home directory: %w", err)
+			}
+			manDir = home + "/.local/share/man/man1"
+		} else {
+			manDir = "/usr/local/share/man/man1"
+		}
+
+		// Create output directory if it doesn't exist
+		// #nosec G301 - Man page directory needs world-read access
+		if err := os.MkdirAll(manDir, 0o755); err != nil {
+			return fmt.Errorf("creating man directory: %w", err)
+		}
+
+		// Generate man pages
+		header := &doc.GenManHeader{
+			Title:   "VCDEPLOY",
+			Section: "1",
+			Source:  "vcdeploy " + version,
+		}
+
+		err := doc.GenManTree(rootCmd, header, manDir)
+		if err != nil {
+			return fmt.Errorf("generating man pages: %w", err)
+		}
+
+		fmt.Printf("Man pages installed to %s\n", manDir)
+		if !userMode {
+			fmt.Println("Run 'mandb' or 'makewhatis' to update the man page database.")
+		}
+		return nil
+	},
+}
+
 func init() {
+	docsInstallCmd.Flags().Bool("user", false, "Install to ~/.local/share/man (no sudo required)")
 	docsCmd.AddCommand(docsMarkdownCmd)
 	docsCmd.AddCommand(docsManCmd)
 	docsCmd.AddCommand(docsYamlCmd)
+	docsCmd.AddCommand(docsInstallCmd)
 	rootCmd.AddCommand(docsCmd)
 }
