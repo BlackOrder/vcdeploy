@@ -13,7 +13,7 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/services"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"github.com/BlackOrder/vcdeploy/internal/validation"
-	"github.com/google/uuid"
+	"github.com/rs/xid"
 	"go.uber.org/zap"
 )
 
@@ -130,7 +130,7 @@ func (s *MasterServer) handleStartProvisioning(w http.ResponseWriter, r *http.Re
 	}
 
 	// Create provision job
-	jobID := uuid.New().String()
+	jobID := xid.New().String()
 	keyID := req.SSHKeyID // Convert to pointer
 	job := &storage.ProvisionJob{
 		ID:         jobID,

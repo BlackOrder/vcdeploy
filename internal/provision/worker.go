@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/BlackOrder/vcdeploy/internal/storage"
-	"github.com/google/uuid"
+	"github.com/rs/xid"
 	"go.uber.org/zap"
 )
 
@@ -77,7 +77,7 @@ func (w *Worker) Submit(ctx context.Context, req *SSHProvisionRequest) (string, 
 	w.shutdownMu.Unlock()
 
 	// Create job ID
-	jobID := uuid.New().String()
+	jobID := xid.New().String()
 
 	// Create job record
 	job := &storage.ProvisionJob{

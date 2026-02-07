@@ -7,6 +7,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/rs/xid"
 )
 
 func newTestOrchestrator() (*Orchestrator, *testCallbacks) {
@@ -506,17 +508,15 @@ func TestOrchestrator_CleanupOldDeployments(t *testing.T) {
 	}
 }
 
-func TestGenerateDeploymentID(t *testing.T) {
+func TestDeploymentIDIsXID(t *testing.T) {
 	ids := make(map[string]bool)
 
 	for i := 0; i < 100; i++ {
-		id, err := generateDeploymentID()
-		if err != nil {
-			t.Fatalf("generateDeploymentID failed: %v", err)
-		}
+		id := xid.New().String()
 
-		if !hasPrefix(id, "deploy-") {
-			t.Errorf("Expected prefix 'deploy-', got %q", id)
+		// XID should be exactly 20 characters
+		if len(id) != 20 {
+			t.Errorf("Expected 20-char XID, got %d chars: %q", len(id), id)
 		}
 
 		if ids[id] {
@@ -524,10 +524,6 @@ func TestGenerateDeploymentID(t *testing.T) {
 		}
 		ids[id] = true
 	}
-}
-
-func hasPrefix(s, prefix string) bool {
-	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
 }
 
 // --- Additional tests for improved coverage ---
@@ -1037,17 +1033,14 @@ func TestOrchestrator_Cancel_Idempotent(t *testing.T) {
 	}
 }
 
-func TestGenerateDeploymentID_Uniqueness(t *testing.T) {
+func TestDeploymentIDUniqueness(t *testing.T) {
 	t.Parallel()
 
 	ids := make(map[string]bool)
 	iterations := 1000
 
 	for i := 0; i < iterations; i++ {
-		id, err := generateDeploymentID()
-		if err != nil {
-			t.Fatalf("generateDeploymentID failed: %v", err)
-		}
+		id := xid.New().String()
 
 		if ids[id] {
 			t.Fatalf("Duplicate ID generated after %d iterations: %s", i, id)
@@ -1352,12 +1345,10 @@ func TestOrchestrator_UpdateDeploymentStatusNonexistent(t *testing.T) {
 	}
 }
 
-func TestOrchestrator_DeployGenerateIDError(t *testing.T) {
+func TestOrchestrator_DeployIDIsXID(t *testing.T) {
 	t.Parallel()
 
-	// This test exercises the path where generateDeploymentID would fail
-	// The function uses crypto/rand which typically doesn't fail,
-	// but we can verify the error is properly wrapped
+	// Verify that Deploy() produces valid XID-format IDs
 	orch := NewOrchestrator(OrchestratorConfig{})
 	ctx := context.Background()
 
@@ -1368,13 +1359,16 @@ func TestOrchestrator_DeployGenerateIDError(t *testing.T) {
 		Branch:     "main",
 	}
 
-	// Normal deploy should work
+	// Normal deploy should work and produce XID-format ID
 	dep, err := orch.Deploy(ctx, req)
 	if err != nil {
 		t.Errorf("Deploy() error = %v", err)
 	}
 	if dep == nil {
-		t.Error("Deploy() returned nil deployment")
+		t.Fatal("Deploy() returned nil deployment")
+	}
+	if len(dep.ID) != 20 {
+		t.Errorf("Deploy() ID = %q, want 20-char XID", dep.ID)
 	}
 }
 

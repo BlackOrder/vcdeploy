@@ -20,7 +20,7 @@ import (
 
 	"github.com/BlackOrder/vcdeploy/internal/security"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
-	"github.com/google/uuid"
+	"github.com/rs/xid"
 	"go.uber.org/zap"
 )
 
@@ -104,7 +104,7 @@ func (g *Service) CloneAndArchive(ctx context.Context, repoURL, ref string) (*Re
 	}
 
 	// Create tar.gz archive
-	archiveID := uuid.New().String()
+	archiveID := xid.New().String()
 	archivePath := filepath.Join(g.workDir, fmt.Sprintf("repo-%s.tar.gz", archiveID))
 
 	checksum, err := g.createArchive(cloneDir, archivePath)

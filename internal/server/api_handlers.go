@@ -16,6 +16,7 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/services"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"github.com/BlackOrder/vcdeploy/internal/validation"
+	"github.com/rs/xid"
 	"go.uber.org/zap"
 )
 
@@ -1149,7 +1150,7 @@ func (s *MasterServer) handleProjectDeployInternal(ctx context.Context, w http.R
 		}
 	}
 
-	deploymentID := fmt.Sprintf("deploy-%d", time.Now().UnixNano())
+	deploymentID := xid.New().String()
 
 	// Check if scheduled
 	if req.ScheduledAt != "" {
@@ -1774,7 +1775,7 @@ func (s *MasterServer) handleDeploymentRetry(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Create new deployment with same configuration
-	newDeploymentID := fmt.Sprintf("deploy-%d", time.Now().UnixNano())
+	newDeploymentID := xid.New().String()
 	newDeployment := &storage.DeploymentRecord{
 		ID:            newDeploymentID,
 		Project:       deployment.Project,

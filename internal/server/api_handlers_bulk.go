@@ -11,6 +11,7 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/proto"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"github.com/BlackOrder/vcdeploy/internal/validation"
+	"github.com/rs/xid"
 	"go.uber.org/zap"
 )
 
@@ -167,7 +168,7 @@ func (s *MasterServer) handleBulkDeployPost(w http.ResponseWriter, r *http.Reque
 		}
 
 		// Create deployment
-		deploymentID := fmt.Sprintf("deploy-%d", time.Now().UnixNano())
+		deploymentID := xid.New().String()
 		deployment := &storage.DeploymentRecord{
 			ID:            deploymentID,
 			Project:       project.Name,

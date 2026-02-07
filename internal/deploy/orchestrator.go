@@ -3,11 +3,11 @@ package deploy
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/rs/xid"
 )
 
 // Orchestrator coordinates deployments across agents.
@@ -125,10 +125,7 @@ func (o *Orchestrator) Deploy(ctx context.Context, req *DeployRequest) (*Deploym
 	}
 
 	// Generate deployment ID
-	deploymentID, err := generateDeploymentID()
-	if err != nil {
-		return nil, fmt.Errorf("generating deployment ID: %w", err)
-	}
+	deploymentID := xid.New().String()
 
 	// Create deployment record
 	deployment := &Deployment{
@@ -204,10 +201,7 @@ func (o *Orchestrator) Rollback(ctx context.Context, req *RollbackRequest) (*Dep
 	}
 
 	// Generate deployment ID for the rollback
-	deploymentID, err := generateDeploymentID()
-	if err != nil {
-		return nil, fmt.Errorf("generating deployment ID: %w", err)
-	}
+	deploymentID := xid.New().String()
 
 	// Create deployment record
 	deployment := &Deployment{
@@ -425,13 +419,4 @@ func (o *Orchestrator) CleanupOldDeployments(maxAge time.Duration) int {
 	}
 
 	return len(toRemove)
-}
-
-// generateDeploymentID generates a unique deployment ID.
-func generateDeploymentID() (string, error) {
-	b := make([]byte, 8)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("deploy-%s", hex.EncodeToString(b)), nil
 }
