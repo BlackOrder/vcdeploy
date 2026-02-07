@@ -153,7 +153,8 @@ type MasterServer struct {
 	caManager   *security.CAManager
 
 	// KMS for secret encryption/decryption
-	kms *security.KMS
+	kms       *security.KMS
+	masterKey *security.MasterKey
 
 	// Service layer - new architecture
 	secretService      services.SecretServicer
@@ -319,8 +320,38 @@ func NewMasterServer(cfg *config.MasterConfig, store storage.Store, logger *zap.
 		sseBroker:    NewSSEBroker(),
 	}
 
+	// Load or generate master key for envelope encryption
+	masterKeyPath := filepath.Join(sysCfg.Paths.DataDir, "master.key")
+	masterKey, mkErr := security.LoadMasterKey(masterKeyPath)
+	if mkErr != nil {
+		// First boot — auto-generate
+		logger.Info("No master key found, generating new one", zap.String("path", masterKeyPath))
+		masterKey, mkErr = security.GenerateMasterKey()
+		if mkErr != nil {
+			return nil, fmt.Errorf("generate master key: %w", mkErr)
+		}
+		// Ensure data directory exists (first boot)
+		if err := os.MkdirAll(filepath.Dir(masterKeyPath), 0700); err != nil {
+			return nil, fmt.Errorf("create data directory: %w", err)
+		}
+		if err := masterKey.SaveToFile(masterKeyPath); err != nil {
+			return nil, fmt.Errorf("save master key: %w", err)
+		}
+		logger.Info("Master key generated and saved", zap.String("path", masterKeyPath))
+	}
+	s.masterKey = masterKey
+
+	// Record master key metadata (singleton row)
+	if dbConn := store.Conn(); dbConn != nil {
+		_, _ = dbConn.ExecContext(context.Background(), `
+			INSERT INTO master_key_meta (id, key_id, created_at)
+			VALUES (1, ?, CURRENT_TIMESTAMP)
+			ON CONFLICT(id) DO UPDATE SET key_id = excluded.key_id, rotated_at = CURRENT_TIMESTAMP
+		`, masterKey.KeyID())
+	}
+
 	// Initialize KMS for encryption services (using the store for persistence)
-	kms, kmsErr := security.NewKMS(context.Background(), store, logger)
+	kms, kmsErr := security.NewKMS(context.Background(), store, logger, masterKey)
 	if kmsErr != nil {
 		logger.Warn("Failed to create KMS, some features will be unavailable", zap.Error(kmsErr))
 	} else {

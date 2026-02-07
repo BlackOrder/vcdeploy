@@ -67,7 +67,12 @@ func NewTestCA(t *testing.T) *TestCABundle {
 
 	// Create and initialize KMS
 	ctx := context.Background()
-	kms, err := security.NewKMS(ctx, store, nil)
+	masterKey, err := security.GenerateMasterKey()
+	if err != nil {
+		bundle.Close()
+		t.Fatalf("testutil.NewTestCA: GenerateMasterKey: %v", err)
+	}
+	kms, err := security.NewKMS(ctx, store, nil, masterKey)
 	if err != nil {
 		bundle.Close()
 		t.Fatalf("testutil.NewTestCA: NewKMS: %v", err)

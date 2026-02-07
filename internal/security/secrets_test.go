@@ -21,7 +21,7 @@ func setupTestSecretService(t *testing.T) (*SecretService, func()) {
 	}
 
 	// Create KMS using the storage interface
-	kms, err := NewKMS(context.Background(), store, nil)
+	kms, err := NewKMS(context.Background(), store, nil, testMasterKey(t))
 	if err != nil {
 		store.Close()
 		t.Fatalf("NewKMS() error: %v", err)

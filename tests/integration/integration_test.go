@@ -38,6 +38,10 @@ func NewTestFixture(t *testing.T) *TestFixture {
 	// Create temp directory
 	tempDir := t.TempDir()
 
+	// Point system config at temp directory so NewMasterServer can save/load master key
+	t.Setenv("VCDEPLOY_DATA_DIR", tempDir)
+	config.ResetSystemConfig()
+
 	// Create logger
 	logger := zap.NewNop()
 

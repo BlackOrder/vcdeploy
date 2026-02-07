@@ -32,7 +32,12 @@ func setupTestSettingsDB(t *testing.T) (storage.Store, *security.KMS, func()) {
 	}
 
 	// Initialize KMS (db implements storage.Store interface)
-	kms, err := security.NewKMS(context.Background(), db, nil)
+	masterKey, err := security.GenerateMasterKey()
+	if err != nil {
+		db.Close()
+		t.Fatalf("generate master key: %v", err)
+	}
+	kms, err := security.NewKMS(context.Background(), db, nil, masterKey)
 	if err != nil {
 		db.Close()
 		t.Fatalf("init KMS: %v", err)

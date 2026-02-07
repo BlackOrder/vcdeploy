@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/BlackOrder/vcdeploy/internal/storage"
+	"github.com/rs/xid"
 	"go.uber.org/zap"
 )
 
@@ -27,6 +28,7 @@ var ErrKMSNotConfigured = errors.New("KMS not configured: encryption/decryption 
 type KMS struct {
 	store      storage.Store
 	logger     *zap.Logger
+	masterKey  *MasterKey
 	cache      map[string]*EncryptionKey
 	cacheMu    sync.RWMutex
 	currentKey *EncryptionKey
@@ -75,15 +77,20 @@ func DefaultKMSConfig() KMSConfig {
 }
 
 // NewKMS creates a new KMS service backed by the store.
-func NewKMS(ctx context.Context, store storage.Store, logger *zap.Logger) (*KMS, error) {
+// The masterKey is used to encrypt/decrypt KMS key material at rest.
+func NewKMS(ctx context.Context, store storage.Store, logger *zap.Logger, masterKey *MasterKey) (*KMS, error) {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
+	if masterKey == nil {
+		return nil, fmt.Errorf("master key is required for KMS initialization")
+	}
 
 	kms := &KMS{
-		store:  store,
-		logger: logger,
-		cache:  make(map[string]*EncryptionKey),
+		store:     store,
+		logger:    logger,
+		masterKey: masterKey,
+		cache:     make(map[string]*EncryptionKey),
 	}
 
 	// Load current active key
@@ -264,7 +271,10 @@ func (k *KMS) RotateKey(ctx context.Context) (*EncryptionKey, error) {
 	}
 
 	// Save new key
-	storageKey := k.toStorageKey(newKey)
+	storageKey, err := k.toStorageKey(newKey)
+	if err != nil {
+		return nil, fmt.Errorf("convert key for storage: %w", err)
+	}
 	if err := k.store.SaveEncryptionKey(ctx, storageKey); err != nil {
 		return nil, fmt.Errorf("save new key: %w", err)
 	}
@@ -399,7 +409,12 @@ func (k *KMS) ListKeys(ctx context.Context) ([]*EncryptionKey, error) {
 
 	keys := make([]*EncryptionKey, 0, len(storageKeys))
 	for _, sk := range storageKeys {
-		keys = append(keys, k.fromStorageKey(sk))
+		key, err := k.fromStorageKey(sk)
+		if err != nil {
+			k.logger.Warn("failed to decrypt key material", zap.String("keyID", sk.ID), zap.Error(err))
+			continue
+		}
+		keys = append(keys, key)
 	}
 
 	return keys, nil
@@ -437,19 +452,18 @@ func (k *KMS) loadCurrentKey(ctx context.Context) error {
 		return fmt.Errorf("load current key: %w", err)
 	}
 
-	key := k.fromStorageKey(storageKey)
+	key, err := k.fromStorageKey(storageKey)
+	if err != nil {
+		return fmt.Errorf("decrypt current key material: %w", err)
+	}
 	k.currentKey = key
 	k.cacheKey(key)
 	return nil
 }
 
 func (k *KMS) generateKey(ctx context.Context) (*EncryptionKey, error) {
-	// Generate random key ID
-	idBytes := make([]byte, 16)
-	if _, err := rand.Read(idBytes); err != nil {
-		return nil, fmt.Errorf("generate id: %w", err)
-	}
-	keyID := base64.URLEncoding.EncodeToString(idBytes)
+	// Generate XID-based key ID (time-sortable, globally unique)
+	keyID := xid.New().String()
 
 	// Generate key material
 	keyMaterial := make([]byte, 32) // AES-256
@@ -477,7 +491,10 @@ func (k *KMS) generateKey(ctx context.Context) (*EncryptionKey, error) {
 }
 
 func (k *KMS) saveKey(ctx context.Context, key *EncryptionKey) error {
-	storageKey := k.toStorageKey(key)
+	storageKey, err := k.toStorageKey(key)
+	if err != nil {
+		return fmt.Errorf("convert key for storage: %w", err)
+	}
 	return k.store.SaveEncryptionKey(ctx, storageKey)
 }
 
@@ -499,7 +516,10 @@ func (k *KMS) getKey(ctx context.Context, keyID string) (*EncryptionKey, error) 
 		return nil, fmt.Errorf("load key: %w", err)
 	}
 
-	key := k.fromStorageKey(storageKey)
+	key, err := k.fromStorageKey(storageKey)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt key material: %w", err)
+	}
 	k.cacheKey(key)
 	return key, nil
 }
@@ -530,11 +550,15 @@ func (k *KMS) logKeyUsage(_ context.Context, keyID, operation, resourceType, res
 
 // --- Type conversion helpers ---
 
-func (k *KMS) toStorageKey(key *EncryptionKey) *storage.EncryptionKey {
+func (k *KMS) toStorageKey(key *EncryptionKey) (*storage.EncryptionKey, error) {
+	encrypted, err := k.masterKey.Encrypt(key.KeyMaterial)
+	if err != nil {
+		return nil, fmt.Errorf("encrypt key material: %w", err)
+	}
 	return &storage.EncryptionKey{
 		ID:                  key.ID,
 		Version:             key.Version,
-		KeyMaterialEnc:      key.KeyMaterial,
+		KeyMaterialEnc:      encrypted,
 		Algorithm:           key.Algorithm,
 		Status:              string(key.Status),
 		CreatedAt:           key.CreatedAt,
@@ -542,14 +566,18 @@ func (k *KMS) toStorageKey(key *EncryptionKey) *storage.EncryptionKey {
 		DeactivatedAt:       key.DeactivatedAt,
 		ScheduledDeletionAt: key.ScheduledDeletionAt,
 		DeletionCancelledAt: key.DeletionCancelledAt,
-	}
+	}, nil
 }
 
-func (k *KMS) fromStorageKey(sk *storage.EncryptionKey) *EncryptionKey {
+func (k *KMS) fromStorageKey(sk *storage.EncryptionKey) (*EncryptionKey, error) {
+	decrypted, err := k.masterKey.Decrypt(sk.KeyMaterialEnc)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt key material for key %s: %w", sk.ID, err)
+	}
 	return &EncryptionKey{
 		ID:                  sk.ID,
 		Version:             sk.Version,
-		KeyMaterial:         sk.KeyMaterialEnc,
+		KeyMaterial:         decrypted,
 		Algorithm:           sk.Algorithm,
 		Status:              KeyStatus(sk.Status),
 		CreatedAt:           sk.CreatedAt,
@@ -557,7 +585,7 @@ func (k *KMS) fromStorageKey(sk *storage.EncryptionKey) *EncryptionKey {
 		DeactivatedAt:       sk.DeactivatedAt,
 		ScheduledDeletionAt: sk.ScheduledDeletionAt,
 		DeletionCancelledAt: sk.DeletionCancelledAt,
-	}
+	}, nil
 }
 
 // --- Helper functions for using KMS with existing secrets ---

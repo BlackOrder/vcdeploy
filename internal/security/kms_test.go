@@ -24,12 +24,21 @@ func setupTestKMSDB(t *testing.T) storage.Store {
 	return store
 }
 
+func testMasterKey(t *testing.T) *MasterKey {
+	t.Helper()
+	mk, err := GenerateMasterKey()
+	if err != nil {
+		t.Fatalf("GenerateMasterKey: %v", err)
+	}
+	return mk
+}
+
 func TestNewKMS(t *testing.T) {
 	db := setupTestKMSDB(t)
 	defer db.Close()
 	ctx := context.Background()
 
-	kms, err := NewKMS(ctx, db, nil)
+	kms, err := NewKMS(ctx, db, nil, testMasterKey(t))
 	if err != nil {
 		t.Fatalf("NewKMS() error: %v", err)
 	}
@@ -44,7 +53,7 @@ func TestKMSInitialize(t *testing.T) {
 	defer db.Close()
 	ctx := context.Background()
 
-	kms, err := NewKMS(ctx, db, nil)
+	kms, err := NewKMS(ctx, db, nil, testMasterKey(t))
 	if err != nil {
 		t.Fatalf("NewKMS() error: %v", err)
 	}
@@ -73,7 +82,7 @@ func TestKMSEncryptDecrypt(t *testing.T) {
 	db := setupTestKMSDB(t)
 	defer db.Close()
 
-	kms, err := NewKMS(context.Background(), db, nil)
+	kms, err := NewKMS(context.Background(), db, nil, testMasterKey(t))
 	if err != nil {
 		t.Fatalf("NewKMS() error: %v", err)
 	}
@@ -111,7 +120,7 @@ func TestKMSEncryptDecryptString(t *testing.T) {
 	db := setupTestKMSDB(t)
 	defer db.Close()
 
-	kms, err := NewKMS(context.Background(), db, nil)
+	kms, err := NewKMS(context.Background(), db, nil, testMasterKey(t))
 	if err != nil {
 		t.Fatalf("NewKMS() error: %v", err)
 	}
@@ -142,7 +151,7 @@ func TestKMSKeyRotation(t *testing.T) {
 	db := setupTestKMSDB(t)
 	defer db.Close()
 
-	kms, err := NewKMS(context.Background(), db, nil)
+	kms, err := NewKMS(context.Background(), db, nil, testMasterKey(t))
 	if err != nil {
 		t.Fatalf("NewKMS() error: %v", err)
 	}
@@ -201,7 +210,7 @@ func TestKMSReEncrypt(t *testing.T) {
 	db := setupTestKMSDB(t)
 	defer db.Close()
 
-	kms, err := NewKMS(context.Background(), db, nil)
+	kms, err := NewKMS(context.Background(), db, nil, testMasterKey(t))
 	if err != nil {
 		t.Fatalf("NewKMS() error: %v", err)
 	}
@@ -253,7 +262,7 @@ func TestKMSKeyDeletionScheduling(t *testing.T) {
 	db := setupTestKMSDB(t)
 	defer db.Close()
 
-	kms, err := NewKMS(context.Background(), db, nil)
+	kms, err := NewKMS(context.Background(), db, nil, testMasterKey(t))
 	if err != nil {
 		t.Fatalf("NewKMS() error: %v", err)
 	}
@@ -294,7 +303,7 @@ func TestKMSCancelKeyDeletion(t *testing.T) {
 	db := setupTestKMSDB(t)
 	defer db.Close()
 
-	kms, err := NewKMS(context.Background(), db, nil)
+	kms, err := NewKMS(context.Background(), db, nil, testMasterKey(t))
 	if err != nil {
 		t.Fatalf("NewKMS() error: %v", err)
 	}
@@ -334,7 +343,7 @@ func TestKMSDeleteKeyNow(t *testing.T) {
 	db := setupTestKMSDB(t)
 	defer db.Close()
 
-	kms, err := NewKMS(context.Background(), db, nil)
+	kms, err := NewKMS(context.Background(), db, nil, testMasterKey(t))
 	if err != nil {
 		t.Fatalf("NewKMS() error: %v", err)
 	}
@@ -379,7 +388,7 @@ func TestKMSListKeys(t *testing.T) {
 	db := setupTestKMSDB(t)
 	defer db.Close()
 
-	kms, err := NewKMS(context.Background(), db, nil)
+	kms, err := NewKMS(context.Background(), db, nil, testMasterKey(t))
 	if err != nil {
 		t.Fatalf("NewKMS() error: %v", err)
 	}
@@ -416,7 +425,7 @@ func TestKMSProcessScheduledDeletions(t *testing.T) {
 	db := setupTestKMSDB(t)
 	defer db.Close()
 
-	kms, err := NewKMS(context.Background(), db, nil)
+	kms, err := NewKMS(context.Background(), db, nil, testMasterKey(t))
 	if err != nil {
 		t.Fatalf("NewKMS() error: %v", err)
 	}
@@ -461,7 +470,7 @@ func TestKMSDecryptInvalidFormat(t *testing.T) {
 	db := setupTestKMSDB(t)
 	defer db.Close()
 
-	kms, err := NewKMS(context.Background(), db, nil)
+	kms, err := NewKMS(context.Background(), db, nil, testMasterKey(t))
 	if err != nil {
 		t.Fatalf("NewKMS() error: %v", err)
 	}
@@ -488,7 +497,7 @@ func TestKMSEncryptWithoutKey(t *testing.T) {
 	db := setupTestKMSDB(t)
 	defer db.Close()
 
-	kms, err := NewKMS(context.Background(), db, nil)
+	kms, err := NewKMS(context.Background(), db, nil, testMasterKey(t))
 	if err != nil {
 		t.Fatalf("NewKMS() error: %v", err)
 	}
@@ -526,7 +535,7 @@ func TestKMSConcurrentEncryption(t *testing.T) {
 	db := setupTestKMSDB(t)
 	defer db.Close()
 
-	kms, err := NewKMS(context.Background(), db, nil)
+	kms, err := NewKMS(context.Background(), db, nil, testMasterKey(t))
 	if err != nil {
 		t.Fatalf("NewKMS() error: %v", err)
 	}
@@ -562,7 +571,7 @@ func TestKMSDoubleInitialize(t *testing.T) {
 	db := setupTestKMSDB(t)
 	defer db.Close()
 
-	kms, err := NewKMS(context.Background(), db, nil)
+	kms, err := NewKMS(context.Background(), db, nil, testMasterKey(t))
 	if err != nil {
 		t.Fatalf("NewKMS() error: %v", err)
 	}
@@ -592,13 +601,16 @@ func TestKMSPersistence(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
 
+	// Use the SAME master key for both instances so encrypted key material can be decrypted after reopen
+	mk := testMasterKey(t)
+
 	// Create and initialize using storage package
 	store1, err := storage.Open(dbPath)
 	if err != nil {
 		t.Fatalf("storage.Open() for store1: %v", err)
 	}
 
-	kms1, err := NewKMS(context.Background(), store1, nil)
+	kms1, err := NewKMS(context.Background(), store1, nil, mk)
 	if err != nil {
 		t.Fatalf("NewKMS() for kms1: %v", err)
 	}
@@ -616,14 +628,14 @@ func TestKMSPersistence(t *testing.T) {
 	keyID := kms1.GetCurrentKey().ID
 	store1.Close()
 
-	// Reopen
+	// Reopen with SAME master key
 	store2, err := storage.Open(dbPath)
 	if err != nil {
 		t.Fatalf("storage.Open() for store2: %v", err)
 	}
 	defer store2.Close()
 
-	kms2, err := NewKMS(context.Background(), store2, nil)
+	kms2, err := NewKMS(context.Background(), store2, nil, mk)
 	if err != nil {
 		t.Fatalf("NewKMS() after reopen error: %v", err)
 	}
