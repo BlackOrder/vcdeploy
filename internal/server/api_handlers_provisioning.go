@@ -205,6 +205,12 @@ func (s *MasterServer) handleGetProvisionLogs(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	// Check for streaming request
+	if r.URL.Query().Get("stream") == "true" {
+		s.handleProvisionLogsStream(w, r, jobID)
+		return
+	}
+
 	ctx := r.Context()
 
 	// Verify job exists
@@ -244,5 +250,50 @@ func (s *MasterServer) handleGetProvisionLogs(w http.ResponseWriter, r *http.Req
 		Status: job.Status.String(),
 		Stage:  job.Stage,
 		Logs:   logEntries,
+	})
+}
+
+// handleProvisionLogsStream streams provision job logs using Server-Sent Events (SSE).
+func (s *MasterServer) handleProvisionLogsStream(w http.ResponseWriter, r *http.Request, jobID string) {
+	ctx := r.Context()
+	s.streamLogs(w, r, streamLogsConfig{
+		listLogs: func() ([]interface{}, int64, error) {
+			logs, err := s.store.ListProvisionLogs(ctx, jobID)
+			if err != nil {
+				return nil, 0, err
+			}
+			result := make([]interface{}, len(logs))
+			var lastID int64
+			for i, l := range logs {
+				result[i] = l
+				lastID = l.ID
+			}
+			return result, lastID, nil
+		},
+		listLogsAfter: func(afterID int64) ([]interface{}, int64, error) {
+			logs, err := s.store.ListProvisionLogsAfter(ctx, jobID, afterID)
+			if err != nil {
+				return nil, afterID, err
+			}
+			result := make([]interface{}, len(logs))
+			newLastID := afterID
+			for i, l := range logs {
+				result[i] = l
+				newLastID = l.ID
+			}
+			return result, newLastID, nil
+		},
+		isComplete: func() (bool, string) {
+			job, err := s.provisionService.GetJob(ctx, jobID)
+			if err != nil || job == nil {
+				return false, ""
+			}
+			status := job.Status.String()
+			switch status {
+			case "completed", "failed", "cancelled":
+				return true, status
+			}
+			return false, ""
+		},
 	})
 }

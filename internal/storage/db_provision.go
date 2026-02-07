@@ -173,6 +173,30 @@ func (db *DB) ListProvisionLogs(ctx context.Context, jobID string) ([]*Provision
 	return logs, rows.Err()
 }
 
+// ListProvisionLogsAfter retrieves logs for a provisioning job with ID greater than afterID.
+func (db *DB) ListProvisionLogsAfter(ctx context.Context, jobID string, afterID int64) ([]*ProvisionLog, error) {
+	rows, err := db.conn.QueryContext(ctx, `
+		SELECT id, job_id, timestamp, level, message
+		FROM provision_logs
+		WHERE job_id = ? AND id > ?
+		ORDER BY timestamp ASC
+	`, jobID, afterID)
+	if err != nil {
+		return nil, fmt.Errorf("getting provision logs after %d: %w", afterID, err)
+	}
+	defer rows.Close()
+
+	var logs []*ProvisionLog
+	for rows.Next() {
+		var log ProvisionLog
+		if err := rows.Scan(&log.ID, &log.JobID, &log.Timestamp, &log.Level, &log.Message); err != nil {
+			return nil, fmt.Errorf("scanning provision log: %w", err)
+		}
+		logs = append(logs, &log)
+	}
+	return logs, rows.Err()
+}
+
 // scanProvisionJobs is a helper to scan provision job rows.
 func scanProvisionJobs(rows *sql.Rows) ([]*ProvisionJob, error) {
 	var jobs []*ProvisionJob
