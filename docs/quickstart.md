@@ -140,8 +140,11 @@ agent:
   update_policy: immediate
 
 paths:
-  repos: /var/lib/vcdeploy/repos/
   releases: /var/www/
+
+archive:
+  cache_dir: /var/lib/vcdeploy/cache/archives
+  keep_count: 5
 
 execution:
   user: www-data
@@ -180,7 +183,7 @@ sudo systemctl enable --now vcdeploy-agent
 ### 1. Add a Project via CLI
 
 ```bash
-vcdeploy project add myapp
+vcdeploy project create myapp
 ```
 
 You'll be prompted for:
@@ -277,7 +280,7 @@ vcdeploy project deploy myapp --dry-run
 vcdeploy deploy list
 
 # Check status
-vcdeploy deploy status <deployment-id>
+vcdeploy deploy show <deployment-id>
 
 # View logs
 vcdeploy deploy logs <deployment-id> --follow

@@ -272,6 +272,17 @@ v1:{key_version}:{nonce}:{ciphertext}
 - Nonce ensures unique ciphertext
 - AES-256-GCM provides authenticated encryption
 
+## Archive Transport Security
+
+Deployment archives are distributed from master to agents via two secure channels:
+
+1. **gRPC Streaming (primary)** — Archives streamed over mTLS-authenticated gRPC connection via `StreamRepoArchive` RPC
+2. **HMAC-Signed HTTP (fallback)** — If gRPC streaming fails, agent downloads via time-limited signed URL: `GET /api/v1/deployments/{id}/archive?token={hmac}&expires={timestamp}`
+
+Signed URLs use HMAC-SHA256 with the agent's authentication secret. Default expiry: 10 minutes (configurable via `archive.signed_url_expiry`).
+
+> **Note:** SSH is used for provisioning (installing agents on servers) and git repository authentication. SSH is NOT used for deployment — deployments use gRPC agents.
+
 ## Security Best Practices
 
 ### Certificate Management
