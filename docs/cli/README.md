@@ -161,7 +161,7 @@ vcdeploy-agent
 
 ### admin
 
-Reset or create the administrator account. Useful for lockout recovery when you can't access the web UI.
+Reset or create the administrator account. Useful for lockout reset when you can't access the web UI.
 
 ```bash
 # Local mode (direct database access)
@@ -492,12 +492,12 @@ vcdeploy deploy list [flags]
 | `--status` | Filter by status (pending, running, success, failed) |
 | `--limit` | Maximum entries (default: 20) |
 
-#### deploy status
+#### deploy show
 
 Show detailed status of a deployment.
 
 ```bash
-vcdeploy deploy status <deployment-id>
+vcdeploy deploy show <deployment-id>
 ```
 
 #### deploy cancel
@@ -522,19 +522,22 @@ vcdeploy deploy logs <deployment-id> [flags]
 | `-f, --follow` | Follow log output |
 | `--tail` | Number of lines to show from end |
 
-#### deploy trigger
+#### deploy create
 
-Manually trigger a deployment.
+Create a new deployment.
 
 ```bash
-vcdeploy deploy trigger <project-name> [flags]
+vcdeploy deploy create --project <name> [flags]
 ```
 
 **Flags:**
 | Flag | Description |
 |------|-------------|
 | `--target` | Specific target to deploy |
-| `--branch` | Branch to deploy (overrides project default) |
+| `--all` | Deploy to all targets |
+| `--ref` | Git ref to deploy (branch, tag, commit) |
+| `--wait` | Wait for completion (timeout in seconds, default 30) |
+| `--dry-run` | Validate without deploying |
 | `--scheduled` | Schedule deployment for later (RFC3339 format) |
 
 ---
@@ -703,12 +706,12 @@ List all configured projects.
 vcdeploy project list
 ```
 
-#### project add
+#### project create
 
-Add a new project interactively.
+Create a new project interactively.
 
 ```bash
-vcdeploy project add <name>
+vcdeploy project create <name>
 ```
 
 You'll be prompted for:
@@ -751,18 +754,21 @@ vcdeploy project validate <name>
 
 #### project deploy
 
+> **Deprecated:** Use `vcdeploy deploy create --project <name>` instead.
+
 Deploy a project.
 
 ```bash
-vcdeploy project deploy <name> [flags]
+vcdeploy deploy create --project <name> [flags]
 ```
 
 **Flags:**
 | Flag | Description |
 |------|-------------|
-| `--target` | Target to deploy to (deploys to all if not specified) |
+| `--target` | Target to deploy to |
+| `--all` | Deploy to all targets |
 | `--dry-run` | Validate without actually deploying |
-| `--force` | Force deploy (bypass deployment lock) |
+| `--wait` | Wait for completion (timeout in seconds, default 30) |
 
 #### project rollback
 
@@ -1488,7 +1494,7 @@ vcdeploy master start
 vcdeploy admin --username admin --email admin@example.com
 
 # Add a project
-vcdeploy project add myapp
+vcdeploy project create myapp
 
 # Set secrets
 vcdeploy secret set myapp DB_PASSWORD
@@ -1505,13 +1511,13 @@ vcdeploy project list
 vcdeploy project validate myapp
 
 # Deploy to production
-vcdeploy project deploy myapp --target production
+vcdeploy deploy create --project myapp --target production
 
 # If something goes wrong, rollback
-vcdeploy project rollback myapp --target production
+vcdeploy deploy rollback <deployment-id> --target production
 
 # Check deployment status
-vcdeploy deploy status 12345
+vcdeploy deploy show 12345
 
 # View deployment logs
 vcdeploy deploy logs 12345 --follow
@@ -1608,7 +1614,7 @@ curl -X POST -H "Authorization: Bearer $VCDEPLOY_TOKEN" \
 | Verb | Usage | When to Use |
 |------|-------|-------------|
 | `revoke` | Invalidate without deleting | `apikey revoke`, `certs revoke` - preserves audit trail |
-| `trigger` | Start an operation | `deploy trigger` |
+| `create` | Create a new resource or operation | `deploy create`, `project create` |
 | `cancel` | Cancel a running operation | `deploy cancel` |
 | `rotate` | Regenerate/replace credentials | `webhook rotate-secret`, `certs ca rotate` |
 
