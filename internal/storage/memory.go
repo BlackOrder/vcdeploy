@@ -438,6 +438,10 @@ func (s *MemoryStore) FlushPending() error {
 	return nil
 }
 
+// Reload is a no-op for bare MemoryStore (no underlying DB to reload from).
+// CachedStore overrides this to reload from SQLite.
+func (s *MemoryStore) Reload(_ context.Context) error { return nil }
+
 // Close signals all write workers to stop, waits for them to drain,
 // and closes all database connections.
 func (s *MemoryStore) Close() error {
