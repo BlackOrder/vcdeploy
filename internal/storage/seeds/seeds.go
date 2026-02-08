@@ -51,7 +51,7 @@ func NewLoader(store storage.Store) *Loader {
 
 // HasSeeds returns true if seed data is defined.
 func (l *Loader) HasSeeds() bool {
-	return len(SeedComponents) > 0 || len(SeedPlaybooks) > 0
+	return len(SeedComponents) > 0 || len(SeedPlaybooks) > 0 || len(SeedProjectTypes) > 0
 }
 
 // GetEmptyStateTitle returns the title for empty seed state.
