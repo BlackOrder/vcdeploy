@@ -379,7 +379,7 @@ func TestAuditExportJob_ExportFormat(t *testing.T) {
 	// without requiring a real database
 
 	type AuditEntry struct {
-		ID        int64     `json:"id"`
+		ID        string    `json:"id"`
 		Timestamp time.Time `json:"timestamp"`
 		Source    string    `json:"source"`
 		User      string    `json:"user"`
@@ -392,7 +392,7 @@ func TestAuditExportJob_ExportFormat(t *testing.T) {
 
 	entries := []AuditEntry{
 		{
-			ID:        1,
+			ID:        "audit-export-001",
 			Timestamp: time.Now(),
 			Source:    "web",
 			User:      "admin",
@@ -403,7 +403,7 @@ func TestAuditExportJob_ExportFormat(t *testing.T) {
 			Result:    "success",
 		},
 		{
-			ID:        2,
+			ID:        "audit-export-002",
 			Timestamp: time.Now(),
 			Source:    "api",
 			User:      "deploy-bot",
