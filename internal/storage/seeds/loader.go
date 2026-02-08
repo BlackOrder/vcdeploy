@@ -22,6 +22,7 @@ func (l *Loader) LoadSeeds(ctx context.Context, logger *zap.Logger) error {
 	logger.Info("loading seed data",
 		zap.Int("components", len(SeedComponents)),
 		zap.Int("playbooks", len(SeedPlaybooks)),
+		zap.Int("project_types", len(SeedProjectTypes)),
 	)
 
 	// Load components
@@ -37,6 +38,14 @@ func (l *Loader) LoadSeeds(ctx context.Context, logger *zap.Logger) error {
 		sp := &SeedPlaybooks[idx]
 		if err := l.loadPlaybook(ctx, *sp, logger); err != nil {
 			return fmt.Errorf("failed to load playbook %s:%s: %w", sp.Slug, sp.Version, err)
+		}
+	}
+
+	// Load project types
+	for idx := range SeedProjectTypes {
+		st := &SeedProjectTypes[idx]
+		if err := l.loadProjectType(ctx, *st, logger); err != nil {
+			return fmt.Errorf("failed to load project type %s: %w", st.Name, err)
 		}
 	}
 
@@ -129,6 +138,33 @@ func (l *Loader) loadPlaybook(ctx context.Context, sp SeedPlaybook, logger *zap.
 	logger.Info("loaded seed playbook",
 		zap.String("slug", sp.Slug),
 		zap.String("version", sp.Version),
+	)
+	return nil
+}
+
+func (l *Loader) loadProjectType(ctx context.Context, st SeedProjectType, logger *zap.Logger) error {
+	// Check if already exists by name
+	existing, err := l.store.GetProjectTypeByName(ctx, st.Name)
+	if err == nil && existing != nil {
+		logger.Debug("seed project type already exists, skipping",
+			zap.String("name", st.Name),
+		)
+		return nil
+	}
+
+	pt := &storage.ProjectType{
+		Name:        st.Name,
+		Description: st.Description,
+		BuildCmd:    st.BuildCmd,
+		CreatedAt:   time.Now(),
+	}
+
+	if err := l.store.CreateProjectType(ctx, pt); err != nil {
+		return fmt.Errorf("create project type: %w", err)
+	}
+
+	logger.Info("loaded seed project type",
+		zap.String("name", st.Name),
 	)
 	return nil
 }

@@ -99,3 +99,50 @@ func TestGetEmptyPlaybooksMessage(t *testing.T) {
 	msg := seeds.GetEmptyPlaybooksMessage()
 	assert.Contains(t, msg, "No playbooks found")
 }
+
+func TestBuiltinTypesSeeded(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	loader := seeds.NewLoader(db)
+	logger := zap.NewNop()
+
+	err := loader.LoadSeeds(context.Background(), logger)
+	require.NoError(t, err)
+
+	// Verify all 5 built-in types exist
+	types, err := db.ListProjectTypes(context.Background())
+	require.NoError(t, err)
+
+	names := make(map[string]bool)
+	for _, pt := range types {
+		names[pt.Name] = true
+	}
+
+	expected := []string{"laravel", "symfony", "nextjs", "static", "nodejs"}
+	for _, name := range expected {
+		assert.True(t, names[name], "expected built-in type %q to be seeded", name)
+	}
+}
+
+func TestBuiltinTypesNotDuplicated(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	loader := seeds.NewLoader(db)
+	logger := zap.NewNop()
+
+	// Load seeds twice
+	err := loader.LoadSeeds(context.Background(), logger)
+	require.NoError(t, err)
+
+	err = loader.LoadSeeds(context.Background(), logger)
+	require.NoError(t, err)
+
+	// Verify no duplicates: count should equal SeedProjectTypes length
+	types, err := db.ListProjectTypes(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, len(seeds.SeedProjectTypes), len(types),
+		"seed should be idempotent — no duplicates after running twice")
+}
