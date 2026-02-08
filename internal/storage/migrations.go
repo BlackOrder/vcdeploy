@@ -46,8 +46,7 @@ var migrations = []Migration{
 				-- TABLE: users
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS users (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					uid TEXT UNIQUE NOT NULL,
+					id TEXT PRIMARY KEY,
 					username TEXT UNIQUE NOT NULL,
 					password_hash TEXT NOT NULL,
 					email TEXT,
@@ -58,14 +57,13 @@ var migrations = []Migration{
 					created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 					updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 				);
-				CREATE INDEX IF NOT EXISTS idx_users_uid ON users(uid);
 
 				-- ============================================================
 				-- TABLE: sessions
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS sessions (
 					id TEXT PRIMARY KEY,
-					user_id INTEGER NOT NULL,
+					user_id TEXT NOT NULL,
 					ip_address TEXT,
 					user_agent TEXT,
 					created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -79,9 +77,8 @@ var migrations = []Migration{
 				-- TABLE: api_keys
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS api_keys (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					uid TEXT UNIQUE NOT NULL,
-					user_id INTEGER NOT NULL,
+					id TEXT PRIMARY KEY,
+					user_id TEXT NOT NULL,
 					name TEXT NOT NULL,
 					key_hash TEXT UNIQUE NOT NULL,
 					key_prefix TEXT,
@@ -97,8 +94,8 @@ var migrations = []Migration{
 				-- TABLE: recovery_codes (TOTP recovery)
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS recovery_codes (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					user_id INTEGER NOT NULL,
+					id TEXT PRIMARY KEY,
+					user_id TEXT NOT NULL,
 					code_hash TEXT NOT NULL,
 					used_at DATETIME,
 					created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -118,22 +115,19 @@ var migrations = []Migration{
 				-- TABLE: project_types
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS project_types (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					uid TEXT UNIQUE NOT NULL,
+					id TEXT PRIMARY KEY,
 					name TEXT UNIQUE NOT NULL,
 					description TEXT,
 					build_cmd TEXT,
 					created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 				);
-				CREATE INDEX IF NOT EXISTS idx_project_types_uid ON project_types(uid);
 
 				-- ============================================================
 				-- TABLE: health_check_configs (referenced by projects)
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS health_check_configs (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					uid TEXT UNIQUE NOT NULL,
-					project_id INTEGER,
+					id TEXT PRIMARY KEY,
+					project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
 					name TEXT NOT NULL,
 					url TEXT NOT NULL,
 					method TEXT NOT NULL DEFAULT 'GET',
@@ -156,41 +150,35 @@ var migrations = []Migration{
 				-- TABLE: projects (with consolidated columns from migration 16)
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS projects (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					uid TEXT UNIQUE NOT NULL,
+					id TEXT PRIMARY KEY,
 					name TEXT UNIQUE NOT NULL,
 					repository TEXT,
 					branch TEXT DEFAULT 'main',
 					deploy_path TEXT,
-					type TEXT,
+					type_id TEXT REFERENCES project_types(id) ON DELETE SET NULL,
 					created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 					updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 					last_deploy_at DATETIME,
 					last_deploy_status TEXT,
-					-- Consolidated from migration 16:
-					health_check_id INTEGER REFERENCES health_check_configs(id),
+					health_check_id TEXT REFERENCES health_check_configs(id) ON DELETE SET NULL,
 					auto_rollback_enabled INTEGER DEFAULT 1,
 					rollback_on_health_fail INTEGER DEFAULT 1
 				);
 				CREATE INDEX IF NOT EXISTS idx_projects_name ON projects(name);
-				CREATE INDEX IF NOT EXISTS idx_projects_type ON projects(type);
+				CREATE INDEX IF NOT EXISTS idx_projects_type_id ON projects(type_id);
 
-				-- Add foreign key for health_check_configs.project_id after projects exists
-				-- (SQLite doesn't enforce foreign keys on table creation order, but this is cleaner)
 
 				-- ============================================================
 				-- TABLE: project_webhooks (with require_secret from migration 13)
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS project_webhooks (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					uid TEXT UNIQUE NOT NULL,
-					project_id INTEGER NOT NULL,
+					id TEXT PRIMARY KEY,
+					project_id TEXT NOT NULL,
 					provider TEXT NOT NULL,
 					secret_encrypted BLOB,
 					enabled INTEGER DEFAULT 1,
 					created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 					updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-					-- Consolidated from migration 13:
 					require_secret INTEGER DEFAULT 0,
 					FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
 					UNIQUE(project_id, provider)
@@ -201,10 +189,9 @@ var migrations = []Migration{
 				-- TABLE: secrets
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS secrets (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					uid TEXT UNIQUE NOT NULL,
+					id TEXT PRIMARY KEY,
 					project TEXT NOT NULL,
-					project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+					project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
 					scope TEXT NOT NULL,
 					key TEXT NOT NULL,
 					value_encrypted BLOB NOT NULL,
@@ -229,7 +216,7 @@ var migrations = []Migration{
 				CREATE TABLE IF NOT EXISTS deployments (
 					id TEXT PRIMARY KEY,
 					project TEXT NOT NULL,
-					project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+					project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
 					target TEXT NOT NULL,
 					branch TEXT NOT NULL,
 					commit_hash TEXT,
@@ -254,7 +241,7 @@ var migrations = []Migration{
 				-- TABLE: deployment_logs
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS deployment_logs (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					id TEXT PRIMARY KEY,
 					deployment_id TEXT NOT NULL,
 					level TEXT NOT NULL,
 					message TEXT NOT NULL,
@@ -268,7 +255,7 @@ var migrations = []Migration{
 				-- TABLE: deployment_rollbacks
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS deployment_rollbacks (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					id TEXT PRIMARY KEY,
 					deployment_id TEXT NOT NULL,
 					project_name TEXT NOT NULL,
 					from_release INTEGER NOT NULL,
@@ -287,10 +274,10 @@ var migrations = []Migration{
 				CREATE INDEX IF NOT EXISTS idx_deployment_rollbacks_project ON deployment_rollbacks(project_name);
 
 				-- ============================================================
-				-- TABLE: deployment_agents (NEW - for multi-agent deployments)
+				-- TABLE: deployment_agents (for multi-agent deployments)
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS deployment_agents (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					id TEXT PRIMARY KEY,
 					deployment_id TEXT NOT NULL,
 					agent_id TEXT NOT NULL,
 					status TEXT NOT NULL DEFAULT 'pending',
@@ -325,7 +312,6 @@ var migrations = []Migration{
 					last_seen_at DATETIME,
 					registered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 					certificate TEXT,
-					-- Consolidated from migration 15:
 					version TEXT DEFAULT '',
 					os TEXT DEFAULT '',
 					arch TEXT DEFAULT '',
@@ -334,7 +320,6 @@ var migrations = []Migration{
 					update_window_end TEXT DEFAULT '',
 					last_update_at DATETIME,
 					last_update_error TEXT DEFAULT '',
-					-- Consolidated from migration 18:
 					hmac_secret BLOB
 				);
 				CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
@@ -344,7 +329,7 @@ var migrations = []Migration{
 				-- TABLE: agent_update_history
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS agent_update_history (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					id TEXT PRIMARY KEY,
 					agent_id TEXT NOT NULL,
 					from_version TEXT NOT NULL,
 					to_version TEXT NOT NULL,
@@ -362,7 +347,7 @@ var migrations = []Migration{
 				-- TABLE: agent_binaries
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS agent_binaries (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					id TEXT PRIMARY KEY,
 					version TEXT NOT NULL,
 					os TEXT NOT NULL,
 					arch TEXT NOT NULL,
@@ -384,8 +369,8 @@ var migrations = []Migration{
 					target_host TEXT NOT NULL,
 					target_port INTEGER NOT NULL DEFAULT 22,
 					target_user TEXT NOT NULL,
-					ssh_key_id INTEGER,
-					agent_binary_id INTEGER,
+					ssh_key_id TEXT,
+					agent_binary_id TEXT,
 					status TEXT NOT NULL DEFAULT 'pending',
 					stage TEXT,
 					progress INTEGER DEFAULT 0,
@@ -393,8 +378,8 @@ var migrations = []Migration{
 					rollback_data TEXT,
 					started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 					completed_at DATETIME,
-					FOREIGN KEY (ssh_key_id) REFERENCES ssh_keys(id),
-					FOREIGN KEY (agent_binary_id) REFERENCES agent_binaries(id)
+					FOREIGN KEY (ssh_key_id) REFERENCES ssh_keys(id) ON DELETE SET NULL,
+					FOREIGN KEY (agent_binary_id) REFERENCES agent_binaries(id) ON DELETE SET NULL
 				);
 				CREATE INDEX IF NOT EXISTS idx_provision_jobs_status ON agent_provision_jobs(status);
 				CREATE INDEX IF NOT EXISTS idx_provision_jobs_target ON agent_provision_jobs(target_host);
@@ -403,12 +388,12 @@ var migrations = []Migration{
 				-- TABLE: provision_logs
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS provision_logs (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					id TEXT PRIMARY KEY,
 					job_id TEXT NOT NULL,
 					timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 					level TEXT NOT NULL,
 					message TEXT NOT NULL,
-					FOREIGN KEY (job_id) REFERENCES agent_provision_jobs(id)
+					FOREIGN KEY (job_id) REFERENCES agent_provision_jobs(id) ON DELETE CASCADE
 				);
 				CREATE INDEX IF NOT EXISTS idx_provision_logs_job_id ON provision_logs(job_id);
 			`)
@@ -425,7 +410,6 @@ var migrations = []Migration{
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS certificate_authorities (
 					id TEXT PRIMARY KEY,
-					uid TEXT UNIQUE NOT NULL,
 					version INTEGER NOT NULL,
 					common_name TEXT NOT NULL,
 					certificate_pem TEXT NOT NULL,
@@ -445,8 +429,7 @@ var migrations = []Migration{
 				-- TABLE: agent_certificates
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS agent_certificates (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					uid TEXT UNIQUE NOT NULL,
+					id TEXT PRIMARY KEY,
 					agent_id TEXT NOT NULL,
 					ca_id TEXT NOT NULL,
 					serial_number TEXT UNIQUE NOT NULL,
@@ -470,7 +453,7 @@ var migrations = []Migration{
 				-- TABLE: server_certificates
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS server_certificates (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					id TEXT PRIMARY KEY,
 					hostname TEXT NOT NULL,
 					certificate_pem TEXT NOT NULL,
 					private_key_encrypted BLOB NOT NULL,
@@ -488,7 +471,7 @@ var migrations = []Migration{
 				-- TABLE: revoked_certificates
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS revoked_certificates (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					id TEXT PRIMARY KEY,
 					serial_number TEXT UNIQUE NOT NULL,
 					agent_id TEXT,
 					reason TEXT,
@@ -501,7 +484,7 @@ var migrations = []Migration{
 				-- TABLE: registration_tokens
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS registration_tokens (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					id TEXT PRIMARY KEY,
 					token TEXT UNIQUE NOT NULL,
 					agent_id TEXT,
 					expires_at DATETIME,
@@ -534,7 +517,7 @@ var migrations = []Migration{
 				-- TABLE: encryption_key_usage
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS encryption_key_usage (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					id TEXT PRIMARY KEY,
 					key_id TEXT NOT NULL,
 					operation TEXT NOT NULL,
 					resource_type TEXT,
@@ -549,13 +532,13 @@ var migrations = []Migration{
 				-- TABLE: cert_audit_events
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS cert_audit_events (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					id TEXT PRIMARY KEY,
 					timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
 					event_type TEXT NOT NULL,
 					agent_id TEXT,
 					hostname TEXT,
 					serial TEXT NOT NULL,
-					ca_id TEXT NOT NULL,
+					ca_id TEXT NOT NULL REFERENCES certificate_authorities(id),
 					reason TEXT,
 					requested_by TEXT NOT NULL,
 					client_ip TEXT
@@ -575,8 +558,7 @@ var migrations = []Migration{
 				-- TABLE: ssh_keys (with created_by from migration 17)
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS ssh_keys (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					uid TEXT UNIQUE NOT NULL,
+					id TEXT PRIMARY KEY,
 					name TEXT UNIQUE NOT NULL,
 					public_key TEXT NOT NULL,
 					private_key_encrypted BLOB NOT NULL,
@@ -584,7 +566,6 @@ var migrations = []Migration{
 					fingerprint TEXT NOT NULL,
 					created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 					last_used_at DATETIME,
-					-- Consolidated from migration 17:
 					created_by TEXT DEFAULT 'system'
 				);
 				CREATE INDEX IF NOT EXISTS idx_ssh_keys_name ON ssh_keys(name);
@@ -594,8 +575,7 @@ var migrations = []Migration{
 				-- TABLE: known_hosts
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS known_hosts (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					uid TEXT UNIQUE NOT NULL,
+					id TEXT PRIMARY KEY,
 					hostname TEXT NOT NULL,
 					port INTEGER NOT NULL DEFAULT 22,
 					key_type TEXT NOT NULL,
@@ -611,8 +591,7 @@ var migrations = []Migration{
 				-- TABLE: ssh_host_keys
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS ssh_host_keys (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					uid TEXT UNIQUE NOT NULL,
+					id TEXT PRIMARY KEY,
 					hostname TEXT NOT NULL,
 					port INTEGER NOT NULL DEFAULT 22,
 					key_type TEXT NOT NULL,
@@ -632,23 +611,21 @@ var migrations = []Migration{
 				-- TABLE: ssh_jump_servers
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS ssh_jump_servers (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					uid TEXT UNIQUE NOT NULL,
+					id TEXT PRIMARY KEY,
 					name TEXT UNIQUE NOT NULL,
 					host TEXT NOT NULL,
 					port INTEGER DEFAULT 22,
 					username TEXT NOT NULL,
-					ssh_key_id INTEGER,
+					ssh_key_id TEXT,
 					created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-					FOREIGN KEY (ssh_key_id) REFERENCES ssh_keys(id)
+					FOREIGN KEY (ssh_key_id) REFERENCES ssh_keys(id) ON DELETE SET NULL
 				);
 
 				-- ============================================================
 				-- TABLE: source_credentials (git credentials)
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS source_credentials (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					uid TEXT UNIQUE NOT NULL,
+					id TEXT PRIMARY KEY,
 					name TEXT UNIQUE NOT NULL,
 					type TEXT NOT NULL,
 					url_pattern TEXT NOT NULL,
@@ -670,8 +647,7 @@ var migrations = []Migration{
 				-- TABLE: settings
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS settings (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					uid TEXT UNIQUE NOT NULL,
+					id TEXT PRIMARY KEY,
 					category TEXT NOT NULL,
 					key TEXT NOT NULL,
 					value TEXT NOT NULL,
@@ -688,7 +664,7 @@ var migrations = []Migration{
 				-- TABLE: rate_limits
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS rate_limits (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					id TEXT PRIMARY KEY,
 					key TEXT NOT NULL,
 					bucket TEXT NOT NULL,
 					count INTEGER NOT NULL DEFAULT 1,
@@ -703,7 +679,7 @@ var migrations = []Migration{
 				-- TABLE: blocked_ips
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS blocked_ips (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					id TEXT PRIMARY KEY,
 					ip_address TEXT UNIQUE NOT NULL,
 					reason TEXT NOT NULL,
 					blocked_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -716,7 +692,7 @@ var migrations = []Migration{
 				-- TABLE: audit_logs
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS audit_logs (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					id TEXT PRIMARY KEY,
 					timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
 					source TEXT NOT NULL,
 					user TEXT NOT NULL,
@@ -738,7 +714,6 @@ var migrations = []Migration{
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS webhook_secrets (
 					provider TEXT PRIMARY KEY,
-					uid TEXT UNIQUE NOT NULL,
 					secret_encrypted BLOB NOT NULL,
 					updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 				);
@@ -748,10 +723,10 @@ var migrations = []Migration{
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS master_key_meta (
 					id INTEGER PRIMARY KEY CHECK (id = 1),
-					key_id TEXT NOT NULL,
+					key_id TEXT NOT NULL REFERENCES encryption_keys(id),
 					created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 					rotated_at DATETIME,
-					previous_key_id TEXT,
+					previous_key_id TEXT REFERENCES encryption_keys(id),
 					previous_key_expires_at DATETIME
 				);
 			`)
@@ -767,8 +742,7 @@ var migrations = []Migration{
 				-- TABLE: acme_certificates
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS acme_certificates (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					uid TEXT UNIQUE NOT NULL,
+					id TEXT PRIMARY KEY,
 					domain TEXT UNIQUE NOT NULL,
 					certificate_pem TEXT NOT NULL,
 					private_key_encrypted BLOB NOT NULL,
@@ -787,8 +761,7 @@ var migrations = []Migration{
 				-- TABLE: acme_accounts
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS acme_accounts (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					uid TEXT UNIQUE NOT NULL,
+					id TEXT PRIMARY KEY,
 					email TEXT NOT NULL,
 					account_url TEXT,
 					private_key_encrypted BLOB NOT NULL,
@@ -808,8 +781,7 @@ var migrations = []Migration{
 				-- TABLE: recipe_components
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS recipe_components (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					uid TEXT UNIQUE NOT NULL,
+					id TEXT PRIMARY KEY,
 					namespace TEXT NOT NULL CHECK(namespace IN ('seed', 'user')),
 					slug TEXT NOT NULL,
 					version TEXT NOT NULL,
@@ -832,8 +804,7 @@ var migrations = []Migration{
 				-- TABLE: playbooks
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS playbooks (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					uid TEXT UNIQUE NOT NULL,
+					id TEXT PRIMARY KEY,
 					namespace TEXT NOT NULL CHECK(namespace IN ('seed', 'user')),
 					slug TEXT NOT NULL,
 					version TEXT NOT NULL,
@@ -848,7 +819,7 @@ var migrations = []Migration{
 					validation_rules JSON,
 					is_seed BOOLEAN NOT NULL DEFAULT 0,
 					is_deprecated BOOLEAN NOT NULL DEFAULT 0,
-					parent_id INTEGER,
+					parent_id TEXT,
 					parent_version TEXT,
 					created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 					UNIQUE(namespace, slug, version),
@@ -863,12 +834,11 @@ var migrations = []Migration{
 				-- TABLE: playbook_activations
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS playbook_activations (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					uid TEXT UNIQUE NOT NULL,
-					project_id INTEGER NOT NULL,
-					playbook_id INTEGER NOT NULL,
+					id TEXT PRIMARY KEY,
+					project_id TEXT NOT NULL,
+					playbook_id TEXT NOT NULL,
 					activated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					activated_by INTEGER,
+					activated_by TEXT,
 					FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
 					FOREIGN KEY (playbook_id) REFERENCES playbooks(id) ON DELETE RESTRICT,
 					FOREIGN KEY (activated_by) REFERENCES users(id) ON DELETE SET NULL
@@ -880,9 +850,8 @@ var migrations = []Migration{
 				-- TABLE: playbook_variable_bindings
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS playbook_variable_bindings (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					uid TEXT UNIQUE NOT NULL,
-					activation_id INTEGER NOT NULL,
+					id TEXT PRIMARY KEY,
+					activation_id TEXT NOT NULL,
 					variable_name TEXT NOT NULL,
 					source_type TEXT NOT NULL CHECK(source_type IN ('literal', 'env', 'secret')),
 					source_ref TEXT,
@@ -897,10 +866,9 @@ var migrations = []Migration{
 				-- TABLE: raw_command_approvals
 				-- ============================================================
 				CREATE TABLE IF NOT EXISTS raw_command_approvals (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					uid TEXT UNIQUE NOT NULL,
-					component_id INTEGER NOT NULL,
-					approved_by INTEGER NOT NULL,
+					id TEXT PRIMARY KEY,
+					component_id TEXT NOT NULL,
+					approved_by TEXT NOT NULL,
 					approved_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 					approval_note TEXT,
 					FOREIGN KEY (component_id) REFERENCES recipe_components(id) ON DELETE CASCADE,
@@ -915,14 +883,23 @@ var migrations = []Migration{
 			// Insert default global health check configuration
 			_, err = tx.Exec(`
 				INSERT OR IGNORE INTO health_check_configs (
-					uid, name, url, method, expected_status, timeout_seconds, retries, 
+					id, name, url, method, expected_status, timeout_seconds, retries,
 					retry_delay_seconds, enabled, is_global
 				) VALUES (
-					'default-global-hc', 'Global Default', '{{.URL}}', 'GET', 200, 10, 3, 5, 1, 1
+					'd642sg0e0ta5dev2vctg', 'Global Default', '{{.URL}}', 'GET', 200, 10, 3, 5, 1, 1
 				)
 			`)
 			if err != nil {
 				return fmt.Errorf("inserting default health check config: %w", err)
+			}
+
+			// Insert default 'generic' project type with stable XID
+			_, err = tx.Exec(`
+				INSERT OR IGNORE INTO project_types (id, name, description, created_at)
+				VALUES ('d642sg0e0ta5dev2vcu0', 'generic', 'Generic project type', CURRENT_TIMESTAMP)
+			`)
+			if err != nil {
+				return fmt.Errorf("inserting default project type: %w", err)
 			}
 
 			return nil
