@@ -82,7 +82,7 @@ type SSHKeyManager struct {
 
 // SSHKey represents an Ed25519 SSH key pair.
 type SSHKey struct {
-	ID               int64
+	ID               string
 	Name             string
 	PublicKey        string // OpenSSH format
 	PrivateKeyEnc    []byte // KMS-encrypted PEM
@@ -95,7 +95,7 @@ type SSHKey struct {
 
 // KnownHost represents a host key in the known_hosts table.
 type KnownHost struct {
-	ID             int64
+	ID             string
 	Hostname       string
 	Port           int
 	KeyType        string

@@ -139,8 +139,7 @@ func (s ScheduledDeploymentStatus) String() string { return string(s) }
 
 // User represents a user in the system.
 type User struct {
-	ID                 int64
-	UID                string
+	ID                 string
 	Username           string
 	PasswordHash       string
 	Email              string
@@ -188,7 +187,7 @@ const (
 
 // AgentUpdateHistory represents a record of an agent update attempt.
 type AgentUpdateHistory struct {
-	ID           int64
+	ID           string
 	AgentID      string
 	FromVersion  string
 	ToVersion    string
@@ -206,7 +205,7 @@ type AgentUpdateHistory struct {
 type DeploymentRecord struct {
 	ID            string
 	Project       string
-	ProjectID     *int64 // FK to projects table (optional for backward compatibility)
+	ProjectID     *string // FK to projects table (optional for backward compatibility)
 	Target        string
 	Branch        string
 	CommitHash    string
@@ -221,7 +220,7 @@ type DeploymentRecord struct {
 
 // DeploymentLog represents a log entry for a deployment.
 type DeploymentLog struct {
-	ID           int64
+	ID           string
 	DeploymentID string
 	Level        string
 	Message      string
@@ -233,7 +232,7 @@ type DeploymentLog struct {
 // Each deployment can have multiple agents, and this table tracks the status
 // of each agent's deployment execution independently.
 type DeploymentAgent struct {
-	ID           int64
+	ID           string
 	DeploymentID string
 	AgentID      string
 	Status       DeploymentStatus // pending, running, success, failed, cancelled
@@ -257,7 +256,7 @@ type ScheduledDeployment struct {
 
 // AuditEntry represents an audit log entry.
 type AuditEntry struct {
-	ID           int64
+	ID           string
 	Timestamp    time.Time
 	Source       string
 	User         string
@@ -274,10 +273,9 @@ type AuditEntry struct {
 
 // Secret represents an encrypted secret.
 type Secret struct {
-	ID             int64
-	UID            string
+	ID             string
 	Project        string
-	ProjectID      *int64 // FK to projects table (optional for backward compatibility)
+	ProjectID      *string // FK to projects table (optional for backward compatibility)
 	Scope          string
 	Key            string
 	ValueEncrypted []byte
@@ -296,26 +294,24 @@ type SecretInfo struct {
 
 // Project represents a deployment project.
 type Project struct {
-	ID                   int64      `json:"id"`
-	UID                  string     `json:"uid"`
+	ID                   string     `json:"id"`
 	Name                 string     `json:"name"`
 	Repository           string     `json:"repository"`
 	Branch               string     `json:"branch"`
 	DeployPath           string     `json:"deployPath"`
-	Type                 string     `json:"type"`
+	TypeID               *string    `json:"typeId,omitempty"`
 	CreatedAt            time.Time  `json:"createdAt"`
 	UpdatedAt            time.Time  `json:"updatedAt"`
 	LastDeployAt         *time.Time `json:"lastDeployAt,omitempty"`
 	LastDeployStatus     string     `json:"lastDeployStatus,omitempty"`
-	HealthCheckID        *int64     `json:"healthCheckId,omitempty"` // Reference to health_check_configs, nil uses global
+	HealthCheckID        *string    `json:"healthCheckId,omitempty"` // Reference to health_check_configs, nil uses global
 	AutoRollbackEnabled  bool       `json:"autoRollbackEnabled"`     // Whether to auto-rollback on deployment issues
 	RollbackOnHealthFail bool       `json:"rollbackOnHealthFail"`    // Whether to rollback if health check fails
 }
 
 // ProjectType represents a project type template.
 type ProjectType struct {
-	ID           int64
-	UID          string
+	ID           string
 	Name         string
 	Description  string
 	BuildCmd     string
@@ -325,9 +321,8 @@ type ProjectType struct {
 
 // ProjectWebhook represents a project-specific webhook configuration.
 type ProjectWebhook struct {
-	ID              int64
-	UID             string
-	ProjectID       int64
+	ID              string
+	ProjectID       string
 	Provider        string
 	SecretEncrypted []byte
 	Enabled         bool
@@ -341,7 +336,7 @@ type ProjectWebhook struct {
 // Session represents a user session.
 type Session struct {
 	ID        string // TEXT primary key
-	UserID    int64
+	UserID    string
 	Token     string // Same as ID for sessions
 	IPAddress string
 	UserAgent string
@@ -354,9 +349,8 @@ type Session struct {
 
 // APIKey represents an API key.
 type APIKey struct {
-	ID         int64      `json:"id"`
-	UID        string     `json:"uid"`
-	UserID     int64      `json:"userId"`
+	ID         string     `json:"id"`
+	UserID     string     `json:"userId"`
 	Name       string     `json:"name"`
 	KeyHash    string     `json:"-"` // Never expose in JSON
 	KeyPrefix  string     `json:"keyPrefix,omitempty"`
@@ -381,8 +375,7 @@ func (key *APIKey) IsValid() bool {
 
 // Setting represents a configuration setting.
 type Setting struct {
-	ID          int64
-	UID         string
+	ID          string
 	Category    string
 	Key         string
 	Value       string
@@ -397,8 +390,7 @@ type Setting struct {
 
 // SSHHostKey represents a stored SSH host key.
 type SSHHostKey struct {
-	ID          int64
-	UID         string
+	ID          string
 	Hostname    string
 	Port        int
 	KeyType     string
@@ -415,13 +407,12 @@ type SSHHostKey struct {
 
 // SSHJumpServer represents a bastion/jump server for SSH connections.
 type SSHJumpServer struct {
-	ID        int64
-	UID       string
+	ID        string
 	Name      string
 	Host      string
 	Port      int
 	Username  string
-	SSHKeyID  *int64 // Optional foreign key to ssh_keys
+	SSHKeyID  *string // Optional foreign key to ssh_keys
 	CreatedAt time.Time
 }
 
@@ -429,7 +420,7 @@ type SSHJumpServer struct {
 
 // BlockedIP represents a blocked IP address.
 type BlockedIP struct {
-	ID        int64
+	ID        string
 	IPAddress string
 	Reason    string
 	BlockedAt time.Time
@@ -439,7 +430,7 @@ type BlockedIP struct {
 
 // RateLimitRecord represents a rate limit tracking record.
 type RateLimitRecord struct {
-	ID          int64
+	ID          string
 	Key         string
 	Bucket      string
 	Count       int
@@ -455,8 +446,8 @@ type ProvisionJob struct {
 	TargetHost    string
 	TargetPort    int
 	TargetUser    string
-	SSHKeyID      *int64
-	AgentBinaryID *int64
+	SSHKeyID      *string
+	AgentBinaryID *string
 	Status        ProvisionStatus
 	Stage         string
 	Progress      int
@@ -468,7 +459,7 @@ type ProvisionJob struct {
 
 // ProvisionLog represents a log entry for a provisioning job.
 type ProvisionLog struct {
-	ID        int64
+	ID        string
 	JobID     string
 	Timestamp time.Time
 	Level     string // info, warn, error
@@ -477,7 +468,7 @@ type ProvisionLog struct {
 
 // AgentBinary represents an agent binary release.
 type AgentBinary struct {
-	ID             int64
+	ID             string
 	Version        string
 	OS             string
 	Arch           string
@@ -493,9 +484,8 @@ type AgentBinary struct {
 // HealthCheckConfig represents a health check configuration.
 // Can be global (is_global=true, project_id=nil) or per-project.
 type HealthCheckConfig struct {
-	ID                int64
-	UID               string
-	ProjectID         *int64 // nil for global config
+	ID                string
+	ProjectID         *string // nil for global config
 	Name              string
 	URL               string // Can include template vars like {{.URL}}
 	Method            string // GET, POST, etc.
@@ -514,7 +504,7 @@ type HealthCheckConfig struct {
 
 // HealthCheckResult represents the result of a health check execution.
 type HealthCheckResult struct {
-	ConfigID       int64
+	ConfigID       string
 	DeploymentID   string
 	Success        bool
 	StatusCode     int
@@ -526,7 +516,7 @@ type HealthCheckResult struct {
 
 // DeploymentRollback represents a rollback event.
 type DeploymentRollback struct {
-	ID                int64
+	ID                string
 	DeploymentID      string
 	ProjectName       string
 	FromRelease       int

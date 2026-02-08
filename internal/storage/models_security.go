@@ -9,7 +9,6 @@ import "time"
 // Old CAs are NEVER deleted, retained forever for backward compatibility.
 type CertificateAuthority struct {
 	ID             string     `json:"id"`
-	UID            string     `json:"uid"`
 	Version        int        `json:"version"`
 	CommonName     string     `json:"common_name"`
 	CertificatePEM string     `json:"certificate_pem"`
@@ -32,8 +31,7 @@ const (
 
 // AgentCertificate represents a certificate issued to an agent.
 type AgentCertificate struct {
-	ID               int64      `json:"id"`
-	UID              string     `json:"uid"`
+	ID               string     `json:"id"`
 	AgentID          string     `json:"agent_id"`
 	CAID             string     `json:"ca_id"`
 	SerialNumber     string     `json:"serial_number"`
@@ -58,7 +56,7 @@ const (
 
 // ServerCertificate represents a TLS certificate for the server.
 type ServerCertificate struct {
-	ID             int64     `json:"id"`
+	ID             string    `json:"id"`
 	Hostname       string    `json:"hostname"`
 	CertificatePEM string    `json:"certificate_pem"`
 	PrivateKeyEnc  []byte    `json:"-"`    // KMS-encrypted, never expose in JSON
@@ -73,7 +71,7 @@ type ServerCertificate struct {
 
 // RegistrationToken represents a one-time token for agent registration.
 type RegistrationToken struct {
-	ID        int64      `json:"id"`
+	ID        string     `json:"id"`
 	Token     string     `json:"token"`
 	AgentID   string     `json:"agent_id,omitempty"` // Pre-assigned or empty for any agent
 	ExpiresAt time.Time  `json:"expires_at"`
@@ -87,8 +85,7 @@ type RegistrationToken struct {
 // SourceCredential represents credentials for accessing source repositories.
 // Credentials are stored encrypted and never transmitted to agents.
 type SourceCredential struct {
-	ID            int64     `json:"id"`
-	UID           string    `json:"uid"`
+	ID            string    `json:"id"`
 	Name          string    `json:"name"`
 	Type          string    `json:"type"`        // "ssh_key", "https_token", "https_basic"
 	URLPattern    string    `json:"url_pattern"` // Regex to match repo URLs
@@ -109,7 +106,7 @@ const (
 
 // RevokedCertificate represents an entry in the Certificate Revocation List.
 type RevokedCertificate struct {
-	ID           int64     `json:"id"`
+	ID           string    `json:"id"`
 	SerialNumber string    `json:"serial_number"`
 	AgentID      string    `json:"agent_id,omitempty"`
 	Reason       string    `json:"reason"`
@@ -147,8 +144,7 @@ const (
 
 // SSHKey represents an SSH key pair for provisioning and git operations.
 type SSHKey struct {
-	ID            int64     `json:"id"`
-	UID           string    `json:"uid"`
+	ID            string    `json:"id"`
 	Name          string    `json:"name"`
 	PublicKey     string    `json:"public_key"`
 	PrivateKeyEnc []byte    `json:"-"` // KMS-encrypted, never expose in JSON
@@ -169,7 +165,7 @@ const (
 
 // CertAuditEvent represents an audit log entry for certificate operations.
 type CertAuditEvent struct {
-	ID          int64     `json:"id"`
+	ID          string    `json:"id"`
 	Timestamp   time.Time `json:"timestamp"`
 	EventType   string    `json:"event_type"` // "issued", "revoked", "renewed", "rejected"
 	AgentID     string    `json:"agent_id,omitempty"`
@@ -206,8 +202,7 @@ type CertAuditFilter struct {
 // ACMECertificate represents a stored ACME/Let's Encrypt certificate.
 // Matches schema in migration 11: acme_certificates table.
 type ACMECertificate struct {
-	ID                  int64      `json:"id"`
-	UID                 string     `json:"uid"`
+	ID                  string     `json:"id"`
 	Domain              string     `json:"domain"`                // Primary domain (unique)
 	CertificatePEM      string     `json:"certificate_pem"`       // Full certificate chain PEM
 	PrivateKeyEncrypted []byte     `json:"private_key_encrypted"` // Private key (encrypted at rest)
@@ -223,8 +218,7 @@ type ACMECertificate struct {
 // ACMEAccount represents an ACME account registration.
 // Matches schema in migration 11: acme_accounts table.
 type ACMEAccount struct {
-	ID                  int64     `json:"id"`
-	UID                 string    `json:"uid"`
+	ID                  string    `json:"id"`
 	Email               string    `json:"email"`                 // Contact email
 	AccountURL          string    `json:"account_url,omitempty"` // ACME account URL
 	PrivateKeyEncrypted []byte    `json:"private_key_encrypted"` // Account private key (encrypted)
@@ -237,8 +231,8 @@ type ACMEAccount struct {
 // RecoveryCode represents a one-time-use 2FA recovery code.
 // Users are given 8 codes when enabling TOTP. Each code can only be used once.
 type RecoveryCode struct {
-	ID        int64      `json:"id"`
-	UserID    int64      `json:"user_id"`
+	ID        string     `json:"id"`
+	UserID    string     `json:"user_id"`
 	CodeHash  string     `json:"-"` // bcrypt hash, never exposed in JSON
 	UsedAt    *time.Time `json:"used_at,omitempty"`
 	CreatedAt time.Time  `json:"created_at"`

@@ -54,7 +54,7 @@ type CertificateAuthority struct {
 
 // AgentCertificate represents a certificate issued to an agent.
 type AgentCertificate struct {
-	ID               int64
+	ID               string
 	AgentID          string
 	CAID             string
 	SerialNumber     string

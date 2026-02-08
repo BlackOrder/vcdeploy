@@ -8,8 +8,7 @@ import (
 
 // RecipeComponent represents a reusable deployment building block.
 type RecipeComponent struct {
-	ID            int64                `json:"id"`
-	UID           string               `json:"uid"`
+	ID            string               `json:"id"`
 	Namespace     string               `json:"namespace"` // "seed" or "user"
 	Slug          string               `json:"slug"`      // unique identifier within namespace
 	Version       string               `json:"version"`   // semver with 'v' prefix
