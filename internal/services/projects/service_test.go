@@ -86,8 +86,8 @@ func TestService_Create_Defaults(t *testing.T) {
 	if project.Branch != "main" {
 		t.Errorf("Create() default branch = %v, want %v", project.Branch, "main")
 	}
-	if derefStr(project.TypeID) != "generic" {
-		t.Errorf("Create() default type = %v, want generic", derefStr(project.TypeID))
+	if derefStr(project.TypeID) != "" {
+		t.Errorf("Create() default type = %v, want empty (NULL)", derefStr(project.TypeID))
 	}
 }
 
@@ -614,7 +614,7 @@ func TestService_Create_TypeVariations(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{"", "generic"},                // default
+		{"", ""},                       // NULL (no default)
 		{"nodejs", "nodejs"},           // explicit
 		{"python", "python"},           // explicit
 		{"go", "go"},                   // explicit

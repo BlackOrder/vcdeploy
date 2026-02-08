@@ -35,10 +35,9 @@ func (s *Service) Create(ctx context.Context, name, repository, branch, deployPa
 		branch = "main"
 	}
 	var typeIDPtr *string
-	if projectType == "" {
-		projectType = "generic"
+	if projectType != "" {
+		typeIDPtr = &projectType
 	}
-	typeIDPtr = &projectType
 
 	project := &storage.Project{
 		Name:       name,

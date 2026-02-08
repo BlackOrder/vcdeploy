@@ -143,7 +143,8 @@ func (s *MemoryStore) SetSetting(ctx context.Context, category, key, value, valu
 
 // InitSetting seeds a setting only if it does not already exist.
 // Used for runtime settings where user edits should survive server restarts.
-func (s *MemoryStore) InitSetting(ctx context.Context, category, key, value, valueType string, encrypted bool) error {
+// The id parameter must be a stable XID so settings are identical across installations.
+func (s *MemoryStore) InitSetting(ctx context.Context, id, category, key, value, valueType string, encrypted bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -154,7 +155,7 @@ func (s *MemoryStore) InitSetting(ctx context.Context, category, key, value, val
 
 	now := time.Now()
 	setting := &Setting{
-		ID:        xid.New().String(),
+		ID:        id,
 		Category:  category,
 		Key:       key,
 		Value:     value,

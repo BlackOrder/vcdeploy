@@ -348,7 +348,7 @@ paths:
                       type: object
                       properties:
                         id:
-                          type: integer
+                          type: string
                         username:
                           type: string
                         email:
@@ -381,7 +381,7 @@ paths:
                 type: object
                 properties:
                   user_id:
-                    type: integer
+                    type: string
                   username:
                     type: string
                   email:
@@ -774,7 +774,7 @@ paths:
         - name: after_id
           in: query
           schema:
-            type: integer
+            type: string
           description: Return logs after this ID (for polling)
       responses:
         '200':
@@ -1288,7 +1288,7 @@ paths:
         in: path
         required: true
         schema:
-          type: integer
+          type: string
         description: API key ID
     get:
       tags: [Auth]
@@ -1664,7 +1664,7 @@ paths:
         in: path
         required: true
         schema:
-          type: integer
+          type: string
         description: Host key ID
     get:
       tags: [Agents]
@@ -1812,7 +1812,7 @@ paths:
         in: path
         required: true
         schema:
-          type: integer
+          type: string
         description: Jump server ID
     get:
       tags: [Agents]
@@ -1936,8 +1936,7 @@ paths:
         in: path
         required: true
         schema:
-          type: integer
-          format: int64
+          type: string
         description: SSH key ID
     get:
       tags: [Security]
@@ -1978,8 +1977,7 @@ paths:
         in: path
         required: true
         schema:
-          type: integer
-          format: int64
+          type: string
         description: SSH key ID
     get:
       tags: [Security]
@@ -2041,8 +2039,7 @@ paths:
                   type: string
                   description: URL pattern to match (e.g., github.com/*)
                 sshKeyId:
-                  type: integer
-                  format: int64
+                  type: string
                   description: Reference to SSH key (for ssh_key type)
                 token:
                   type: string
@@ -2073,8 +2070,7 @@ paths:
         in: path
         required: true
         schema:
-          type: integer
-          format: int64
+          type: string
         description: Credential ID
     get:
       tags: [Security]
@@ -2150,8 +2146,7 @@ paths:
         in: path
         required: true
         schema:
-          type: integer
-          format: int64
+          type: string
         description: Credential ID
     post:
       tags: [Security]
@@ -3048,7 +3043,7 @@ components:
       type: object
       properties:
         id:
-          type: integer
+          type: string
         username:
           type: string
         email:
@@ -3206,15 +3201,15 @@ components:
       type: object
       properties:
         id:
-          type: integer
+          type: string
         name:
           type: string
         project_id:
-          type: integer
+          type: string
         project_name:
           type: string
         agent_id:
-          type: integer
+          type: string
           nullable: true
           description: Agent ID (null for master-local targets)
         agent_name:
@@ -3240,7 +3235,7 @@ components:
         path:
           type: string
         agent_id:
-          type: integer
+          type: string
           nullable: true
           description: Agent ID (omit for master-local deployment)
 
@@ -3252,14 +3247,14 @@ components:
         path:
           type: string
         agent_id:
-          type: integer
+          type: string
           nullable: true
 
     DeploymentLog:
       type: object
       properties:
         id:
-          type: integer
+          type: string
         deploymentId:
           type: string
         timestamp:
@@ -3346,7 +3341,7 @@ components:
       type: object
       properties:
         id:
-          type: integer
+          type: string
         name:
           type: string
         description:
@@ -3399,7 +3394,7 @@ components:
       type: object
       properties:
         id:
-          type: integer
+          type: string
         name:
           type: string
         description:
@@ -3433,7 +3428,7 @@ components:
       type: object
       properties:
         id:
-          type: integer
+          type: string
         timestamp:
           type: string
           format: date-time
@@ -3477,7 +3472,7 @@ components:
       type: object
       properties:
         id:
-          type: integer
+          type: string
         hostname:
           type: string
         port:
@@ -3520,7 +3515,7 @@ components:
       type: object
       properties:
         id:
-          type: integer
+          type: string
         name:
           type: string
         hostname:
@@ -3559,7 +3554,7 @@ components:
       type: object
       properties:
         id:
-          type: integer
+          type: string
         ipAddress:
           type: string
         blockedAt:
@@ -3625,7 +3620,7 @@ components:
         targetUser:
           type: string
         jumpServerId:
-          type: integer
+          type: string
           description: Optional jump server to use
 
     Rollback:
@@ -3717,7 +3712,7 @@ components:
       type: object
       properties:
         id:
-          type: integer
+          type: string
         name:
           type: string
         fingerprint:
@@ -3764,7 +3759,7 @@ components:
       type: object
       properties:
         id:
-          type: integer
+          type: string
         name:
           type: string
         type:
@@ -3797,7 +3792,7 @@ components:
           type: string
           format: password
         sshKeyId:
-          type: integer
+          type: string
           description: Reference to SSH key (for ssh_key type)
         token:
           type: string
@@ -3817,7 +3812,7 @@ components:
           type: string
           format: password
         sshKeyId:
-          type: integer
+          type: string
         token:
           type: string
           format: password
@@ -3869,7 +3864,7 @@ components:
       type: object
       properties:
         id:
-          type: integer
+          type: string
         name:
           type: string
         subject:
@@ -3918,7 +3913,7 @@ components:
       type: object
       properties:
         id:
-          type: integer
+          type: string
         timestamp:
           type: string
           format: date-time
