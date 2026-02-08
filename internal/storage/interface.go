@@ -14,6 +14,9 @@ type Store interface {
 	Close() error
 	Conn() *sql.DB // Returns underlying connection (may be nil for memory-only stores)
 
+	// Maintenance mode support
+	FlushPending() error // Drain pending writes to disk (no-op for direct DB stores)
+
 	// Transaction support
 	RunInTransaction(ctx context.Context, fn func(tx *sql.Tx) error) error
 

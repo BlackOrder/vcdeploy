@@ -404,6 +404,40 @@ func (s *MemoryStore) startWriteWorker(name string, db *sql.DB, writes <-chan Wr
 	}()
 }
 
+// FlushPending drains all pending write operations to SQLite without
+// shutting down the write workers. Call this before import/export to
+// ensure the on-disk database is up to date.
+func (s *MemoryStore) FlushPending() error {
+	channels := []chan WriteOp{
+		s.coreWrites,
+		s.projectsWrites,
+		s.agentsWrites,
+		s.deploymentsWrites,
+		s.auditWrites,
+		s.ratelimitWrites,
+		s.provisionWrites,
+	}
+
+	// Wait until all channels are empty
+	for attempts := 0; attempts < 100; attempts++ {
+		allEmpty := true
+		for _, ch := range channels {
+			if len(ch) > 0 {
+				allEmpty = false
+				break
+			}
+		}
+		if allEmpty {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// Wait one more flush interval to ensure the last batch is committed
+	time.Sleep(250 * time.Millisecond)
+	return nil
+}
+
 // Close signals all write workers to stop, waits for them to drain,
 // and closes all database connections.
 func (s *MemoryStore) Close() error {
