@@ -42,7 +42,7 @@ type ImportDiff struct {
 // TableDiff shows what changed for a single table.
 type TableDiff struct {
 	Name       string `json:"name"`
-	NewRecords int    `json:"new_records"` // In imported, not in main (by uid)
+	NewRecords int    `json:"new_records"` // In imported, not in main (by id/XID)
 	Changed    int    `json:"changed"`     // In both, content differs
 	OnlyInMain int    `json:"only_in_main"`
 	Total      int    `json:"total"` // Total records in import file
@@ -271,7 +271,7 @@ func (s *ImportService) importReplace(ctx context.Context, tx *sql.Tx, table Tab
 	return s.copyRows(ctx, tx, table, columns, passphrase, false, true)
 }
 
-// importMerge inserts new records and updates changed records (by uid).
+// importMerge inserts new records and updates changed records (by id/XID).
 func (s *ImportService) importMerge(ctx context.Context, tx *sql.Tx, table TableExportConfig, passphrase string) error {
 	// Get columns
 	columns, err := getTableColumnsFromTx(ctx, tx, "imported", table.Name)

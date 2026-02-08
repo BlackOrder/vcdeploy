@@ -250,7 +250,7 @@ type ProjectWebhookStore interface {
 type SettingStore interface {
 	GetSetting(ctx context.Context, category, key string) (*Setting, error)
 	SetSetting(ctx context.Context, category, key, value, valueType string, encrypted bool) error
-	InitSetting(ctx context.Context, category, key, value, valueType string, encrypted bool) error
+	InitSetting(ctx context.Context, id, category, key, value, valueType string, encrypted bool) error
 	ListSettingsByCategory(ctx context.Context, category string) ([]*Setting, error)
 	ListAllSettings(ctx context.Context) ([]*Setting, error)
 	DeleteSetting(ctx context.Context, category, key string) error

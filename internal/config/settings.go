@@ -204,23 +204,23 @@ func (s *SettingsService) SetDuration(ctx context.Context, category, key string,
 
 // initString seeds a string setting only if it does not already exist.
 // Used for runtime defaults where user edits should survive restarts.
-func (s *SettingsService) initString(ctx context.Context, category, key, value string) error {
-	return s.store.InitSetting(ctx, category, key, value, "string", false)
+func (s *SettingsService) initString(ctx context.Context, id, category, key, value string) error {
+	return s.store.InitSetting(ctx, id, category, key, value, "string", false)
 }
 
 // initBool seeds a boolean setting only if it does not already exist.
-func (s *SettingsService) initBool(ctx context.Context, category, key string, value bool) error {
-	return s.store.InitSetting(ctx, category, key, strconv.FormatBool(value), "bool", false)
+func (s *SettingsService) initBool(ctx context.Context, id, category, key string, value bool) error {
+	return s.store.InitSetting(ctx, id, category, key, strconv.FormatBool(value), "bool", false)
 }
 
 // initInt seeds an integer setting only if it does not already exist.
-func (s *SettingsService) initInt(ctx context.Context, category, key string, value int) error {
-	return s.store.InitSetting(ctx, category, key, strconv.Itoa(value), "int", false)
+func (s *SettingsService) initInt(ctx context.Context, id, category, key string, value int) error {
+	return s.store.InitSetting(ctx, id, category, key, strconv.Itoa(value), "int", false)
 }
 
 // initDuration seeds a duration setting only if it does not already exist.
-func (s *SettingsService) initDuration(ctx context.Context, category, key string, value time.Duration) error {
-	return s.store.InitSetting(ctx, category, key, value.String(), "duration", false)
+func (s *SettingsService) initDuration(ctx context.Context, id, category, key string, value time.Duration) error {
+	return s.store.InitSetting(ctx, id, category, key, value.String(), "duration", false)
 }
 
 // SetRaw stores a setting with explicit value type (for import scenarios).
@@ -351,125 +351,127 @@ func (s *SettingsService) SetDefaults(ctx context.Context) error {
 	}
 
 	// === Runtime fields: DB is source of truth, seed only on first boot ===
+	// Each runtime setting uses a stable hardcoded XID so that settings are
+	// identical across installations, enabling reliable import/export by id.
 
 	// SSH settings (runtime)
-	if err := s.initString(ctx, "ssh", "default_user", defaults.SSH.DefaultUser); err != nil {
+	if err := s.initString(ctx, "d645ta0e0tacdcmkh4l0", "ssh", "default_user", defaults.SSH.DefaultUser); err != nil {
 		return err
 	}
-	if err := s.initString(ctx, "ssh", "default_key", defaults.SSH.DefaultKey); err != nil {
+	if err := s.initString(ctx, "d645ta0e0tacdcmkh4lg", "ssh", "default_key", defaults.SSH.DefaultKey); err != nil {
 		return err
 	}
-	if err := s.initString(ctx, "ssh", "known_hosts", defaults.SSH.KnownHosts); err != nil {
+	if err := s.initString(ctx, "d645ta0e0tacdcmkh4m0", "ssh", "known_hosts", defaults.SSH.KnownHosts); err != nil {
 		return err
 	}
-	if err := s.initDuration(ctx, "ssh", "connection_timeout", defaults.SSH.ConnectionTimeout); err != nil {
+	if err := s.initDuration(ctx, "d645ta0e0tacdcmkh4mg", "ssh", "connection_timeout", defaults.SSH.ConnectionTimeout); err != nil {
 		return err
 	}
-	if err := s.initDuration(ctx, "ssh", "keepalive_interval", defaults.SSH.KeepaliveInterval); err != nil {
+	if err := s.initDuration(ctx, "d645ta0e0tacdcmkh4n0", "ssh", "keepalive_interval", defaults.SSH.KeepaliveInterval); err != nil {
 		return err
 	}
-	if err := s.initDuration(ctx, "ssh", "idle_timeout", defaults.SSH.IdleTimeout); err != nil {
+	if err := s.initDuration(ctx, "d645ta0e0tacdcmkh4ng", "ssh", "idle_timeout", defaults.SSH.IdleTimeout); err != nil {
 		return err
 	}
 
 	// Security settings (runtime)
-	if err := s.initBool(ctx, "security", "key_rotation_enabled", defaults.Security.KeyRotation.Enabled); err != nil {
+	if err := s.initBool(ctx, "d645ta0e0tacdcmkh4o0", "security", "key_rotation_enabled", defaults.Security.KeyRotation.Enabled); err != nil {
 		return err
 	}
-	if err := s.initDuration(ctx, "security", "key_rotation_interval", defaults.Security.KeyRotation.Interval); err != nil {
+	if err := s.initDuration(ctx, "d645ta0e0tacdcmkh4og", "security", "key_rotation_interval", defaults.Security.KeyRotation.Interval); err != nil {
 		return err
 	}
-	if err := s.initDuration(ctx, "security", "session_timeout", defaults.Security.SessionTimeout); err != nil {
+	if err := s.initDuration(ctx, "d645ta0e0tacdcmkh4p0", "security", "session_timeout", defaults.Security.SessionTimeout); err != nil {
 		return err
 	}
-	if err := s.initBool(ctx, "security", "require_2fa_admin", defaults.Security.Require2FAAdmin); err != nil {
+	if err := s.initBool(ctx, "d645ta0e0tacdcmkh4pg", "security", "require_2fa_admin", defaults.Security.Require2FAAdmin); err != nil {
 		return err
 	}
 
 	// Backup settings (runtime)
-	if err := s.initBool(ctx, "backup", "db_enabled", defaults.Backup.Database.Enabled); err != nil {
+	if err := s.initBool(ctx, "d645ta0e0tacdcmkh4q0", "backup", "db_enabled", defaults.Backup.Database.Enabled); err != nil {
 		return err
 	}
-	if err := s.initDuration(ctx, "backup", "db_interval", defaults.Backup.Database.Interval); err != nil {
+	if err := s.initDuration(ctx, "d645ta0e0tacdcmkh4qg", "backup", "db_interval", defaults.Backup.Database.Interval); err != nil {
 		return err
 	}
-	if err := s.initDuration(ctx, "backup", "db_retention", defaults.Backup.Database.Retention); err != nil {
+	if err := s.initDuration(ctx, "d645ta0e0tacdcmkh4r0", "backup", "db_retention", defaults.Backup.Database.Retention); err != nil {
 		return err
 	}
-	if err := s.initString(ctx, "backup", "db_path", defaults.Backup.Database.Path); err != nil {
+	if err := s.initString(ctx, "d645ta0e0tacdcmkh4rg", "backup", "db_path", defaults.Backup.Database.Path); err != nil {
 		return err
 	}
-	if err := s.initInt(ctx, "backup", "config_versions", defaults.Backup.Config.Versions); err != nil {
+	if err := s.initInt(ctx, "d645ta0e0tacdcmkh4s0", "backup", "config_versions", defaults.Backup.Config.Versions); err != nil {
 		return err
 	}
 
 	// Logs settings (runtime)
-	if err := s.initDuration(ctx, "logs", "deploy_retention", defaults.Logs.Deployment.Retention); err != nil {
+	if err := s.initDuration(ctx, "d645ta0e0tacdcmkh4sg", "logs", "deploy_retention", defaults.Logs.Deployment.Retention); err != nil {
 		return err
 	}
-	if err := s.initInt(ctx, "logs", "deploy_max_size_mb", defaults.Logs.Deployment.MaxSizeMB); err != nil {
+	if err := s.initInt(ctx, "d645ta0e0tacdcmkh4t0", "logs", "deploy_max_size_mb", defaults.Logs.Deployment.MaxSizeMB); err != nil {
 		return err
 	}
-	if err := s.initDuration(ctx, "logs", "audit_retention", defaults.Logs.Audit.Retention); err != nil {
+	if err := s.initDuration(ctx, "d645ta0e0tacdcmkh4tg", "logs", "audit_retention", defaults.Logs.Audit.Retention); err != nil {
 		return err
 	}
-	if err := s.initBool(ctx, "logs", "audit_export_enabled", defaults.Logs.Audit.Export.Enabled); err != nil {
+	if err := s.initBool(ctx, "d645ta0e0tacdcmkh4u0", "logs", "audit_export_enabled", defaults.Logs.Audit.Export.Enabled); err != nil {
 		return err
 	}
-	if err := s.initString(ctx, "logs", "audit_export_destination", defaults.Logs.Audit.Export.Destination); err != nil {
+	if err := s.initString(ctx, "d645ta0e0tacdcmkh4ug", "logs", "audit_export_destination", defaults.Logs.Audit.Export.Destination); err != nil {
 		return err
 	}
-	if err := s.initString(ctx, "logs", "audit_export_schedule", defaults.Logs.Audit.Export.Schedule); err != nil {
+	if err := s.initString(ctx, "d645ta0e0tacdcmkh4v0", "logs", "audit_export_schedule", defaults.Logs.Audit.Export.Schedule); err != nil {
 		return err
 	}
-	if err := s.initString(ctx, "logs", "app_level", defaults.Logs.Application.Level); err != nil {
+	if err := s.initString(ctx, "d645ta0e0tacdcmkh4vg", "logs", "app_level", defaults.Logs.Application.Level); err != nil {
 		return err
 	}
-	if err := s.initDuration(ctx, "logs", "app_retention", defaults.Logs.Application.Retention); err != nil {
+	if err := s.initDuration(ctx, "d645ta0e0tacdcmkh500", "logs", "app_retention", defaults.Logs.Application.Retention); err != nil {
 		return err
 	}
-	if err := s.initString(ctx, "logs", "rotation_schedule", defaults.Logs.Rotation.Schedule); err != nil {
+	if err := s.initString(ctx, "d645ta0e0tacdcmkh50g", "logs", "rotation_schedule", defaults.Logs.Rotation.Schedule); err != nil {
 		return err
 	}
 
 	// Webhooks settings (runtime)
-	if err := s.initBool(ctx, "webhooks", "github_enabled", defaults.Webhooks.GitHub.Enabled); err != nil {
+	if err := s.initBool(ctx, "d645ta0e0tacdcmkh510", "webhooks", "github_enabled", defaults.Webhooks.GitHub.Enabled); err != nil {
 		return err
 	}
-	if err := s.initString(ctx, "webhooks", "github_path", defaults.Webhooks.GitHub.Path); err != nil {
+	if err := s.initString(ctx, "d645ta0e0tacdcmkh51g", "webhooks", "github_path", defaults.Webhooks.GitHub.Path); err != nil {
 		return err
 	}
-	if err := s.initBool(ctx, "webhooks", "gitlab_enabled", defaults.Webhooks.GitLab.Enabled); err != nil {
+	if err := s.initBool(ctx, "d645ta0e0tacdcmkh520", "webhooks", "gitlab_enabled", defaults.Webhooks.GitLab.Enabled); err != nil {
 		return err
 	}
-	if err := s.initString(ctx, "webhooks", "gitlab_path", defaults.Webhooks.GitLab.Path); err != nil {
+	if err := s.initString(ctx, "d645ta0e0tacdcmkh52g", "webhooks", "gitlab_path", defaults.Webhooks.GitLab.Path); err != nil {
 		return err
 	}
-	if err := s.initBool(ctx, "webhooks", "bitbucket_enabled", defaults.Webhooks.Bitbucket.Enabled); err != nil {
+	if err := s.initBool(ctx, "d645ta0e0tacdcmkh530", "webhooks", "bitbucket_enabled", defaults.Webhooks.Bitbucket.Enabled); err != nil {
 		return err
 	}
-	if err := s.initString(ctx, "webhooks", "bitbucket_path", defaults.Webhooks.Bitbucket.Path); err != nil {
+	if err := s.initString(ctx, "d645ta0e0tacdcmkh53g", "webhooks", "bitbucket_path", defaults.Webhooks.Bitbucket.Path); err != nil {
 		return err
 	}
 
 	// Notifications settings (runtime)
-	if err := s.initBool(ctx, "notifications", "slack_enabled", defaults.Notifications.Providers.Slack.Enabled); err != nil {
+	if err := s.initBool(ctx, "d645ta0e0tacdcmkh540", "notifications", "slack_enabled", defaults.Notifications.Providers.Slack.Enabled); err != nil {
 		return err
 	}
-	if err := s.initBool(ctx, "notifications", "email_enabled", defaults.Notifications.Providers.Email.Enabled); err != nil {
+	if err := s.initBool(ctx, "d645ta0e0tacdcmkh54g", "notifications", "email_enabled", defaults.Notifications.Providers.Email.Enabled); err != nil {
 		return err
 	}
-	if err := s.initBool(ctx, "notifications", "webhook_enabled", defaults.Notifications.Providers.Webhook.Enabled); err != nil {
+	if err := s.initBool(ctx, "d645ta0e0tacdcmkh550", "notifications", "webhook_enabled", defaults.Notifications.Providers.Webhook.Enabled); err != nil {
 		return err
 	}
 
 	// API settings (runtime)
-	if err := s.initBool(ctx, "api", "enabled", defaults.API.Enabled); err != nil {
+	if err := s.initBool(ctx, "d645ta0e0tacdcmkh55g", "api", "enabled", defaults.API.Enabled); err != nil {
 		return err
 	}
 
 	// Appearance settings (runtime)
-	if err := s.initString(ctx, "appearance", "theme", defaults.Appearance.Theme); err != nil {
+	if err := s.initString(ctx, "d645ta0e0tacdcmkh560", "appearance", "theme", defaults.Appearance.Theme); err != nil {
 		return err
 	}
 

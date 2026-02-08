@@ -1860,7 +1860,7 @@ func (s *MasterServer) loggingMiddleware(next http.Handler) http.Handler {
 // normalizePath normalizes URL paths for metrics by replacing IDs with placeholders.
 // This reduces metric cardinality while preserving useful grouping.
 func normalizePath(path string) string {
-	// Simple normalization: replace numeric segments and UUIDs with :id
+	// Simple normalization: replace numeric segments, UUIDs, and XIDs with :id
 	parts := strings.Split(path, "/")
 	for i, part := range parts {
 		// Replace numeric IDs
@@ -1871,9 +1871,24 @@ func normalizePath(path string) string {
 		// Replace UUIDs (simple check for 36-char strings with dashes)
 		if len(part) == 36 && strings.Count(part, "-") == 4 {
 			parts[i] = ":id"
+			continue
+		}
+		// Replace XIDs (20-char base32hex lowercase strings)
+		if len(part) == 20 && isXID(part) {
+			parts[i] = ":id"
 		}
 	}
 	return strings.Join(parts, "/")
+}
+
+// isXID checks if a string looks like an XID (20 chars, lowercase alphanumeric base32).
+func isXID(s string) bool {
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'v')) {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *MasterServer) withAuth(handler http.HandlerFunc) http.HandlerFunc {
