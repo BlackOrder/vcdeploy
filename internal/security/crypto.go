@@ -280,7 +280,7 @@ func LoadOrGenerateMasterKey(dataDir string) (*MasterKey, error) {
 		return nil, fmt.Errorf("generate master key: %w", err)
 	}
 	// Ensure data directory exists (first boot)
-	if err := os.MkdirAll(dataDir, 0700); err != nil {
+	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return nil, fmt.Errorf("create data directory %s: %w", dataDir, err)
 	}
 	if err := mk.SaveToFile(keyPath); err != nil {

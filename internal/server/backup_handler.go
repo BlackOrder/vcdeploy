@@ -139,7 +139,7 @@ func (s *MasterServer) handleBackupDownload(w http.ResponseWriter, r *http.Reque
 
 	// Serve the file
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="vcdeploy-export.db"`))
+	w.Header().Set("Content-Disposition", `attachment; filename="vcdeploy-export.db"`)
 	http.ServeFile(w, r, dl.filePath)
 
 	// Clean up the temp file after serving
@@ -150,7 +150,8 @@ func (s *MasterServer) handleBackupDownload(w http.ResponseWriter, r *http.Reque
 }
 
 // cleanupExpiredExports removes expired download tokens and their files.
-// Called periodically by the scheduler.
+//
+//nolint:unused // Available for periodic cleanup via scheduler
 func cleanupExpiredExports() {
 	exportDownloadsMu.Lock()
 	defer exportDownloadsMu.Unlock()
@@ -334,8 +335,8 @@ func (s *MasterServer) handleBackupImportExecute(w http.ResponseWriter, r *http.
 
 	// Convert string strategies to typed
 	strategies := make(map[string]backup.ImportStrategy)
-	for table, strat := range req.Strategies {
-		switch strat {
+	for table, stratStr := range req.Strategies {
+		switch stratStr {
 		case "replace":
 			strategies[table] = backup.StrategyReplace
 		case "merge":
@@ -344,7 +345,7 @@ func (s *MasterServer) handleBackupImportExecute(w http.ResponseWriter, r *http.
 			strategies[table] = backup.StrategySkip
 		default:
 			_ = os.Remove(session.filePath)
-			http.Error(w, fmt.Sprintf(`{"error":"invalid strategy %q for table %s"}`, strat, table), http.StatusBadRequest)
+			http.Error(w, fmt.Sprintf(`{"error":"invalid strategy %q for table %s"}`, stratStr, table), http.StatusBadRequest)
 			return
 		}
 	}
