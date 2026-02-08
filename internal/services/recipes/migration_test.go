@@ -8,6 +8,8 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 )
 
+func strPtr(s string) *string { return &s }
+
 func TestMigrationService_MigrateProjectConfig_Basic(t *testing.T) {
 	db := setupTestDB(t)
 	svc := NewMigrationService(db)
@@ -15,8 +17,8 @@ func TestMigrationService_MigrateProjectConfig_Basic(t *testing.T) {
 
 	// Create test project
 	project := &storage.Project{
-		Name: "test-project",
-		Type: "laravel",
+		Name:   "test-project",
+		TypeID: strPtr("laravel"),
 	}
 	if err := db.CreateProject(ctx, project); err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
@@ -64,8 +66,8 @@ func TestMigrationService_MigrateProjectConfig_NoComponents(t *testing.T) {
 
 	// Create test project
 	project := &storage.Project{
-		Name: "test-project",
-		Type: "static",
+		Name:   "test-project",
+		TypeID: strPtr("static"),
 	}
 	if err := db.CreateProject(ctx, project); err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
@@ -101,8 +103,8 @@ func TestMigrationService_MigrateProjectConfig_WithActivation(t *testing.T) {
 
 	// Create test project
 	project := &storage.Project{
-		Name: "test-project",
-		Type: "node",
+		Name:   "test-project",
+		TypeID: strPtr("node"),
 	}
 	if err := db.CreateProject(ctx, project); err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
@@ -132,7 +134,7 @@ func TestMigrationService_MigrateProjectConfig_WithActivation(t *testing.T) {
 		t.Fatal("Activation should not be nil when ActivatePlaybook is true")
 	}
 	if result.Activation.ProjectID != project.ID {
-		t.Errorf("Activation.ProjectID = %d, want %d", result.Activation.ProjectID, project.ID)
+		t.Errorf("Activation.ProjectID = %s, want %s", result.Activation.ProjectID, project.ID)
 	}
 }
 
@@ -171,8 +173,8 @@ func TestMigrationService_Defaults(t *testing.T) {
 
 	// Create test project
 	project := &storage.Project{
-		Name: "default-test",
-		Type: "generic",
+		Name:   "default-test",
+		TypeID: strPtr("generic"),
 	}
 	if err := db.CreateProject(ctx, project); err != nil {
 		t.Fatalf("CreateProject() error = %v", err)

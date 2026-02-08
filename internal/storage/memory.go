@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -38,27 +37,27 @@ type MemoryStore struct {
 	provisionWrites   chan WriteOp
 
 	// In-memory data (source of truth for reads)
-	users         map[int64]*User
+	users         map[string]*User
 	usersByName   map[string]*User
 	sessions      map[string]*Session
 	apiKeys       map[string]*APIKey // keyed by hash
-	apiKeysByUser map[int64][]*APIKey
+	apiKeysByUser map[string][]*APIKey
 
 	settings map[string]*Setting // keyed by "category:key"
 
-	projects       map[int64]*Project
+	projects       map[string]*Project
 	projectsByName map[string]*Project
-	projectTypes   map[int64]*ProjectType
-	webhooks       map[int64]*ProjectWebhook
+	projectTypes   map[string]*ProjectType
+	webhooks       map[string]*ProjectWebhook
 	secrets        map[string]*Secret // keyed by "project:scope:key"
 
 	agents        map[string]*Agent
-	agentBinaries map[int64]*AgentBinary
-	agentUpdates  map[int64]*AgentUpdateHistory
+	agentBinaries map[string]*AgentBinary
+	agentUpdates  map[string]*AgentUpdateHistory
 
 	deployments         map[string]*DeploymentRecord
 	deploymentLogs      map[string][]*DeploymentLog
-	deploymentRollbacks map[int64]*DeploymentRollback
+	deploymentRollbacks map[string]*DeploymentRollback
 	scheduledDeploys    map[string]*ScheduledDeployment
 	deploymentAgents    map[string][]DeploymentAgent // keyed by deployment_id
 
@@ -69,20 +68,20 @@ type MemoryStore struct {
 
 	provisionJobs map[string]*ProvisionJob
 	provisionLogs map[string][]*ProvisionLog // keyed by job ID
-	sshHostKeys   map[int64]*SSHHostKey
-	jumpServers   map[int64]*SSHJumpServer
+	sshHostKeys   map[string]*SSHHostKey
+	jumpServers   map[string]*SSHJumpServer
 
-	healthCheckConfigs map[int64]*HealthCheckConfig
+	healthCheckConfigs map[string]*HealthCheckConfig
 
 	// Security tables (Stage 1 migration)
 	certificateAuthorities map[string]*CertificateAuthority
 	agentCertificates      map[string]*AgentCertificate  // keyed by serial number
 	serverCertificates     map[string]*ServerCertificate // keyed by hostname
 	registrationTokens     map[string]*RegistrationToken // keyed by token
-	sourceCredentials      map[int64]*SourceCredential
+	sourceCredentials      map[string]*SourceCredential
 	revokedCertificates    map[string]*RevokedCertificate // keyed by serial number
 	encryptionKeys         map[string]*EncryptionKey
-	sshKeys                map[int64]*SSHKey
+	sshKeys                map[string]*SSHKey
 	certAuditEvents        []*CertAuditEvent // append-only slice
 
 	// ACME certificate storage
@@ -90,63 +89,21 @@ type MemoryStore struct {
 	acmeAccounts     map[string]*ACMEAccount     // keyed by email
 
 	// Recovery codes storage
-	recoveryCodes map[int64][]*RecoveryCode // keyed by user ID
+	recoveryCodes map[string][]*RecoveryCode // keyed by user ID
 
 	// Recipe and playbook storage
-	recipeComponents        map[int64]*RecipeComponent
+	recipeComponents        map[string]*RecipeComponent
 	recipeComponentsByKey   map[string]*RecipeComponent // keyed by "namespace:slug:version"
-	playbooks               map[int64]*Playbook
+	playbooks               map[string]*Playbook
 	playbooksByKey          map[string]*Playbook // keyed by "namespace:slug:version"
-	playbookActivations     map[int64]*PlaybookActivation
-	activationsByProject    map[int64][]*PlaybookActivation // keyed by project ID
-	activationsByPlaybook   map[int64][]*PlaybookActivation // keyed by playbook ID
-	variableBindings        map[int64]*PlaybookVariableBinding
-	bindingsByActivation    map[int64][]*PlaybookVariableBinding  // keyed by activation ID
+	playbookActivations     map[string]*PlaybookActivation
+	activationsByProject    map[string][]*PlaybookActivation // keyed by project ID
+	activationsByPlaybook   map[string][]*PlaybookActivation // keyed by playbook ID
+	variableBindings        map[string]*PlaybookVariableBinding
+	bindingsByActivation    map[string][]*PlaybookVariableBinding // keyed by activation ID
 	bindingsBySourceRef     map[string][]*PlaybookVariableBinding // keyed by "sourceType:sourceRef"
-	rawApprovals            map[int64]*RawCommandApproval
-	rawApprovalsByComponent map[int64][]*RawCommandApproval // keyed by component ID
-
-	// ID generators (atomic)
-	nextUserID          atomic.Int64
-	nextAPIKeyID        atomic.Int64
-	nextProjectID       atomic.Int64
-	nextProjectTypeID   atomic.Int64
-	nextWebhookID       atomic.Int64
-	nextSecretID        atomic.Int64
-	nextAgentBinaryID   atomic.Int64
-	nextAgentUpdateID   atomic.Int64
-	nextDeploymentLogID atomic.Int64
-	nextRollbackID      atomic.Int64
-	nextAuditID         atomic.Int64
-	nextBlockedIPID     atomic.Int64
-	nextRateLimitID     atomic.Int64
-	nextSSHHostKeyID    atomic.Int64
-	nextJumpServerID    atomic.Int64
-	nextHealthCheckID   atomic.Int64
-	nextSettingID       atomic.Int64
-
-	// Security ID generators
-	nextAgentCertID   atomic.Int64
-	nextServerCertID  atomic.Int64
-	nextRegTokenID    atomic.Int64
-	nextSourceCredID  atomic.Int64
-	nextRevokedCertID atomic.Int64
-	nextSSHKeyID      atomic.Int64
-	nextCertAuditID   atomic.Int64
-
-	// ACME ID generators
-	nextACMECertID    atomic.Int64
-	nextACMEAccountID atomic.Int64
-
-	// Recovery code ID generator
-	nextRecoveryCodeID atomic.Int64
-
-	// Recipe and playbook ID generators
-	nextRecipeComponentID    atomic.Int64
-	nextPlaybookID           atomic.Int64
-	nextPlaybookActivationID atomic.Int64
-	nextVariableBindingID    atomic.Int64
-	nextRawApprovalID        atomic.Int64
+	rawApprovals            map[string]*RawCommandApproval
+	rawApprovalsByComponent map[string][]*RawCommandApproval // keyed by component ID
 
 	// Shutdown coordination
 	done chan struct{}
@@ -250,27 +207,27 @@ func NewMemoryStore(cfg *MemoryStoreConfig) *MemoryStore {
 		provisionWrites:   make(chan WriteOp, bufSize),
 
 		// Initialize all maps
-		users:         make(map[int64]*User),
+		users:         make(map[string]*User),
 		usersByName:   make(map[string]*User),
 		sessions:      make(map[string]*Session),
 		apiKeys:       make(map[string]*APIKey),
-		apiKeysByUser: make(map[int64][]*APIKey),
+		apiKeysByUser: make(map[string][]*APIKey),
 
 		settings: make(map[string]*Setting),
 
-		projects:       make(map[int64]*Project),
+		projects:       make(map[string]*Project),
 		projectsByName: make(map[string]*Project),
-		projectTypes:   make(map[int64]*ProjectType),
-		webhooks:       make(map[int64]*ProjectWebhook),
+		projectTypes:   make(map[string]*ProjectType),
+		webhooks:       make(map[string]*ProjectWebhook),
 		secrets:        make(map[string]*Secret),
 
 		agents:        make(map[string]*Agent),
-		agentBinaries: make(map[int64]*AgentBinary),
-		agentUpdates:  make(map[int64]*AgentUpdateHistory),
+		agentBinaries: make(map[string]*AgentBinary),
+		agentUpdates:  make(map[string]*AgentUpdateHistory),
 
 		deployments:         make(map[string]*DeploymentRecord),
 		deploymentLogs:      make(map[string][]*DeploymentLog),
-		deploymentRollbacks: make(map[int64]*DeploymentRollback),
+		deploymentRollbacks: make(map[string]*DeploymentRollback),
 		scheduledDeploys:    make(map[string]*ScheduledDeployment),
 		deploymentAgents:    make(map[string][]DeploymentAgent),
 
@@ -281,20 +238,20 @@ func NewMemoryStore(cfg *MemoryStoreConfig) *MemoryStore {
 
 		provisionJobs: make(map[string]*ProvisionJob),
 		provisionLogs: make(map[string][]*ProvisionLog),
-		sshHostKeys:   make(map[int64]*SSHHostKey),
-		jumpServers:   make(map[int64]*SSHJumpServer),
+		sshHostKeys:   make(map[string]*SSHHostKey),
+		jumpServers:   make(map[string]*SSHJumpServer),
 
-		healthCheckConfigs: make(map[int64]*HealthCheckConfig),
+		healthCheckConfigs: make(map[string]*HealthCheckConfig),
 
 		// Security maps
 		certificateAuthorities: make(map[string]*CertificateAuthority),
 		agentCertificates:      make(map[string]*AgentCertificate),
 		serverCertificates:     make(map[string]*ServerCertificate),
 		registrationTokens:     make(map[string]*RegistrationToken),
-		sourceCredentials:      make(map[int64]*SourceCredential),
+		sourceCredentials:      make(map[string]*SourceCredential),
 		revokedCertificates:    make(map[string]*RevokedCertificate),
 		encryptionKeys:         make(map[string]*EncryptionKey),
-		sshKeys:                make(map[int64]*SSHKey),
+		sshKeys:                make(map[string]*SSHKey),
 		certAuditEvents:        make([]*CertAuditEvent, 0),
 
 		// ACME maps
@@ -302,21 +259,21 @@ func NewMemoryStore(cfg *MemoryStoreConfig) *MemoryStore {
 		acmeAccounts:     make(map[string]*ACMEAccount),
 
 		// Recovery codes map
-		recoveryCodes: make(map[int64][]*RecoveryCode),
+		recoveryCodes: make(map[string][]*RecoveryCode),
 
 		// Recipe and playbook maps
-		recipeComponents:        make(map[int64]*RecipeComponent),
+		recipeComponents:        make(map[string]*RecipeComponent),
 		recipeComponentsByKey:   make(map[string]*RecipeComponent),
-		playbooks:               make(map[int64]*Playbook),
+		playbooks:               make(map[string]*Playbook),
 		playbooksByKey:          make(map[string]*Playbook),
-		playbookActivations:     make(map[int64]*PlaybookActivation),
-		activationsByProject:    make(map[int64][]*PlaybookActivation),
-		activationsByPlaybook:   make(map[int64][]*PlaybookActivation),
-		variableBindings:        make(map[int64]*PlaybookVariableBinding),
-		bindingsByActivation:    make(map[int64][]*PlaybookVariableBinding),
+		playbookActivations:     make(map[string]*PlaybookActivation),
+		activationsByProject:    make(map[string][]*PlaybookActivation),
+		activationsByPlaybook:   make(map[string][]*PlaybookActivation),
+		variableBindings:        make(map[string]*PlaybookVariableBinding),
+		bindingsByActivation:    make(map[string][]*PlaybookVariableBinding),
 		bindingsBySourceRef:     make(map[string][]*PlaybookVariableBinding),
-		rawApprovals:            make(map[int64]*RawCommandApproval),
-		rawApprovalsByComponent: make(map[int64][]*RawCommandApproval),
+		rawApprovals:            make(map[string]*RawCommandApproval),
+		rawApprovalsByComponent: make(map[string][]*RawCommandApproval),
 
 		done: make(chan struct{}),
 	}
@@ -523,11 +480,6 @@ func (s *MemoryStore) queueWrite(ch chan<- WriteOp, op WriteOp) {
 		// Force send (will block if necessary)
 		ch <- op
 	}
-}
-
-// nextID atomically increments and returns the next ID for a given counter.
-func nextID(counter *atomic.Int64) int64 {
-	return counter.Add(1)
 }
 
 // settingKey returns the map key for a setting.

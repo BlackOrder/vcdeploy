@@ -54,7 +54,7 @@ func TestMemoryStore_LoadFromDB(t *testing.T) {
 		t.Errorf("GetProjectByName() error = %v", err)
 	}
 	if loadedProject.ID != project.ID {
-		t.Errorf("Project ID = %d, want %d", loadedProject.ID, project.ID)
+		t.Errorf("Project ID = %s, want %s", loadedProject.ID, project.ID)
 	}
 
 	loadedSetting, err := memStore.GetSetting(ctx, "test", "key1")
@@ -106,7 +106,7 @@ func TestMemoryStore_LoadProjects(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		project := &Project{
 			Name:       "project" + string(rune('0'+i)),
-			Type:       pt.Name,
+			TypeID:     strPtr(pt.Name),
 			Repository: "git@example.com:test.git",
 		}
 		db.CreateProject(ctx, project)
@@ -125,8 +125,8 @@ func TestMemoryStore_LoadProjects(t *testing.T) {
 	}
 
 	types, _ := memStore.ListProjectTypes(ctx)
-	if len(types) != 1 {
-		t.Errorf("len(types) = %d, want 1", len(types))
+	if len(types) != 2 {
+		t.Errorf("len(types) = %d, want 2 (1 custom + 1 seeded generic)", len(types))
 	}
 }
 
@@ -266,7 +266,7 @@ func TestMemoryStore_LoadSessions(t *testing.T) {
 		t.Fatal("loaded session is nil")
 	}
 	if loaded.UserID != user.ID {
-		t.Errorf("UserID = %d, want %d", loaded.UserID, user.ID)
+		t.Errorf("UserID = %s, want %s", loaded.UserID, user.ID)
 	}
 }
 
@@ -359,8 +359,8 @@ func TestMemoryStore_LoadNextIDs(t *testing.T) {
 	}
 	memStore.CreateUser(ctx, newUser)
 
-	// New user should have ID > 10
-	if newUser.ID <= 10 {
-		t.Errorf("New user ID = %d, want > 10", newUser.ID)
+	// New user should have ID set
+	if newUser.ID == "" {
+		t.Error("New user ID should be set")
 	}
 }

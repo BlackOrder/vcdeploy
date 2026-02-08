@@ -6,15 +6,17 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
+
+	"github.com/rs/xid"
 )
 
 // AssignAgentToDeployment assigns an agent to participate in a deployment.
 // Returns an error if the agent is already assigned to the deployment.
 func (db *DB) AssignAgentToDeployment(ctx context.Context, deploymentID, agentID string) error {
 	_, err := db.conn.ExecContext(ctx, `
-		INSERT INTO deployment_agents (deployment_id, agent_id, status)
-		VALUES (?, ?, ?)
-	`, deploymentID, agentID, DeploymentStatusPending)
+		INSERT INTO deployment_agents (id, deployment_id, agent_id, status)
+		VALUES (?, ?, ?, ?)
+	`, xid.New().String(), deploymentID, agentID, DeploymentStatusPending)
 	if err != nil {
 		return fmt.Errorf("assign agent to deployment: %w", err)
 	}
@@ -30,8 +32,8 @@ func (db *DB) AssignAgentsToDeployment(ctx context.Context, deploymentID string,
 	defer func() { _ = tx.Rollback() }()
 
 	stmt, err := tx.PrepareContext(ctx, `
-		INSERT INTO deployment_agents (deployment_id, agent_id, status)
-		VALUES (?, ?, ?)
+		INSERT INTO deployment_agents (id, deployment_id, agent_id, status)
+		VALUES (?, ?, ?, ?)
 	`)
 	if err != nil {
 		return fmt.Errorf("prepare statement: %w", err)
@@ -39,7 +41,7 @@ func (db *DB) AssignAgentsToDeployment(ctx context.Context, deploymentID string,
 	defer stmt.Close()
 
 	for _, agentID := range agentIDs {
-		_, err := stmt.ExecContext(ctx, deploymentID, agentID, DeploymentStatusPending)
+		_, err := stmt.ExecContext(ctx, xid.New().String(), deploymentID, agentID, DeploymentStatusPending)
 		if err != nil {
 			return fmt.Errorf("assign agent %s: %w", agentID, err)
 		}

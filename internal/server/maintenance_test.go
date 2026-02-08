@@ -261,7 +261,7 @@ func TestMaintenanceMode_RefreshesOnExit(t *testing.T) {
 	// Simulate a DB modification during maintenance (direct insert)
 	ctx := context.Background()
 	_, err := server.store.Conn().ExecContext(ctx,
-		`INSERT INTO project_types (uid, name) VALUES (?, ?)`,
+		`INSERT INTO project_types (id, name) VALUES (?, ?)`,
 		"test-uid-refresh-001", "refresh-test-type",
 	)
 	if err != nil {

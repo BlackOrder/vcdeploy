@@ -268,7 +268,7 @@ func (r *ProjectListRunner) Run() error {
 	r.ctx.Println("------------------------------------------------------------")
 
 	for _, p := range projects {
-		r.ctx.Printf("%-20s %-15s %-40s\n", p.Name, p.Type, p.Repository)
+		r.ctx.Printf("%-20s %-15s %-40s\n", p.Name, derefTypeID(p.TypeID), p.Repository)
 	}
 
 	return nil
@@ -379,4 +379,11 @@ func (r *MasterStatusRunner) Run() error {
 
 	r.ctx.Printf("\n  Address: %s\n", r.masterAddr)
 	return nil
+}
+
+func derefTypeID(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

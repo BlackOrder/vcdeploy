@@ -56,7 +56,7 @@ func TestHandleAdminTOTPUsers(t *testing.T) {
 
 	var response struct {
 		Users []struct {
-			ID          int64  `json:"id"`
+			ID          string `json:"id"`
 			Username    string `json:"username"`
 			TOTPEnabled bool   `json:"totpEnabled"`
 		} `json:"users"`
@@ -193,7 +193,7 @@ func TestHandleAdminTOTPStatus(t *testing.T) {
 	}
 
 	var response struct {
-		UserID                 int64  `json:"user_id"`
+		UserID                 string `json:"user_id"`
 		Username               string `json:"username"`
 		TOTPEnabled            bool   `json:"totp_enabled"`
 		RecoveryCodesRemaining int    `json:"recovery_codes_remaining"`

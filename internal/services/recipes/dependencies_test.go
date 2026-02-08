@@ -50,7 +50,7 @@ func TestDependencyService_FindSecretUsages(t *testing.T) {
 
 	// Activate with a secret binding
 	actSvc := NewActivationService(db)
-	_, err := actSvc.Activate(ctx, 1, playbook.ID, map[string]VariableBinding{
+	_, err := actSvc.Activate(ctx, "test-project-id", playbook.ID, map[string]VariableBinding{
 		"DB_PASSWORD": {SourceType: storage.SourceTypeSecret, SourceRef: "my-db-password"},
 	}, nil)
 	if err != nil {
@@ -114,7 +114,7 @@ func TestDependencyService_CheckDeletionSafe(t *testing.T) {
 
 	// Activate with secret binding
 	actSvc := NewActivationService(db)
-	_, err := actSvc.Activate(ctx, 1, playbook.ID, map[string]VariableBinding{
+	_, err := actSvc.Activate(ctx, "test-project-id-2", playbook.ID, map[string]VariableBinding{
 		"API_KEY": {SourceType: storage.SourceTypeSecret, SourceRef: "production-api-key"},
 	}, nil)
 	if err != nil {
@@ -146,16 +146,16 @@ func TestDeletionBlockedError_GetUsageDetails(t *testing.T) {
 		ResourceName: "my-secret",
 		Usages: []*ResourceUsage{
 			{
-				ProjectID:    1,
+				ProjectID:    "project-1",
 				ProjectName:  "Project Alpha",
-				PlaybookID:   10,
+				PlaybookID:   "playbook-10",
 				PlaybookName: "Deploy Alpha",
 				VariableName: "DB_PASSWORD",
 			},
 			{
-				ProjectID:    2,
+				ProjectID:    "project-2",
 				ProjectName:  "Project Beta",
-				PlaybookID:   20,
+				PlaybookID:   "playbook-20",
 				PlaybookName: "Deploy Beta",
 				VariableName: "DB_PASSWORD",
 			},

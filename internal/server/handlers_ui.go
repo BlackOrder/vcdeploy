@@ -4,7 +4,6 @@ package server
 import (
 	"context"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -118,7 +117,7 @@ func (s *MasterServer) handleProjectsUI(w http.ResponseWriter, r *http.Request) 
 			projectsList = append(projectsList, map[string]interface{}{
 				"ID":         p.ID,
 				"Name":       p.Name,
-				"Type":       p.Type,
+				"TypeID":     derefStr(p.TypeID),
 				"Repository": p.Repository,
 				"Branch":     p.Branch,
 				"Path":       p.DeployPath,
@@ -145,8 +144,8 @@ func (s *MasterServer) handleProjectDetailUI(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	id, err := strconv.ParseInt(path, 10, 64)
-	if err != nil {
+	id := path
+	if id == "" {
 		http.Error(w, "Invalid project ID", http.StatusBadRequest)
 		return
 	}
@@ -154,7 +153,7 @@ func (s *MasterServer) handleProjectDetailUI(w http.ResponseWriter, r *http.Requ
 	// Get project
 	project, err := s.projectService.GetByID(ctx, id)
 	if err != nil {
-		s.logger.Error("Failed to get project", zap.Error(err), zap.Int64("id", id))
+		s.logger.Error("Failed to get project", zap.Error(err), zap.String("id", id))
 		http.Error(w, "Project not found", http.StatusNotFound)
 		return
 	}
@@ -163,7 +162,7 @@ func (s *MasterServer) handleProjectDetailUI(w http.ResponseWriter, r *http.Requ
 		"Project": map[string]interface{}{
 			"ID":         project.ID,
 			"Name":       project.Name,
-			"Type":       project.Type,
+			"TypeID":     derefStr(project.TypeID),
 			"Repository": project.Repository,
 			"Branch":     project.Branch,
 			"DeployPath": project.DeployPath,

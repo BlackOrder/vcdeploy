@@ -168,7 +168,7 @@ func (m *EnforcementMiddleware) Require2FAForAdmin(next http.Handler) http.Handl
 		// Get user details
 		user, err := m.userService.GetByID(r.Context(), userID)
 		if err != nil {
-			m.logger.Error("Failed to get user for 2FA check", zap.Int64("userID", userID), zap.Error(err))
+			m.logger.Error("Failed to get user for 2FA check", zap.String("userID", userID), zap.Error(err))
 			WriteJSONError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}
@@ -207,7 +207,7 @@ func (m *EnforcementMiddleware) Require2FAForAdminFunc(next http.HandlerFunc) ht
 		// Get user details
 		user, err := m.userService.GetByID(r.Context(), userID)
 		if err != nil {
-			m.logger.Error("Failed to get user for 2FA check", zap.Int64("userID", userID), zap.Error(err))
+			m.logger.Error("Failed to get user for 2FA check", zap.String("userID", userID), zap.Error(err))
 			WriteJSONError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}
@@ -239,7 +239,7 @@ func (m *EnforcementMiddleware) RequireRole(role string) func(http.HandlerFunc) 
 
 			user, err := m.userService.GetByID(r.Context(), userID)
 			if err != nil {
-				m.logger.Error("Failed to get user for role check", zap.Int64("userID", userID), zap.Error(err))
+				m.logger.Error("Failed to get user for role check", zap.String("userID", userID), zap.Error(err))
 				WriteJSONError(w, http.StatusInternalServerError, "internal server error")
 				return
 			}
@@ -276,7 +276,7 @@ func (m *EnforcementMiddleware) RequireMinRole(minRole string) func(http.Handler
 
 			user, err := m.userService.GetByID(r.Context(), userID)
 			if err != nil {
-				m.logger.Error("Failed to get user for role check", zap.Int64("userID", userID), zap.Error(err))
+				m.logger.Error("Failed to get user for role check", zap.String("userID", userID), zap.Error(err))
 				WriteJSONError(w, http.StatusInternalServerError, "internal server error")
 				return
 			}
@@ -436,7 +436,7 @@ func (m *EnforcementMiddleware) CheckMinRole(ctx context.Context, minRole string
 
 	user, err := m.userService.GetByID(ctx, userID)
 	if err != nil {
-		m.logger.Error("Failed to get user for role check", zap.Int64("userID", userID), zap.Error(err))
+		m.logger.Error("Failed to get user for role check", zap.String("userID", userID), zap.Error(err))
 		return "Internal server error", http.StatusInternalServerError, false
 	}
 

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -41,8 +40,8 @@ func (s *MasterServer) handleRecipeComponent(w http.ResponseWriter, r *http.Requ
 
 	// Extract ID from path: /api/v1/recipes/components/{id}
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/recipes/components/")
-	id, err := strconv.ParseInt(path, 10, 64)
-	if err != nil {
+	id := path
+	if id == "" {
 		s.jsonError(w, http.StatusBadRequest, "invalid component ID")
 		return
 	}
@@ -101,7 +100,7 @@ func (s *MasterServer) handleListComponents(ctx context.Context, w http.Response
 	})
 }
 
-func (s *MasterServer) handleGetComponent(ctx context.Context, w http.ResponseWriter, id int64) {
+func (s *MasterServer) handleGetComponent(ctx context.Context, w http.ResponseWriter, id string) {
 	// Check read access
 	if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
 		s.jsonError(w, status, msg)
@@ -110,7 +109,7 @@ func (s *MasterServer) handleGetComponent(ctx context.Context, w http.ResponseWr
 
 	component, err := s.store.GetRecipeComponentByID(ctx, id)
 	if err != nil {
-		s.logger.Error("Failed to get component", zap.Error(err), zap.Int64("id", id))
+		s.logger.Error("Failed to get component", zap.Error(err), zap.String("id", id))
 		s.jsonError(w, http.StatusInternalServerError, "failed to get component")
 		return
 	}
@@ -178,7 +177,7 @@ func (s *MasterServer) handleCreateComponent(ctx context.Context, w http.Respons
 	s.writeJSON(w, http.StatusCreated, component)
 }
 
-func (s *MasterServer) handleUpdateComponent(ctx context.Context, w http.ResponseWriter, r *http.Request, id int64) {
+func (s *MasterServer) handleUpdateComponent(ctx context.Context, w http.ResponseWriter, r *http.Request, id string) {
 	// Check write access
 	if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
 		s.jsonError(w, status, msg)
@@ -188,7 +187,7 @@ func (s *MasterServer) handleUpdateComponent(ctx context.Context, w http.Respons
 	// Get existing component
 	existing, err := s.store.GetRecipeComponentByID(ctx, id)
 	if err != nil {
-		s.logger.Error("Failed to get component", zap.Error(err), zap.Int64("id", id))
+		s.logger.Error("Failed to get component", zap.Error(err), zap.String("id", id))
 		s.jsonError(w, http.StatusInternalServerError, "failed to get component")
 		return
 	}
@@ -233,7 +232,7 @@ func (s *MasterServer) handleUpdateComponent(ctx context.Context, w http.Respons
 	s.jsonResponse(w, existing)
 }
 
-func (s *MasterServer) handleDeleteComponent(ctx context.Context, w http.ResponseWriter, id int64) {
+func (s *MasterServer) handleDeleteComponent(ctx context.Context, w http.ResponseWriter, id string) {
 	// Check write access
 	if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
 		s.jsonError(w, status, msg)
@@ -243,7 +242,7 @@ func (s *MasterServer) handleDeleteComponent(ctx context.Context, w http.Respons
 	// Get existing component
 	existing, err := s.store.GetRecipeComponentByID(ctx, id)
 	if err != nil {
-		s.logger.Error("Failed to get component", zap.Error(err), zap.Int64("id", id))
+		s.logger.Error("Failed to get component", zap.Error(err), zap.String("id", id))
 		s.jsonError(w, http.StatusInternalServerError, "failed to get component")
 		return
 	}
@@ -296,8 +295,8 @@ func (s *MasterServer) handleRecipePlaybook(w http.ResponseWriter, r *http.Reque
 
 	// Extract ID from path: /api/v1/recipes/playbooks/{id}
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/recipes/playbooks/")
-	id, err := strconv.ParseInt(path, 10, 64)
-	if err != nil {
+	id := path
+	if id == "" {
 		s.jsonError(w, http.StatusBadRequest, "invalid playbook ID")
 		return
 	}
@@ -357,7 +356,7 @@ func (s *MasterServer) handleListPlaybooks(ctx context.Context, w http.ResponseW
 	})
 }
 
-func (s *MasterServer) handleGetPlaybook(ctx context.Context, w http.ResponseWriter, id int64) {
+func (s *MasterServer) handleGetPlaybook(ctx context.Context, w http.ResponseWriter, id string) {
 	// Check read access
 	if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
 		s.jsonError(w, status, msg)
@@ -366,7 +365,7 @@ func (s *MasterServer) handleGetPlaybook(ctx context.Context, w http.ResponseWri
 
 	playbook, err := s.store.GetPlaybookByID(ctx, id)
 	if err != nil {
-		s.logger.Error("Failed to get playbook", zap.Error(err), zap.Int64("id", id))
+		s.logger.Error("Failed to get playbook", zap.Error(err), zap.String("id", id))
 		s.jsonError(w, http.StatusInternalServerError, "failed to get playbook")
 		return
 	}
@@ -440,7 +439,7 @@ func (s *MasterServer) handleCreatePlaybook(ctx context.Context, w http.Response
 	s.writeJSON(w, http.StatusCreated, playbook)
 }
 
-func (s *MasterServer) handleUpdatePlaybook(ctx context.Context, w http.ResponseWriter, r *http.Request, id int64) {
+func (s *MasterServer) handleUpdatePlaybook(ctx context.Context, w http.ResponseWriter, r *http.Request, id string) {
 	// Check write access
 	if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
 		s.jsonError(w, status, msg)
@@ -450,7 +449,7 @@ func (s *MasterServer) handleUpdatePlaybook(ctx context.Context, w http.Response
 	// Get existing playbook
 	existing, err := s.store.GetPlaybookByID(ctx, id)
 	if err != nil {
-		s.logger.Error("Failed to get playbook", zap.Error(err), zap.Int64("id", id))
+		s.logger.Error("Failed to get playbook", zap.Error(err), zap.String("id", id))
 		s.jsonError(w, http.StatusInternalServerError, "failed to get playbook")
 		return
 	}
@@ -498,7 +497,7 @@ func (s *MasterServer) handleUpdatePlaybook(ctx context.Context, w http.Response
 	s.jsonResponse(w, existing)
 }
 
-func (s *MasterServer) handleDeletePlaybook(ctx context.Context, w http.ResponseWriter, id int64) {
+func (s *MasterServer) handleDeletePlaybook(ctx context.Context, w http.ResponseWriter, id string) {
 	// Check write access
 	if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
 		s.jsonError(w, status, msg)
@@ -508,7 +507,7 @@ func (s *MasterServer) handleDeletePlaybook(ctx context.Context, w http.Response
 	// Get existing playbook
 	existing, err := s.store.GetPlaybookByID(ctx, id)
 	if err != nil {
-		s.logger.Error("Failed to get playbook", zap.Error(err), zap.Int64("id", id))
+		s.logger.Error("Failed to get playbook", zap.Error(err), zap.String("id", id))
 		s.jsonError(w, http.StatusInternalServerError, "failed to get playbook")
 		return
 	}
@@ -540,7 +539,7 @@ func (s *MasterServer) handleDeletePlaybook(ctx context.Context, w http.Response
 // --- Activation API ---
 
 // handleProjectPlaybookByID handles GET/POST/DELETE for /api/v1/projects/{id}/playbook.
-func (s *MasterServer) handleProjectPlaybookByID(w http.ResponseWriter, r *http.Request, projectID int64) {
+func (s *MasterServer) handleProjectPlaybookByID(w http.ResponseWriter, r *http.Request, projectID string) {
 	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
@@ -556,7 +555,7 @@ func (s *MasterServer) handleProjectPlaybookByID(w http.ResponseWriter, r *http.
 	}
 }
 
-func (s *MasterServer) handleGetProjectPlaybookByID(ctx context.Context, w http.ResponseWriter, projectID int64) {
+func (s *MasterServer) handleGetProjectPlaybookByID(ctx context.Context, w http.ResponseWriter, projectID string) {
 	// Check read access
 	if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
 		s.jsonError(w, status, msg)
@@ -588,11 +587,11 @@ func (s *MasterServer) handleGetProjectPlaybookByID(ctx context.Context, w http.
 
 // ActivatePlaybookRequest is the request body for activating a playbook.
 type ActivatePlaybookRequest struct {
-	PlaybookID int64                              `json:"playbook_id"`
+	PlaybookID string                             `json:"playbook_id"`
 	Bindings   map[string]recipes.VariableBinding `json:"bindings,omitempty"`
 }
 
-func (s *MasterServer) handleActivatePlaybookByID(ctx context.Context, w http.ResponseWriter, r *http.Request, projectID int64) {
+func (s *MasterServer) handleActivatePlaybookByID(ctx context.Context, w http.ResponseWriter, r *http.Request, projectID string) {
 	// Check write access
 	if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
 		s.jsonError(w, status, msg)
@@ -609,7 +608,7 @@ func (s *MasterServer) handleActivatePlaybookByID(ctx context.Context, w http.Re
 	}
 
 	// Get user ID from context
-	var userID *int64
+	var userID *string
 	if user, ok := GetUserFromContext(ctx); ok && user != nil {
 		userID = &user.ID
 	}
@@ -623,13 +622,13 @@ func (s *MasterServer) handleActivatePlaybookByID(ctx context.Context, w http.Re
 	}
 
 	s.logger.Info("Playbook activated",
-		zap.Int64("project_id", projectID),
-		zap.Int64("playbook_id", req.PlaybookID))
+		zap.String("project_id", projectID),
+		zap.String("playbook_id", req.PlaybookID))
 
 	s.writeJSON(w, http.StatusCreated, activation)
 }
 
-func (s *MasterServer) handleDeactivatePlaybookByID(ctx context.Context, w http.ResponseWriter, projectID int64) {
+func (s *MasterServer) handleDeactivatePlaybookByID(ctx context.Context, w http.ResponseWriter, projectID string) {
 	// Check write access
 	if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
 		s.jsonError(w, status, msg)
@@ -643,7 +642,7 @@ func (s *MasterServer) handleDeactivatePlaybookByID(ctx context.Context, w http.
 		return
 	}
 
-	s.logger.Info("Playbook deactivated", zap.Int64("project_id", projectID))
+	s.logger.Info("Playbook deactivated", zap.String("project_id", projectID))
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -652,8 +651,8 @@ func (s *MasterServer) handleDeactivatePlaybookByID(ctx context.Context, w http.
 
 // ActivationRequest is the request body for POST /api/v1/recipes/activations.
 type ActivationRequest struct {
-	ProjectID  int64                              `json:"project_id"`
-	PlaybookID int64                              `json:"playbook_id"`
+	ProjectID  string                             `json:"project_id"`
+	PlaybookID string                             `json:"playbook_id"`
 	Bindings   map[string]recipes.VariableBinding `json:"bindings,omitempty"`
 }
 
@@ -682,17 +681,17 @@ func (s *MasterServer) handleActivations(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if req.ProjectID == 0 {
+	if req.ProjectID == "" {
 		s.jsonError(w, http.StatusBadRequest, "project_id is required")
 		return
 	}
-	if req.PlaybookID == 0 {
+	if req.PlaybookID == "" {
 		s.jsonError(w, http.StatusBadRequest, "playbook_id is required")
 		return
 	}
 
 	// Get user ID from context
-	var userID *int64
+	var userID *string
 	if user, ok := GetUserFromContext(ctx); ok && user != nil {
 		userID = &user.ID
 	}
@@ -706,8 +705,8 @@ func (s *MasterServer) handleActivations(w http.ResponseWriter, r *http.Request)
 	}
 
 	s.logger.Info("Playbook activated",
-		zap.Int64("project_id", req.ProjectID),
-		zap.Int64("playbook_id", req.PlaybookID))
+		zap.String("project_id", req.ProjectID),
+		zap.String("playbook_id", req.PlaybookID))
 
 	s.writeJSON(w, http.StatusCreated, activation)
 }
@@ -721,8 +720,8 @@ func (s *MasterServer) handleActivation(w http.ResponseWriter, r *http.Request) 
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/recipes/activations/")
 	// Handle optional /detail suffix
 	path = strings.TrimSuffix(path, "/detail")
-	projectID, err := strconv.ParseInt(path, 10, 64)
-	if err != nil {
+	projectID := path
+	if projectID == "" {
 		s.jsonError(w, http.StatusBadRequest, "invalid project ID")
 		return
 	}
@@ -771,8 +770,8 @@ func (s *MasterServer) handleRawApproval(w http.ResponseWriter, r *http.Request)
 
 	// Extract ID from path: /api/v1/recipes/raw-approvals/{id}
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/recipes/raw-approvals/")
-	id, err := strconv.ParseInt(path, 10, 64)
-	if err != nil {
+	id := path
+	if id == "" {
 		s.jsonError(w, http.StatusBadRequest, "invalid approval ID")
 		return
 	}
@@ -821,7 +820,7 @@ func (s *MasterServer) handleListRawApprovals(ctx context.Context, w http.Respon
 
 // ApproveRawRequest is the request body for approving a RAW command.
 type ApproveRawRequest struct {
-	ComponentID int64  `json:"component_id"`
+	ComponentID string `json:"component_id"`
 	Reason      string `json:"reason,omitempty"`
 }
 
@@ -847,8 +846,8 @@ func (s *MasterServer) handleApproveRaw(ctx context.Context, w http.ResponseWrit
 	}
 
 	s.logger.Info("RAW component approved",
-		zap.Int64("component_id", req.ComponentID),
-		zap.Int64("approved_by", user.ID))
+		zap.String("component_id", req.ComponentID),
+		zap.String("approved_by", user.ID))
 
 	s.writeJSON(w, http.StatusCreated, map[string]interface{}{
 		"component_id": req.ComponentID,
@@ -859,7 +858,7 @@ func (s *MasterServer) handleApproveRaw(ctx context.Context, w http.ResponseWrit
 
 // RevokeRawRequest is the request body for revoking a RAW approval.
 // The component_id is extracted from the URL path, but we need admin user ID.
-func (s *MasterServer) handleRevokeRawApproval(ctx context.Context, w http.ResponseWriter, componentID int64) {
+func (s *MasterServer) handleRevokeRawApproval(ctx context.Context, w http.ResponseWriter, componentID string) {
 	// Get admin user ID from context
 	user, ok := GetUserFromContext(ctx)
 	if !ok || user == nil {
@@ -875,8 +874,8 @@ func (s *MasterServer) handleRevokeRawApproval(ctx context.Context, w http.Respo
 	}
 
 	s.logger.Info("RAW approval revoked",
-		zap.Int64("component_id", componentID),
-		zap.Int64("revoked_by", user.ID))
+		zap.String("component_id", componentID),
+		zap.String("revoked_by", user.ID))
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -1008,8 +1007,8 @@ func (s *MasterServer) handleMigrationPreview(w http.ResponseWriter, r *http.Req
 
 	// Extract project ID from path
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/recipes/migration/preview/")
-	projectID, err := strconv.ParseInt(path, 10, 64)
-	if err != nil {
+	projectID := path
+	if projectID == "" {
 		s.jsonError(w, http.StatusBadRequest, "invalid project ID")
 		return
 	}
@@ -1026,7 +1025,7 @@ func (s *MasterServer) handleMigrationPreview(w http.ResponseWriter, r *http.Req
 	// This provides a basic preview based on project type
 	preview := &recipes.MigrationPreview{
 		ProjectName:     project.Name,
-		ProjectType:     project.Type,
+		ProjectType:     derefStr(project.TypeID),
 		PreDeployHooks:  0,
 		PostDeployHooks: 0,
 		ReloadActions:   0,
@@ -1036,7 +1035,7 @@ func (s *MasterServer) handleMigrationPreview(w http.ResponseWriter, r *http.Req
 	}
 
 	// Estimate components based on project type
-	switch project.Type {
+	switch derefStr(project.TypeID) {
 	case "laravel", "php":
 		preview.PreDeployHooks = 2  // composer install, cache clear
 		preview.PostDeployHooks = 3 // migrations, cache warm, queue restart
@@ -1087,8 +1086,8 @@ func (s *MasterServer) handleMigration(w http.ResponseWriter, r *http.Request) {
 	// Extract project ID from path
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/recipes/migration/")
 	path = strings.TrimSuffix(path, "/")
-	projectID, err := strconv.ParseInt(path, 10, 64)
-	if err != nil {
+	projectID := path
+	if projectID == "" {
 		s.jsonError(w, http.StatusBadRequest, "invalid project ID")
 		return
 	}
@@ -1129,7 +1128,7 @@ func (s *MasterServer) handleMigration(w http.ResponseWriter, r *http.Request) {
 	playbook := &storage.Playbook{
 		Name:        playbookName,
 		Slug:        slug,
-		Description: fmt.Sprintf("Deployment playbook for %s (%s)", project.Name, project.Type),
+		Description: fmt.Sprintf("Deployment playbook for %s (%s)", project.Name, derefStr(project.TypeID)),
 		Version:     playbookVersion,
 		Namespace:   "user",
 		Steps:       []storage.PlaybookStep{},
@@ -1160,7 +1159,7 @@ func (s *MasterServer) handleMigration(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.logger.Info("Created playbook for project",
-		zap.Int64("project_id", projectID),
+		zap.String("project_id", projectID),
 		zap.String("playbook_name", playbook.Name))
 
 	s.jsonResponse(w, map[string]interface{}{

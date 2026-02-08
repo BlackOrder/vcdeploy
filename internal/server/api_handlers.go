@@ -239,8 +239,8 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 
 	// Parse user ID and check for sub-resources
 	parts := strings.Split(path, "/")
-	userID, err := strconv.ParseInt(parts[0], 10, 64)
-	if err != nil {
+	userID := parts[0]
+	if userID == "" {
 		s.jsonError(w, http.StatusBadRequest, "Invalid user ID")
 		return
 	}
@@ -326,7 +326,7 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 			// Invalidate all sessions for this user (security best practice)
 			if err := s.sessionService.DeleteAllForUser(ctx, userID); err != nil {
 				s.logger.Error("Failed to invalidate sessions after password change",
-					zap.Int64("user_id", userID),
+					zap.String("user_id", userID),
 					zap.Error(err))
 			}
 		}
@@ -371,7 +371,7 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 			"email":    user.Email,
 			"role":     user.Role,
 		}
-		s.logAuditWithSnapshot(r, "delete", "user", fmt.Sprintf("%d", user.ID), userSnapshot, fmt.Sprintf("Deleted user: %s", user.Username), "success")
+		s.logAuditWithSnapshot(r, "delete", "user", user.ID, userSnapshot, fmt.Sprintf("Deleted user: %s", user.Username), "success")
 		w.WriteHeader(http.StatusNoContent)
 
 	case http.MethodPatch:
@@ -427,7 +427,7 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 			// Invalidate all sessions for this user (security best practice)
 			if err := s.sessionService.DeleteAllForUser(ctx, userID); err != nil {
 				s.logger.Error("Failed to invalidate sessions after password change",
-					zap.Int64("user_id", userID),
+					zap.String("user_id", userID),
 					zap.Error(err))
 			}
 			updated = true
@@ -794,9 +794,9 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	projectID, err := strconv.ParseInt(projectIDStr, 10, 64)
-	if err != nil {
-		s.jsonError(w, http.StatusBadRequest, "Invalid project ID: must be a number")
+	projectID := projectIDStr
+	if projectID == "" {
+		s.jsonError(w, http.StatusBadRequest, "Invalid project ID")
 		return
 	}
 
@@ -876,7 +876,8 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 			project.DeployPath = req.DeployPath
 		}
 		if req.Type != "" {
-			project.Type = req.Type
+			typeID := req.Type
+			project.TypeID = &typeID
 		}
 
 		if err := s.projectService.UpdateByID(ctx, project); err != nil {
@@ -885,7 +886,7 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 
-		s.logAudit(r, "update", "project", fmt.Sprintf("Updated project: %d", projectID), "success")
+		s.logAudit(r, "update", "project", fmt.Sprintf("Updated project: %s", projectID), "success")
 		s.jsonResponse(w, project)
 
 	case http.MethodDelete:
@@ -914,7 +915,7 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 		}
 
 		// Log with snapshot of deleted resource
-		s.logAuditWithSnapshot(r, "delete", "project", fmt.Sprintf("%d", project.ID), project, fmt.Sprintf("Deleted project: %s (ID: %d)", project.Name, projectID), "success")
+		s.logAuditWithSnapshot(r, "delete", "project", project.ID, project, fmt.Sprintf("Deleted project: %s (ID: %s)", project.Name, projectID), "success")
 		w.WriteHeader(http.StatusNoContent)
 
 	default:
@@ -923,7 +924,7 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 }
 
 // handleProjectClone creates a copy of an existing project.
-func (s *MasterServer) handleProjectClone(w http.ResponseWriter, r *http.Request, projectID int64) {
+func (s *MasterServer) handleProjectClone(w http.ResponseWriter, r *http.Request, projectID string) {
 	if r.Method != http.MethodPost {
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
@@ -972,7 +973,7 @@ func (s *MasterServer) handleProjectClone(w http.ResponseWriter, r *http.Request
 	}
 
 	// Create new project with same configuration
-	newProject, err := s.projectService.Create(ctx, req.Name, source.Repository, source.Branch, source.DeployPath, source.Type)
+	newProject, err := s.projectService.Create(ctx, req.Name, source.Repository, source.Branch, source.DeployPath, derefStr(source.TypeID))
 	if err != nil {
 		s.logger.Error("Failed to create cloned project", zap.Error(err))
 		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
@@ -988,7 +989,7 @@ func (s *MasterServer) handleProjectClone(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	s.logAudit(r, "clone", "project", fmt.Sprintf("Cloned project %s from %s (ID: %d)", req.Name, source.Name, projectID), "success")
+	s.logAudit(r, "clone", "project", fmt.Sprintf("Cloned project %s from %s (ID: %s)", req.Name, source.Name, projectID), "success")
 	s.writeJSON(w, http.StatusCreated, newProject)
 }
 
@@ -1007,7 +1008,7 @@ func (s *MasterServer) handleProjectWebhooks(w http.ResponseWriter, r *http.Requ
 }
 
 // handleProjectWebhooksByID handles webhook configuration for a project by ID.
-func (s *MasterServer) handleProjectWebhooksByID(w http.ResponseWriter, r *http.Request, projectID int64) {
+func (s *MasterServer) handleProjectWebhooksByID(w http.ResponseWriter, r *http.Request, projectID string) {
 	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
@@ -1885,20 +1886,20 @@ func (s *MasterServer) handleDeploymentLogs(w http.ResponseWriter, r *http.Reque
 func (s *MasterServer) handleDeploymentLogsStream(w http.ResponseWriter, r *http.Request, deploymentID string) {
 	ctx := r.Context()
 	s.streamLogs(w, r, streamLogsConfig{
-		listLogs: func() ([]interface{}, int64, error) {
+		listLogs: func() ([]interface{}, string, error) {
 			logs, err := s.deploymentService.ListLogs(ctx, deploymentID)
 			if err != nil {
-				return nil, 0, err
+				return nil, "", err
 			}
 			result := make([]interface{}, len(logs))
-			var lastID int64
+			var lastID string
 			for i, l := range logs {
 				result[i] = l
 				lastID = l.ID
 			}
 			return result, lastID, nil
 		},
-		listLogsAfter: func(afterID int64) ([]interface{}, int64, error) {
+		listLogsAfter: func(afterID string) ([]interface{}, string, error) {
 			logs, err := s.deploymentService.ListLogsAfter(ctx, deploymentID, afterID)
 			if err != nil {
 				return nil, afterID, err
@@ -2068,8 +2069,8 @@ func (s *MasterServer) handleAPIKey(w http.ResponseWriter, r *http.Request) {
 		isRevoke = true
 	}
 
-	keyID, err := strconv.ParseInt(path, 10, 64)
-	if err != nil {
+	keyID := path
+	if keyID == "" {
 		s.jsonError(w, http.StatusBadRequest, "Invalid key ID")
 		return
 	}
@@ -2108,7 +2109,7 @@ func (s *MasterServer) handleAPIKey(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		s.logAudit(r, "revoke", "apikey", fmt.Sprintf("Revoked API key ID: %d", keyID), "success")
+		s.logAudit(r, "revoke", "apikey", fmt.Sprintf("Revoked API key ID: %s", keyID), "success")
 		s.jsonResponse(w, StatusResponse{Status: "revoked"})
 
 	default:

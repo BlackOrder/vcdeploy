@@ -1960,29 +1960,29 @@ type contextKey string
 const contextKeyUserID contextKey = "userID"
 
 // GetUserIDFromContext extracts the user ID from the request context.
-func GetUserIDFromContext(ctx context.Context) (int64, bool) {
-	userID, ok := ctx.Value(contextKeyUserID).(int64)
+func GetUserIDFromContext(ctx context.Context) (string, bool) {
+	userID, ok := ctx.Value(contextKeyUserID).(string)
 	return userID, ok
 }
 
 // validateAPIKey validates an API key and returns the API key object and user ID if valid.
-func (s *MasterServer) validateAPIKey(ctx context.Context, key string) (*storage.APIKey, int64, error) {
+func (s *MasterServer) validateAPIKey(ctx context.Context, key string) (*storage.APIKey, string, error) {
 	if key == "" {
-		return nil, 0, fmt.Errorf("empty API key")
+		return nil, "", fmt.Errorf("empty API key")
 	}
 
 	// Look up using API key service
 	apiKey, err := s.apiKeyService.GetByRawKey(ctx, key)
 	if services.IsNotFound(err) {
-		return nil, 0, fmt.Errorf("API key not found")
+		return nil, "", fmt.Errorf("API key not found")
 	}
 	if err != nil {
-		return nil, 0, fmt.Errorf("database error: %w", err)
+		return nil, "", fmt.Errorf("database error: %w", err)
 	}
 
 	// Check if valid
 	if !apiKey.IsValid() {
-		return nil, 0, fmt.Errorf("API key expired or revoked")
+		return nil, "", fmt.Errorf("API key expired or revoked")
 	}
 
 	// Update last used timestamp asynchronously
@@ -2001,18 +2001,18 @@ func (s *MasterServer) validateAPIKey(ctx context.Context, key string) (*storage
 }
 
 // validateSession validates a session token and returns the user ID if valid.
-func (s *MasterServer) validateSession(ctx context.Context, token string) (int64, error) {
+func (s *MasterServer) validateSession(ctx context.Context, token string) (string, error) {
 	if token == "" {
-		return 0, fmt.Errorf("empty session token")
+		return "", fmt.Errorf("empty session token")
 	}
 
 	// Look up using session service
 	session, err := s.sessionService.GetByToken(ctx, token)
 	if services.IsNotFound(err) {
-		return 0, fmt.Errorf("session not found or expired")
+		return "", fmt.Errorf("session not found or expired")
 	}
 	if err != nil {
-		return 0, fmt.Errorf("database error: %w", err)
+		return "", fmt.Errorf("database error: %w", err)
 	}
 
 	return session.UserID, nil

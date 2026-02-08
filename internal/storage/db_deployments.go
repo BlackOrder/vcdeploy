@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/rs/xid"
 	"time"
 
 	"go.uber.org/zap"
@@ -76,10 +77,13 @@ func (db *DB) GetDeployment(ctx context.Context, id string) (*DeploymentRecord, 
 
 // CreateDeploymentLog creates a deployment log entry.
 func (db *DB) CreateDeploymentLog(ctx context.Context, log *DeploymentLog) error {
+	if log.ID == "" {
+		log.ID = xid.New().String()
+	}
 	_, err := db.conn.ExecContext(ctx, `
-		INSERT INTO deployment_logs (deployment_id, level, message, source, created_at)
-		VALUES (?, ?, ?, ?, ?)
-	`, log.DeploymentID, log.Level, log.Message, log.Source, log.CreatedAt)
+		INSERT INTO deployment_logs (id, deployment_id, level, message, source, created_at)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, log.ID, log.DeploymentID, log.Level, log.Message, log.Source, log.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("creating deployment log: %w", err)
 	}
@@ -110,7 +114,7 @@ func (db *DB) ListDeploymentLogs(ctx context.Context, deploymentID string) ([]*D
 
 // ListDeploymentLogsAfter returns logs for a deployment after a specific log ID.
 // This is used for streaming/polling new logs.
-func (db *DB) ListDeploymentLogsAfter(ctx context.Context, deploymentID string, afterID int64) ([]*DeploymentLog, error) {
+func (db *DB) ListDeploymentLogsAfter(ctx context.Context, deploymentID string, afterID string) ([]*DeploymentLog, error) {
 	rows, err := db.conn.QueryContext(ctx, `
 		SELECT id, deployment_id, level, message, source, created_at
 		FROM deployment_logs WHERE deployment_id = ? AND id > ? ORDER BY created_at
@@ -345,25 +349,23 @@ func (db *DB) CountDeployments(ctx context.Context) (int64, error) {
 
 // CreateDeploymentRollback creates a new rollback record.
 func (db *DB) CreateDeploymentRollback(ctx context.Context, rollback *DeploymentRollback) error {
-	result, err := db.conn.ExecContext(ctx, `
-		INSERT INTO deployment_rollbacks (deployment_id, project_name, from_release, to_release, reason, 
+	if rollback.ID == "" {
+		rollback.ID = xid.New().String()
+	}
+	_, err := db.conn.ExecContext(ctx, `
+		INSERT INTO deployment_rollbacks (id, deployment_id, project_name, from_release, to_release, reason, 
 			triggered_by, health_check_failed, health_check_error, status)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, rollback.DeploymentID, rollback.ProjectName, rollback.FromRelease, rollback.ToRelease,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, rollback.ID, rollback.DeploymentID, rollback.ProjectName, rollback.FromRelease, rollback.ToRelease,
 		rollback.Reason, rollback.TriggeredBy, rollback.HealthCheckFailed, rollback.HealthCheckError, rollback.Status)
 	if err != nil {
 		return fmt.Errorf("creating deployment rollback: %w", err)
 	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		return fmt.Errorf("getting rollback id: %w", err)
-	}
-	rollback.ID = id
 	return nil
 }
 
 // GetDeploymentRollback retrieves a rollback record by ID.
-func (db *DB) GetDeploymentRollback(ctx context.Context, id int64) (*DeploymentRollback, error) {
+func (db *DB) GetDeploymentRollback(ctx context.Context, id string) (*DeploymentRollback, error) {
 	var rollback DeploymentRollback
 	var completedAt sql.NullTime
 	var errorMsg, healthError sql.NullString
@@ -480,7 +482,7 @@ func (db *DB) GetLatestRollbackForDeployment(ctx context.Context, deploymentID s
 }
 
 // UpdateProjectHealthCheck updates a project's health check configuration reference.
-func (db *DB) UpdateProjectHealthCheck(ctx context.Context, projectID int64, healthCheckID *int64, autoRollback, rollbackOnHealthFail bool) error {
+func (db *DB) UpdateProjectHealthCheck(ctx context.Context, projectID string, healthCheckID *string, autoRollback, rollbackOnHealthFail bool) error {
 	_, err := db.conn.ExecContext(ctx, `
 		UPDATE projects SET health_check_id = ?, auto_rollback_enabled = ?, rollback_on_health_fail = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?

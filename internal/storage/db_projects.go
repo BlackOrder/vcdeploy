@@ -7,29 +7,22 @@ import (
 	"fmt"
 
 	"github.com/rs/xid"
-	"go.uber.org/zap"
 )
 
 // --- Project operations ---
 
 // CreateProject creates a new project.
 func (db *DB) CreateProject(ctx context.Context, project *Project) error {
-	if project.UID == "" {
-		project.UID = xid.New().String()
+	if project.ID == "" {
+		project.ID = xid.New().String()
 	}
-	result, err := db.conn.ExecContext(ctx, `
-		INSERT INTO projects (uid, name, repository, branch, deploy_path, type, created_at)
+	_, err := db.conn.ExecContext(ctx, `
+		INSERT INTO projects (id, name, repository, branch, deploy_path, type_id, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, project.UID, project.Name, project.Repository, project.Branch, project.DeployPath, project.Type, project.CreatedAt)
+	`, project.ID, project.Name, project.Repository, project.Branch, project.DeployPath, project.TypeID, project.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("insert project: %w", err)
 	}
-
-	id, err := result.LastInsertId()
-	if err != nil {
-		db.logger.Warn("failed to get LastInsertId for project", zap.Error(err))
-	}
-	project.ID = id
 	return nil
 }
 
@@ -40,9 +33,9 @@ func (db *DB) GetProjectByName(ctx context.Context, name string) (*Project, erro
 	var lastDeployStatus sql.NullString
 
 	err := db.conn.QueryRowContext(ctx, `
-		SELECT id, uid, name, repository, branch, deploy_path, type, created_at, last_deploy_at, last_deploy_status
+		SELECT id, name, repository, branch, deploy_path, type_id, created_at, last_deploy_at, last_deploy_status
 		FROM projects WHERE name = ?
-	`, name).Scan(&p.ID, &p.UID, &p.Name, &p.Repository, &p.Branch, &p.DeployPath, &p.Type, &p.CreatedAt, &lastDeploy, &lastDeployStatus)
+	`, name).Scan(&p.ID, &p.Name, &p.Repository, &p.Branch, &p.DeployPath, &p.TypeID, &p.CreatedAt, &lastDeploy, &lastDeployStatus)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
@@ -60,7 +53,7 @@ func (db *DB) GetProjectByName(ctx context.Context, name string) (*Project, erro
 // ListProjects returns all projects.
 func (db *DB) ListProjects(ctx context.Context) ([]*Project, error) {
 	rows, err := db.conn.QueryContext(ctx, `
-		SELECT id, uid, name, repository, branch, deploy_path, type, created_at, last_deploy_at, last_deploy_status
+		SELECT id, name, repository, branch, deploy_path, type_id, created_at, last_deploy_at, last_deploy_status
 		FROM projects ORDER BY name
 	`)
 	if err != nil {
@@ -74,7 +67,7 @@ func (db *DB) ListProjects(ctx context.Context) ([]*Project, error) {
 		var lastDeploy sql.NullTime
 		var lastDeployStatus sql.NullString
 
-		if err := rows.Scan(&p.ID, &p.UID, &p.Name, &p.Repository, &p.Branch, &p.DeployPath, &p.Type, &p.CreatedAt, &lastDeploy, &lastDeployStatus); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Repository, &p.Branch, &p.DeployPath, &p.TypeID, &p.CreatedAt, &lastDeploy, &lastDeployStatus); err != nil {
 			return nil, fmt.Errorf("scan project: %w", err)
 		}
 		if lastDeploy.Valid {
@@ -89,7 +82,7 @@ func (db *DB) ListProjects(ctx context.Context) ([]*Project, error) {
 // ListProjectsPaginated returns projects with pagination support.
 func (db *DB) ListProjectsPaginated(ctx context.Context, limit, offset int) ([]*Project, error) {
 	rows, err := db.conn.QueryContext(ctx, `
-		SELECT id, uid, name, repository, branch, deploy_path, type, created_at, last_deploy_at, last_deploy_status
+		SELECT id, name, repository, branch, deploy_path, type_id, created_at, last_deploy_at, last_deploy_status
 		FROM projects ORDER BY name LIMIT ? OFFSET ?
 	`, limit, offset)
 	if err != nil {
@@ -103,7 +96,7 @@ func (db *DB) ListProjectsPaginated(ctx context.Context, limit, offset int) ([]*
 		var lastDeploy sql.NullTime
 		var lastDeployStatus sql.NullString
 
-		if err := rows.Scan(&p.ID, &p.UID, &p.Name, &p.Repository, &p.Branch, &p.DeployPath, &p.Type, &p.CreatedAt, &lastDeploy, &lastDeployStatus); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Repository, &p.Branch, &p.DeployPath, &p.TypeID, &p.CreatedAt, &lastDeploy, &lastDeployStatus); err != nil {
 			return nil, fmt.Errorf("scan project: %w", err)
 		}
 		if lastDeploy.Valid {
@@ -135,15 +128,15 @@ func (db *DB) DeleteProject(ctx context.Context, name string) error {
 }
 
 // GetProjectByID retrieves a project by ID with context.
-func (db *DB) GetProjectByID(ctx context.Context, id int64) (*Project, error) {
+func (db *DB) GetProjectByID(ctx context.Context, id string) (*Project, error) {
 	var p Project
 	var lastDeploy sql.NullTime
 	var lastDeployStatus sql.NullString
 
 	err := db.conn.QueryRowContext(ctx, `
-		SELECT id, uid, name, repository, branch, deploy_path, type, created_at, last_deploy_at, last_deploy_status
+		SELECT id, name, repository, branch, deploy_path, type_id, created_at, last_deploy_at, last_deploy_status
 		FROM projects WHERE id = ?
-	`, id).Scan(&p.ID, &p.UID, &p.Name, &p.Repository, &p.Branch, &p.DeployPath, &p.Type, &p.CreatedAt, &lastDeploy, &lastDeployStatus)
+	`, id).Scan(&p.ID, &p.Name, &p.Repository, &p.Branch, &p.DeployPath, &p.TypeID, &p.CreatedAt, &lastDeploy, &lastDeployStatus)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
@@ -161,9 +154,9 @@ func (db *DB) GetProjectByID(ctx context.Context, id int64) (*Project, error) {
 // UpdateProjectByID updates a project by ID.
 func (db *DB) UpdateProjectByID(ctx context.Context, p *Project) error {
 	_, err := db.conn.ExecContext(ctx, `
-		UPDATE projects SET name = ?, repository = ?, branch = ?, deploy_path = ?, type = ?
+		UPDATE projects SET name = ?, repository = ?, branch = ?, deploy_path = ?, type_id = ?
 		WHERE id = ?
-	`, p.Name, p.Repository, p.Branch, p.DeployPath, p.Type, p.ID)
+	`, p.Name, p.Repository, p.Branch, p.DeployPath, p.TypeID, p.ID)
 	if err != nil {
 		return fmt.Errorf("updating project: %w", err)
 	}
@@ -171,7 +164,7 @@ func (db *DB) UpdateProjectByID(ctx context.Context, p *Project) error {
 }
 
 // DeleteProjectByID deletes a project by ID.
-func (db *DB) DeleteProjectByID(ctx context.Context, id int64) error {
+func (db *DB) DeleteProjectByID(ctx context.Context, id string) error {
 	_, err := db.conn.ExecContext(ctx, `DELETE FROM projects WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("deleting project: %w", err)
@@ -183,30 +176,25 @@ func (db *DB) DeleteProjectByID(ctx context.Context, id int64) error {
 
 // CreateProjectType creates a new project type.
 func (db *DB) CreateProjectType(ctx context.Context, pt *ProjectType) error {
-	if pt.UID == "" {
-		pt.UID = xid.New().String()
+	if pt.ID == "" {
+		pt.ID = xid.New().String()
 	}
-	result, err := db.conn.ExecContext(ctx, `
-		INSERT INTO project_types (uid, name, description, build_cmd, created_at)
+	_, err := db.conn.ExecContext(ctx, `
+		INSERT INTO project_types (id, name, description, build_cmd, created_at)
 		VALUES (?, ?, ?, ?, ?)
-	`, pt.UID, pt.Name, pt.Description, pt.BuildCmd, pt.CreatedAt)
+	`, pt.ID, pt.Name, pt.Description, pt.BuildCmd, pt.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("insert project type: %w", err)
 	}
 
-	id, err := result.LastInsertId()
-	if err != nil {
-		db.logger.Warn("failed to get LastInsertId for project type", zap.Error(err))
-	}
-	pt.ID = id
 	return nil
 }
 
 // ListProjectTypes returns all project types.
 func (db *DB) ListProjectTypes(ctx context.Context) ([]*ProjectType, error) {
 	rows, err := db.conn.QueryContext(ctx, `
-		SELECT pt.id, pt.uid, pt.name, pt.description, pt.build_cmd, 
-		       (SELECT COUNT(*) FROM projects WHERE type = pt.name) as project_count,
+		SELECT pt.id, pt.name, pt.description, pt.build_cmd, 
+		       (SELECT COUNT(*) FROM projects WHERE type_id = pt.id) as project_count,
 		       pt.created_at
 		FROM project_types pt ORDER BY pt.name
 	`)
@@ -218,9 +206,11 @@ func (db *DB) ListProjectTypes(ctx context.Context) ([]*ProjectType, error) {
 	var types []*ProjectType
 	for rows.Next() {
 		var pt ProjectType
-		if err := rows.Scan(&pt.ID, &pt.UID, &pt.Name, &pt.Description, &pt.BuildCmd, &pt.ProjectCount, &pt.CreatedAt); err != nil {
+		var buildCmd sql.NullString
+		if err := rows.Scan(&pt.ID, &pt.Name, &pt.Description, &buildCmd, &pt.ProjectCount, &pt.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan project type: %w", err)
 		}
+		pt.BuildCmd = buildCmd.String
 		types = append(types, &pt)
 	}
 	return types, rows.Err()
@@ -229,12 +219,14 @@ func (db *DB) ListProjectTypes(ctx context.Context) ([]*ProjectType, error) {
 // GetProjectTypeByName retrieves a project type by name.
 func (db *DB) GetProjectTypeByName(ctx context.Context, name string) (*ProjectType, error) {
 	var pt ProjectType
+	var buildCmd sql.NullString
 	err := db.conn.QueryRowContext(ctx, `
-		SELECT pt.id, pt.uid, pt.name, pt.description, pt.build_cmd, 
-		       (SELECT COUNT(*) FROM projects WHERE type = pt.name) as project_count,
+		SELECT pt.id, pt.name, pt.description, pt.build_cmd, 
+		       (SELECT COUNT(*) FROM projects WHERE type_id = pt.id) as project_count,
 		       pt.created_at
 		FROM project_types pt WHERE pt.name = ?
-	`, name).Scan(&pt.ID, &pt.UID, &pt.Name, &pt.Description, &pt.BuildCmd, &pt.ProjectCount, &pt.CreatedAt)
+	`, name).Scan(&pt.ID, &pt.Name, &pt.Description, &buildCmd, &pt.ProjectCount, &pt.CreatedAt)
+	pt.BuildCmd = buildCmd.String
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("project type not found: %s", name)
 	}
@@ -291,14 +283,14 @@ func (db *DB) ExportAllSecrets(ctx context.Context) (map[string]map[string]strin
 // --- Project Webhook operations ---
 
 // GetProjectWebhook retrieves a webhook config for a project and provider.
-func (db *DB) GetProjectWebhook(ctx context.Context, projectID int64, provider string) (*ProjectWebhook, error) {
+func (db *DB) GetProjectWebhook(ctx context.Context, projectID string, provider string) (*ProjectWebhook, error) {
 	var w ProjectWebhook
 	var enabled, requireSecret int
 	err := db.conn.QueryRowContext(ctx, `
-		SELECT id, uid, project_id, provider, secret_encrypted, enabled, COALESCE(require_secret, 0), created_at, updated_at
+		SELECT id, project_id, provider, secret_encrypted, enabled, COALESCE(require_secret, 0), created_at, updated_at
 		FROM project_webhooks WHERE project_id = ? AND provider = ?
 	`, projectID, provider).Scan(
-		&w.ID, &w.UID, &w.ProjectID, &w.Provider, &w.SecretEncrypted, &enabled, &requireSecret, &w.CreatedAt, &w.UpdatedAt,
+		&w.ID, &w.ProjectID, &w.Provider, &w.SecretEncrypted, &enabled, &requireSecret, &w.CreatedAt, &w.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
@@ -312,8 +304,8 @@ func (db *DB) GetProjectWebhook(ctx context.Context, projectID int64, provider s
 }
 
 // SetProjectWebhook creates or updates a webhook config.
-func (db *DB) SetProjectWebhook(ctx context.Context, projectID int64, provider string, secretEncrypted []byte, enabled, requireSecret bool) error {
-	uid := xid.New().String()
+func (db *DB) SetProjectWebhook(ctx context.Context, projectID string, provider string, secretEncrypted []byte, enabled, requireSecret bool) error {
+	whID := xid.New().String()
 	enabledVal := 0
 	if enabled {
 		enabledVal = 1
@@ -323,14 +315,14 @@ func (db *DB) SetProjectWebhook(ctx context.Context, projectID int64, provider s
 		requireSecretVal = 1
 	}
 	_, err := db.conn.ExecContext(ctx, `
-		INSERT INTO project_webhooks (uid, project_id, provider, secret_encrypted, enabled, require_secret)
+		INSERT INTO project_webhooks (id, project_id, provider, secret_encrypted, enabled, require_secret)
 		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(project_id, provider) DO UPDATE SET
 			secret_encrypted = excluded.secret_encrypted,
 			enabled = excluded.enabled,
 			require_secret = excluded.require_secret,
 			updated_at = CURRENT_TIMESTAMP
-	`, uid, projectID, provider, secretEncrypted, enabledVal, requireSecretVal)
+	`, whID, projectID, provider, secretEncrypted, enabledVal, requireSecretVal)
 	if err != nil {
 		return fmt.Errorf("setting project webhook: %w", err)
 	}
@@ -338,9 +330,9 @@ func (db *DB) SetProjectWebhook(ctx context.Context, projectID int64, provider s
 }
 
 // ListProjectWebhooks retrieves all webhooks for a project.
-func (db *DB) ListProjectWebhooks(ctx context.Context, projectID int64) ([]*ProjectWebhook, error) {
+func (db *DB) ListProjectWebhooks(ctx context.Context, projectID string) ([]*ProjectWebhook, error) {
 	rows, err := db.conn.QueryContext(ctx, `
-		SELECT id, uid, project_id, provider, secret_encrypted, enabled, COALESCE(require_secret, 0), created_at, updated_at
+		SELECT id, project_id, provider, secret_encrypted, enabled, COALESCE(require_secret, 0), created_at, updated_at
 		FROM project_webhooks WHERE project_id = ? ORDER BY provider
 	`, projectID)
 	if err != nil {
@@ -352,7 +344,7 @@ func (db *DB) ListProjectWebhooks(ctx context.Context, projectID int64) ([]*Proj
 	for rows.Next() {
 		var w ProjectWebhook
 		var enabled, requireSecret int
-		if err := rows.Scan(&w.ID, &w.UID, &w.ProjectID, &w.Provider, &w.SecretEncrypted, &enabled, &requireSecret, &w.CreatedAt, &w.UpdatedAt); err != nil {
+		if err := rows.Scan(&w.ID, &w.ProjectID, &w.Provider, &w.SecretEncrypted, &enabled, &requireSecret, &w.CreatedAt, &w.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scanning webhook: %w", err)
 		}
 		w.Enabled = enabled == 1
@@ -363,7 +355,7 @@ func (db *DB) ListProjectWebhooks(ctx context.Context, projectID int64) ([]*Proj
 }
 
 // DeleteProjectWebhook deletes a webhook config.
-func (db *DB) DeleteProjectWebhook(ctx context.Context, projectID int64, provider string) error {
+func (db *DB) DeleteProjectWebhook(ctx context.Context, projectID string, provider string) error {
 	_, err := db.conn.ExecContext(ctx, `DELETE FROM project_webhooks WHERE project_id = ? AND provider = ?`, projectID, provider)
 	if err != nil {
 		return fmt.Errorf("deleting project webhook: %w", err)
@@ -376,9 +368,9 @@ func (db *DB) DeleteProjectWebhook(ctx context.Context, projectID int64, provide
 // UpdateProjectByName updates a project by name.
 func (db *DB) UpdateProjectByName(ctx context.Context, p *Project) error {
 	_, err := db.conn.ExecContext(ctx, `
-		UPDATE projects SET repository = ?, branch = ?, deploy_path = ?, type = ?
+		UPDATE projects SET repository = ?, branch = ?, deploy_path = ?, type_id = ?
 		WHERE name = ?
-	`, p.Repository, p.Branch, p.DeployPath, p.Type, p.Name)
+	`, p.Repository, p.Branch, p.DeployPath, p.TypeID, p.Name)
 	if err != nil {
 		return fmt.Errorf("updating project: %w", err)
 	}

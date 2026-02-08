@@ -34,16 +34,18 @@ func (s *Service) Create(ctx context.Context, name, repository, branch, deployPa
 	if branch == "" {
 		branch = "main"
 	}
+	var typeIDPtr *string
 	if projectType == "" {
 		projectType = "generic"
 	}
+	typeIDPtr = &projectType
 
 	project := &storage.Project{
 		Name:       name,
 		Repository: repository,
 		Branch:     branch,
 		DeployPath: deployPath,
-		Type:       projectType,
+		TypeID:     typeIDPtr,
 		CreatedAt:  time.Now(),
 	}
 
@@ -55,7 +57,7 @@ func (s *Service) Create(ctx context.Context, name, repository, branch, deployPa
 }
 
 // GetByID retrieves a project by ID.
-func (s *Service) GetByID(ctx context.Context, id int64) (*storage.Project, error) {
+func (s *Service) GetByID(ctx context.Context, id string) (*storage.Project, error) {
 	project, err := s.store.GetProjectByID(ctx, id)
 	if err != nil {
 		return nil, err // Returns ErrNotFound if not found
@@ -120,7 +122,7 @@ func (s *Service) Update(ctx context.Context, project *storage.Project) error {
 }
 
 // DeleteByID removes a project by ID.
-func (s *Service) DeleteByID(ctx context.Context, id int64) error {
+func (s *Service) DeleteByID(ctx context.Context, id string) error {
 	if err := s.store.DeleteProjectByID(ctx, id); err != nil {
 		return fmt.Errorf("deleting project: %w", err)
 	}

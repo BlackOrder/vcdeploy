@@ -210,7 +210,7 @@ func (s *MasterServer) handleAPILogin(w http.ResponseWriter, r *http.Request) {
 
 			// Build slice of hashes for verification
 			hashes := make([]string, len(codes))
-			var codeID int64
+			var codeID string
 			normalizedCode := security.NormalizeRecoveryCode(req.TOTP)
 			for i, code := range codes {
 				if code.UsedAt == nil {
@@ -222,7 +222,7 @@ func (s *MasterServer) handleAPILogin(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			if codeID == 0 {
+			if codeID == "" {
 				s.logger.Debug("API login failed: invalid TOTP", zap.String("username", req.Username))
 				s.logAudit(r, "api_login", "session", "invalid TOTP for: "+req.Username, "failure")
 				s.jsonError(w, http.StatusUnauthorized, "invalid verification code")
@@ -280,7 +280,7 @@ func (s *MasterServer) handleAPICurrentUser(w http.ResponseWriter, r *http.Reque
 
 	// Get the user from context (set by withAuth middleware)
 	userID, ok := GetUserIDFromContext(r.Context())
-	if !ok || userID == 0 {
+	if !ok || userID == "" {
 		s.jsonError(w, http.StatusUnauthorized, "not authenticated")
 		return
 	}
@@ -358,7 +358,7 @@ func (s *MasterServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 				}
 
 				// Check if the code matches any unused recovery code
-				var codeID int64
+				var codeID string
 				normalizedCode := security.NormalizeRecoveryCode(totp)
 				for _, code := range codes {
 					if code.UsedAt == nil {
@@ -369,7 +369,7 @@ func (s *MasterServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 
-				if codeID == 0 {
+				if codeID == "" {
 					s.logger.Debug("Login failed: invalid TOTP", zap.String("username", username))
 					s.logAudit(r, "login", "session", "invalid TOTP for: "+username, "failure")
 					s.renderTemplate(w, "login", map[string]interface{}{
@@ -445,13 +445,13 @@ func (s *MasterServer) handleLogout(w http.ResponseWriter, r *http.Request) {
 		if session, err := s.sessionService.GetByToken(ctx, cookie.Value); err == nil {
 			if auditErr := s.auditService.Log(ctx, &storage.AuditEntry{
 				Source:    "web",
-				User:      fmt.Sprintf("user:%d", session.UserID),
+				User:      fmt.Sprintf("user:%s", session.UserID),
 				Action:    "logout",
 				Resource:  "session",
 				Result:    "success",
 				Timestamp: time.Now(),
 			}); auditErr != nil {
-				s.logger.Error("Failed to log audit entry for logout", zap.Error(auditErr), zap.Int64("userID", session.UserID))
+				s.logger.Error("Failed to log audit entry for logout", zap.Error(auditErr), zap.String("userID", session.UserID))
 			}
 		}
 
@@ -525,7 +525,7 @@ func (s *MasterServer) handleChangePassword(w http.ResponseWriter, r *http.Reque
 		// Invalidate all existing sessions for this user (security best practice)
 		if err := s.sessionService.DeleteAllForUser(ctx, user.ID); err != nil {
 			s.logger.Error("Failed to invalidate sessions after password change",
-				zap.Int64("user_id", user.ID),
+				zap.String("user_id", user.ID),
 				zap.Error(err))
 			// Continue - password was changed successfully, session cleanup is best-effort
 		}

@@ -29,7 +29,7 @@ type Service struct {
 
 // Entry represents a decrypted secret.
 type Entry struct {
-	ID        int64
+	ID        string
 	Project   string
 	Scope     string
 	Key       string

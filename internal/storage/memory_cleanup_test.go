@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"github.com/rs/xid"
 	"testing"
 	"time"
 )
@@ -275,8 +276,8 @@ func TestMemoryStore_CleanupOrphanedWebhooks(t *testing.T) {
 
 	// Create orphaned webhook (for non-existent project) directly in the map
 	s.mu.Lock()
-	orphanedID := nextID(&s.nextWebhookID)
-	s.webhooks[orphanedID] = &ProjectWebhook{ID: orphanedID, ProjectID: 99999, Provider: "gitlab"}
+	orphanedID := xid.New().String()
+	s.webhooks[orphanedID] = &ProjectWebhook{ID: orphanedID, ProjectID: "nonexistent", Provider: "gitlab"}
 	s.mu.Unlock()
 
 	count, err := s.CleanupOrphanedWebhooks(ctx)

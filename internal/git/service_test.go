@@ -44,7 +44,7 @@ func TestFindCredential_NoMatch(t *testing.T) {
 	store := &mockStore{
 		credentials: []*storage.SourceCredential{
 			{
-				ID:         1,
+				ID:         "test-id-1",
 				Name:       "github-cred",
 				Type:       SourceCredentialTypeHTTPSToken,
 				URLPattern: `^https://github\.com/private/.*`,
@@ -69,7 +69,7 @@ func TestFindCredential_Match(t *testing.T) {
 	store := &mockStore{
 		credentials: []*storage.SourceCredential{
 			{
-				ID:         1,
+				ID:         "test-id-1",
 				Name:       "github-cred",
 				Type:       SourceCredentialTypeHTTPSToken,
 				URLPattern: `^https://github\.com/private/.*`,
@@ -87,8 +87,8 @@ func TestFindCredential_Match(t *testing.T) {
 	if cred == nil {
 		t.Fatal("expected credential, got nil")
 	}
-	if cred.ID != 1 {
-		t.Errorf("expected ID 1, got %d", cred.ID)
+	if cred.ID != "test-id-1" {
+		t.Errorf("expected ID test-id-1, got %s", cred.ID)
 	}
 }
 
@@ -100,13 +100,13 @@ func TestFindCredential_InvalidPattern(t *testing.T) {
 	store := &mockStore{
 		credentials: []*storage.SourceCredential{
 			{
-				ID:         1,
+				ID:         "test-id-1",
 				Name:       "bad-pattern",
 				Type:       SourceCredentialTypeHTTPSToken,
 				URLPattern: `[invalid`, // Invalid regex
 			},
 			{
-				ID:         2,
+				ID:         "test-id-2",
 				Name:       "good-cred",
 				Type:       SourceCredentialTypeHTTPSToken,
 				URLPattern: `^https://github\.com/.*`,
@@ -121,8 +121,8 @@ func TestFindCredential_InvalidPattern(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cred.ID != 2 {
-		t.Errorf("expected ID 2 (skipping bad pattern), got %d", cred.ID)
+	if cred.ID != "test-id-2" {
+		t.Errorf("expected ID test-id-2 (skipping bad pattern), got %s", cred.ID)
 	}
 }
 

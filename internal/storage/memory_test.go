@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -74,8 +75,8 @@ func TestMemoryStore_CloseFlushesWrites(t *testing.T) {
 
 	// Simulate some activity
 	s.mu.Lock()
-	s.users[1] = &User{ID: 1, Username: "test"}
-	s.usersByName["test"] = s.users[1]
+	s.users["1"] = &User{ID: "1", Username: "test"}
+	s.usersByName["test"] = s.users["1"]
 	s.mu.Unlock()
 
 	// Close should complete without hanging
@@ -104,12 +105,12 @@ func TestMemoryStore_ConcurrentAccess(t *testing.T) {
 	// Concurrent writers
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
-		go func(id int64) {
+		go func(id string) {
 			defer wg.Done()
 			s.mu.Lock()
 			s.users[id] = &User{ID: id, Username: "user"}
 			s.mu.Unlock()
-		}(int64(i))
+		}(fmt.Sprintf("user-%d", i))
 	}
 
 	// Concurrent readers
@@ -176,20 +177,6 @@ func TestDefaultMemoryStoreConfig(t *testing.T) {
 	}
 	if cfg.ChannelBufferSize != 10000 {
 		t.Errorf("ChannelBufferSize = %d, want 10000", cfg.ChannelBufferSize)
-	}
-}
-
-func TestNextID(t *testing.T) {
-	s := NewMemoryStore(nil)
-	defer s.Close()
-
-	// Test ID generation
-	id1 := nextID(&s.nextUserID)
-	id2 := nextID(&s.nextUserID)
-	id3 := nextID(&s.nextUserID)
-
-	if id1 != 1 || id2 != 2 || id3 != 3 {
-		t.Errorf("nextID sequence = %d, %d, %d; want 1, 2, 3", id1, id2, id3)
 	}
 }
 

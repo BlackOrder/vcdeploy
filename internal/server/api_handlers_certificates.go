@@ -139,7 +139,7 @@ func (s *MasterServer) handleRevokeAgentCertificate(w http.ResponseWriter, r *ht
 
 	// Get user from context for audit
 	revokedBy := "system"
-	if userID, ok := GetUserIDFromContext(ctx); ok && userID > 0 {
+	if userID, ok := GetUserIDFromContext(ctx); ok && userID != "" {
 		user, err := s.userService.GetByID(ctx, userID)
 		if err == nil {
 			revokedBy = user.Username

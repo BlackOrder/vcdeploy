@@ -227,8 +227,8 @@ func (s *MasterServer) handleAgentBinary(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
+	id := idStr
+	if id == "" {
 		s.jsonError(w, http.StatusBadRequest, "invalid binary ID")
 		return
 	}
@@ -312,7 +312,7 @@ func (s *MasterServer) handleAgentBinary(w http.ResponseWriter, r *http.Request)
 }
 
 // handleAgentBinaryDownload handles GET /api/v1/binaries/{id}/download
-func (s *MasterServer) handleAgentBinaryDownload(w http.ResponseWriter, r *http.Request, id int64) {
+func (s *MasterServer) handleAgentBinaryDownload(w http.ResponseWriter, r *http.Request, id string) {
 	if r.Method != http.MethodGet {
 		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -358,7 +358,7 @@ func (s *MasterServer) handleAgentBinaryDownload(w http.ResponseWriter, r *http.
 }
 
 // handleSetCurrentBinary handles POST /api/v1/binaries/{id}/current
-func (s *MasterServer) handleSetCurrentBinary(w http.ResponseWriter, r *http.Request, id int64) {
+func (s *MasterServer) handleSetCurrentBinary(w http.ResponseWriter, r *http.Request, id string) {
 	if r.Method != http.MethodPost {
 		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -656,7 +656,7 @@ func (s *MasterServer) handleTriggerAgentUpdate(w http.ResponseWriter, r *http.R
 	if fwdHost := r.Header.Get("X-Forwarded-Host"); fwdHost != "" {
 		host = fwdHost
 	}
-	downloadURL := fmt.Sprintf("%s://%s/api/v1/binaries/%d/download", scheme, host, binary.ID)
+	downloadURL := fmt.Sprintf("%s://%s/api/v1/binaries/%s/download", scheme, host, binary.ID)
 
 	// Try to send update command via gRPC if agent is connected
 	updateDelivery := "heartbeat"

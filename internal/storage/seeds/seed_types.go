@@ -12,6 +12,10 @@ type SeedProjectType struct {
 // These are the framework archetypes that vcdeploy supports out of the box.
 var SeedProjectTypes = []SeedProjectType{
 	{
+		Name:        "generic",
+		Description: "Generic project type",
+	},
+	{
 		Name:        "laravel",
 		Description: "PHP Laravel application with Composer, Artisan, and shared storage directory",
 		BuildCmd:    "composer install --no-dev --optimize-autoloader",

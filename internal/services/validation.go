@@ -111,8 +111,8 @@ func ValidateOneOf(field, value string, allowed []string) error {
 }
 
 // ValidateID checks if an ID is positive.
-func ValidateID(field string, id int64) error {
-	if id <= 0 {
+func ValidateID(field string, id string) error {
+	if id == "" {
 		return InvalidInput("validation", field+" must be a positive integer")
 	}
 	return nil

@@ -246,7 +246,7 @@ func (s *SettingsService) Delete(ctx context.Context, category, key string) erro
 
 // SettingMetadata represents setting info returned by list operations.
 type SettingMetadata struct {
-	ID          int64
+	ID          string
 	Category    string
 	Key         string
 	Value       string

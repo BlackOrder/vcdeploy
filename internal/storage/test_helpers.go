@@ -61,7 +61,7 @@ func (s *TestMemoryStore) MustCreateProject(name string) *Project {
 }
 
 // MustCreateSession creates a session and fails the test if it errors.
-func (s *TestMemoryStore) MustCreateSession(userID int64, token string, expiresAt time.Time) *Session {
+func (s *TestMemoryStore) MustCreateSession(userID string, token string, expiresAt time.Time) *Session {
 	s.t.Helper()
 
 	session := &Session{
@@ -78,7 +78,7 @@ func (s *TestMemoryStore) MustCreateSession(userID int64, token string, expiresA
 }
 
 // MustCreateAPIKey creates an API key and fails the test if it errors.
-func (s *TestMemoryStore) MustCreateAPIKey(userID int64, name, keyHash string) *APIKey {
+func (s *TestMemoryStore) MustCreateAPIKey(userID string, name, keyHash string) *APIKey {
 	s.t.Helper()
 
 	key := &APIKey{

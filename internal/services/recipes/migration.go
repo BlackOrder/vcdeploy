@@ -39,7 +39,7 @@ type MigrationOptions struct {
 	// ActivatePlaybook automatically activates the playbook for the project
 	ActivatePlaybook bool
 	// UserID is the user performing the migration (for audit)
-	UserID *int64
+	UserID *string
 }
 
 // MigrationResult contains the results of a migration.
@@ -55,7 +55,7 @@ type MigrationResult struct {
 }
 
 // MigrateProjectConfig migrates a project YAML configuration to a playbook.
-func (s *MigrationService) MigrateProjectConfig(ctx context.Context, projectID int64, cfg *config.ProjectConfig, opts MigrationOptions) (*MigrationResult, error) {
+func (s *MigrationService) MigrateProjectConfig(ctx context.Context, projectID string, cfg *config.ProjectConfig, opts MigrationOptions) (*MigrationResult, error) {
 	result := &MigrationResult{
 		Warnings: []string{},
 	}
@@ -186,7 +186,7 @@ func (s *MigrationService) MigrateProjectConfig(ctx context.Context, projectID i
 	result.Playbook = playbook
 
 	// Activate playbook if requested
-	if opts.ActivatePlaybook && projectID > 0 {
+	if opts.ActivatePlaybook && projectID != "" {
 		activation, err := s.activationSvc.Activate(ctx, projectID, playbook.ID, nil, opts.UserID)
 		if err != nil {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to activate playbook: %v", err))
@@ -249,7 +249,7 @@ func (s *MigrationService) createComponentFromReload(ctx context.Context, projec
 }
 
 // MigrateFromYAMLFile reads a project YAML file and migrates it.
-func (s *MigrationService) MigrateFromYAMLFile(ctx context.Context, projectID int64, yamlPath string, opts MigrationOptions) (*MigrationResult, error) {
+func (s *MigrationService) MigrateFromYAMLFile(ctx context.Context, projectID string, yamlPath string, opts MigrationOptions) (*MigrationResult, error) {
 	cfg, err := config.LoadProjectConfig(yamlPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load YAML: %w", err)

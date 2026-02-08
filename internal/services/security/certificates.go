@@ -30,7 +30,7 @@ func NewCertificateService(store storage.Store, logger *zap.Logger) *Certificate
 
 // AgentCertificateInfo represents agent certificate info for API responses.
 type AgentCertificateInfo struct {
-	ID               int64      `json:"id"`
+	ID               string     `json:"id"`
 	AgentID          string     `json:"agent_id"`
 	SerialNumber     string     `json:"serial_number"`
 	Status           string     `json:"status"`
@@ -59,7 +59,7 @@ type CAInfo struct {
 
 // ServerCertInfo represents server certificate info for API responses.
 type ServerCertInfo struct {
-	ID        int64     `json:"id"`
+	ID        string    `json:"id"`
 	Hostname  string    `json:"hostname"`
 	SANs      []string  `json:"sans"`
 	NotBefore time.Time `json:"not_before"`

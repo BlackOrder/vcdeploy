@@ -217,7 +217,7 @@ func TestHandleHostKey_Get(t *testing.T) {
 	}
 	_ = server.hostKeyService.Create(ctx, key)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/host-keys/1", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/host-keys/"+key.ID, http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -274,7 +274,7 @@ func TestHandleHostKey_Delete(t *testing.T) {
 	}
 	_ = server.hostKeyService.Create(ctx, key)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/host-keys/1", http.NoBody)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/host-keys/"+key.ID, http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -297,8 +297,8 @@ func TestHandleHostKey_InvalidID(t *testing.T) {
 
 	server.handleHostKey(rec, req)
 
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
 	}
 }
 
@@ -323,7 +323,7 @@ func TestHandleHostKey_UpdateTrust(t *testing.T) {
 	_ = server.hostKeyService.Create(ctx, key)
 
 	body := bytes.NewBufferString(`{"trusted": true}`)
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/host-keys/1", body)
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/host-keys/"+key.ID, body)
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
@@ -533,7 +533,7 @@ func TestHandleJumpServer_Get(t *testing.T) {
 	}
 	_ = server.store.CreateJumpServer(ctx, js)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/jump-servers/1", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/jump-servers/"+js.ID, http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -561,7 +561,7 @@ func TestHandleJumpServer_Delete(t *testing.T) {
 	}
 	_ = server.store.CreateJumpServer(ctx, js)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/jump-servers/1", http.NoBody)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/jump-servers/"+js.ID, http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -601,8 +601,8 @@ func TestHandleJumpServer_InvalidID(t *testing.T) {
 
 	server.handleJumpServer(rec, req)
 
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
 	}
 }
 
@@ -630,7 +630,7 @@ func TestHandleJumpServer_Update(t *testing.T) {
 		"username": "newuser"
 	}`)
 
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/jump-servers/1", body)
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/jump-servers/"+js.ID, body)
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()

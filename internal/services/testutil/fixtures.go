@@ -8,6 +8,8 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 )
 
+func strPtr(s string) *string { return &s }
+
 // UserFixture creates a test user with sensible defaults.
 func UserFixture(opts ...func(*storage.User)) *storage.User {
 	now := time.Now()
@@ -62,7 +64,7 @@ func ProjectFixture(opts ...func(*storage.Project)) *storage.Project {
 		Repository: "https://github.com/example/repo.git",
 		Branch:     "main",
 		DeployPath: "/var/www/project",
-		Type:       "docker-compose",
+		TypeID:     strPtr("docker-compose"),
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}
@@ -103,7 +105,7 @@ func WithDeployPath(path string) func(*storage.Project) {
 // WithProjectType sets the project type.
 func WithProjectType(projectType string) func(*storage.Project) {
 	return func(p *storage.Project) {
-		p.Type = projectType
+		p.TypeID = &projectType
 	}
 }
 
@@ -217,7 +219,7 @@ func WithLabels(labels map[string]string) func(*storage.Agent) {
 }
 
 // SessionFixture creates a test session with sensible defaults.
-func SessionFixture(userID int64, opts ...func(*storage.Session)) *storage.Session {
+func SessionFixture(userID string, opts ...func(*storage.Session)) *storage.Session {
 	now := time.Now()
 	session := &storage.Session{
 		ID:        fmt.Sprintf("session_%d", now.UnixNano()),
@@ -264,7 +266,7 @@ func WithExpiresAt(t time.Time) func(*storage.Session) {
 }
 
 // APIKeyFixture creates a test API key with sensible defaults.
-func APIKeyFixture(userID int64, opts ...func(*storage.APIKey)) *storage.APIKey {
+func APIKeyFixture(userID string, opts ...func(*storage.APIKey)) *storage.APIKey {
 	now := time.Now()
 	apiKey := &storage.APIKey{
 		UserID:    userID,

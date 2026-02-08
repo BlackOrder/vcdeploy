@@ -22,6 +22,8 @@ import (
 	"go.uber.org/zap"
 )
 
+func strPtr(s string) *string { return &s }
+
 // TestFixture provides test infrastructure for integration tests.
 type TestFixture struct {
 	T          *testing.T
@@ -109,7 +111,7 @@ func (f *TestFixture) CreateTestProject(name, repo, branch string) *storage.Proj
 		Repository: repo,
 		Branch:     branch,
 		DeployPath: "/var/www/" + name,
-		Type:       "web",
+		TypeID:     strPtr("web"),
 		CreatedAt:  time.Now(),
 	}
 
@@ -741,7 +743,7 @@ func TestE2EDeploymentWorkflow(t *testing.T) {
 		Repository: "https://github.com/test/e2e-repo.git",
 		Branch:     "main",
 		DeployPath: "/var/www/e2e",
-		Type:       "nodejs-e2e",
+		TypeID:     strPtr("nodejs-e2e"),
 		CreatedAt:  time.Now(),
 	}
 	err = f.DB.CreateProject(ctx, project)
@@ -932,8 +934,8 @@ func TestE2EProjectTypeManagement(t *testing.T) {
 		t.Fatalf("Failed to list project types: %v", err)
 	}
 
-	if len(storedTypes) != 3 {
-		t.Errorf("Expected 3 project types, got %d", len(storedTypes))
+	if len(storedTypes) != 4 {
+		t.Errorf("Expected 4 project types (3 custom + 1 seeded generic), got %d", len(storedTypes))
 	}
 
 	// Step 3: Get specific type
@@ -972,8 +974,8 @@ func TestE2EProjectTypeManagement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to list project types after deletion: %v", err)
 	}
-	if len(storedTypes) != 2 {
-		t.Errorf("Expected 2 project types after deletion, got %d", len(storedTypes))
+	if len(storedTypes) != 3 {
+		t.Errorf("Expected 3 project types after deletion (2 remaining + 1 seeded generic), got %d", len(storedTypes))
 	}
 
 	t.Log("E2E project type management workflow completed successfully")
@@ -1011,7 +1013,7 @@ func TestE2EAgentDeploymentWithLogs(t *testing.T) {
 		Repository: "https://github.com/test/workflow-app.git",
 		Branch:     "main",
 		DeployPath: "/var/www/workflow-app",
-		Type:       "web",
+		TypeID:     strPtr("web"),
 		CreatedAt:  time.Now(),
 	}
 	err = f.DB.CreateProject(ctx, project)
@@ -1197,7 +1199,7 @@ func TestE2EDeploymentFailureWorkflow(t *testing.T) {
 		Repository: "https://github.com/test/failure-app.git",
 		Branch:     "main",
 		DeployPath: "/var/www/failure-app",
-		Type:       "web",
+		TypeID:     strPtr("web"),
 		CreatedAt:  time.Now(),
 	}
 	err := f.DB.CreateProject(ctx, project)
@@ -1407,7 +1409,7 @@ func TestE2EMultiAgentDeployment(t *testing.T) {
 		Repository: "https://github.com/test/multi-app.git",
 		Branch:     "main",
 		DeployPath: "/var/www/multi-app",
-		Type:       "web",
+		TypeID:     strPtr("web"),
 		CreatedAt:  time.Now(),
 	}
 	err := f.DB.CreateProject(ctx, project)
@@ -1532,7 +1534,7 @@ func TestAuthenticationFlows(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateUser() error = %v", err)
 		}
-		if user.ID == 0 {
+		if user.ID == "" {
 			t.Error("CreateUser() did not set ID")
 		}
 
@@ -1576,7 +1578,7 @@ func TestAuthenticationFlows(t *testing.T) {
 			t.Fatalf("GetSessionByToken() error = %v", err)
 		}
 		if fetched.UserID != user.ID {
-			t.Errorf("GetSessionByToken() userID = %d, want %d", fetched.UserID, user.ID)
+			t.Errorf("GetSessionByToken() userID = %s, want %s", fetched.UserID, user.ID)
 		}
 
 		// Delete session (logout)

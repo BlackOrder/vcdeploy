@@ -36,7 +36,7 @@ func (s *PlaybookService) Get(ctx context.Context, namespace, slug, version stri
 }
 
 // GetByID retrieves a playbook by its ID.
-func (s *PlaybookService) GetByID(ctx context.Context, id int64) (*storage.Playbook, error) {
+func (s *PlaybookService) GetByID(ctx context.Context, id string) (*storage.Playbook, error) {
 	return s.store.GetPlaybookByID(ctx, id)
 }
 
@@ -121,7 +121,7 @@ func (s *PlaybookService) Update(ctx context.Context, playbook *storage.Playbook
 }
 
 // CustomizeFromSeed creates a user copy of a seed playbook.
-func (s *PlaybookService) CustomizeFromSeed(ctx context.Context, seedID int64, newSlug, newVersion string) (*storage.Playbook, error) {
+func (s *PlaybookService) CustomizeFromSeed(ctx context.Context, seedID string, newSlug, newVersion string) (*storage.Playbook, error) {
 	seed, err := s.store.GetPlaybookByID(ctx, seedID)
 	if err != nil {
 		return nil, fmt.Errorf("seed playbook not found: %w", err)
@@ -162,7 +162,7 @@ func (s *PlaybookService) CustomizeFromSeed(ctx context.Context, seedID int64, n
 }
 
 // CheckNewerVersionAvailable compares playbook against latest seed version.
-func (s *PlaybookService) CheckNewerVersionAvailable(ctx context.Context, playbookID int64) (bool, string, error) {
+func (s *PlaybookService) CheckNewerVersionAvailable(ctx context.Context, playbookID string) (bool, string, error) {
 	playbook, err := s.store.GetPlaybookByID(ctx, playbookID)
 	if err != nil {
 		return false, "", err
@@ -192,7 +192,7 @@ func (s *PlaybookService) CheckNewerVersionAvailable(ctx context.Context, playbo
 }
 
 // Validate checks if playbook is valid for activation.
-func (s *PlaybookService) Validate(ctx context.Context, playbookID int64) error {
+func (s *PlaybookService) Validate(ctx context.Context, playbookID string) error {
 	playbook, err := s.store.GetPlaybookByID(ctx, playbookID)
 	if err != nil {
 		return err
@@ -202,7 +202,7 @@ func (s *PlaybookService) Validate(ctx context.Context, playbookID int64) error 
 }
 
 // GetAllRequiredVariables collects all required variables from all steps.
-func (s *PlaybookService) GetAllRequiredVariables(ctx context.Context, playbookID int64) ([]storage.VariableDefinition, error) {
+func (s *PlaybookService) GetAllRequiredVariables(ctx context.Context, playbookID string) ([]storage.VariableDefinition, error) {
 	playbook, err := s.store.GetPlaybookByID(ctx, playbookID)
 	if err != nil {
 		return nil, err
@@ -253,7 +253,7 @@ func (s *PlaybookService) validateSteps(ctx context.Context, steps []storage.Pla
 }
 
 // Delete removes a user playbook.
-func (s *PlaybookService) Delete(ctx context.Context, id int64) error {
+func (s *PlaybookService) Delete(ctx context.Context, id string) error {
 	playbook, err := s.store.GetPlaybookByID(ctx, id)
 	if err != nil {
 		return err

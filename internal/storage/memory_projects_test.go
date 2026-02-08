@@ -18,7 +18,7 @@ func TestMemoryStore_CreateProject(t *testing.T) {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 
-	if project.ID == 0 {
+	if project.ID == "" {
 		t.Error("CreateProject() did not assign ID")
 	}
 	if project.CreatedAt.IsZero() {
@@ -180,7 +180,7 @@ func TestMemoryStore_DeleteProject_CascadesDeployments(t *testing.T) {
 
 	// Add a deployment log
 	s.CreateDeploymentLog(ctx, &DeploymentLog{
-		ID:           1,
+		ID:           "log-1",
 		DeploymentID: "dep-123",
 		Message:      "Build started",
 	})
@@ -223,7 +223,7 @@ func TestMemoryStore_CreateProjectType(t *testing.T) {
 		t.Fatalf("CreateProjectType() error = %v", err)
 	}
 
-	if pt.ID == 0 {
+	if pt.ID == "" {
 		t.Error("CreateProjectType() did not assign ID")
 	}
 }

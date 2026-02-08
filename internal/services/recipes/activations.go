@@ -32,7 +32,7 @@ type VariableBinding struct {
 }
 
 // Activate activates a playbook for a project.
-func (s *ActivationService) Activate(ctx context.Context, projectID, playbookID int64, bindings map[string]VariableBinding, userID *int64) (*storage.PlaybookActivation, error) {
+func (s *ActivationService) Activate(ctx context.Context, projectID, playbookID string, bindings map[string]VariableBinding, userID *string) (*storage.PlaybookActivation, error) {
 	// Validate playbook exists
 	playbook, err := s.store.GetPlaybookByID(ctx, playbookID)
 	if err != nil {
@@ -87,25 +87,25 @@ func (s *ActivationService) Activate(ctx context.Context, projectID, playbookID 
 }
 
 // Deactivate removes the playbook activation for a project.
-func (s *ActivationService) Deactivate(ctx context.Context, projectID int64) error {
+func (s *ActivationService) Deactivate(ctx context.Context, projectID string) error {
 	existing, err := s.store.GetPlaybookActivation(ctx, projectID)
 	if err != nil {
 		return fmt.Errorf("failed to get activation: %w", err)
 	}
 	if existing == nil {
-		return fmt.Errorf("no activation found for project %d", projectID)
+		return fmt.Errorf("no activation found for project %s", projectID)
 	}
 	return s.store.DeletePlaybookActivation(ctx, existing.ID)
 }
 
 // GetActive returns the current activation for a project.
-func (s *ActivationService) GetActive(ctx context.Context, projectID int64) (*storage.PlaybookActivation, error) {
+func (s *ActivationService) GetActive(ctx context.Context, projectID string) (*storage.PlaybookActivation, error) {
 	activation, err := s.store.GetPlaybookActivation(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
 	if activation == nil {
-		return nil, fmt.Errorf("no activation found for project %d", projectID)
+		return nil, fmt.Errorf("no activation found for project %s", projectID)
 	}
 
 	// Load bindings
@@ -122,7 +122,7 @@ func (s *ActivationService) GetActive(ctx context.Context, projectID int64) (*st
 }
 
 // GetActiveWithPlaybook returns the activation along with the associated playbook.
-func (s *ActivationService) GetActiveWithPlaybook(ctx context.Context, projectID int64) (*storage.PlaybookActivation, *storage.Playbook, error) {
+func (s *ActivationService) GetActiveWithPlaybook(ctx context.Context, projectID string) (*storage.PlaybookActivation, *storage.Playbook, error) {
 	activation, err := s.GetActive(ctx, projectID)
 	if err != nil {
 		return nil, nil, err
@@ -137,12 +137,12 @@ func (s *ActivationService) GetActiveWithPlaybook(ctx context.Context, projectID
 }
 
 // ListByPlaybook returns all activations using a specific playbook.
-func (s *ActivationService) ListByPlaybook(ctx context.Context, playbookID int64) ([]*storage.PlaybookActivation, error) {
+func (s *ActivationService) ListByPlaybook(ctx context.Context, playbookID string) ([]*storage.PlaybookActivation, error) {
 	return s.store.ListActivationsByPlaybook(ctx, playbookID)
 }
 
 // UpdateBindings updates the variable bindings for an activation.
-func (s *ActivationService) UpdateBindings(ctx context.Context, activationID int64, bindings map[string]VariableBinding) error {
+func (s *ActivationService) UpdateBindings(ctx context.Context, activationID string, bindings map[string]VariableBinding) error {
 	activation, err := s.store.GetPlaybookActivationByID(ctx, activationID)
 	if err != nil {
 		return fmt.Errorf("activation not found: %w", err)
@@ -165,7 +165,7 @@ func (s *ActivationService) UpdateBindings(ctx context.Context, activationID int
 	}
 	for _, b := range existingBindings {
 		if err := s.store.DeleteVariableBinding(ctx, b.ID); err != nil {
-			return fmt.Errorf("failed to delete binding %d: %w", b.ID, err)
+			return fmt.Errorf("failed to delete binding %s: %w", b.ID, err)
 		}
 	}
 
@@ -188,7 +188,7 @@ func (s *ActivationService) UpdateBindings(ctx context.Context, activationID int
 
 // ResolveVariables resolves all variable bindings to their actual values.
 // Returns a map of variable name to resolved value.
-func (s *ActivationService) ResolveVariables(ctx context.Context, activationID int64, envGetter func(string) string, secretGetter func(context.Context, string) (string, error)) (map[string]string, error) {
+func (s *ActivationService) ResolveVariables(ctx context.Context, activationID string, envGetter func(string) string, secretGetter func(context.Context, string) (string, error)) (map[string]string, error) {
 	bindings, err := s.store.GetVariableBindings(ctx, activationID)
 	if err != nil {
 		return nil, err

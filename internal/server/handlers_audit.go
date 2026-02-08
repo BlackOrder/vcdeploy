@@ -3,7 +3,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -97,7 +96,7 @@ func (s *MasterServer) logAudit(r *http.Request, action, resource, details, resu
 		)
 	} else {
 		// Publish SSE event for real-time audit monitoring
-		s.publishAuditEvent(fmt.Sprintf("%d", entry.ID), user, action, resource, ip)
+		s.publishAuditEvent(entry.ID, user, action, resource, ip)
 	}
 }
 
@@ -142,6 +141,6 @@ func (s *MasterServer) logAuditWithSnapshot(r *http.Request, action, resource, r
 		)
 	} else {
 		// Publish SSE event for real-time audit monitoring
-		s.publishAuditEvent(fmt.Sprintf("%d", entry.ID), user, action, resource, ip)
+		s.publishAuditEvent(entry.ID, user, action, resource, ip)
 	}
 }

@@ -24,7 +24,7 @@ type ProvisionAgentRequest struct {
 	AgentID    string `json:"agent_id"`
 	TargetHost string `json:"target_host"`
 	SSHUser    string `json:"ssh_user"`
-	SSHKeyID   int64  `json:"ssh_key_id"`
+	SSHKeyID   string `json:"ssh_key_id"`
 	SSHPort    int    `json:"ssh_port,omitempty"`
 }
 
@@ -45,7 +45,7 @@ func (r *ProvisionAgentRequest) Validate() error {
 	if r.SSHUser == "" {
 		return services.NewInputError("ssh_user is required", "ssh_user")
 	}
-	if r.SSHKeyID <= 0 {
+	if r.SSHKeyID == "" {
 		return services.NewInputError("ssh_key_id is required", "ssh_key_id")
 	}
 	return nil
@@ -122,7 +122,7 @@ func (s *MasterServer) handleStartProvisioning(w http.ResponseWriter, r *http.Re
 
 	// Get initiated by user
 	initiatedBy := "system"
-	if userID, ok := GetUserIDFromContext(ctx); ok && userID > 0 {
+	if userID, ok := GetUserIDFromContext(ctx); ok && userID != "" {
 		user, err := s.userService.GetByID(ctx, userID)
 		if err == nil {
 			initiatedBy = user.Username
@@ -257,20 +257,20 @@ func (s *MasterServer) handleGetProvisionLogs(w http.ResponseWriter, r *http.Req
 func (s *MasterServer) handleProvisionLogsStream(w http.ResponseWriter, r *http.Request, jobID string) {
 	ctx := r.Context()
 	s.streamLogs(w, r, streamLogsConfig{
-		listLogs: func() ([]interface{}, int64, error) {
+		listLogs: func() ([]interface{}, string, error) {
 			logs, err := s.store.ListProvisionLogs(ctx, jobID)
 			if err != nil {
-				return nil, 0, err
+				return nil, "", err
 			}
 			result := make([]interface{}, len(logs))
-			var lastID int64
+			var lastID string
 			for i, l := range logs {
 				result[i] = l
 				lastID = l.ID
 			}
 			return result, lastID, nil
 		},
-		listLogsAfter: func(afterID int64) ([]interface{}, int64, error) {
+		listLogsAfter: func(afterID string) ([]interface{}, string, error) {
 			logs, err := s.store.ListProvisionLogsAfter(ctx, jobID, afterID)
 			if err != nil {
 				return nil, afterID, err

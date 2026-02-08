@@ -434,7 +434,7 @@ func runUserTOTPListLocal() error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "ID\tUSERNAME\tEMAIL\tROLE")
 	for _, u := range totpUsers {
-		fmt.Fprintf(w, "%d\t%s\t%s\t%s\n", u.ID, u.Username, u.Email, u.Role)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", u.ID, u.Username, u.Email, u.Role)
 	}
 	_ = w.Flush() // #nosec G104 - best effort output flush
 
@@ -460,7 +460,7 @@ func runUserTOTPListRemote(cmd *cobra.Command) error {
 
 	var result struct {
 		Users []struct {
-			ID          int64  `json:"id"`
+			ID          string `json:"id"`
 			Username    string `json:"username"`
 			Email       string `json:"email"`
 			Role        string `json:"role"`
@@ -480,7 +480,7 @@ func runUserTOTPListRemote(cmd *cobra.Command) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "ID\tUSERNAME\tEMAIL\tROLE")
 	for _, u := range result.Users {
-		fmt.Fprintf(w, "%d\t%s\t%s\t%s\n", u.ID, u.Username, u.Email, u.Role)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", u.ID, u.Username, u.Email, u.Role)
 	}
 	_ = w.Flush() // #nosec G104 - best effort output flush
 
@@ -519,7 +519,7 @@ func runUserTOTPShowLocal(username string) error {
 		return fmt.Errorf("user not found: %w", err)
 	}
 
-	fmt.Printf("User: %s (ID: %d)\n", user.Username, user.ID)
+	fmt.Printf("User: %s (ID: %s)\n", user.Username, user.ID)
 	fmt.Printf("Email: %s\n", user.Email)
 	fmt.Printf("Role: %s\n", user.Role)
 	fmt.Printf("TOTP Enabled: %v\n", user.TOTPEnabled)

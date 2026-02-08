@@ -277,7 +277,7 @@ func TestMemoryStore_CreateAgentBinary(t *testing.T) {
 		t.Fatalf("CreateAgentBinary() error = %v", err)
 	}
 
-	if binary.ID == 0 {
+	if binary.ID == "" {
 		t.Error("CreateAgentBinary() did not assign ID")
 	}
 }
@@ -427,7 +427,7 @@ func TestMemoryStore_CreateAgentUpdateHistory(t *testing.T) {
 		t.Fatalf("CreateAgentUpdateHistory() error = %v", err)
 	}
 
-	if history.ID == 0 {
+	if history.ID == "" {
 		t.Error("CreateAgentUpdateHistory() did not assign ID")
 	}
 	if history.Status != "pending" {

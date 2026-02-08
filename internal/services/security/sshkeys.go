@@ -49,7 +49,7 @@ func (s *SSHKeyService) requireKMS() error {
 
 // SSHKeyInfo represents SSH key info for API responses (without private key).
 type SSHKeyInfo struct {
-	ID          int64     `json:"id"`
+	ID          string    `json:"id"`
 	Name        string    `json:"name"`
 	PublicKey   string    `json:"public_key"`
 	Fingerprint string    `json:"fingerprint"`
@@ -157,7 +157,7 @@ func (s *SSHKeyService) ListSSHKeys(ctx context.Context) ([]SSHKeyInfo, error) {
 }
 
 // GetSSHKey returns SSH key info by ID (without private key).
-func (s *SSHKeyService) GetSSHKey(ctx context.Context, id int64) (*SSHKeyInfo, error) {
+func (s *SSHKeyService) GetSSHKey(ctx context.Context, id string) (*SSHKeyInfo, error) {
 	key, err := s.store.GetSSHKey(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("getting SSH key: %w", err)
@@ -193,7 +193,7 @@ func (s *SSHKeyService) GetSSHKeyByName(ctx context.Context, name string) (*SSHK
 }
 
 // GetPublicKey returns just the public key for an SSH key (for authorized_keys).
-func (s *SSHKeyService) GetPublicKey(ctx context.Context, id int64) (string, error) {
+func (s *SSHKeyService) GetPublicKey(ctx context.Context, id string) (string, error) {
 	key, err := s.store.GetSSHKey(ctx, id)
 	if err != nil {
 		return "", fmt.Errorf("getting SSH key: %w", err)
@@ -351,7 +351,7 @@ func (s *SSHKeyService) ImportSSHKey(ctx context.Context, req ImportSSHKeyReques
 }
 
 // DeleteSSHKey removes an SSH key.
-func (s *SSHKeyService) DeleteSSHKey(ctx context.Context, id int64) error {
+func (s *SSHKeyService) DeleteSSHKey(ctx context.Context, id string) error {
 	// Check exists
 	key, err := s.store.GetSSHKey(ctx, id)
 	if err != nil {
@@ -363,7 +363,7 @@ func (s *SSHKeyService) DeleteSSHKey(ctx context.Context, id int64) error {
 	}
 
 	s.logger.Info("SSH key deleted",
-		zap.Int64("id", id),
+		zap.String("id", id),
 		zap.String("name", key.Name),
 	)
 
@@ -371,7 +371,7 @@ func (s *SSHKeyService) DeleteSSHKey(ctx context.Context, id int64) error {
 }
 
 // GetSigner returns an ssh.Signer for a key (for use in SSH connections).
-func (s *SSHKeyService) GetSigner(ctx context.Context, id int64) (ssh.Signer, error) {
+func (s *SSHKeyService) GetSigner(ctx context.Context, id string) (ssh.Signer, error) {
 	if err := s.requireKMS(); err != nil {
 		return nil, err
 	}

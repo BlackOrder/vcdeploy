@@ -42,7 +42,7 @@ Example:
 }
 
 var (
-	importProjectID        int64
+	importProjectID        string
 	importPlaybookName     string
 	importPlaybookVersion  string
 	importCreateComponents bool
@@ -55,7 +55,7 @@ var (
 func init() {
 	recipeCmd.AddCommand(ImportYAMLCmd)
 
-	ImportYAMLCmd.Flags().Int64Var(&importProjectID, "project-id", 0, "Project ID to associate the playbook with")
+	ImportYAMLCmd.Flags().StringVar(&importProjectID, "project-id", "", "Project ID to associate the playbook with")
 	ImportYAMLCmd.Flags().StringVar(&importPlaybookName, "name", "", "Name for the generated playbook (default: <project>-playbook)")
 	ImportYAMLCmd.Flags().StringVar(&importPlaybookVersion, "version", "v1.0.0", "Version for the generated playbook")
 	ImportYAMLCmd.Flags().BoolVar(&importCreateComponents, "create-components", true, "Create individual components from hooks")
@@ -406,7 +406,7 @@ func runImportYAML(cmd *cobra.Command, args []string) error {
 		CreateComponents: importCreateComponents,
 		PlaybookName:     importPlaybookName,
 		PlaybookVersion:  importPlaybookVersion,
-		ActivatePlaybook: importActivate && importProjectID > 0,
+		ActivatePlaybook: importActivate && importProjectID != "",
 	}
 
 	ctx := context.Background()
@@ -477,7 +477,7 @@ func outputMigrationResult(result *recipes.MigrationResult) error {
 
 	if result.Playbook != nil {
 		fmt.Printf("Playbook created: %s (v%s)\n", result.Playbook.Name, result.Playbook.Version)
-		fmt.Printf("  ID: %d\n", result.Playbook.ID)
+		fmt.Printf("  ID: %s\n", result.Playbook.ID)
 		fmt.Printf("  Steps: %d\n", len(result.Playbook.Steps))
 	}
 
@@ -489,7 +489,7 @@ func outputMigrationResult(result *recipes.MigrationResult) error {
 	}
 
 	if result.Activation != nil {
-		fmt.Printf("\nPlaybook activated for project ID: %d\n", result.Activation.ProjectID)
+		fmt.Printf("\nPlaybook activated for project ID: %s\n", result.Activation.ProjectID)
 	}
 
 	if len(result.Warnings) > 0 {

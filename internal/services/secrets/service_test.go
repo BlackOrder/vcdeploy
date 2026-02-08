@@ -152,7 +152,7 @@ func TestService_GetEntry(t *testing.T) {
 	if entry.Value != "secret-value" {
 		t.Errorf("GetEntry() value = %v, want %v", entry.Value, "secret-value")
 	}
-	if entry.ID == 0 {
+	if entry.ID == "" {
 		t.Error("GetEntry() ID should be set")
 	}
 	if entry.CreatedAt.IsZero() {
@@ -767,7 +767,7 @@ func TestService_List_MetadataFields(t *testing.T) {
 	}
 
 	m := metadata[0]
-	if m.ID == 0 {
+	if m.ID == "" {
 		t.Error("List() metadata ID should be set")
 	}
 	if m.Project != "myproject" {

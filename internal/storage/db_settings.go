@@ -17,10 +17,10 @@ func (db *DB) GetSetting(ctx context.Context, category, key string) (*Setting, e
 	var encrypted int
 	var description sql.NullString
 	err := db.conn.QueryRowContext(ctx, `
-		SELECT id, uid, category, key, value, value_type, encrypted, description, created_at, updated_at
+		SELECT id, category, key, value, value_type, encrypted, description, created_at, updated_at
 		FROM settings WHERE category = ? AND key = ?
 	`, category, key).Scan(
-		&s.ID, &s.UID, &s.Category, &s.Key, &s.Value, &s.ValueType, &encrypted, &description, &s.CreatedAt, &s.UpdatedAt,
+		&s.ID, &s.Category, &s.Key, &s.Value, &s.ValueType, &encrypted, &description, &s.CreatedAt, &s.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
@@ -35,20 +35,20 @@ func (db *DB) GetSetting(ctx context.Context, category, key string) (*Setting, e
 
 // SetSetting creates or updates a setting.
 func (db *DB) SetSetting(ctx context.Context, category, key, value, valueType string, encrypted bool) error {
-	uid := xid.New().String()
+	settingID := xid.New().String()
 	encVal := 0
 	if encrypted {
 		encVal = 1
 	}
 	_, err := db.conn.ExecContext(ctx, `
-		INSERT INTO settings (uid, category, key, value, value_type, encrypted)
+		INSERT INTO settings (id, category, key, value, value_type, encrypted)
 		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(category, key) DO UPDATE SET
 			value = excluded.value,
 			value_type = excluded.value_type,
 			encrypted = excluded.encrypted,
 			updated_at = CURRENT_TIMESTAMP
-	`, uid, category, key, value, valueType, encVal)
+	`, settingID, category, key, value, valueType, encVal)
 	if err != nil {
 		return fmt.Errorf("setting setting: %w", err)
 	}
@@ -58,15 +58,15 @@ func (db *DB) SetSetting(ctx context.Context, category, key, value, valueType st
 // InitSetting seeds a setting only if it does not already exist (INSERT OR IGNORE).
 // Used for runtime settings where user edits should survive server restarts.
 func (db *DB) InitSetting(ctx context.Context, category, key, value, valueType string, encrypted bool) error {
-	uid := xid.New().String()
+	settingID := xid.New().String()
 	encVal := 0
 	if encrypted {
 		encVal = 1
 	}
 	_, err := db.conn.ExecContext(ctx, `
-		INSERT OR IGNORE INTO settings (uid, category, key, value, value_type, encrypted)
+		INSERT OR IGNORE INTO settings (id, category, key, value, value_type, encrypted)
 		VALUES (?, ?, ?, ?, ?, ?)
-	`, uid, category, key, value, valueType, encVal)
+	`, settingID, category, key, value, valueType, encVal)
 	if err != nil {
 		return fmt.Errorf("init setting: %w", err)
 	}
@@ -76,7 +76,7 @@ func (db *DB) InitSetting(ctx context.Context, category, key, value, valueType s
 // ListSettingsByCategory retrieves all settings in a category.
 func (db *DB) ListSettingsByCategory(ctx context.Context, category string) ([]*Setting, error) {
 	rows, err := db.conn.QueryContext(ctx, `
-		SELECT id, uid, category, key, value, value_type, encrypted, description, created_at, updated_at
+		SELECT id, category, key, value, value_type, encrypted, description, created_at, updated_at
 		FROM settings WHERE category = ? ORDER BY key
 	`, category)
 	if err != nil {
@@ -89,7 +89,7 @@ func (db *DB) ListSettingsByCategory(ctx context.Context, category string) ([]*S
 		var s Setting
 		var encrypted int
 		var description sql.NullString
-		if err := rows.Scan(&s.ID, &s.UID, &s.Category, &s.Key, &s.Value, &s.ValueType, &encrypted, &description, &s.CreatedAt, &s.UpdatedAt); err != nil {
+		if err := rows.Scan(&s.ID, &s.Category, &s.Key, &s.Value, &s.ValueType, &encrypted, &description, &s.CreatedAt, &s.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scanning setting: %w", err)
 		}
 		s.Encrypted = encrypted == 1
@@ -102,7 +102,7 @@ func (db *DB) ListSettingsByCategory(ctx context.Context, category string) ([]*S
 // ListAllSettings retrieves all settings.
 func (db *DB) ListAllSettings(ctx context.Context) ([]*Setting, error) {
 	rows, err := db.conn.QueryContext(ctx, `
-		SELECT id, uid, category, key, value, value_type, encrypted, description, created_at, updated_at
+		SELECT id, category, key, value, value_type, encrypted, description, created_at, updated_at
 		FROM settings ORDER BY category, key
 	`)
 	if err != nil {
@@ -115,7 +115,7 @@ func (db *DB) ListAllSettings(ctx context.Context) ([]*Setting, error) {
 		var s Setting
 		var encrypted int
 		var description sql.NullString
-		if err := rows.Scan(&s.ID, &s.UID, &s.Category, &s.Key, &s.Value, &s.ValueType, &encrypted, &description, &s.CreatedAt, &s.UpdatedAt); err != nil {
+		if err := rows.Scan(&s.ID, &s.Category, &s.Key, &s.Value, &s.ValueType, &encrypted, &description, &s.CreatedAt, &s.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scanning setting: %w", err)
 		}
 		s.Encrypted = encrypted == 1

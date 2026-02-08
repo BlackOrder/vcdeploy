@@ -30,22 +30,22 @@ func NewRawApprovalServiceWithAudit(store storage.Store, auditService services.A
 
 // ApprovalStatus represents the approval state of a component.
 type ApprovalStatus struct {
-	ComponentID  int64      `json:"component_id"`
+	ComponentID  string     `json:"component_id"`
 	IsRaw        bool       `json:"is_raw"`
 	IsApproved   bool       `json:"is_approved"`
-	ApprovedBy   int64      `json:"approved_by,omitempty"`
+	ApprovedBy   string     `json:"approved_by,omitempty"`
 	ApprovedAt   *time.Time `json:"approved_at,omitempty"`
 	ApprovalNote string     `json:"approval_note,omitempty"`
 }
 
 // RequiresApproval checks if a component needs approval.
-func (s *RawApprovalService) RequiresApproval(ctx context.Context, componentID int64) (bool, error) {
+func (s *RawApprovalService) RequiresApproval(ctx context.Context, componentID string) (bool, error) {
 	component, err := s.store.GetRecipeComponentByID(ctx, componentID)
 	if err != nil {
 		return false, err
 	}
 	if component == nil {
-		return false, fmt.Errorf("component not found: %d", componentID)
+		return false, fmt.Errorf("component not found: %s", componentID)
 	}
 
 	if !component.IsRaw {
@@ -65,13 +65,13 @@ func (s *RawApprovalService) RequiresApproval(ctx context.Context, componentID i
 }
 
 // Approve records admin approval for a RAW component.
-func (s *RawApprovalService) Approve(ctx context.Context, componentID, adminUserID int64, note string) error {
+func (s *RawApprovalService) Approve(ctx context.Context, componentID, adminUserID string, note string) error {
 	component, err := s.store.GetRecipeComponentByID(ctx, componentID)
 	if err != nil {
 		return fmt.Errorf("component not found: %w", err)
 	}
 	if component == nil {
-		return fmt.Errorf("component not found: %d", componentID)
+		return fmt.Errorf("component not found: %s", componentID)
 	}
 
 	if !component.IsRaw {
@@ -101,8 +101,8 @@ func (s *RawApprovalService) Approve(ctx context.Context, componentID, adminUser
 			Source:     "raw_approval",
 			Action:     "raw_component_approved",
 			Resource:   "component",
-			ResourceID: fmt.Sprintf("%d", componentID),
-			Details:    fmt.Sprintf("user_id=%d, component=%s:%s, note=%s", adminUserID, component.Namespace, component.Slug, note),
+			ResourceID: componentID,
+			Details:    fmt.Sprintf("user_id=%s, component=%s:%s, note=%s", adminUserID, component.Namespace, component.Slug, note),
 		})
 	}
 
@@ -110,14 +110,14 @@ func (s *RawApprovalService) Approve(ctx context.Context, componentID, adminUser
 }
 
 // RevokeApproval removes approval from a RAW component.
-func (s *RawApprovalService) RevokeApproval(ctx context.Context, componentID, adminUserID int64) error {
+func (s *RawApprovalService) RevokeApproval(ctx context.Context, componentID, adminUserID string) error {
 	// Verify component exists and is RAW
 	component, err := s.store.GetRecipeComponentByID(ctx, componentID)
 	if err != nil {
 		return fmt.Errorf("component not found: %w", err)
 	}
 	if component == nil {
-		return fmt.Errorf("component not found: %d", componentID)
+		return fmt.Errorf("component not found: %s", componentID)
 	}
 
 	if !component.IsRaw {
@@ -127,7 +127,7 @@ func (s *RawApprovalService) RevokeApproval(ctx context.Context, componentID, ad
 	// Verify approval exists
 	existing, err := s.store.GetRawApproval(ctx, componentID)
 	if err != nil || existing == nil {
-		return fmt.Errorf("no approval found for component %d", componentID)
+		return fmt.Errorf("no approval found for component %s", componentID)
 	}
 
 	if err := s.store.DeleteRawApproval(ctx, componentID); err != nil {
@@ -140,8 +140,8 @@ func (s *RawApprovalService) RevokeApproval(ctx context.Context, componentID, ad
 			Source:     "raw_approval",
 			Action:     "raw_component_revoked",
 			Resource:   "component",
-			ResourceID: fmt.Sprintf("%d", componentID),
-			Details:    fmt.Sprintf("user_id=%d, component=%s:%s", adminUserID, component.Namespace, component.Slug),
+			ResourceID: componentID,
+			Details:    fmt.Sprintf("user_id=%s, component=%s:%s", adminUserID, component.Namespace, component.Slug),
 		})
 	}
 
@@ -149,13 +149,13 @@ func (s *RawApprovalService) RevokeApproval(ctx context.Context, componentID, ad
 }
 
 // GetApprovalStatus returns current approval status.
-func (s *RawApprovalService) GetApprovalStatus(ctx context.Context, componentID int64) (*ApprovalStatus, error) {
+func (s *RawApprovalService) GetApprovalStatus(ctx context.Context, componentID string) (*ApprovalStatus, error) {
 	component, err := s.store.GetRecipeComponentByID(ctx, componentID)
 	if err != nil {
 		return nil, err
 	}
 	if component == nil {
-		return nil, fmt.Errorf("component not found: %d", componentID)
+		return nil, fmt.Errorf("component not found: %s", componentID)
 	}
 
 	status := &ApprovalStatus{

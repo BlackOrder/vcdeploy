@@ -42,10 +42,10 @@ type ResolvedStep struct {
 
 // ResolvedPlaybook contains the fully resolved deployment steps.
 type ResolvedPlaybook struct {
-	PlaybookID      int64
+	PlaybookID      string
 	PlaybookName    string
 	PlaybookVersion string
-	ProjectID       int64
+	ProjectID       string
 	PreDeploySteps  []*ResolvedStep
 	DeploySteps     []*ResolvedStep
 	PostDeploySteps []*ResolvedStep
@@ -61,7 +61,7 @@ type DeployHooks struct {
 }
 
 // Resolve resolves an activated playbook for deployment.
-func (r *PlaybookResolver) Resolve(ctx context.Context, projectID int64, envGetter func(string) string, secretGetter func(context.Context, string) (string, error)) (*ResolvedPlaybook, error) {
+func (r *PlaybookResolver) Resolve(ctx context.Context, projectID string, envGetter func(string) string, secretGetter func(context.Context, string) (string, error)) (*ResolvedPlaybook, error) {
 	// Get activation
 	activation, playbook, err := r.activationSvc.GetActiveWithPlaybook(ctx, projectID)
 	if err != nil {
@@ -165,7 +165,7 @@ func (r *PlaybookResolver) resolveStep(ctx context.Context, step storage.Playboo
 }
 
 // HasActivePlaybook checks if a project has an active playbook.
-func (r *PlaybookResolver) HasActivePlaybook(ctx context.Context, projectID int64) bool {
+func (r *PlaybookResolver) HasActivePlaybook(ctx context.Context, projectID string) bool {
 	activation, err := r.activationSvc.GetActive(ctx, projectID)
 	return err == nil && activation != nil
 }
@@ -205,7 +205,7 @@ func (r *PlaybookResolver) GetSharedDirs(resolved *ResolvedPlaybook) []string {
 }
 
 // ValidateForDeployment validates that a playbook is ready for deployment.
-func (r *PlaybookResolver) ValidateForDeployment(ctx context.Context, projectID int64) error {
+func (r *PlaybookResolver) ValidateForDeployment(ctx context.Context, projectID string) error {
 	activation, err := r.activationSvc.GetActive(ctx, projectID)
 	if err != nil {
 		return fmt.Errorf("no active playbook")
@@ -301,7 +301,7 @@ func (r *PlaybookResolver) BuildDeployRequest(resolved *ResolvedPlaybook, cfg *D
 
 // DeploymentRequest contains the resolved deployment parameters.
 type DeploymentRequest struct {
-	PlaybookID      int64
+	PlaybookID      string
 	PlaybookName    string
 	PlaybookVersion string
 	PreDeployHooks  []string

@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"github.com/rs/xid"
 	"time"
 )
 
@@ -17,7 +18,9 @@ func (s *MemoryStore) BlockIP(ctx context.Context, block *BlockedIP) error {
 		return ErrDuplicate
 	}
 
-	block.ID = nextID(&s.nextBlockedIPID)
+	if block.ID == "" {
+		block.ID = xid.New().String()
+	}
 	if block.BlockedAt.IsZero() {
 		block.BlockedAt = time.Now()
 	}
@@ -130,7 +133,7 @@ func (s *MemoryStore) RecordRateLimitRequest(ctx context.Context, key, bucket st
 
 	// New window or different key
 	record := &RateLimitRecord{
-		ID:          nextID(&s.nextRateLimitID),
+		ID:          xid.New().String(),
 		Key:         key,
 		Bucket:      bucket,
 		Count:       1,

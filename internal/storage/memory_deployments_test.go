@@ -152,7 +152,7 @@ func TestMemoryStore_CreateDeploymentLog(t *testing.T) {
 		t.Fatalf("CreateDeploymentLog() error = %v", err)
 	}
 
-	if log.ID == 0 {
+	if log.ID == "" {
 		t.Error("CreateDeploymentLog() did not assign ID")
 	}
 }
@@ -216,7 +216,7 @@ func TestMemoryStore_CreateDeploymentRollback(t *testing.T) {
 		t.Fatalf("CreateDeploymentRollback() error = %v", err)
 	}
 
-	if rollback.ID == 0 {
+	if rollback.ID == "" {
 		t.Error("CreateDeploymentRollback() did not assign ID")
 	}
 	if rollback.Status != "pending" {

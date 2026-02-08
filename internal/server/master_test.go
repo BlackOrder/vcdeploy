@@ -116,7 +116,7 @@ func newTestServer(t *testing.T) *MasterServer {
 
 // newTestServerWithAuth creates a test server with a test user, API key, and session.
 // Returns the server, the raw API key, the session token, and the user ID.
-func newTestServerWithAuth(t *testing.T) (*MasterServer, string, string, int64) {
+func newTestServerWithAuth(t *testing.T) (*MasterServer, string, string, string) {
 	t.Helper()
 
 	server := newTestServer(t)
@@ -169,7 +169,7 @@ func newTestServerWithAuth(t *testing.T) (*MasterServer, string, string, int64) 
 
 // createTestAdminUser creates an admin user in the test server and returns their ID.
 // Use this when testing handlers that require authentication without full middleware.
-func createTestAdminUser(t *testing.T, server *MasterServer) int64 {
+func createTestAdminUser(t *testing.T, server *MasterServer) string {
 	t.Helper()
 	ctx := context.Background()
 
@@ -188,7 +188,7 @@ func createTestAdminUser(t *testing.T, server *MasterServer) int64 {
 }
 
 // requestWithAdminContext creates a request with admin user context for testing.
-func requestWithAdminContext(req *http.Request, userID int64) *http.Request {
+func requestWithAdminContext(req *http.Request, userID string) *http.Request {
 	ctx := context.WithValue(req.Context(), contextKeyUserID, userID)
 	return req.WithContext(ctx)
 }
@@ -1631,8 +1631,8 @@ func TestHandleAPILogin(t *testing.T) {
 		if userResp["username"] != "loginuser" {
 			t.Errorf("username = %v, want 'loginuser'", userResp["username"])
 		}
-		if int64(userResp["id"].(float64)) != user.ID {
-			t.Errorf("user id = %v, want %d", userResp["id"], user.ID)
+		if userResp["id"].(string) != user.ID {
+			t.Errorf("user id = %v, want %s", userResp["id"], user.ID)
 		}
 	})
 
@@ -1929,15 +1929,15 @@ func TestGetUserIDFromContext(t *testing.T) {
 
 	// Test with user ID in context
 	req := httptest.NewRequest("GET", "/", nil)
-	ctx := context.WithValue(req.Context(), contextKeyUserID, int64(123))
+	ctx := context.WithValue(req.Context(), contextKeyUserID, "test-user-123")
 	req = req.WithContext(ctx)
 
 	userID, ok := GetUserIDFromContext(req.Context())
 	if !ok {
 		t.Error("expected ok = true")
 	}
-	if userID != 123 {
-		t.Errorf("userID = %d, want 123", userID)
+	if userID != "test-user-123" {
+		t.Errorf("userID = %s, want test-user-123", userID)
 	}
 }
 
@@ -1950,8 +1950,8 @@ func TestGetUserIDFromContext_Missing(t *testing.T) {
 	if ok {
 		t.Error("expected ok = false for missing context")
 	}
-	if userID != 0 {
-		t.Errorf("userID = %d, want 0 for missing context", userID)
+	if userID != "" {
+		t.Errorf("userID = %s, want empty for missing context", userID)
 	}
 }
 
@@ -1959,15 +1959,15 @@ func TestGetUserIDFromContext_WrongType(t *testing.T) {
 	t.Parallel()
 
 	req := httptest.NewRequest("GET", "/", nil)
-	ctx := context.WithValue(req.Context(), contextKeyUserID, "not-an-int")
+	ctx := context.WithValue(req.Context(), contextKeyUserID, int64(123))
 	req = req.WithContext(ctx)
 
 	userID, ok := GetUserIDFromContext(req.Context())
 	if ok {
 		t.Error("expected ok = false for wrong type")
 	}
-	if userID != 0 {
-		t.Errorf("userID = %d, want 0 for wrong type", userID)
+	if userID != "" {
+		t.Errorf("userID = %s, want empty for wrong type", userID)
 	}
 }
 
