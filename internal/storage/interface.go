@@ -17,6 +17,11 @@ type Store interface {
 	// Maintenance mode support
 	FlushPending() error // Drain pending writes to disk (no-op for direct DB stores)
 
+	// Reload refreshes in-memory state from disk after external DB modifications.
+	// For CachedStore this reloads all data from SQLite into memory.
+	// For direct DB stores this is a no-op.
+	Reload(ctx context.Context) error
+
 	// Transaction support
 	RunInTransaction(ctx context.Context, fn func(tx *sql.Tx) error) error
 

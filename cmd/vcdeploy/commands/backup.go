@@ -13,9 +13,15 @@ import (
 
 func init() {
 	rootCmd.AddCommand(backupExportCmd)
+	rootCmd.AddCommand(backupImportCmd)
 
 	backupExportCmd.Flags().StringP("output", "o", "", "Output file path for the export")
 	backupExportCmd.Flags().String("passphrase", "", "Passphrase for encryption (prompted if not provided)")
+
+	backupImportCmd.Flags().StringP("input", "i", "", "Input file path for the import (required)")
+	backupImportCmd.Flags().String("passphrase", "", "Passphrase for decryption (prompted if not provided)")
+	backupImportCmd.Flags().String("strategy", "", "Strategy for all tables: merge-all or replace-all (interactive if not set)")
+	_ = backupImportCmd.MarkFlagRequired("input")
 }
 
 var backupExportCmd = &cobra.Command{
@@ -108,4 +114,127 @@ func promptPassphrase() (string, error) {
 	}
 
 	return string(pass1), nil
+}
+
+var backupImportCmd = &cobra.Command{
+	Use:   "backup-import",
+	Short: "Import data from a passphrase-protected export file",
+	Long: `Imports configuration from a vcdeploy export file.
+
+The server must be in maintenance mode before importing. This prevents
+concurrent writes that could conflict with the import process.
+
+In interactive mode (default), you'll see a diff of changes and choose
+a strategy (merge/replace/skip) for each table.
+
+In non-interactive mode, use --strategy merge-all or --strategy replace-all
+to apply a uniform strategy to all tables.`,
+	RunE: runBackupImport,
+}
+
+func runBackupImport(cmd *cobra.Command, _ []string) error {
+	svc, cleanup, err := initServices()
+	if err != nil {
+		return fmt.Errorf("initialize services: %w", err)
+	}
+	defer cleanup()
+
+	inputPath, _ := cmd.Flags().GetString("input")
+
+	// Check file exists
+	if _, err := os.Stat(inputPath); os.IsNotExist(err) {
+		return fmt.Errorf("import file not found: %s", inputPath)
+	}
+
+	// Get passphrase
+	passphrase, _ := cmd.Flags().GetString("passphrase")
+	if passphrase == "" {
+		fmt.Print("Enter passphrase: ")
+		pass, err := term.ReadPassword(int(os.Stdin.Fd()))
+		fmt.Println()
+		if err != nil {
+			return fmt.Errorf("read passphrase: %w", err)
+		}
+		passphrase = string(pass)
+	}
+
+	importSvc := backup.NewImportService(svc.Store(), svc.KMS(), svc.MasterKey(), svc.logger)
+
+	// Compute diff
+	fmt.Println("Analyzing import file...")
+	diff, err := importSvc.ComputeDiff(cmd.Context(), inputPath)
+	if err != nil {
+		return fmt.Errorf("compute diff: %w", err)
+	}
+
+	// Display diff
+	fmt.Println()
+	fmt.Println("Import Diff:")
+	fmt.Println("─────────────────────────────────────────────────")
+	fmt.Printf("%-30s %6s %6s %6s %6s\n", "Table", "New", "Chg", "Main", "Total")
+	fmt.Println("─────────────────────────────────────────────────")
+	for _, td := range diff.Tables {
+		if td.Total > 0 || td.OnlyInMain > 0 {
+			fmt.Printf("%-30s %6d %6d %6d %6d\n", td.Name, td.NewRecords, td.Changed, td.OnlyInMain, td.Total)
+		}
+	}
+	fmt.Println("─────────────────────────────────────────────────")
+
+	// Build strategies
+	strategy, _ := cmd.Flags().GetString("strategy")
+	strategies := make(map[string]backup.ImportStrategy)
+
+	switch strategy {
+	case "merge-all":
+		for _, td := range diff.Tables {
+			strategies[td.Name] = backup.StrategyMerge
+		}
+		fmt.Println("Strategy: merge all tables")
+
+	case "replace-all":
+		for _, td := range diff.Tables {
+			strategies[td.Name] = backup.StrategyReplace
+		}
+		fmt.Println("Strategy: replace all tables")
+
+	default:
+		// Interactive mode
+		fmt.Println()
+		fmt.Println("Choose strategy per table ([m]erge / [r]eplace / [s]kip):")
+		for _, td := range diff.Tables {
+			if td.Total == 0 && td.OnlyInMain == 0 {
+				strategies[td.Name] = backup.StrategySkip
+				continue
+			}
+			for {
+				fmt.Printf("  %-30s → ", td.Name)
+				var choice string
+				if _, err := fmt.Scanln(&choice); err != nil {
+					choice = "s"
+				}
+				switch choice {
+				case "m", "merge":
+					strategies[td.Name] = backup.StrategyMerge
+				case "r", "replace":
+					strategies[td.Name] = backup.StrategyReplace
+				case "s", "skip", "":
+					strategies[td.Name] = backup.StrategySkip
+				default:
+					fmt.Println("    Invalid choice. Use m(erge), r(eplace), or s(kip)")
+					continue
+				}
+				break
+			}
+		}
+	}
+
+	fmt.Println()
+	fmt.Println("Executing import...")
+
+	if err := importSvc.Execute(cmd.Context(), inputPath, passphrase, strategies); err != nil {
+		return fmt.Errorf("import failed: %w", err)
+	}
+
+	fmt.Println("✅ Import completed successfully")
+	return nil
 }

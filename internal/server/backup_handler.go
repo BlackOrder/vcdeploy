@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -161,4 +162,208 @@ func cleanupExpiredExports() {
 			delete(exportDownloads, token)
 		}
 	}
+}
+
+// importSession tracks an uploaded import file pending execution.
+type importSession struct {
+	filePath  string
+	diff      *backup.ImportDiff
+	expiresAt time.Time
+}
+
+var (
+	importSessions   = make(map[string]*importSession)
+	importSessionsMu sync.Mutex
+)
+
+// handleBackupImportUpload handles POST /api/v1/admin/backup/import/upload.
+// Accepts a multipart upload of an export file + passphrase, returns session ID and diff.
+func (s *MasterServer) handleBackupImportUpload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Require admin role
+	user, _ := GetUserFromContext(r.Context())
+	if user == nil || user.Role != "admin" {
+		http.Error(w, "admin access required", http.StatusForbidden)
+		return
+	}
+
+	// Require maintenance mode
+	if !s.maintenanceMode.Load() {
+		s.writeJSON(w, http.StatusConflict, map[string]string{
+			"error": "maintenance mode must be enabled before importing",
+		})
+		return
+	}
+
+	// Parse multipart form (limit to 256MB)
+	if err := r.ParseMultipartForm(256 << 20); err != nil {
+		http.Error(w, "failed to parse multipart form: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	passphrase := r.FormValue("passphrase")
+	if passphrase == "" {
+		http.Error(w, `{"error":"passphrase is required"}`, http.StatusBadRequest)
+		return
+	}
+
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, "import file is required", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	// Save to temp file
+	tmpFile, err := os.CreateTemp("", "vcdeploy-import-*.db")
+	if err != nil {
+		http.Error(w, "failed to create temp file", http.StatusInternalServerError)
+		return
+	}
+	if _, err := io.Copy(tmpFile, file); err != nil {
+		tmpFile.Close()
+		_ = os.Remove(tmpFile.Name())
+		http.Error(w, "failed to save uploaded file", http.StatusInternalServerError)
+		return
+	}
+	tmpFile.Close()
+
+	// Compute diff
+	importSvc := backup.NewImportService(s.store, s.kms, s.masterKey, s.logger)
+	diff, err := importSvc.ComputeDiff(r.Context(), tmpFile.Name())
+	if err != nil {
+		_ = os.Remove(tmpFile.Name())
+		s.logger.Error("import diff computation failed", zap.Error(err))
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "failed to compute import diff: " + err.Error(),
+		})
+		return
+	}
+
+	// Generate session ID
+	sessionBytes := make([]byte, 32)
+	if _, err := rand.Read(sessionBytes); err != nil {
+		_ = os.Remove(tmpFile.Name())
+		http.Error(w, "failed to generate session ID", http.StatusInternalServerError)
+		return
+	}
+	sessionID := hex.EncodeToString(sessionBytes)
+
+	importSessionsMu.Lock()
+	importSessions[sessionID] = &importSession{
+		filePath:  tmpFile.Name(),
+		diff:      diff,
+		expiresAt: time.Now().Add(30 * time.Minute),
+	}
+	importSessionsMu.Unlock()
+
+	s.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"session_id": sessionID,
+		"diff":       diff,
+		"expires":    time.Now().Add(30 * time.Minute).Format(time.RFC3339),
+		"message":    "Review the diff and call /api/v1/admin/backup/import/execute to apply.",
+	})
+}
+
+// handleBackupImportExecute handles POST /api/v1/admin/backup/import/execute.
+// Applies the import with per-table strategies.
+func (s *MasterServer) handleBackupImportExecute(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Require admin role
+	user, _ := GetUserFromContext(r.Context())
+	if user == nil || user.Role != "admin" {
+		http.Error(w, "admin access required", http.StatusForbidden)
+		return
+	}
+
+	// Require maintenance mode
+	if !s.maintenanceMode.Load() {
+		s.writeJSON(w, http.StatusConflict, map[string]string{
+			"error": "maintenance mode must be enabled before importing",
+		})
+		return
+	}
+
+	var req struct {
+		SessionID  string            `json:"session_id"`
+		Passphrase string            `json:"passphrase"`
+		Strategies map[string]string `json:"strategies"` // table_name → "replace"|"merge"|"skip"
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.SessionID == "" || req.Passphrase == "" {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "session_id and passphrase are required",
+		})
+		return
+	}
+
+	// Look up session
+	importSessionsMu.Lock()
+	session, ok := importSessions[req.SessionID]
+	if ok {
+		delete(importSessions, req.SessionID)
+	}
+	importSessionsMu.Unlock()
+
+	if !ok {
+		s.writeJSON(w, http.StatusNotFound, map[string]string{
+			"error": "invalid or expired import session",
+		})
+		return
+	}
+
+	if time.Now().After(session.expiresAt) {
+		_ = os.Remove(session.filePath)
+		s.writeJSON(w, http.StatusGone, map[string]string{
+			"error": "import session has expired",
+		})
+		return
+	}
+
+	// Convert string strategies to typed
+	strategies := make(map[string]backup.ImportStrategy)
+	for table, strat := range req.Strategies {
+		switch strat {
+		case "replace":
+			strategies[table] = backup.StrategyReplace
+		case "merge":
+			strategies[table] = backup.StrategyMerge
+		case "skip", "":
+			strategies[table] = backup.StrategySkip
+		default:
+			_ = os.Remove(session.filePath)
+			http.Error(w, fmt.Sprintf(`{"error":"invalid strategy %q for table %s"}`, strat, table), http.StatusBadRequest)
+			return
+		}
+	}
+
+	// Execute import
+	importSvc := backup.NewImportService(s.store, s.kms, s.masterKey, s.logger)
+	if err := importSvc.Execute(r.Context(), session.filePath, req.Passphrase, strategies); err != nil {
+		_ = os.Remove(session.filePath)
+		s.logger.Error("import execution failed", zap.Error(err))
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "import failed: " + err.Error(),
+		})
+		return
+	}
+
+	// Clean up
+	_ = os.Remove(session.filePath)
+
+	s.writeJSON(w, http.StatusOK, map[string]string{
+		"message": "Import completed successfully. Disable maintenance mode when ready.",
+	})
 }

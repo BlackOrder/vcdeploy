@@ -42,6 +42,12 @@ func (cs *CachedStore) Close() error {
 	return nil
 }
 
+// Reload refreshes all in-memory data from the underlying SQLite database.
+// This is used after direct DB modifications (e.g., import) to sync the cache.
+func (cs *CachedStore) Reload(ctx context.Context) error {
+	return cs.MemoryStore.LoadFromDB(ctx, cs.db)
+}
+
 // NewCachedStore creates a MemoryStore backed by SQLite.
 // It opens the database, runs migrations, loads existing data into memory,
 // and starts background persistence workers.
