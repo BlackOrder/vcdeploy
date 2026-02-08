@@ -3252,3 +3252,79 @@ func TestBodySizeLimit_HealthCheckCreate(t *testing.T) {
 		t.Errorf("expected status %d for oversized body, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
 	}
 }
+
+// TestSettingsAPI_RejectsPreBootEdit verifies that pre-boot settings (server, grpc)
+// cannot be changed via the API.
+func TestSettingsAPI_RejectsPreBootEdit(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	for _, category := range []string{"server", "grpc"} {
+		body := strings.NewReader(`{"listen":"0.0.0.0:9999"}`)
+		req := httptest.NewRequest("PUT", "/api/v1/settings/"+category, body)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-API-Key", apiKey)
+		w := httptest.NewRecorder()
+
+		req = requestWithUserContext(req, userID)
+		server.handleSettingsCategory(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("PUT /api/v1/settings/%s: expected 400, got %d: %s", category, w.Code, w.Body.String())
+		}
+	}
+}
+
+// TestSettingsAPI_AcceptsRuntimeEdit verifies that runtime settings (ssh, security, etc.)
+// can be changed via the API.
+func TestSettingsAPI_AcceptsRuntimeEdit(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	for _, category := range []string{"ssh", "security", "backup", "logs", "webhooks", "notifications", "api", "appearance"} {
+		body := strings.NewReader(`{"test_key":"test_value"}`)
+		req := httptest.NewRequest("PUT", "/api/v1/settings/"+category, body)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-API-Key", apiKey)
+		w := httptest.NewRecorder()
+
+		req = requestWithUserContext(req, userID)
+		server.handleSettingsCategory(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("PUT /api/v1/settings/%s: expected 200, got %d: %s", category, w.Code, w.Body.String())
+		}
+	}
+}
+
+// TestSettingsAPI_GetPreBootIncludesReadonly verifies that GET on pre-boot categories
+// includes the _readonly flag.
+func TestSettingsAPI_GetPreBootIncludesReadonly(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	req := httptest.NewRequest("GET", "/api/v1/settings/server", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	req = requestWithUserContext(req, userID)
+	server.handleSettingsCategory(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if result["_readonly"] != true {
+		t.Errorf("expected _readonly=true for pre-boot category server, got %v", result["_readonly"])
+	}
+}

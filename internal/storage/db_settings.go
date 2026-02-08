@@ -55,6 +55,24 @@ func (db *DB) SetSetting(ctx context.Context, category, key, value, valueType st
 	return nil
 }
 
+// InitSetting seeds a setting only if it does not already exist (INSERT OR IGNORE).
+// Used for runtime settings where user edits should survive server restarts.
+func (db *DB) InitSetting(ctx context.Context, category, key, value, valueType string, encrypted bool) error {
+	uid := xid.New().String()
+	encVal := 0
+	if encrypted {
+		encVal = 1
+	}
+	_, err := db.conn.ExecContext(ctx, `
+		INSERT OR IGNORE INTO settings (uid, category, key, value, value_type, encrypted)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, uid, category, key, value, valueType, encVal)
+	if err != nil {
+		return fmt.Errorf("init setting: %w", err)
+	}
+	return nil
+}
+
 // ListSettingsByCategory retrieves all settings in a category.
 func (db *DB) ListSettingsByCategory(ctx context.Context, category string) ([]*Setting, error) {
 	rows, err := db.conn.QueryContext(ctx, `
