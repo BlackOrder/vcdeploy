@@ -335,12 +335,17 @@ lint: ## Run linter (mirrors CI 'lint' job)
 .PHONY: fmt
 fmt: ## Format code
 	go fmt ./...
+	@command -v goimports >/dev/null 2>&1 && goimports -w . || true
 	@command -v gofumpt >/dev/null 2>&1 && gofumpt -l -w . || true
 
 .PHONY: fmt-check
-fmt-check: ## Check formatting
+fmt-check: ## Check formatting (gofmt + goimports)
 	@test -z "$$(gofmt -l . 2>/dev/null | grep -v vendor)" || \
 		(echo "Run 'make fmt'" && gofmt -l . | grep -v vendor && exit 1)
+	@if command -v goimports >/dev/null 2>&1; then \
+		test -z "$$(goimports -l . 2>/dev/null | grep -v vendor)" || \
+		(echo "Imports out of order. Run 'make fmt'" && goimports -l . | grep -v vendor && exit 1); \
+	fi
 
 .PHONY: vet
 vet: ## Run go vet
@@ -370,6 +375,7 @@ proto: ## Generate protobuf code
 		$(PROTO_DIR)/*.proto
 	@# Clean up any nested directories created by protoc
 	@rm -rf $(PROTO_OUT)/api 2>/dev/null || true
+	@command -v goimports >/dev/null 2>&1 && goimports -w $(PROTO_OUT) || true
 
 .PHONY: proto-check
 proto-check: proto ## Verify proto stubs are up to date (mirrors CI)
@@ -382,6 +388,7 @@ proto-check: proto ## Verify proto stubs are up to date (mirrors CI)
 .PHONY: generate
 generate: ## Run go generate
 	go generate ./...
+	@command -v goimports >/dev/null 2>&1 && goimports -w . || true
 
 # ============================================================================
 # Docker (Development)
