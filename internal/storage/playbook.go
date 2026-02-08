@@ -8,8 +8,7 @@ import (
 
 // Playbook represents a deployment composition of recipe components.
 type Playbook struct {
-	ID              int64            `json:"id"`
-	UID             string           `json:"uid"`
+	ID              string           `json:"id"`
 	Namespace       string           `json:"namespace"` // "seed" or "user"
 	Slug            string           `json:"slug"`      // unique identifier within namespace
 	Version         string           `json:"version"`   // semver with 'v' prefix
@@ -24,7 +23,7 @@ type Playbook struct {
 	ValidationRules *ValidationRules `json:"validation_rules,omitempty"`
 	IsSeed          bool             `json:"is_seed"`
 	IsDeprecated    bool             `json:"is_deprecated"`
-	ParentID        *int64           `json:"parent_id,omitempty"` // for copy-on-write customization
+	ParentID        *string          `json:"parent_id,omitempty"` // for copy-on-write customization
 	ParentVersion   string           `json:"parent_version,omitempty"`
 	CreatedAt       time.Time        `json:"created_at"`
 }
@@ -134,20 +133,18 @@ func (p *Playbook) ParseValidationRulesJSON(data string) error {
 
 // PlaybookActivation links a project to a specific playbook version.
 type PlaybookActivation struct {
-	ID          int64                     `json:"id"`
-	UID         string                    `json:"uid"`
-	ProjectID   int64                     `json:"project_id"`
-	PlaybookID  int64                     `json:"playbook_id"`
+	ID          string                    `json:"id"`
+	ProjectID   string                    `json:"project_id"`
+	PlaybookID  string                    `json:"playbook_id"`
 	ActivatedAt time.Time                 `json:"activated_at"`
-	ActivatedBy *int64                    `json:"activated_by,omitempty"`
+	ActivatedBy *string                   `json:"activated_by,omitempty"`
 	Bindings    []PlaybookVariableBinding `json:"bindings,omitempty"` // loaded separately
 }
 
 // PlaybookVariableBinding maps a variable to its value source.
 type PlaybookVariableBinding struct {
-	ID           int64  `json:"id"`
-	UID          string `json:"uid"`
-	ActivationID int64  `json:"activation_id"`
+	ID           string `json:"id"`
+	ActivationID string `json:"activation_id"`
 	VariableName string `json:"variable_name"`
 	SourceType   string `json:"source_type"`             // literal, env, secret
 	SourceRef    string `json:"source_ref,omitempty"`    // env key name or secret key
@@ -156,10 +153,9 @@ type PlaybookVariableBinding struct {
 
 // RawCommandApproval records admin approval for RAW components.
 type RawCommandApproval struct {
-	ID           int64     `json:"id"`
-	UID          string    `json:"uid"`
-	ComponentID  int64     `json:"component_id"`
-	ApprovedBy   int64     `json:"approved_by"`
+	ID           string    `json:"id"`
+	ComponentID  string    `json:"component_id"`
+	ApprovedBy   string    `json:"approved_by"`
 	ApprovedAt   time.Time `json:"approved_at"`
 	ApprovalNote string    `json:"approval_note,omitempty"`
 }

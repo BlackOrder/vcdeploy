@@ -57,7 +57,7 @@ func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
 
 		// Return metadata only (no values for security)
 		type secretResponse struct {
-			ID        int64     `json:"id"`
+			ID        string    `json:"id"`
 			Project   string    `json:"project"`
 			Scope     string    `json:"scope"`
 			Key       string    `json:"key"`

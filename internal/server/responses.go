@@ -21,7 +21,7 @@ type ErrorResponse struct {
 
 // UserResponse represents a user in API responses.
 type UserResponse struct {
-	ID        int64     `json:"id"`
+	ID        string    `json:"id"`
 	Username  string    `json:"username"`
 	Email     string    `json:"email"`
 	Role      string    `json:"role"`
@@ -30,7 +30,7 @@ type UserResponse struct {
 
 // UserCreateResponse represents a newly created user.
 type UserCreateResponse struct {
-	ID        int64     `json:"id"`
+	ID        string    `json:"id"`
 	Username  string    `json:"username"`
 	Email     string    `json:"email"`
 	Role      string    `json:"role"`
@@ -39,7 +39,7 @@ type UserCreateResponse struct {
 
 // UserInfoResponse represents basic user information (without sensitive fields).
 type UserInfoResponse struct {
-	ID       int64  `json:"id"`
+	ID       string `json:"id"`
 	Username string `json:"username"`
 	Email    string `json:"email"`
 	Role     string `json:"role"`
@@ -55,7 +55,7 @@ type LoginResponse struct {
 
 // ProjectResponse represents a project in API responses.
 type ProjectResponse struct {
-	ID            int64     `json:"id"`
+	ID            string    `json:"id"`
 	Name          string    `json:"name"`
 	Description   string    `json:"description,omitempty"`
 	Repository    string    `json:"repository"`
@@ -70,7 +70,7 @@ type ProjectResponse struct {
 
 // APIKeyResponse represents an API key in list responses (no raw key).
 type APIKeyResponse struct {
-	ID         int64      `json:"id"`
+	ID         string     `json:"id"`
 	Name       string     `json:"name"`
 	Scopes     []string   `json:"scopes"`
 	ExpiresAt  *time.Time `json:"expiresAt,omitempty"`
@@ -80,7 +80,7 @@ type APIKeyResponse struct {
 
 // APIKeyCreateResponse represents a newly created API key (includes raw key).
 type APIKeyCreateResponse struct {
-	ID        int64      `json:"id"`
+	ID        string     `json:"id"`
 	Name      string     `json:"name"`
 	Key       string     `json:"key"` // Only visible on creation
 	Scopes    []string   `json:"scopes"`
@@ -173,7 +173,7 @@ type DeploymentStats struct {
 
 // UserListResponse represents a user in list responses (includes TOTP status).
 type UserListResponse struct {
-	ID          int64     `json:"id"`
+	ID          string    `json:"id"`
 	Username    string    `json:"username"`
 	Email       string    `json:"email"`
 	Role        string    `json:"role"`
@@ -213,7 +213,7 @@ type PaginatedResponse struct {
 // SSHKeyResponse represents an SSH key in API responses.
 // Note: The actual API returns security.SSHKeyInfo directly from the service layer.
 type SSHKeyResponse struct {
-	ID          int64     `json:"id"`
+	ID          string    `json:"id"`
 	Name        string    `json:"name"`
 	Type        string    `json:"type"`
 	Fingerprint string    `json:"fingerprint"`
@@ -227,7 +227,7 @@ type SSHKeyResponse struct {
 // CredentialResponse represents a source credential in API responses.
 // Note: The actual API returns security.CredentialInfo directly from the service layer.
 type CredentialResponse struct {
-	ID         int64     `json:"id"`
+	ID         string    `json:"id"`
 	Name       string    `json:"name"`
 	Type       string    `json:"type"`
 	URLPattern string    `json:"urlPattern"`
@@ -261,7 +261,7 @@ type ProvisionLogsResponse struct {
 
 // ProvisionLogEntry represents a single provisioning log entry.
 type ProvisionLogEntry struct {
-	ID        int64     `json:"id"`
+	ID        string    `json:"id"`
 	JobID     string    `json:"jobId"`
 	Timestamp time.Time `json:"timestamp"`
 	Level     string    `json:"level"`
@@ -281,7 +281,7 @@ type ProvisionJobCreateResponse struct {
 
 // HostKeyResponse represents an SSH host key in API responses.
 type HostKeyResponse struct {
-	ID         int64     `json:"id"`
+	ID         string    `json:"id"`
 	Hostname   string    `json:"hostname"`
 	Port       int       `json:"port"`
 	KeyType    string    `json:"keyType"`
@@ -295,12 +295,12 @@ type HostKeyResponse struct {
 
 // JumpServerResponse represents an SSH jump server in API responses.
 type JumpServerResponse struct {
-	ID        int64     `json:"id"`
+	ID        string    `json:"id"`
 	Name      string    `json:"name"`
 	Host      string    `json:"host"`
 	Port      int       `json:"port"`
 	Username  string    `json:"username"`
-	SSHKeyID  *int64    `json:"sshKeyId,omitempty"`
+	SSHKeyID  *string   `json:"sshKeyId,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 }
 
@@ -308,26 +308,26 @@ type JumpServerResponse struct {
 
 // HealthCheckConfigResponse represents a health check config in API responses.
 type HealthCheckConfigResponse struct {
-	ID                int64  `json:"id"`
-	Name              string `json:"name"`
-	URL               string `json:"url"`
-	Method            string `json:"method"`
-	ExpectedStatus    int    `json:"expectedStatus"`
-	TimeoutSeconds    int    `json:"timeoutSeconds"`
-	Retries           int    `json:"retries"`
-	RetryDelaySeconds int    `json:"retryDelaySeconds"`
-	Headers           string `json:"headers,omitempty"`
-	Body              string `json:"body,omitempty"`
-	ProjectID         *int64 `json:"projectId,omitempty"`
-	Enabled           bool   `json:"enabled"`
-	IsGlobal          bool   `json:"isGlobal"`
+	ID                string  `json:"id"`
+	Name              string  `json:"name"`
+	URL               string  `json:"url"`
+	Method            string  `json:"method"`
+	ExpectedStatus    int     `json:"expectedStatus"`
+	TimeoutSeconds    int     `json:"timeoutSeconds"`
+	Retries           int     `json:"retries"`
+	RetryDelaySeconds int     `json:"retryDelaySeconds"`
+	Headers           string  `json:"headers,omitempty"`
+	Body              string  `json:"body,omitempty"`
+	ProjectID         *string `json:"projectId,omitempty"`
+	Enabled           bool    `json:"enabled"`
+	IsGlobal          bool    `json:"isGlobal"`
 }
 
 // ProjectHealthConfigResponse represents project health check configuration.
 type ProjectHealthConfigResponse struct {
-	HealthCheckID        *int64 `json:"healthCheckId"`
-	AutoRollbackEnabled  bool   `json:"autoRollbackEnabled"`
-	RollbackOnHealthFail bool   `json:"rollbackOnHealthFail"`
+	HealthCheckID        *string `json:"healthCheckId"`
+	AutoRollbackEnabled  bool    `json:"autoRollbackEnabled"`
+	RollbackOnHealthFail bool    `json:"rollbackOnHealthFail"`
 }
 
 // --- Rollback Responses ---
@@ -344,7 +344,7 @@ type RollbackListResponse struct {
 
 // AgentBinaryResponse represents an agent binary in API responses.
 type AgentBinaryResponse struct {
-	ID        int64     `json:"id"`
+	ID        string    `json:"id"`
 	Version   string    `json:"version"`
 	OS        string    `json:"os"`
 	Arch      string    `json:"arch"`
@@ -360,7 +360,7 @@ type AgentUpdateTriggerResponse struct {
 	FromVersion string `json:"fromVersion,omitempty"`
 	ToVersion   string `json:"toVersion,omitempty"`
 	Force       bool   `json:"force,omitempty"`
-	UpdateID    int64  `json:"updateId,omitempty"`
+	UpdateID    string `json:"updateId,omitempty"`
 	Delivery    string `json:"delivery,omitempty"`
 }
 
@@ -409,7 +409,7 @@ type TLSSettingsInfoResponse struct {
 
 // ProjectTypeResponse represents a project type in API responses.
 type ProjectTypeResponse struct {
-	ID          int64     `json:"id,omitempty"`
+	ID          string    `json:"id,omitempty"`
 	Name        string    `json:"name"`
 	Description string    `json:"description,omitempty"`
 	BuildCmd    string    `json:"buildCmd,omitempty"`
