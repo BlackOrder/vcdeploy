@@ -3,8 +3,9 @@ package storage
 import (
 	"context"
 	"fmt"
-	"github.com/rs/xid"
 	"time"
+
+	"github.com/rs/xid"
 )
 
 // AssignAgentToDeployment assigns an agent to participate in a deployment.
