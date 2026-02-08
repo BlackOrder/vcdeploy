@@ -140,6 +140,35 @@ func (s *MemoryStore) SetSetting(ctx context.Context, category, key, value, valu
 	return nil
 }
 
+// InitSetting seeds a setting only if it does not already exist.
+// Used for runtime settings where user edits should survive server restarts.
+func (s *MemoryStore) InitSetting(ctx context.Context, category, key, value, valueType string, encrypted bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	k := settingKey(category, key)
+	if _, exists := s.settings[k]; exists {
+		return nil // Already exists, do not overwrite
+	}
+
+	now := time.Now()
+	setting := &Setting{
+		UID:       xid.New().String(),
+		ID:        nextID(&s.nextSettingID),
+		Category:  category,
+		Key:       key,
+		Value:     value,
+		ValueType: valueType,
+		Encrypted: encrypted,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	s.settings[k] = setting
+	s.queueWrite(s.coreWrites, NewWriteOp(WriteOpInsert, "settings", setting))
+	return nil
+}
+
 // ListSettingsByCategory returns all settings for a category.
 func (s *MemoryStore) ListSettingsByCategory(ctx context.Context, category string) ([]*Setting, error) {
 	s.mu.RLock()

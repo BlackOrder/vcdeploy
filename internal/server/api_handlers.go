@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/BlackOrder/vcdeploy/internal/config"
 	"github.com/BlackOrder/vcdeploy/internal/proto"
 	"github.com/BlackOrder/vcdeploy/internal/services"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
@@ -529,12 +530,22 @@ func (s *MasterServer) handleSettingsCategory(w http.ResponseWriter, r *http.Req
 		for _, setting := range settings {
 			result[setting.Key] = setting.Value
 		}
+		if config.IsPreBootCategory(category) {
+			result["_readonly"] = true
+		}
 		s.jsonResponse(w, result)
 
 	case http.MethodPut:
 		// Admin-only: changing settings
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
 			s.jsonError(w, status, msg)
+			return
+		}
+
+		// Pre-boot categories are read-only — must edit master.yaml and restart
+		if config.IsPreBootCategory(category) {
+			s.jsonError(w, http.StatusBadRequest,
+				fmt.Sprintf("Settings in category %q are read-only. Edit master.yaml and restart the server.", category))
 			return
 		}
 

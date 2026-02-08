@@ -14,6 +14,19 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// preBootCategories lists settings categories whose values come from YAML
+// and are always overwritten on server restart. They cannot be changed via
+// the API/UI — the user must edit master.yaml and restart.
+var preBootCategories = map[string]bool{
+	"server": true,
+	"grpc":   true,
+}
+
+// IsPreBootCategory returns true if the entire category is pre-boot (read-only).
+func IsPreBootCategory(category string) bool {
+	return preBootCategories[category]
+}
+
 // SettingsService manages configuration stored in the database.
 type SettingsService struct {
 	store storage.Store
@@ -189,6 +202,27 @@ func (s *SettingsService) SetDuration(ctx context.Context, category, key string,
 	return s.store.SetSetting(ctx, category, key, value.String(), "duration", false)
 }
 
+// initString seeds a string setting only if it does not already exist.
+// Used for runtime defaults where user edits should survive restarts.
+func (s *SettingsService) initString(ctx context.Context, category, key, value string) error {
+	return s.store.InitSetting(ctx, category, key, value, "string", false)
+}
+
+// initBool seeds a boolean setting only if it does not already exist.
+func (s *SettingsService) initBool(ctx context.Context, category, key string, value bool) error {
+	return s.store.InitSetting(ctx, category, key, strconv.FormatBool(value), "bool", false)
+}
+
+// initInt seeds an integer setting only if it does not already exist.
+func (s *SettingsService) initInt(ctx context.Context, category, key string, value int) error {
+	return s.store.InitSetting(ctx, category, key, strconv.Itoa(value), "int", false)
+}
+
+// initDuration seeds a duration setting only if it does not already exist.
+func (s *SettingsService) initDuration(ctx context.Context, category, key string, value time.Duration) error {
+	return s.store.InitSetting(ctx, category, key, value.String(), "duration", false)
+}
+
 // SetRaw stores a setting with explicit value type (for import scenarios).
 func (s *SettingsService) SetRaw(ctx context.Context, category, key, value, valueType string, encrypted bool) error {
 	storeValue := value
@@ -289,10 +323,15 @@ func (s *SettingsService) GetCategory(ctx context.Context, category string) (map
 }
 
 // SetDefaults initializes the database with default settings.
+// Pre-boot fields (server, gRPC) always overwrite — YAML is source of truth.
+// Runtime fields (SSH, security, backup, logs, etc.) are seeded only on first boot —
+// user edits via UI/CLI survive server restarts.
 func (s *SettingsService) SetDefaults(ctx context.Context) error {
 	defaults := DefaultMasterConfig()
 
-	// Server settings
+	// === Pre-boot fields: YAML always overwrites DB on restart ===
+
+	// Server settings (pre-boot)
 	if err := s.Set(ctx, "server", "listen", defaults.Server.Listen, false); err != nil {
 		return err
 	}
@@ -306,129 +345,131 @@ func (s *SettingsService) SetDefaults(ctx context.Context) error {
 		return err
 	}
 
-	// gRPC settings
+	// gRPC settings (pre-boot)
 	if err := s.Set(ctx, "grpc", "listen", defaults.GRPC.Listen, false); err != nil {
 		return err
 	}
 
-	// SSH settings
-	if err := s.Set(ctx, "ssh", "default_user", defaults.SSH.DefaultUser, false); err != nil {
+	// === Runtime fields: DB is source of truth, seed only on first boot ===
+
+	// SSH settings (runtime)
+	if err := s.initString(ctx, "ssh", "default_user", defaults.SSH.DefaultUser); err != nil {
 		return err
 	}
-	if err := s.Set(ctx, "ssh", "default_key", defaults.SSH.DefaultKey, false); err != nil {
+	if err := s.initString(ctx, "ssh", "default_key", defaults.SSH.DefaultKey); err != nil {
 		return err
 	}
-	if err := s.Set(ctx, "ssh", "known_hosts", defaults.SSH.KnownHosts, false); err != nil {
+	if err := s.initString(ctx, "ssh", "known_hosts", defaults.SSH.KnownHosts); err != nil {
 		return err
 	}
-	if err := s.SetDuration(ctx, "ssh", "connection_timeout", defaults.SSH.ConnectionTimeout); err != nil {
+	if err := s.initDuration(ctx, "ssh", "connection_timeout", defaults.SSH.ConnectionTimeout); err != nil {
 		return err
 	}
-	if err := s.SetDuration(ctx, "ssh", "keepalive_interval", defaults.SSH.KeepaliveInterval); err != nil {
+	if err := s.initDuration(ctx, "ssh", "keepalive_interval", defaults.SSH.KeepaliveInterval); err != nil {
 		return err
 	}
-	if err := s.SetDuration(ctx, "ssh", "idle_timeout", defaults.SSH.IdleTimeout); err != nil {
+	if err := s.initDuration(ctx, "ssh", "idle_timeout", defaults.SSH.IdleTimeout); err != nil {
 		return err
 	}
 
-	// Security settings
-	if err := s.SetBool(ctx, "security", "key_rotation_enabled", defaults.Security.KeyRotation.Enabled); err != nil {
+	// Security settings (runtime)
+	if err := s.initBool(ctx, "security", "key_rotation_enabled", defaults.Security.KeyRotation.Enabled); err != nil {
 		return err
 	}
-	if err := s.SetDuration(ctx, "security", "key_rotation_interval", defaults.Security.KeyRotation.Interval); err != nil {
+	if err := s.initDuration(ctx, "security", "key_rotation_interval", defaults.Security.KeyRotation.Interval); err != nil {
 		return err
 	}
-	if err := s.SetDuration(ctx, "security", "session_timeout", defaults.Security.SessionTimeout); err != nil {
+	if err := s.initDuration(ctx, "security", "session_timeout", defaults.Security.SessionTimeout); err != nil {
 		return err
 	}
-	if err := s.SetBool(ctx, "security", "require_2fa_admin", defaults.Security.Require2FAAdmin); err != nil {
-		return err
-	}
-
-	// Backup settings
-	if err := s.SetBool(ctx, "backup", "db_enabled", defaults.Backup.Database.Enabled); err != nil {
-		return err
-	}
-	if err := s.SetDuration(ctx, "backup", "db_interval", defaults.Backup.Database.Interval); err != nil {
-		return err
-	}
-	if err := s.SetDuration(ctx, "backup", "db_retention", defaults.Backup.Database.Retention); err != nil {
-		return err
-	}
-	if err := s.Set(ctx, "backup", "db_path", defaults.Backup.Database.Path, false); err != nil {
-		return err
-	}
-	if err := s.SetInt(ctx, "backup", "config_versions", defaults.Backup.Config.Versions); err != nil {
+	if err := s.initBool(ctx, "security", "require_2fa_admin", defaults.Security.Require2FAAdmin); err != nil {
 		return err
 	}
 
-	// Logs settings
-	if err := s.SetDuration(ctx, "logs", "deploy_retention", defaults.Logs.Deployment.Retention); err != nil {
+	// Backup settings (runtime)
+	if err := s.initBool(ctx, "backup", "db_enabled", defaults.Backup.Database.Enabled); err != nil {
 		return err
 	}
-	if err := s.SetInt(ctx, "logs", "deploy_max_size_mb", defaults.Logs.Deployment.MaxSizeMB); err != nil {
+	if err := s.initDuration(ctx, "backup", "db_interval", defaults.Backup.Database.Interval); err != nil {
 		return err
 	}
-	if err := s.SetDuration(ctx, "logs", "audit_retention", defaults.Logs.Audit.Retention); err != nil {
+	if err := s.initDuration(ctx, "backup", "db_retention", defaults.Backup.Database.Retention); err != nil {
 		return err
 	}
-	if err := s.SetBool(ctx, "logs", "audit_export_enabled", defaults.Logs.Audit.Export.Enabled); err != nil {
+	if err := s.initString(ctx, "backup", "db_path", defaults.Backup.Database.Path); err != nil {
 		return err
 	}
-	if err := s.Set(ctx, "logs", "audit_export_destination", defaults.Logs.Audit.Export.Destination, false); err != nil {
-		return err
-	}
-	if err := s.Set(ctx, "logs", "audit_export_schedule", defaults.Logs.Audit.Export.Schedule, false); err != nil {
-		return err
-	}
-	if err := s.Set(ctx, "logs", "app_level", defaults.Logs.Application.Level, false); err != nil {
-		return err
-	}
-	if err := s.SetDuration(ctx, "logs", "app_retention", defaults.Logs.Application.Retention); err != nil {
-		return err
-	}
-	if err := s.Set(ctx, "logs", "rotation_schedule", defaults.Logs.Rotation.Schedule, false); err != nil {
+	if err := s.initInt(ctx, "backup", "config_versions", defaults.Backup.Config.Versions); err != nil {
 		return err
 	}
 
-	// Webhooks settings
-	if err := s.SetBool(ctx, "webhooks", "github_enabled", defaults.Webhooks.GitHub.Enabled); err != nil {
+	// Logs settings (runtime)
+	if err := s.initDuration(ctx, "logs", "deploy_retention", defaults.Logs.Deployment.Retention); err != nil {
 		return err
 	}
-	if err := s.Set(ctx, "webhooks", "github_path", defaults.Webhooks.GitHub.Path, false); err != nil {
+	if err := s.initInt(ctx, "logs", "deploy_max_size_mb", defaults.Logs.Deployment.MaxSizeMB); err != nil {
 		return err
 	}
-	if err := s.SetBool(ctx, "webhooks", "gitlab_enabled", defaults.Webhooks.GitLab.Enabled); err != nil {
+	if err := s.initDuration(ctx, "logs", "audit_retention", defaults.Logs.Audit.Retention); err != nil {
 		return err
 	}
-	if err := s.Set(ctx, "webhooks", "gitlab_path", defaults.Webhooks.GitLab.Path, false); err != nil {
+	if err := s.initBool(ctx, "logs", "audit_export_enabled", defaults.Logs.Audit.Export.Enabled); err != nil {
 		return err
 	}
-	if err := s.SetBool(ctx, "webhooks", "bitbucket_enabled", defaults.Webhooks.Bitbucket.Enabled); err != nil {
+	if err := s.initString(ctx, "logs", "audit_export_destination", defaults.Logs.Audit.Export.Destination); err != nil {
 		return err
 	}
-	if err := s.Set(ctx, "webhooks", "bitbucket_path", defaults.Webhooks.Bitbucket.Path, false); err != nil {
+	if err := s.initString(ctx, "logs", "audit_export_schedule", defaults.Logs.Audit.Export.Schedule); err != nil {
 		return err
 	}
-
-	// Notifications settings
-	if err := s.SetBool(ctx, "notifications", "slack_enabled", defaults.Notifications.Providers.Slack.Enabled); err != nil {
+	if err := s.initString(ctx, "logs", "app_level", defaults.Logs.Application.Level); err != nil {
 		return err
 	}
-	if err := s.SetBool(ctx, "notifications", "email_enabled", defaults.Notifications.Providers.Email.Enabled); err != nil {
+	if err := s.initDuration(ctx, "logs", "app_retention", defaults.Logs.Application.Retention); err != nil {
 		return err
 	}
-	if err := s.SetBool(ctx, "notifications", "webhook_enabled", defaults.Notifications.Providers.Webhook.Enabled); err != nil {
-		return err
-	}
-
-	// API settings
-	if err := s.SetBool(ctx, "api", "enabled", defaults.API.Enabled); err != nil {
+	if err := s.initString(ctx, "logs", "rotation_schedule", defaults.Logs.Rotation.Schedule); err != nil {
 		return err
 	}
 
-	// Appearance settings
-	if err := s.Set(ctx, "appearance", "theme", defaults.Appearance.Theme, false); err != nil {
+	// Webhooks settings (runtime)
+	if err := s.initBool(ctx, "webhooks", "github_enabled", defaults.Webhooks.GitHub.Enabled); err != nil {
+		return err
+	}
+	if err := s.initString(ctx, "webhooks", "github_path", defaults.Webhooks.GitHub.Path); err != nil {
+		return err
+	}
+	if err := s.initBool(ctx, "webhooks", "gitlab_enabled", defaults.Webhooks.GitLab.Enabled); err != nil {
+		return err
+	}
+	if err := s.initString(ctx, "webhooks", "gitlab_path", defaults.Webhooks.GitLab.Path); err != nil {
+		return err
+	}
+	if err := s.initBool(ctx, "webhooks", "bitbucket_enabled", defaults.Webhooks.Bitbucket.Enabled); err != nil {
+		return err
+	}
+	if err := s.initString(ctx, "webhooks", "bitbucket_path", defaults.Webhooks.Bitbucket.Path); err != nil {
+		return err
+	}
+
+	// Notifications settings (runtime)
+	if err := s.initBool(ctx, "notifications", "slack_enabled", defaults.Notifications.Providers.Slack.Enabled); err != nil {
+		return err
+	}
+	if err := s.initBool(ctx, "notifications", "email_enabled", defaults.Notifications.Providers.Email.Enabled); err != nil {
+		return err
+	}
+	if err := s.initBool(ctx, "notifications", "webhook_enabled", defaults.Notifications.Providers.Webhook.Enabled); err != nil {
+		return err
+	}
+
+	// API settings (runtime)
+	if err := s.initBool(ctx, "api", "enabled", defaults.API.Enabled); err != nil {
+		return err
+	}
+
+	// Appearance settings (runtime)
+	if err := s.initString(ctx, "appearance", "theme", defaults.Appearance.Theme); err != nil {
 		return err
 	}
 
