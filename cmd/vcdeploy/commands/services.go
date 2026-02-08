@@ -94,9 +94,10 @@ var errStorageNotOpen = errors.New("storage not open - call OpenStorage first")
 // It provides a convenient way for CLI commands to access services.
 type CLIServices struct {
 	*Services
-	store  storage.Store
-	kms    *security.KMS
-	logger *zap.Logger
+	store     storage.Store
+	kms       *security.KMS
+	masterKey *security.MasterKey
+	logger    *zap.Logger
 }
 
 // InitCLIServices initializes services from a database path for CLI command use.
@@ -146,9 +147,10 @@ func InitCLIServices(dbPath string) (*CLIServices, func(), error) {
 			Webhooks:     webhooks.New(store, kms),
 			HostKeys:     hostkeys.New(store),
 		},
-		store:  store,
-		kms:    kms,
-		logger: logger,
+		store:     store,
+		kms:       kms,
+		masterKey: masterKey,
+		logger:    logger,
 	}
 
 	cleanup := func() {
@@ -167,4 +169,9 @@ func (s *CLIServices) Store() storage.Store {
 // KMS returns the key management service.
 func (s *CLIServices) KMS() *security.KMS {
 	return s.kms
+}
+
+// MasterKey returns the master key for direct encryption/decryption.
+func (s *CLIServices) MasterKey() *security.MasterKey {
+	return s.masterKey
 }
