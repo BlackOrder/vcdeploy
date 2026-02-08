@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"github.com/rs/xid"
 	"time"
 )
 
@@ -156,7 +157,9 @@ func (s *MemoryStore) CreateDeploymentLog(ctx context.Context, log *DeploymentLo
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	log.ID = nextID(&s.nextDeploymentLogID)
+	if log.ID == "" {
+		log.ID = xid.New().String()
+	}
 	if log.CreatedAt.IsZero() {
 		log.CreatedAt = time.Now()
 	}
@@ -185,7 +188,7 @@ func (s *MemoryStore) ListDeploymentLogs(ctx context.Context, deploymentID strin
 }
 
 // ListDeploymentLogsAfter returns log entries after a given ID.
-func (s *MemoryStore) ListDeploymentLogsAfter(ctx context.Context, deploymentID string, afterID int64) ([]*DeploymentLog, error) {
+func (s *MemoryStore) ListDeploymentLogsAfter(ctx context.Context, deploymentID string, afterID string) ([]*DeploymentLog, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -245,7 +248,9 @@ func (s *MemoryStore) CreateDeploymentRollback(ctx context.Context, rollback *De
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	rollback.ID = nextID(&s.nextRollbackID)
+	if rollback.ID == "" {
+		rollback.ID = xid.New().String()
+	}
 	if rollback.StartedAt.IsZero() {
 		rollback.StartedAt = time.Now()
 	}
@@ -262,7 +267,7 @@ func (s *MemoryStore) CreateDeploymentRollback(ctx context.Context, rollback *De
 }
 
 // GetDeploymentRollback retrieves a rollback by ID.
-func (s *MemoryStore) GetDeploymentRollback(ctx context.Context, id int64) (*DeploymentRollback, error) {
+func (s *MemoryStore) GetDeploymentRollback(ctx context.Context, id string) (*DeploymentRollback, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 

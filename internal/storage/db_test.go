@@ -13,6 +13,8 @@ import (
 	"go.uber.org/zap"
 )
 
+func strPtr(s string) *string { return &s }
+
 // TestNew tests database creation and initialization.
 func TestNew(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -110,7 +112,7 @@ func TestCreateUser(t *testing.T) {
 		t.Fatalf("CreateUser() error = %v", err)
 	}
 
-	if user.ID == 0 {
+	if user.ID == "" {
 		t.Error("CreateUser() did not set user ID")
 	}
 }
@@ -784,7 +786,7 @@ func TestCreateProject(t *testing.T) {
 		Repository: "https://github.com/example/myapp",
 		Branch:     "main",
 		DeployPath: "/var/www/myapp",
-		Type:       "nodejs",
+		TypeID:     strPtr("nodejs"),
 		CreatedAt:  time.Now(),
 	}
 
@@ -793,7 +795,7 @@ func TestCreateProject(t *testing.T) {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 
-	if project.ID == 0 {
+	if project.ID == "" {
 		t.Error("CreateProject() did not set project ID")
 	}
 }
@@ -809,7 +811,7 @@ func TestGetProject(t *testing.T) {
 		Repository:       "https://github.com/example/findme",
 		Branch:           "develop",
 		DeployPath:       "/var/www/findme",
-		Type:             "php",
+		TypeID:           strPtr("php"),
 		CreatedAt:        time.Now(),
 		LastDeployStatus: "", // Must set to avoid NULL scan issue
 	}
@@ -819,7 +821,7 @@ func TestGetProject(t *testing.T) {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 
-	if project.ID == 0 {
+	if project.ID == "" {
 		t.Error("CreateProject() did not set project ID")
 	}
 
@@ -916,7 +918,7 @@ func TestCreateProjectType(t *testing.T) {
 		t.Fatalf("CreateProjectType() error = %v", err)
 	}
 
-	if pt.ID == 0 {
+	if pt.ID == "" {
 		t.Error("CreateProjectType() did not set ID")
 	}
 }
@@ -944,8 +946,8 @@ func TestListProjectTypes(t *testing.T) {
 		t.Fatalf("ListProjectTypes() error = %v", err)
 	}
 
-	if len(list) != 2 {
-		t.Errorf("ListProjectTypes() returned %d types, want 2", len(list))
+	if len(list) != 3 {
+		t.Errorf("ListProjectTypes() returned %d types, want 3 (2 custom + 1 seeded generic)", len(list))
 	}
 }
 
@@ -1432,7 +1434,7 @@ func TestCreateAPIKey(t *testing.T) {
 		t.Fatalf("CreateAPIKey() error = %v", err)
 	}
 
-	if key.ID == 0 {
+	if key.ID == "" {
 		t.Error("CreateAPIKey() did not set key ID")
 	}
 }
@@ -2337,7 +2339,7 @@ func TestGetProjectWebhookNotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	_, err := db.GetProjectWebhook(ctx, 9999, "github")
+	_, err := db.GetProjectWebhook(ctx, "nonexistent", "github")
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("GetProjectWebhook() error = %v, want ErrNotFound", err)
 	}
@@ -2584,8 +2586,8 @@ func TestCleanupOldAuditLogs(t *testing.T) {
 
 	// Create an old audit log entry using direct SQL with SQLite datetime function
 	_, err := db.conn.ExecContext(ctx, `
-		INSERT INTO audit_logs (timestamp, source, user, action, result) 
-		VALUES (datetime('now', '-48 hours'), 'test', 'admin', 'test_action', 'success')
+		INSERT INTO audit_logs (id, timestamp, source, user, action, result) 
+		VALUES ('test-audit-cleanup', datetime('now', '-48 hours'), 'test', 'admin', 'test_action', 'success')
 	`)
 	if err != nil {
 		t.Fatalf("Insert old audit log error = %v", err)
@@ -3537,8 +3539,8 @@ func TestRunInTransaction(t *testing.T) {
 
 	// Successful transaction
 	err := db.RunInTransaction(ctx, func(tx *sql.Tx) error {
-		_, err := tx.Exec(`INSERT INTO users (uid, username, password_hash, email, role) VALUES (?, ?, ?, ?, ?)`,
-			"uid-txuser1", "txuser1", "hash", "tx@example.com", "viewer")
+		_, err := tx.Exec(`INSERT INTO users (id, username, password_hash, email, role) VALUES (?, ?, ?, ?, ?)`,
+			"txuser1-id", "txuser1", "hash", "tx@example.com", "viewer")
 		return err
 	})
 	if err != nil {
@@ -3563,8 +3565,8 @@ func TestRunInTransactionRollback(t *testing.T) {
 
 	// Transaction that should rollback
 	err := db.RunInTransaction(ctx, func(tx *sql.Tx) error {
-		_, err := tx.Exec(`INSERT INTO users (uid, username, password_hash, email, role) VALUES (?, ?, ?, ?, ?)`,
-			"uid-txuser2", "txuser2", "hash", "tx2@example.com", "viewer")
+		_, err := tx.Exec(`INSERT INTO users (id, username, password_hash, email, role) VALUES (?, ?, ?, ?, ?)`,
+			"txuser2-id", "txuser2", "hash", "tx2@example.com", "viewer")
 		if err != nil {
 			return err
 		}
@@ -3590,7 +3592,7 @@ func TestGetUserByIDNotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	_, err := db.GetUserByID(ctx, 99999)
+	_, err := db.GetUserByID(ctx, "nonexistent")
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("GetUserByID() error = %v, want ErrNotFound", err)
 	}
@@ -3632,7 +3634,7 @@ func TestDeleteSSHHostKeyNotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	err := db.DeleteSSHHostKey(ctx, 99999)
+	err := db.DeleteSSHHostKey(ctx, "nonexistent")
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("DeleteSSHHostKey() error = %v, want ErrNotFound", err)
 	}
@@ -3873,9 +3875,9 @@ func TestCleanupExpiredAPIKeysWithData(t *testing.T) {
 
 	// Create an expired API key using direct SQL
 	_, err := db.conn.ExecContext(ctx, `
-		INSERT INTO api_keys (uid, user_id, name, key_hash, expires_at, created_at)
+		INSERT INTO api_keys (id, user_id, name, key_hash, expires_at, created_at)
 		VALUES (?, ?, 'expired-key', 'expiredhash', datetime('now', '-2 hours'), datetime('now', '-24 hours'))
-	`, "uid-expired-key", user.ID)
+	`, "expired-key-id", user.ID)
 	if err != nil {
 		t.Fatalf("Insert expired API key error = %v", err)
 	}
@@ -3898,8 +3900,8 @@ func TestCleanupOrphanedWebhooksWithData(t *testing.T) {
 
 	// Create an orphaned webhook (project_id that doesn't exist)
 	_, err := db.conn.ExecContext(ctx, `
-		INSERT INTO project_webhooks (uid, project_id, provider, secret_encrypted, enabled)
-		VALUES ('uid-orphaned-wh', 99999, 'github', X'1234', 1)
+		INSERT INTO project_webhooks (id, project_id, provider, secret_encrypted, enabled)
+		VALUES ('orphaned-wh-id', 'nonexistent-project', 'github', X'1234', 1)
 	`)
 	if err != nil {
 		t.Fatalf("Insert orphaned webhook error = %v", err)
@@ -4435,7 +4437,7 @@ func TestUpdateProjectByNameDetailed(t *testing.T) {
 		Repository: "https://github.com/test/update",
 		Branch:     "main",
 		DeployPath: "/var/www/app",
-		Type:       "nodejs",
+		TypeID:     strPtr("nodejs"),
 	}
 	_ = db.CreateProject(ctx, project)
 
@@ -4445,7 +4447,7 @@ func TestUpdateProjectByNameDetailed(t *testing.T) {
 		Repository: "https://gitlab.com/test/updated",
 		Branch:     "develop",
 		DeployPath: "/opt/app",
-		Type:       "python",
+		TypeID:     strPtr("python"),
 	}
 	err := db.UpdateProjectByName(ctx, updated)
 	if err != nil {
@@ -4463,8 +4465,8 @@ func TestUpdateProjectByNameDetailed(t *testing.T) {
 	if retrieved.DeployPath != "/opt/app" {
 		t.Errorf("Project DeployPath = %v, want /opt/app", retrieved.DeployPath)
 	}
-	if retrieved.Type != "python" {
-		t.Errorf("Project Type = %v, want python", retrieved.Type)
+	if retrieved.TypeID == nil || *retrieved.TypeID != "python" {
+		t.Errorf("Project TypeID = %v, want python", retrieved.TypeID)
 	}
 }
 
@@ -4703,8 +4705,8 @@ func TestListProjectsWithData(t *testing.T) {
 
 	// Create multiple projects
 	projects := []*Project{
-		{Name: "proj1", Repository: "https://github.com/test/1", Branch: "main", DeployPath: "/var/www/1", Type: "nodejs"},
-		{Name: "proj2", Repository: "https://github.com/test/2", Branch: "develop", DeployPath: "/var/www/2", Type: "python"},
+		{Name: "proj1", Repository: "https://github.com/test/1", Branch: "main", DeployPath: "/var/www/1", TypeID: strPtr("nodejs")},
+		{Name: "proj2", Repository: "https://github.com/test/2", Branch: "develop", DeployPath: "/var/www/2", TypeID: strPtr("python")},
 	}
 	for _, p := range projects {
 		if err := db.CreateProject(ctx, p); err != nil {
@@ -5133,7 +5135,7 @@ func TestJumpServerCRUD(t *testing.T) {
 	if err := db.CreateJumpServer(ctx, js); err != nil {
 		t.Fatalf("CreateJumpServer() error = %v", err)
 	}
-	if js.ID == 0 {
+	if js.ID == "" {
 		t.Error("CreateJumpServer() did not set ID")
 	}
 
@@ -5236,7 +5238,7 @@ func TestJumpServerNotFound(t *testing.T) {
 	ctx := context.Background()
 
 	// Get by ID
-	_, err := db.GetJumpServer(ctx, 99999)
+	_, err := db.GetJumpServer(ctx, "nonexistent")
 	if err != ErrNotFound {
 		t.Errorf("GetJumpServer() error = %v, want ErrNotFound", err)
 	}
@@ -5248,13 +5250,13 @@ func TestJumpServerNotFound(t *testing.T) {
 	}
 
 	// Update nonexistent
-	err = db.UpdateJumpServer(ctx, &SSHJumpServer{ID: 99999, Name: "test"})
+	err = db.UpdateJumpServer(ctx, &SSHJumpServer{ID: "nonexistent", Name: "test"})
 	if err != ErrNotFound {
 		t.Errorf("UpdateJumpServer() error = %v, want ErrNotFound", err)
 	}
 
 	// Delete nonexistent
-	err = db.DeleteJumpServer(ctx, 99999)
+	err = db.DeleteJumpServer(ctx, "nonexistent")
 	if err != ErrNotFound {
 		t.Errorf("DeleteJumpServer() error = %v, want ErrNotFound", err)
 	}
@@ -5267,7 +5269,7 @@ func TestJumpServerWithSSHKeyID(t *testing.T) {
 	ctx := context.Background()
 
 	// Create jump server with SSH key reference
-	keyID := int64(42)
+	keyID := "key-42"
 	js := &SSHJumpServer{
 		Name:     "bastion-with-key",
 		Host:     "key.example.com",
@@ -5287,7 +5289,7 @@ func TestJumpServerWithSSHKeyID(t *testing.T) {
 	if got.SSHKeyID == nil {
 		t.Error("GetJumpServer() SSHKeyID = nil, want non-nil")
 	} else if *got.SSHKeyID != keyID {
-		t.Errorf("GetJumpServer() SSHKeyID = %d, want %d", *got.SSHKeyID, keyID)
+		t.Errorf("GetJumpServer() SSHKeyID = %s, want %s", *got.SSHKeyID, keyID)
 	}
 }
 
@@ -5335,7 +5337,7 @@ func TestAgentBinary_CRUD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateAgentBinary() error = %v", err)
 	}
-	if binary.ID == 0 {
+	if binary.ID == "" {
 		t.Error("CreateAgentBinary() did not set ID")
 	}
 
@@ -5397,7 +5399,7 @@ func TestAgentBinary_GetByVersion(t *testing.T) {
 		t.Fatalf("GetAgentBinaryByVersion() error = %v", err)
 	}
 	if got.ID != binary.ID {
-		t.Errorf("GetAgentBinaryByVersion() ID = %d, want %d", got.ID, binary.ID)
+		t.Errorf("GetAgentBinaryByVersion() ID = %s, want %s", got.ID, binary.ID)
 	}
 
 	// Non-existent version
@@ -5438,7 +5440,7 @@ func TestAgentBinary_SetCurrent(t *testing.T) {
 		t.Fatalf("GetCurrentAgentBinary() error = %v", err)
 	}
 	if current.ID != binary1.ID {
-		t.Errorf("GetCurrentAgentBinary() ID = %d, want %d", current.ID, binary1.ID)
+		t.Errorf("GetCurrentAgentBinary() ID = %s, want %s", current.ID, binary1.ID)
 	}
 
 	// Set binary2 as current
@@ -5452,7 +5454,7 @@ func TestAgentBinary_SetCurrent(t *testing.T) {
 		t.Fatalf("GetCurrentAgentBinary() after set error = %v", err)
 	}
 	if current.ID != binary2.ID {
-		t.Errorf("GetCurrentAgentBinary() after set ID = %d, want %d", current.ID, binary2.ID)
+		t.Errorf("GetCurrentAgentBinary() after set ID = %s, want %s", current.ID, binary2.ID)
 	}
 
 	// Verify binary1 is no longer current
@@ -5500,7 +5502,7 @@ func TestAgentBinary_DeleteNotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	err := db.DeleteAgentBinary(ctx, 999999)
+	err := db.DeleteAgentBinary(ctx, "nonexistent")
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("DeleteAgentBinary() non-existent should return ErrNotFound, got %v", err)
 	}
@@ -5538,7 +5540,7 @@ func TestAgentUpdateHistory_CRUD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateAgentUpdateHistory() error = %v", err)
 	}
-	if history.ID == 0 {
+	if history.ID == "" {
 		t.Error("CreateAgentUpdateHistory() did not set ID")
 	}
 
@@ -5689,7 +5691,7 @@ func TestAgentUpdateHistory_NotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	_, err := db.GetAgentUpdateHistory(ctx, 999999)
+	_, err := db.GetAgentUpdateHistory(ctx, "nonexistent")
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("GetAgentUpdateHistory() non-existent should return ErrNotFound, got %v", err)
 	}
@@ -5893,7 +5895,7 @@ func TestHealthCheckConfig_CRUD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateHealthCheckConfig() error = %v", err)
 	}
-	if config.ID == 0 {
+	if config.ID == "" {
 		t.Error("CreateHealthCheckConfig() did not set ID")
 	}
 
@@ -5972,7 +5974,7 @@ func TestHealthCheckConfig_ForProject(t *testing.T) {
 		Repository: "https://github.com/test/hc",
 		Branch:     "main",
 		DeployPath: "/app",
-		Type:       "web",
+		TypeID:     strPtr("web"),
 		CreatedAt:  time.Now(),
 	}
 	if err := db.CreateProject(ctx, project); err != nil {
@@ -6026,7 +6028,7 @@ func TestHealthCheckConfig_ForProject(t *testing.T) {
 		t.Error("GetHealthCheckConfigForProject() should return project-specific config when it exists")
 	}
 	if got.ID != projectConfig.ID {
-		t.Errorf("GetHealthCheckConfigForProject() ID = %d, want %d", got.ID, projectConfig.ID)
+		t.Errorf("GetHealthCheckConfigForProject() ID = %s, want %s", got.ID, projectConfig.ID)
 	}
 }
 
@@ -6120,13 +6122,13 @@ func TestHealthCheckConfig_NotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	_, err := db.GetHealthCheckConfig(ctx, 999999)
+	_, err := db.GetHealthCheckConfig(ctx, "nonexistent")
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("GetHealthCheckConfig() non-existent should return ErrNotFound, got %v", err)
 	}
 
 	// Delete non-existent
-	err = db.DeleteHealthCheckConfig(ctx, 999999)
+	err = db.DeleteHealthCheckConfig(ctx, "nonexistent")
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("DeleteHealthCheckConfig() non-existent should return ErrNotFound, got %v", err)
 	}
@@ -6158,7 +6160,7 @@ func TestDeploymentRollback_CRUD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateDeploymentRollback() error = %v", err)
 	}
-	if rollback.ID == 0 {
+	if rollback.ID == "" {
 		t.Error("CreateDeploymentRollback() did not set ID")
 	}
 
@@ -6276,7 +6278,7 @@ func TestDeploymentRollback_GetLatest(t *testing.T) {
 	// Create rollbacks - the most recently inserted one should be returned
 	// Note: CreateDeploymentRollback doesn't save started_at from the struct,
 	// it uses CURRENT_TIMESTAMP as default. So we rely on insertion order.
-	var lastID int64
+	var lastID string
 	var lastFromRelease int
 	for i := 0; i < 3; i++ {
 		fromRelease := i + 2
@@ -6306,7 +6308,7 @@ func TestDeploymentRollback_GetLatest(t *testing.T) {
 
 	// Verify it's the last inserted one
 	if latest.ID != lastID {
-		t.Errorf("GetLatestRollbackForDeployment() ID = %d, want %d", latest.ID, lastID)
+		t.Errorf("GetLatestRollbackForDeployment() ID = %s, want %s", latest.ID, lastID)
 	}
 	if latest.FromRelease != lastFromRelease {
 		t.Errorf("GetLatestRollbackForDeployment() FromRelease = %d, want %d", latest.FromRelease, lastFromRelease)
@@ -6325,7 +6327,7 @@ func TestDeploymentRollback_NotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	_, err := db.GetDeploymentRollback(ctx, 999999)
+	_, err := db.GetDeploymentRollback(ctx, "nonexistent")
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("GetDeploymentRollback() non-existent should return ErrNotFound, got %v", err)
 	}
@@ -6345,7 +6347,7 @@ func TestUpdateProjectHealthCheck(t *testing.T) {
 		Repository: "https://github.com/test/hc-update",
 		Branch:     "main",
 		DeployPath: "/app",
-		Type:       "web",
+		TypeID:     strPtr("web"),
 		CreatedAt:  time.Now(),
 	}
 	if err := db.CreateProject(ctx, project); err != nil {

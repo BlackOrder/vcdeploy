@@ -18,6 +18,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func strPtr(s string) *string { return &s }
+
 // setupTestDB creates a test database in a temporary directory.
 func setupTestDB(t *testing.T) (storage.Store, func()) {
 	t.Helper()
@@ -125,7 +127,7 @@ func TestProjectDBOperations(t *testing.T) {
 		Name:       "test-project",
 		Repository: "https://github.com/example/repo",
 		Branch:     "main",
-		Type:       "nodejs",
+		TypeID:     strPtr("nodejs"),
 		DeployPath: "/var/www/app",
 	}
 
@@ -133,7 +135,7 @@ func TestProjectDBOperations(t *testing.T) {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 
-	if project.ID == 0 {
+	if project.ID == "" {
 		t.Error("CreateProject() did not set project ID")
 	}
 
@@ -209,8 +211,8 @@ func TestProjectTypeDBOperations(t *testing.T) {
 		t.Fatalf("ListProjectTypes() error = %v", err)
 	}
 
-	if len(types) != 1 {
-		t.Errorf("ListProjectTypes() returned %d types, want 1", len(types))
+	if len(types) != 2 {
+		t.Errorf("ListProjectTypes() returned %d types, want 2 (1 custom + 1 seeded generic)", len(types))
 	}
 
 	// Test DeleteProjectType

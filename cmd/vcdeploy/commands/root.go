@@ -976,7 +976,7 @@ func runProjectList(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
 			p.Name,
-			p.Type,
+			derefTypeID(p.TypeID),
 			p.Repository,
 			lastDeploy,
 			status,
@@ -1076,7 +1076,7 @@ func runProjectEdit(cmd *cobra.Command, args []string) error {
 			project.DeployPath = pathFlag
 		}
 		if typeFlag != "" {
-			project.Type = typeFlag
+			project.TypeID = &typeFlag
 		}
 	} else {
 		// Interactive mode
@@ -1124,7 +1124,7 @@ func runProjectEdit(cmd *cobra.Command, args []string) error {
 		}
 
 		// Type
-		fmt.Printf("Type [%s]: ", project.Type)
+		fmt.Printf("Type [%s]: ", derefTypeID(project.TypeID))
 		input, err = reader.ReadString('\n')
 		if err != nil {
 			fmt.Println()
@@ -1132,7 +1132,7 @@ func runProjectEdit(cmd *cobra.Command, args []string) error {
 		}
 		input = strings.TrimSpace(input)
 		if input != "" {
-			project.Type = input
+			project.TypeID = &input
 		}
 	}
 

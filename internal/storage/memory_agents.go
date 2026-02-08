@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"github.com/rs/xid"
 	"strings"
 	"time"
 )
@@ -331,7 +332,9 @@ func (s *MemoryStore) CreateAgentBinary(ctx context.Context, binary *AgentBinary
 		}
 	}
 
-	binary.ID = nextID(&s.nextAgentBinaryID)
+	if binary.ID == "" {
+		binary.ID = xid.New().String()
+	}
 	binary.UploadedAt = time.Now()
 
 	// Copy-on-store
@@ -343,7 +346,7 @@ func (s *MemoryStore) CreateAgentBinary(ctx context.Context, binary *AgentBinary
 }
 
 // GetAgentBinary retrieves an agent binary by ID.
-func (s *MemoryStore) GetAgentBinary(ctx context.Context, id int64) (*AgentBinary, error) {
+func (s *MemoryStore) GetAgentBinary(ctx context.Context, id string) (*AgentBinary, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -398,7 +401,7 @@ func (s *MemoryStore) ListAgentBinaries(ctx context.Context) ([]*AgentBinary, er
 }
 
 // SetCurrentAgentBinary sets an agent binary as the current version.
-func (s *MemoryStore) SetCurrentAgentBinary(ctx context.Context, id int64) error {
+func (s *MemoryStore) SetCurrentAgentBinary(ctx context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -422,7 +425,7 @@ func (s *MemoryStore) SetCurrentAgentBinary(ctx context.Context, id int64) error
 }
 
 // DeleteAgentBinary removes an agent binary by ID.
-func (s *MemoryStore) DeleteAgentBinary(ctx context.Context, id int64) error {
+func (s *MemoryStore) DeleteAgentBinary(ctx context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -442,7 +445,9 @@ func (s *MemoryStore) CreateAgentUpdateHistory(ctx context.Context, history *Age
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	history.ID = nextID(&s.nextAgentUpdateID)
+	if history.ID == "" {
+		history.ID = xid.New().String()
+	}
 	history.StartedAt = time.Now()
 	if history.Status == "" {
 		history.Status = UpdateStatusPending
@@ -457,7 +462,7 @@ func (s *MemoryStore) CreateAgentUpdateHistory(ctx context.Context, history *Age
 }
 
 // GetAgentUpdateHistory retrieves an update history record by ID.
-func (s *MemoryStore) GetAgentUpdateHistory(ctx context.Context, id int64) (*AgentUpdateHistory, error) {
+func (s *MemoryStore) GetAgentUpdateHistory(ctx context.Context, id string) (*AgentUpdateHistory, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 

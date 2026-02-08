@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"github.com/rs/xid"
 	"sort"
 	"strings"
 	"time"
@@ -43,8 +44,8 @@ func (m *MemoryStore) CreateRecipeComponent(ctx context.Context, c *RecipeCompon
 	}
 
 	// Assign ID if not set
-	if c.ID == 0 {
-		c.ID = nextID(&m.nextRecipeComponentID)
+	if c.ID == "" {
+		c.ID = xid.New().String()
 	}
 
 	// Set created time if not set
@@ -80,7 +81,7 @@ func (m *MemoryStore) GetRecipeComponent(ctx context.Context, namespace, slug, v
 }
 
 // GetRecipeComponentByID returns a component by ID.
-func (m *MemoryStore) GetRecipeComponentByID(ctx context.Context, id int64) (*RecipeComponent, error) {
+func (m *MemoryStore) GetRecipeComponentByID(ctx context.Context, id string) (*RecipeComponent, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -189,7 +190,7 @@ func (m *MemoryStore) UpdateRecipeComponent(ctx context.Context, c *RecipeCompon
 }
 
 // DeleteRecipeComponent deletes a component by ID.
-func (m *MemoryStore) DeleteRecipeComponent(ctx context.Context, id int64) error {
+func (m *MemoryStore) DeleteRecipeComponent(ctx context.Context, id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -227,8 +228,8 @@ func (m *MemoryStore) CreatePlaybook(ctx context.Context, p *Playbook) error {
 	}
 
 	// Assign ID if not set
-	if p.ID == 0 {
-		p.ID = nextID(&m.nextPlaybookID)
+	if p.ID == "" {
+		p.ID = xid.New().String()
 	}
 
 	// Set created time if not set
@@ -285,7 +286,7 @@ func (m *MemoryStore) GetPlaybook(ctx context.Context, namespace, slug, version 
 }
 
 // GetPlaybookByID returns a playbook by ID.
-func (m *MemoryStore) GetPlaybookByID(ctx context.Context, id int64) (*Playbook, error) {
+func (m *MemoryStore) GetPlaybookByID(ctx context.Context, id string) (*Playbook, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -415,7 +416,7 @@ func (m *MemoryStore) UpdatePlaybook(ctx context.Context, p *Playbook) error {
 }
 
 // DeletePlaybook deletes a playbook by ID.
-func (m *MemoryStore) DeletePlaybook(ctx context.Context, id int64) error {
+func (m *MemoryStore) DeletePlaybook(ctx context.Context, id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -475,13 +476,13 @@ func (m *MemoryStore) CreatePlaybookActivation(ctx context.Context, a *PlaybookA
 	// Check if project already has an activation
 	for _, existing := range m.activationsByProject[a.ProjectID] {
 		if existing.ProjectID == a.ProjectID {
-			return fmt.Errorf("project %d already has an active playbook", a.ProjectID)
+			return fmt.Errorf("project %s already has an active playbook", a.ProjectID)
 		}
 	}
 
 	// Assign ID if not set
-	if a.ID == 0 {
-		a.ID = nextID(&m.nextPlaybookActivationID)
+	if a.ID == "" {
+		a.ID = xid.New().String()
 	}
 
 	// Set activated time if not set
@@ -504,7 +505,7 @@ func (m *MemoryStore) CreatePlaybookActivation(ctx context.Context, a *PlaybookA
 }
 
 // GetPlaybookActivation returns the activation for a project.
-func (m *MemoryStore) GetPlaybookActivation(ctx context.Context, projectID int64) (*PlaybookActivation, error) {
+func (m *MemoryStore) GetPlaybookActivation(ctx context.Context, projectID string) (*PlaybookActivation, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -519,7 +520,7 @@ func (m *MemoryStore) GetPlaybookActivation(ctx context.Context, projectID int64
 }
 
 // GetPlaybookActivationByID returns an activation by ID.
-func (m *MemoryStore) GetPlaybookActivationByID(ctx context.Context, id int64) (*PlaybookActivation, error) {
+func (m *MemoryStore) GetPlaybookActivationByID(ctx context.Context, id string) (*PlaybookActivation, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -534,7 +535,7 @@ func (m *MemoryStore) GetPlaybookActivationByID(ctx context.Context, id int64) (
 }
 
 // ListActivationsByPlaybook returns all activations using a specific playbook.
-func (m *MemoryStore) ListActivationsByPlaybook(ctx context.Context, playbookID int64) ([]*PlaybookActivation, error) {
+func (m *MemoryStore) ListActivationsByPlaybook(ctx context.Context, playbookID string) ([]*PlaybookActivation, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -549,7 +550,7 @@ func (m *MemoryStore) ListActivationsByPlaybook(ctx context.Context, playbookID 
 }
 
 // DeletePlaybookActivation deletes an activation by ID.
-func (m *MemoryStore) DeletePlaybookActivation(ctx context.Context, id int64) error {
+func (m *MemoryStore) DeletePlaybookActivation(ctx context.Context, id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -572,7 +573,7 @@ func (m *MemoryStore) DeletePlaybookActivation(ctx context.Context, id int64) er
 }
 
 // removeActivationFromSlice removes an activation by ID from a slice.
-func removeActivationFromSlice(slice []*PlaybookActivation, id int64) []*PlaybookActivation {
+func removeActivationFromSlice(slice []*PlaybookActivation, id string) []*PlaybookActivation {
 	for i, a := range slice {
 		if a.ID == id {
 			return append(slice[:i], slice[i+1:]...)
@@ -593,8 +594,8 @@ func (m *MemoryStore) CreateVariableBinding(ctx context.Context, b *PlaybookVari
 	defer m.mu.Unlock()
 
 	// Assign ID if not set
-	if b.ID == 0 {
-		b.ID = nextID(&m.nextVariableBindingID)
+	if b.ID == "" {
+		b.ID = xid.New().String()
 	}
 
 	// Store a copy
@@ -617,7 +618,7 @@ func (m *MemoryStore) CreateVariableBinding(ctx context.Context, b *PlaybookVari
 }
 
 // GetVariableBindings returns all bindings for an activation.
-func (m *MemoryStore) GetVariableBindings(ctx context.Context, activationID int64) ([]*PlaybookVariableBinding, error) {
+func (m *MemoryStore) GetVariableBindings(ctx context.Context, activationID string) ([]*PlaybookVariableBinding, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -677,7 +678,7 @@ func (m *MemoryStore) UpdateVariableBinding(ctx context.Context, b *PlaybookVari
 }
 
 // DeleteVariableBinding deletes a binding by ID.
-func (m *MemoryStore) DeleteVariableBinding(ctx context.Context, id int64) error {
+func (m *MemoryStore) DeleteVariableBinding(ctx context.Context, id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -721,7 +722,7 @@ func (m *MemoryStore) FindBindingsBySourceRef(ctx context.Context, sourceType, s
 }
 
 // removeBindingFromSlice removes a binding by ID from a slice.
-func removeBindingFromSlice(slice []*PlaybookVariableBinding, id int64) []*PlaybookVariableBinding {
+func removeBindingFromSlice(slice []*PlaybookVariableBinding, id string) []*PlaybookVariableBinding {
 	for i, b := range slice {
 		if b.ID == id {
 			return append(slice[:i], slice[i+1:]...)
@@ -744,13 +745,13 @@ func (m *MemoryStore) CreateRawApproval(ctx context.Context, a *RawCommandApprov
 	// Check if component already has an approval
 	for _, existing := range m.rawApprovalsByComponent[a.ComponentID] {
 		if existing.ComponentID == a.ComponentID {
-			return fmt.Errorf("component %d already has an approval", a.ComponentID)
+			return fmt.Errorf("component %s already has an approval", a.ComponentID)
 		}
 	}
 
 	// Assign ID if not set
-	if a.ID == 0 {
-		a.ID = nextID(&m.nextRawApprovalID)
+	if a.ID == "" {
+		a.ID = xid.New().String()
 	}
 
 	// Set approved time if not set
@@ -772,7 +773,7 @@ func (m *MemoryStore) CreateRawApproval(ctx context.Context, a *RawCommandApprov
 }
 
 // GetRawApproval returns the approval for a component.
-func (m *MemoryStore) GetRawApproval(ctx context.Context, componentID int64) (*RawCommandApproval, error) {
+func (m *MemoryStore) GetRawApproval(ctx context.Context, componentID string) (*RawCommandApproval, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -787,7 +788,7 @@ func (m *MemoryStore) GetRawApproval(ctx context.Context, componentID int64) (*R
 }
 
 // DeleteRawApproval deletes an approval by component ID.
-func (m *MemoryStore) DeleteRawApproval(ctx context.Context, componentID int64) error {
+func (m *MemoryStore) DeleteRawApproval(ctx context.Context, componentID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -844,8 +845,6 @@ func (m *MemoryStore) loadRecipeComponentsFromDB(_ context.Context, db *DB) erro
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
-	var maxID int64
 	for rows.Next() {
 		c := &RecipeComponent{}
 		var contentJSON, variablesJSON string
@@ -860,22 +859,16 @@ func (m *MemoryStore) loadRecipeComponentsFromDB(_ context.Context, db *DB) erro
 
 		// Parse JSON fields
 		if err := c.ParseContentJSON(contentJSON); err != nil {
-			return fmt.Errorf("parse content for component %d: %w", c.ID, err)
+			return fmt.Errorf("parse content for component %s: %w", c.ID, err)
 		}
 		if err := c.ParseVariablesJSON(variablesJSON); err != nil {
-			return fmt.Errorf("parse variables for component %d: %w", c.ID, err)
+			return fmt.Errorf("parse variables for component %s: %w", c.ID, err)
 		}
 
 		m.recipeComponents[c.ID] = c
 		key := recipeComponentKey(c.Namespace, c.Slug, c.Version)
 		m.recipeComponentsByKey[key] = c
-
-		if c.ID > maxID {
-			maxID = c.ID
-		}
 	}
-
-	m.nextRecipeComponentID.Store(maxID)
 	return rows.Err()
 }
 
@@ -894,12 +887,10 @@ func (m *MemoryStore) loadPlaybooksFromDB(_ context.Context, db *DB) error {
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
-	var maxID int64
 	for rows.Next() {
 		p := &Playbook{}
 		var stepsJSON, sharedDirsJSON, sharedFilesJSON, writableDirsJSON, validationRulesJSON string
-		var parentID *int64
+		var parentID *string
 		var parentVersion *string
 		err := rows.Scan(
 			&p.ID, &p.Namespace, &p.Slug, &p.Version, &p.Name, &p.Description, &p.FrameworkType,
@@ -912,19 +903,19 @@ func (m *MemoryStore) loadPlaybooksFromDB(_ context.Context, db *DB) error {
 
 		// Parse JSON fields
 		if err := p.ParseStepsJSON(stepsJSON); err != nil {
-			return fmt.Errorf("parse steps for playbook %d: %w", p.ID, err)
+			return fmt.Errorf("parse steps for playbook %s: %w", p.ID, err)
 		}
 		if err := p.ParseSharedDirsJSON(sharedDirsJSON); err != nil {
-			return fmt.Errorf("parse shared_dirs for playbook %d: %w", p.ID, err)
+			return fmt.Errorf("parse shared_dirs for playbook %s: %w", p.ID, err)
 		}
 		if err := p.ParseSharedFilesJSON(sharedFilesJSON); err != nil {
-			return fmt.Errorf("parse shared_files for playbook %d: %w", p.ID, err)
+			return fmt.Errorf("parse shared_files for playbook %s: %w", p.ID, err)
 		}
 		if err := p.ParseWritableDirsJSON(writableDirsJSON); err != nil {
-			return fmt.Errorf("parse writable_dirs for playbook %d: %w", p.ID, err)
+			return fmt.Errorf("parse writable_dirs for playbook %s: %w", p.ID, err)
 		}
 		if err := p.ParseValidationRulesJSON(validationRulesJSON); err != nil {
-			return fmt.Errorf("parse validation_rules for playbook %d: %w", p.ID, err)
+			return fmt.Errorf("parse validation_rules for playbook %s: %w", p.ID, err)
 		}
 
 		p.ParentID = parentID
@@ -935,13 +926,7 @@ func (m *MemoryStore) loadPlaybooksFromDB(_ context.Context, db *DB) error {
 		m.playbooks[p.ID] = p
 		key := playbookKey(p.Namespace, p.Slug, p.Version)
 		m.playbooksByKey[key] = p
-
-		if p.ID > maxID {
-			maxID = p.ID
-		}
 	}
-
-	m.nextPlaybookID.Store(maxID)
 	return rows.Err()
 }
 
@@ -958,8 +943,6 @@ func (m *MemoryStore) loadPlaybookActivationsFromDB(_ context.Context, db *DB) e
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
-	var maxID int64
 	for rows.Next() {
 		a := &PlaybookActivation{}
 		err := rows.Scan(&a.ID, &a.ProjectID, &a.PlaybookID, &a.ActivatedAt, &a.ActivatedBy)
@@ -970,13 +953,7 @@ func (m *MemoryStore) loadPlaybookActivationsFromDB(_ context.Context, db *DB) e
 		m.playbookActivations[a.ID] = a
 		m.activationsByProject[a.ProjectID] = append(m.activationsByProject[a.ProjectID], a)
 		m.activationsByPlaybook[a.PlaybookID] = append(m.activationsByPlaybook[a.PlaybookID], a)
-
-		if a.ID > maxID {
-			maxID = a.ID
-		}
 	}
-
-	m.nextPlaybookActivationID.Store(maxID)
 	return rows.Err()
 }
 
@@ -993,8 +970,6 @@ func (m *MemoryStore) loadVariableBindingsFromDB(_ context.Context, db *DB) erro
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
-	var maxID int64
 	for rows.Next() {
 		b := &PlaybookVariableBinding{}
 		var sourceRef, literalValue *string
@@ -1018,13 +993,7 @@ func (m *MemoryStore) loadVariableBindingsFromDB(_ context.Context, db *DB) erro
 			key := bindingSourceKey(b.SourceType, b.SourceRef)
 			m.bindingsBySourceRef[key] = append(m.bindingsBySourceRef[key], b)
 		}
-
-		if b.ID > maxID {
-			maxID = b.ID
-		}
 	}
-
-	m.nextVariableBindingID.Store(maxID)
 	return rows.Err()
 }
 
@@ -1041,8 +1010,6 @@ func (m *MemoryStore) loadRawApprovalsFromDB(_ context.Context, db *DB) error {
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
-	var maxID int64
 	for rows.Next() {
 		a := &RawCommandApproval{}
 		var note *string
@@ -1057,13 +1024,7 @@ func (m *MemoryStore) loadRawApprovalsFromDB(_ context.Context, db *DB) error {
 
 		m.rawApprovals[a.ID] = a
 		m.rawApprovalsByComponent[a.ComponentID] = append(m.rawApprovalsByComponent[a.ComponentID], a)
-
-		if a.ID > maxID {
-			maxID = a.ID
-		}
 	}
-
-	m.nextRawApprovalID.Store(maxID)
 	return rows.Err()
 }
 

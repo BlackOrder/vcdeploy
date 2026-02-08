@@ -20,9 +20,9 @@ func NewDependencyService(store storage.Store) *DependencyService {
 
 // ResourceUsage describes how a resource is used.
 type ResourceUsage struct {
-	ProjectID    int64  `json:"project_id"`
+	ProjectID    string `json:"project_id"`
 	ProjectName  string `json:"project_name"`
-	PlaybookID   int64  `json:"playbook_id"`
+	PlaybookID   string `json:"playbook_id"`
 	PlaybookName string `json:"playbook_name"`
 	VariableName string `json:"variable_name"`
 }
@@ -86,11 +86,11 @@ func (s *DependencyService) bindingsToUsages(ctx context.Context, bindings []*st
 	return usages, nil
 }
 
-func (s *DependencyService) getProjectName(ctx context.Context, projectID int64) string {
+func (s *DependencyService) getProjectName(ctx context.Context, projectID string) string {
 	// Try to get project from store
 	project, err := s.store.GetProjectByID(ctx, projectID)
 	if err != nil || project == nil {
-		return fmt.Sprintf("Project %d", projectID)
+		return fmt.Sprintf("Project %s", projectID)
 	}
 	return project.Name
 }

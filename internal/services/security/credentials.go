@@ -45,7 +45,7 @@ func (s *CredentialService) requireKMS() error {
 
 // CredentialInfo represents credential info for API responses (without secrets).
 type CredentialInfo struct {
-	ID         int64     `json:"id"`
+	ID         string    `json:"id"`
 	Name       string    `json:"name"`
 	Type       string    `json:"type"`
 	URLPattern string    `json:"url_pattern"`
@@ -155,7 +155,7 @@ func (s *CredentialService) ListCredentials(ctx context.Context) ([]CredentialIn
 }
 
 // GetCredential returns credential info by ID (without secret).
-func (s *CredentialService) GetCredential(ctx context.Context, id int64) (*CredentialInfo, error) {
+func (s *CredentialService) GetCredential(ctx context.Context, id string) (*CredentialInfo, error) {
 	cred, err := s.store.GetSourceCredential(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("getting credential: %w", err)
@@ -249,7 +249,7 @@ func (s *CredentialService) CreateCredential(ctx context.Context, req CreateCred
 }
 
 // UpdateCredential updates an existing credential.
-func (s *CredentialService) UpdateCredential(ctx context.Context, id int64, req UpdateCredentialRequest) (*CredentialInfo, error) {
+func (s *CredentialService) UpdateCredential(ctx context.Context, id string, req UpdateCredentialRequest) (*CredentialInfo, error) {
 	// Only require KMS if credential value is being updated
 	if req.Credential != nil {
 		if err := s.requireKMS(); err != nil {
@@ -325,7 +325,7 @@ func (s *CredentialService) UpdateCredential(ctx context.Context, id int64, req 
 	}
 
 	s.logger.Info("Credential updated",
-		zap.Int64("id", id),
+		zap.String("id", id),
 		zap.String("name", cred.Name),
 	)
 
@@ -341,7 +341,7 @@ func (s *CredentialService) UpdateCredential(ctx context.Context, id int64, req 
 }
 
 // DeleteCredential removes a credential.
-func (s *CredentialService) DeleteCredential(ctx context.Context, id int64) error {
+func (s *CredentialService) DeleteCredential(ctx context.Context, id string) error {
 	// Check exists
 	cred, err := s.store.GetSourceCredential(ctx, id)
 	if err != nil {
@@ -353,7 +353,7 @@ func (s *CredentialService) DeleteCredential(ctx context.Context, id int64) erro
 	}
 
 	s.logger.Info("Credential deleted",
-		zap.Int64("id", id),
+		zap.String("id", id),
 		zap.String("name", cred.Name),
 	)
 
@@ -361,7 +361,7 @@ func (s *CredentialService) DeleteCredential(ctx context.Context, id int64) erro
 }
 
 // TestCredential tests if a credential matches and works with a repo URL.
-func (s *CredentialService) TestCredential(ctx context.Context, id int64, repoURL string) (*TestCredentialResult, error) {
+func (s *CredentialService) TestCredential(ctx context.Context, id string, repoURL string) (*TestCredentialResult, error) {
 	cred, err := s.store.GetSourceCredential(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("getting credential: %w", err)
@@ -413,7 +413,7 @@ func (s *CredentialService) MatchCredentialForURL(ctx context.Context, repoURL s
 
 // GetDecryptedCredential returns the decrypted credential value.
 // This should only be used internally when actually needing the credential.
-func (s *CredentialService) GetDecryptedCredential(ctx context.Context, id int64) (string, error) {
+func (s *CredentialService) GetDecryptedCredential(ctx context.Context, id string) (string, error) {
 	if err := s.requireKMS(); err != nil {
 		return "", err
 	}

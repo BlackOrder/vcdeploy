@@ -183,7 +183,7 @@ func TestMemoryStore_PlaybookActivation_CRUD(t *testing.T) {
 
 	// Create activation
 	activation := &PlaybookActivation{
-		ProjectID:   1,
+		ProjectID:   "test-project-1",
 		PlaybookID:  playbook.ID,
 		ActivatedAt: time.Now(),
 	}
@@ -193,7 +193,7 @@ func TestMemoryStore_PlaybookActivation_CRUD(t *testing.T) {
 	assert.NotZero(t, activation.ID)
 
 	// Read by project ID
-	found, err := store.GetPlaybookActivation(ctx, 1)
+	found, err := store.GetPlaybookActivation(ctx, "test-project-1")
 	require.NoError(t, err)
 	assert.Equal(t, activation.ID, found.ID)
 	assert.Equal(t, playbook.ID, found.PlaybookID)
@@ -201,7 +201,7 @@ func TestMemoryStore_PlaybookActivation_CRUD(t *testing.T) {
 	// Read by ID
 	found, err = store.GetPlaybookActivationByID(ctx, activation.ID)
 	require.NoError(t, err)
-	assert.Equal(t, int64(1), found.ProjectID)
+	assert.Equal(t, "test-project-1", found.ProjectID)
 
 	// List by playbook
 	activations, err := store.ListActivationsByPlaybook(ctx, playbook.ID)
@@ -212,7 +212,7 @@ func TestMemoryStore_PlaybookActivation_CRUD(t *testing.T) {
 	err = store.DeletePlaybookActivation(ctx, activation.ID)
 	require.NoError(t, err)
 
-	_, err = store.GetPlaybookActivation(ctx, 1)
+	_, err = store.GetPlaybookActivation(ctx, "test-project-1")
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
@@ -222,7 +222,7 @@ func TestMemoryStore_VariableBinding_CRUD(t *testing.T) {
 
 	// Create a binding
 	binding := &PlaybookVariableBinding{
-		ActivationID: 1,
+		ActivationID: "activation-1",
 		VariableName: "DB_PASSWORD",
 		SourceType:   SourceTypeSecret,
 		SourceRef:    "database/password",
@@ -233,7 +233,7 @@ func TestMemoryStore_VariableBinding_CRUD(t *testing.T) {
 	assert.NotZero(t, binding.ID)
 
 	// Get bindings for activation
-	bindings, err := store.GetVariableBindings(ctx, 1)
+	bindings, err := store.GetVariableBindings(ctx, "activation-1")
 	require.NoError(t, err)
 	assert.Len(t, bindings, 1)
 	assert.Equal(t, "DB_PASSWORD", bindings[0].VariableName)
@@ -263,7 +263,7 @@ func TestMemoryStore_VariableBinding_CRUD(t *testing.T) {
 	err = store.DeleteVariableBinding(ctx, binding.ID)
 	require.NoError(t, err)
 
-	bindings, err = store.GetVariableBindings(ctx, 1)
+	bindings, err = store.GetVariableBindings(ctx, "activation-1")
 	require.NoError(t, err)
 	assert.Len(t, bindings, 0)
 }
@@ -274,8 +274,8 @@ func TestMemoryStore_RawApproval_CRUD(t *testing.T) {
 
 	// Create a raw approval
 	approval := &RawCommandApproval{
-		ComponentID:  1,
-		ApprovedBy:   1,
+		ComponentID:  "component-1",
+		ApprovedBy:   "user-1",
 		ApprovedAt:   time.Now(),
 		ApprovalNote: "Approved for production use",
 	}
@@ -285,7 +285,7 @@ func TestMemoryStore_RawApproval_CRUD(t *testing.T) {
 	assert.NotZero(t, approval.ID)
 
 	// Get by component ID
-	found, err := store.GetRawApproval(ctx, 1)
+	found, err := store.GetRawApproval(ctx, "component-1")
 	require.NoError(t, err)
 	assert.Equal(t, approval.ID, found.ID)
 	assert.Equal(t, "Approved for production use", found.ApprovalNote)
@@ -296,10 +296,10 @@ func TestMemoryStore_RawApproval_CRUD(t *testing.T) {
 	assert.Len(t, approvals, 1)
 
 	// Delete by component ID
-	err = store.DeleteRawApproval(ctx, 1)
+	err = store.DeleteRawApproval(ctx, "component-1")
 	require.NoError(t, err)
 
-	_, err = store.GetRawApproval(ctx, 1)
+	_, err = store.GetRawApproval(ctx, "component-1")
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 

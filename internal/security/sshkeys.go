@@ -182,17 +182,14 @@ func (m *SSHKeyManager) GenerateKey(ctx context.Context, name string) (*SSHKey, 
 	}
 
 	// Save to database
-	result, err := m.db.ExecContext(ctx, `
-		INSERT INTO ssh_keys (uid, name, public_key, private_key_encrypted, key_type, fingerprint, created_at)
+	key.ID = xid.New().String()
+	_, err = m.db.ExecContext(ctx, `
+		INSERT INTO ssh_keys (id, name, public_key, private_key_encrypted, key_type, fingerprint, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, xid.New().String(), key.Name, key.PublicKey, key.PrivateKeyEnc, key.KeyType, key.Fingerprint, key.CreatedAt)
+	`, key.ID, key.Name, key.PublicKey, key.PrivateKeyEnc, key.KeyType, key.Fingerprint, key.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("save key: %w", err)
 	}
-
-	// Note: SQLite's LastInsertId() never returns an error
-	id, _ := result.LastInsertId()
-	key.ID = id
 
 	m.cache[name] = key
 
@@ -237,7 +234,7 @@ func (m *SSHKeyManager) GetKey(ctx context.Context, name string) (*SSHKey, error
 }
 
 // GetKeyByID retrieves a key by ID.
-func (m *SSHKeyManager) GetKeyByID(ctx context.Context, id int64) (*SSHKey, error) {
+func (m *SSHKeyManager) GetKeyByID(ctx context.Context, id string) (*SSHKey, error) {
 	row := m.db.QueryRowContext(ctx, `
 		SELECT id, name, public_key, private_key_encrypted, key_type, fingerprint, created_at, last_used_at
 		FROM ssh_keys
@@ -355,7 +352,7 @@ func (m *SSHKeyManager) AddKnownHost(ctx context.Context, hostname string, port 
 	now := time.Now()
 
 	_, err := m.db.ExecContext(ctx, `
-		INSERT INTO known_hosts (uid, hostname, port, key_type, public_key, fingerprint, added_at, last_verified_at)
+		INSERT INTO known_hosts (id, hostname, port, key_type, public_key, fingerprint, added_at, last_verified_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(hostname, port, key_type) DO UPDATE SET
 			public_key = excluded.public_key,

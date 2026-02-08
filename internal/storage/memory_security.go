@@ -176,8 +176,8 @@ func (s *MemoryStore) SaveAgentCert(ctx context.Context, cert *AgentCertificate)
 
 	// Copy-on-store
 	stored := *cert
-	if stored.ID == 0 {
-		stored.ID = s.nextAgentCertID.Add(1)
+	if stored.ID == "" {
+		stored.ID = xid.New().String()
 	}
 	if stored.IssuedAt.IsZero() {
 		stored.IssuedAt = time.Now()
@@ -217,7 +217,7 @@ func (s *MemoryStore) RevokeAgentCert(ctx context.Context, agentID, reason, revo
 
 		// Add to revocation list
 		revoked := &RevokedCertificate{
-			ID:           s.nextRevokedCertID.Add(1),
+			ID:           xid.New().String(),
 			SerialNumber: cert.SerialNumber,
 			AgentID:      agentID,
 			Reason:       reason,
@@ -255,7 +255,7 @@ func (s *MemoryStore) RevokeAgentCertBySerial(ctx context.Context, serialNumber,
 
 	// Add to revocation list
 	revoked := &RevokedCertificate{
-		ID:           s.nextRevokedCertID.Add(1),
+		ID:           xid.New().String(),
 		SerialNumber: serialNumber,
 		AgentID:      cert.AgentID,
 		Reason:       reason,
@@ -321,8 +321,8 @@ func (s *MemoryStore) SaveServerCert(ctx context.Context, cert *ServerCertificat
 
 	// Copy-on-store
 	stored := *cert
-	if stored.ID == 0 {
-		stored.ID = s.nextServerCertID.Add(1)
+	if stored.ID == "" {
+		stored.ID = xid.New().String()
 	}
 	if stored.CreatedAt.IsZero() {
 		stored.CreatedAt = time.Now()
@@ -395,8 +395,8 @@ func (s *MemoryStore) SaveRegistrationToken(ctx context.Context, rt *Registratio
 
 	// Copy-on-store
 	stored := *rt
-	if stored.ID == 0 {
-		stored.ID = s.nextRegTokenID.Add(1)
+	if stored.ID == "" {
+		stored.ID = xid.New().String()
 	}
 	if stored.CreatedAt.IsZero() {
 		stored.CreatedAt = time.Now()
@@ -471,7 +471,7 @@ func (s *MemoryStore) CleanupExpiredTokens(ctx context.Context) (int64, error) {
 // --- Source Credential methods ---
 
 // GetSourceCredential returns a credential by ID.
-func (s *MemoryStore) GetSourceCredential(ctx context.Context, id int64) (*SourceCredential, error) {
+func (s *MemoryStore) GetSourceCredential(ctx context.Context, id string) (*SourceCredential, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -520,9 +520,9 @@ func (s *MemoryStore) SaveSourceCredential(ctx context.Context, cred *SourceCred
 
 	// Copy-on-store
 	stored := *cred
-	isNew := stored.ID == 0
+	isNew := stored.ID == ""
 	if isNew {
-		stored.ID = s.nextSourceCredID.Add(1)
+		stored.ID = xid.New().String()
 	}
 	now := time.Now()
 	if stored.CreatedAt.IsZero() {
@@ -544,7 +544,7 @@ func (s *MemoryStore) SaveSourceCredential(ctx context.Context, cred *SourceCred
 }
 
 // DeleteSourceCredential removes a source credential.
-func (s *MemoryStore) DeleteSourceCredential(ctx context.Context, id int64) error {
+func (s *MemoryStore) DeleteSourceCredential(ctx context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -591,8 +591,8 @@ func (s *MemoryStore) SaveRevokedCert(ctx context.Context, revoked *RevokedCerti
 
 	// Copy-on-store
 	stored := *revoked
-	if stored.ID == 0 {
-		stored.ID = s.nextRevokedCertID.Add(1)
+	if stored.ID == "" {
+		stored.ID = xid.New().String()
 	}
 	if stored.RevokedAt.IsZero() {
 		stored.RevokedAt = time.Now()
@@ -712,7 +712,7 @@ func (s *MemoryStore) UpdateEncryptionKeyStatus(ctx context.Context, id string, 
 // --- SSH Key methods ---
 
 // GetSSHKey returns an SSH key by ID.
-func (s *MemoryStore) GetSSHKey(ctx context.Context, id int64) (*SSHKey, error) {
+func (s *MemoryStore) GetSSHKey(ctx context.Context, id string) (*SSHKey, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -761,9 +761,9 @@ func (s *MemoryStore) SaveSSHKey(ctx context.Context, key *SSHKey) error {
 
 	// Copy-on-store
 	stored := *key
-	isNew := stored.ID == 0
+	isNew := stored.ID == ""
 	if isNew {
-		stored.ID = s.nextSSHKeyID.Add(1)
+		stored.ID = xid.New().String()
 	}
 	if stored.CreatedAt.IsZero() {
 		stored.CreatedAt = time.Now()
@@ -783,7 +783,7 @@ func (s *MemoryStore) SaveSSHKey(ctx context.Context, key *SSHKey) error {
 }
 
 // DeleteSSHKey removes an SSH key.
-func (s *MemoryStore) DeleteSSHKey(ctx context.Context, id int64) error {
+func (s *MemoryStore) DeleteSSHKey(ctx context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -807,7 +807,7 @@ func (s *MemoryStore) SaveCertAuditEvent(ctx context.Context, event *CertAuditEv
 
 	// Copy-on-store
 	stored := *event
-	stored.ID = s.nextCertAuditID.Add(1)
+	stored.ID = xid.New().String()
 	if stored.Timestamp.IsZero() {
 		stored.Timestamp = time.Now()
 	}
@@ -866,7 +866,7 @@ func (s *MemoryStore) ListCertAuditEvents(ctx context.Context, filter CertAuditF
 // GetCA returns a CA by ID.
 func (db *DB) GetCA(ctx context.Context, id string) (*CertificateAuthority, error) {
 	row := db.conn.QueryRowContext(ctx, `
-		SELECT id, uid, version, common_name, certificate_pem, private_key_encrypted, 
+		SELECT id, version, common_name, certificate_pem, private_key_encrypted, 
 		       not_before, not_after, status, is_current, created_at, rotated_at
 		FROM certificate_authorities
 		WHERE id = ?
@@ -878,7 +878,7 @@ func (db *DB) GetCA(ctx context.Context, id string) (*CertificateAuthority, erro
 // GetCurrentCA returns the currently active CA.
 func (db *DB) GetCurrentCA(ctx context.Context) (*CertificateAuthority, error) {
 	row := db.conn.QueryRowContext(ctx, `
-		SELECT id, uid, version, common_name, certificate_pem, private_key_encrypted, 
+		SELECT id, version, common_name, certificate_pem, private_key_encrypted, 
 		       not_before, not_after, status, is_current, created_at, rotated_at
 		FROM certificate_authorities
 		WHERE is_current = 1
@@ -891,7 +891,7 @@ func (db *DB) GetCurrentCA(ctx context.Context) (*CertificateAuthority, error) {
 // ListCAs returns all certificate authorities.
 func (db *DB) ListCAs(ctx context.Context) ([]*CertificateAuthority, error) {
 	rows, err := db.conn.QueryContext(ctx, `
-		SELECT id, uid, version, common_name, certificate_pem, private_key_encrypted, 
+		SELECT id, version, common_name, certificate_pem, private_key_encrypted, 
 		       not_before, not_after, status, is_current, created_at, rotated_at
 		FROM certificate_authorities
 		ORDER BY version DESC
@@ -915,14 +915,14 @@ func (db *DB) ListCAs(ctx context.Context) ([]*CertificateAuthority, error) {
 
 // SaveCA creates or updates a certificate authority.
 func (db *DB) SaveCA(ctx context.Context, ca *CertificateAuthority) error {
-	if ca.UID == "" {
-		ca.UID = xid.New().String()
+	if ca.ID == "" {
+		ca.ID = xid.New().String()
 	}
 	_, err := db.conn.ExecContext(ctx, `
 		INSERT OR REPLACE INTO certificate_authorities 
-		(id, uid, version, common_name, certificate_pem, private_key_encrypted, not_before, not_after, status, is_current, created_at, rotated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, ca.ID, ca.UID, ca.Version, ca.CommonName, ca.CertificatePEM, ca.PrivateKeyEnc,
+		(id, version, common_name, certificate_pem, private_key_encrypted, not_before, not_after, status, is_current, created_at, rotated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, ca.ID, ca.Version, ca.CommonName, ca.CertificatePEM, ca.PrivateKeyEnc,
 		ca.NotBefore, ca.NotAfter, ca.Status, ca.IsCurrent, ca.CreatedAt, ca.RotatedAt)
 	return err
 }
@@ -956,7 +956,7 @@ func scanCA(row *sql.Row) (*CertificateAuthority, error) {
 	ca := &CertificateAuthority{}
 	var rotatedAt sql.NullTime
 	err := row.Scan(
-		&ca.ID, &ca.UID, &ca.Version, &ca.CommonName, &ca.CertificatePEM, &ca.PrivateKeyEnc,
+		&ca.ID, &ca.Version, &ca.CommonName, &ca.CertificatePEM, &ca.PrivateKeyEnc,
 		&ca.NotBefore, &ca.NotAfter, &ca.Status, &ca.IsCurrent, &ca.CreatedAt, &rotatedAt,
 	)
 	if err == sql.ErrNoRows {
@@ -975,7 +975,7 @@ func scanCARow(rows *sql.Rows) (*CertificateAuthority, error) {
 	ca := &CertificateAuthority{}
 	var rotatedAt sql.NullTime
 	err := rows.Scan(
-		&ca.ID, &ca.UID, &ca.Version, &ca.CommonName, &ca.CertificatePEM, &ca.PrivateKeyEnc,
+		&ca.ID, &ca.Version, &ca.CommonName, &ca.CertificatePEM, &ca.PrivateKeyEnc,
 		&ca.NotBefore, &ca.NotAfter, &ca.Status, &ca.IsCurrent, &ca.CreatedAt, &rotatedAt,
 	)
 	if err != nil {
@@ -990,7 +990,7 @@ func scanCARow(rows *sql.Rows) (*CertificateAuthority, error) {
 // GetAgentCert returns the active certificate for an agent.
 func (db *DB) GetAgentCert(ctx context.Context, agentID string) (*AgentCertificate, error) {
 	row := db.conn.QueryRowContext(ctx, `
-		SELECT id, uid, agent_id, ca_id, serial_number, certificate_pem, not_before, not_after, 
+		SELECT id, agent_id, ca_id, serial_number, certificate_pem, not_before, not_after, 
 		       status, issued_at, renewed_at, revoked_at, revocation_reason
 		FROM agent_certificates
 		WHERE agent_id = ? AND status = ?
@@ -1004,7 +1004,7 @@ func (db *DB) GetAgentCert(ctx context.Context, agentID string) (*AgentCertifica
 // GetAgentCertBySerial returns a certificate by serial number.
 func (db *DB) GetAgentCertBySerial(ctx context.Context, serialNumber string) (*AgentCertificate, error) {
 	row := db.conn.QueryRowContext(ctx, `
-		SELECT id, uid, agent_id, ca_id, serial_number, certificate_pem, not_before, not_after, 
+		SELECT id, agent_id, ca_id, serial_number, certificate_pem, not_before, not_after, 
 		       status, issued_at, renewed_at, revoked_at, revocation_reason
 		FROM agent_certificates
 		WHERE serial_number = ?
@@ -1016,7 +1016,7 @@ func (db *DB) GetAgentCertBySerial(ctx context.Context, serialNumber string) (*A
 // ListAgentCerts returns all agent certificates.
 func (db *DB) ListAgentCerts(ctx context.Context) ([]*AgentCertificate, error) {
 	rows, err := db.conn.QueryContext(ctx, `
-		SELECT id, uid, agent_id, ca_id, serial_number, certificate_pem, not_before, not_after, 
+		SELECT id, agent_id, ca_id, serial_number, certificate_pem, not_before, not_after, 
 		       status, issued_at, renewed_at, revoked_at, revocation_reason
 		FROM agent_certificates
 		ORDER BY issued_at DESC
@@ -1041,7 +1041,7 @@ func (db *DB) ListAgentCerts(ctx context.Context) ([]*AgentCertificate, error) {
 // ListAgentCertsByAgent returns all certificates for an agent.
 func (db *DB) ListAgentCertsByAgent(ctx context.Context, agentID string) ([]*AgentCertificate, error) {
 	rows, err := db.conn.QueryContext(ctx, `
-		SELECT id, uid, agent_id, ca_id, serial_number, certificate_pem, not_before, not_after, 
+		SELECT id, agent_id, ca_id, serial_number, certificate_pem, not_before, not_after, 
 		       status, issued_at, renewed_at, revoked_at, revocation_reason
 		FROM agent_certificates
 		WHERE agent_id = ?
@@ -1066,21 +1066,17 @@ func (db *DB) ListAgentCertsByAgent(ctx context.Context, agentID string) ([]*Age
 
 // SaveAgentCert creates or updates an agent certificate.
 func (db *DB) SaveAgentCert(ctx context.Context, cert *AgentCertificate) error {
-	if cert.ID == 0 {
-		if cert.UID == "" {
-			cert.UID = xid.New().String()
-		}
-		result, err := db.conn.ExecContext(ctx, `
+	if cert.ID == "" {
+		cert.ID = xid.New().String()
+		_, err := db.conn.ExecContext(ctx, `
 			INSERT INTO agent_certificates 
-			(uid, agent_id, ca_id, serial_number, certificate_pem, not_before, not_after, status, issued_at)
+			(id, agent_id, ca_id, serial_number, certificate_pem, not_before, not_after, status, issued_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, cert.UID, cert.AgentID, cert.CAID, cert.SerialNumber, cert.CertificatePEM,
+		`, cert.ID, cert.AgentID, cert.CAID, cert.SerialNumber, cert.CertificatePEM,
 			cert.NotBefore, cert.NotAfter, cert.Status, cert.IssuedAt)
 		if err != nil {
 			return err
 		}
-		id, _ := result.LastInsertId()
-		cert.ID = id
 		return nil
 	}
 
@@ -1149,7 +1145,7 @@ func scanAgentCert(row *sql.Row) (*AgentCertificate, error) {
 	var renewedAt, revokedAt sql.NullTime
 	var revocationReason sql.NullString
 	err := row.Scan(
-		&cert.ID, &cert.UID, &cert.AgentID, &cert.CAID, &cert.SerialNumber, &cert.CertificatePEM,
+		&cert.ID, &cert.AgentID, &cert.CAID, &cert.SerialNumber, &cert.CertificatePEM,
 		&cert.NotBefore, &cert.NotAfter, &cert.Status, &cert.IssuedAt,
 		&renewedAt, &revokedAt, &revocationReason,
 	)
@@ -1176,7 +1172,7 @@ func scanAgentCertRow(rows *sql.Rows) (*AgentCertificate, error) {
 	var renewedAt, revokedAt sql.NullTime
 	var revocationReason sql.NullString
 	err := rows.Scan(
-		&cert.ID, &cert.UID, &cert.AgentID, &cert.CAID, &cert.SerialNumber, &cert.CertificatePEM,
+		&cert.ID, &cert.AgentID, &cert.CAID, &cert.SerialNumber, &cert.CertificatePEM,
 		&cert.NotBefore, &cert.NotAfter, &cert.Status, &cert.IssuedAt,
 		&renewedAt, &revokedAt, &revocationReason,
 	)
@@ -1246,8 +1242,8 @@ func (db *DB) ListServerCerts(ctx context.Context) ([]*ServerCertificate, error)
 
 // SaveServerCert creates or updates a server certificate.
 func (db *DB) SaveServerCert(ctx context.Context, cert *ServerCertificate) error {
-	if cert.ID == 0 {
-		result, err := db.conn.ExecContext(ctx, `
+	if cert.ID == "" {
+		_, err := db.conn.ExecContext(ctx, `
 			INSERT INTO server_certificates 
 			(hostname, certificate_pem, private_key_encrypted, sans, not_before, not_after, ca_id, created_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -1256,8 +1252,6 @@ func (db *DB) SaveServerCert(ctx context.Context, cert *ServerCertificate) error
 		if err != nil {
 			return err
 		}
-		id, _ := result.LastInsertId()
-		cert.ID = id
 		return nil
 	}
 
@@ -1346,16 +1340,14 @@ func (db *DB) ListRegistrationTokens(ctx context.Context) ([]*RegistrationToken,
 
 // SaveRegistrationToken creates or updates a registration token.
 func (db *DB) SaveRegistrationToken(ctx context.Context, rt *RegistrationToken) error {
-	if rt.ID == 0 {
-		result, err := db.conn.ExecContext(ctx, `
+	if rt.ID == "" {
+		_, err := db.conn.ExecContext(ctx, `
 			INSERT INTO registration_tokens (token, agent_id, expires_at, created_by, created_at)
 			VALUES (?, ?, ?, ?, ?)
 		`, rt.Token, nullString(rt.AgentID), rt.ExpiresAt, rt.CreatedBy, rt.CreatedAt)
 		if err != nil {
 			return err
 		}
-		id, _ := result.LastInsertId()
-		rt.ID = id
 		return nil
 	}
 
@@ -1402,15 +1394,15 @@ func (db *DB) CleanupExpiredTokens(ctx context.Context) (int64, error) {
 }
 
 // GetSourceCredential returns a credential by ID.
-func (db *DB) GetSourceCredential(ctx context.Context, id int64) (*SourceCredential, error) {
+func (db *DB) GetSourceCredential(ctx context.Context, id string) (*SourceCredential, error) {
 	row := db.conn.QueryRowContext(ctx, `
-		SELECT id, uid, name, type, url_pattern, credential_encrypted, created_by, created_at, updated_at
+		SELECT id, name, type, url_pattern, credential_encrypted, created_by, created_at, updated_at
 		FROM source_credentials
 		WHERE id = ?
 	`, id)
 
 	cred := &SourceCredential{}
-	err := row.Scan(&cred.ID, &cred.UID, &cred.Name, &cred.Type, &cred.URLPattern, &cred.CredentialEnc,
+	err := row.Scan(&cred.ID, &cred.Name, &cred.Type, &cred.URLPattern, &cred.CredentialEnc,
 		&cred.CreatedBy, &cred.CreatedAt, &cred.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
@@ -1424,13 +1416,13 @@ func (db *DB) GetSourceCredential(ctx context.Context, id int64) (*SourceCredent
 // GetSourceCredentialByName returns a credential by name.
 func (db *DB) GetSourceCredentialByName(ctx context.Context, name string) (*SourceCredential, error) {
 	row := db.conn.QueryRowContext(ctx, `
-		SELECT id, uid, name, type, url_pattern, credential_encrypted, created_by, created_at, updated_at
+		SELECT id, name, type, url_pattern, credential_encrypted, created_by, created_at, updated_at
 		FROM source_credentials
 		WHERE name = ?
 	`, name)
 
 	cred := &SourceCredential{}
-	err := row.Scan(&cred.ID, &cred.UID, &cred.Name, &cred.Type, &cred.URLPattern, &cred.CredentialEnc,
+	err := row.Scan(&cred.ID, &cred.Name, &cred.Type, &cred.URLPattern, &cred.CredentialEnc,
 		&cred.CreatedBy, &cred.CreatedAt, &cred.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
@@ -1444,7 +1436,7 @@ func (db *DB) GetSourceCredentialByName(ctx context.Context, name string) (*Sour
 // ListSourceCredentials returns all source credentials.
 func (db *DB) ListSourceCredentials(ctx context.Context) ([]*SourceCredential, error) {
 	rows, err := db.conn.QueryContext(ctx, `
-		SELECT id, uid, name, type, url_pattern, credential_encrypted, created_by, created_at, updated_at
+		SELECT id, name, type, url_pattern, credential_encrypted, created_by, created_at, updated_at
 		FROM source_credentials
 		ORDER BY name
 	`)
@@ -1456,7 +1448,7 @@ func (db *DB) ListSourceCredentials(ctx context.Context) ([]*SourceCredential, e
 	var creds []*SourceCredential
 	for rows.Next() {
 		cred := &SourceCredential{}
-		err := rows.Scan(&cred.ID, &cred.UID, &cred.Name, &cred.Type, &cred.URLPattern, &cred.CredentialEnc,
+		err := rows.Scan(&cred.ID, &cred.Name, &cred.Type, &cred.URLPattern, &cred.CredentialEnc,
 			&cred.CreatedBy, &cred.CreatedAt, &cred.UpdatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("scan credential: %w", err)
@@ -1470,21 +1462,19 @@ func (db *DB) ListSourceCredentials(ctx context.Context) ([]*SourceCredential, e
 // SaveSourceCredential creates or updates a source credential.
 func (db *DB) SaveSourceCredential(ctx context.Context, cred *SourceCredential) error {
 	now := time.Now()
-	if cred.ID == 0 {
-		if cred.UID == "" {
-			cred.UID = xid.New().String()
+	if cred.ID == "" {
+		if cred.ID == "" {
+			cred.ID = xid.New().String()
 		}
 		cred.CreatedAt = now
 		cred.UpdatedAt = now
-		result, err := db.conn.ExecContext(ctx, `
-			INSERT INTO source_credentials (uid, name, type, url_pattern, credential_encrypted, created_by, created_at, updated_at)
+		_, err := db.conn.ExecContext(ctx, `
+			INSERT INTO source_credentials (id, name, type, url_pattern, credential_encrypted, created_by, created_at, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		`, cred.UID, cred.Name, cred.Type, cred.URLPattern, cred.CredentialEnc, cred.CreatedBy, cred.CreatedAt, cred.UpdatedAt)
+		`, cred.ID, cred.Name, cred.Type, cred.URLPattern, cred.CredentialEnc, cred.CreatedBy, cred.CreatedAt, cred.UpdatedAt)
 		if err != nil {
 			return err
 		}
-		id, _ := result.LastInsertId()
-		cred.ID = id
 		return nil
 	}
 
@@ -1498,7 +1488,7 @@ func (db *DB) SaveSourceCredential(ctx context.Context, cred *SourceCredential) 
 }
 
 // DeleteSourceCredential removes a source credential.
-func (db *DB) DeleteSourceCredential(ctx context.Context, id int64) error {
+func (db *DB) DeleteSourceCredential(ctx context.Context, id string) error {
 	result, err := db.conn.ExecContext(ctx, `DELETE FROM source_credentials WHERE id = ?`, id)
 	if err != nil {
 		return err
@@ -1556,15 +1546,13 @@ func (db *DB) SaveRevokedCert(ctx context.Context, revoked *RevokedCertificate) 
 	if revoked.RevokedAt.IsZero() {
 		revoked.RevokedAt = time.Now()
 	}
-	result, err := db.conn.ExecContext(ctx, `
+	_, err := db.conn.ExecContext(ctx, `
 		INSERT INTO revoked_certificates (serial_number, agent_id, reason, revoked_at, revoked_by)
 		VALUES (?, ?, ?, ?, ?)
 	`, revoked.SerialNumber, nullString(revoked.AgentID), revoked.Reason, revoked.RevokedAt, revoked.RevokedBy)
 	if err != nil {
 		return err
 	}
-	id, _ := result.LastInsertId()
-	revoked.ID = id
 	return nil
 }
 
@@ -1709,15 +1697,15 @@ func scanEncryptionKeyRow(rows *sql.Rows) (*EncryptionKey, error) {
 }
 
 // GetSSHKey returns an SSH key by ID.
-func (db *DB) GetSSHKey(ctx context.Context, id int64) (*SSHKey, error) {
+func (db *DB) GetSSHKey(ctx context.Context, id string) (*SSHKey, error) {
 	row := db.conn.QueryRowContext(ctx, `
-		SELECT id, uid, name, public_key, private_key_encrypted, fingerprint, key_type, created_by, created_at
+		SELECT id, name, public_key, private_key_encrypted, fingerprint, key_type, created_by, created_at
 		FROM ssh_keys
 		WHERE id = ?
 	`, id)
 
 	key := &SSHKey{}
-	err := row.Scan(&key.ID, &key.UID, &key.Name, &key.PublicKey, &key.PrivateKeyEnc, &key.Fingerprint,
+	err := row.Scan(&key.ID, &key.Name, &key.PublicKey, &key.PrivateKeyEnc, &key.Fingerprint,
 		&key.KeyType, &key.CreatedBy, &key.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
@@ -1731,13 +1719,13 @@ func (db *DB) GetSSHKey(ctx context.Context, id int64) (*SSHKey, error) {
 // GetSSHKeyByName returns an SSH key by name.
 func (db *DB) GetSSHKeyByName(ctx context.Context, name string) (*SSHKey, error) {
 	row := db.conn.QueryRowContext(ctx, `
-		SELECT id, uid, name, public_key, private_key_encrypted, fingerprint, key_type, created_by, created_at
+		SELECT id, name, public_key, private_key_encrypted, fingerprint, key_type, created_by, created_at
 		FROM ssh_keys
 		WHERE name = ?
 	`, name)
 
 	key := &SSHKey{}
-	err := row.Scan(&key.ID, &key.UID, &key.Name, &key.PublicKey, &key.PrivateKeyEnc, &key.Fingerprint,
+	err := row.Scan(&key.ID, &key.Name, &key.PublicKey, &key.PrivateKeyEnc, &key.Fingerprint,
 		&key.KeyType, &key.CreatedBy, &key.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
@@ -1751,7 +1739,7 @@ func (db *DB) GetSSHKeyByName(ctx context.Context, name string) (*SSHKey, error)
 // ListSSHKeys returns all SSH keys.
 func (db *DB) ListSSHKeys(ctx context.Context) ([]*SSHKey, error) {
 	rows, err := db.conn.QueryContext(ctx, `
-		SELECT id, uid, name, public_key, private_key_encrypted, fingerprint, key_type, created_by, created_at
+		SELECT id, name, public_key, private_key_encrypted, fingerprint, key_type, created_by, created_at
 		FROM ssh_keys
 		ORDER BY name
 	`)
@@ -1763,7 +1751,7 @@ func (db *DB) ListSSHKeys(ctx context.Context) ([]*SSHKey, error) {
 	var keys []*SSHKey
 	for rows.Next() {
 		key := &SSHKey{}
-		err := rows.Scan(&key.ID, &key.UID, &key.Name, &key.PublicKey, &key.PrivateKeyEnc, &key.Fingerprint,
+		err := rows.Scan(&key.ID, &key.Name, &key.PublicKey, &key.PrivateKeyEnc, &key.Fingerprint,
 			&key.KeyType, &key.CreatedBy, &key.CreatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("scan SSH key: %w", err)
@@ -1776,22 +1764,20 @@ func (db *DB) ListSSHKeys(ctx context.Context) ([]*SSHKey, error) {
 
 // SaveSSHKey creates or updates an SSH key.
 func (db *DB) SaveSSHKey(ctx context.Context, key *SSHKey) error {
-	if key.ID == 0 {
-		if key.UID == "" {
-			key.UID = xid.New().String()
+	if key.ID == "" {
+		if key.ID == "" {
+			key.ID = xid.New().String()
 		}
 		if key.CreatedAt.IsZero() {
 			key.CreatedAt = time.Now()
 		}
-		result, err := db.conn.ExecContext(ctx, `
-			INSERT INTO ssh_keys (uid, name, public_key, private_key_encrypted, fingerprint, key_type, created_by, created_at)
+		_, err := db.conn.ExecContext(ctx, `
+			INSERT INTO ssh_keys (id, name, public_key, private_key_encrypted, fingerprint, key_type, created_by, created_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		`, key.UID, key.Name, key.PublicKey, key.PrivateKeyEnc, key.Fingerprint, key.KeyType, key.CreatedBy, key.CreatedAt)
+		`, key.ID, key.Name, key.PublicKey, key.PrivateKeyEnc, key.Fingerprint, key.KeyType, key.CreatedBy, key.CreatedAt)
 		if err != nil {
 			return err
 		}
-		id, _ := result.LastInsertId()
-		key.ID = id
 		return nil
 	}
 
@@ -1804,7 +1790,7 @@ func (db *DB) SaveSSHKey(ctx context.Context, key *SSHKey) error {
 }
 
 // DeleteSSHKey removes an SSH key.
-func (db *DB) DeleteSSHKey(ctx context.Context, id int64) error {
+func (db *DB) DeleteSSHKey(ctx context.Context, id string) error {
 	result, err := db.conn.ExecContext(ctx, `DELETE FROM ssh_keys WHERE id = ?`, id)
 	if err != nil {
 		return err
@@ -1821,7 +1807,7 @@ func (db *DB) SaveCertAuditEvent(ctx context.Context, event *CertAuditEvent) err
 	if event.Timestamp.IsZero() {
 		event.Timestamp = time.Now()
 	}
-	result, err := db.conn.ExecContext(ctx, `
+	_, err := db.conn.ExecContext(ctx, `
 		INSERT INTO cert_audit_events (timestamp, event_type, agent_id, hostname, serial, ca_id, reason, requested_by, client_ip)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, event.Timestamp, event.EventType, nullString(event.AgentID), nullString(event.Hostname),
@@ -1829,8 +1815,6 @@ func (db *DB) SaveCertAuditEvent(ctx context.Context, event *CertAuditEvent) err
 	if err != nil {
 		return err
 	}
-	id, _ := result.LastInsertId()
-	event.ID = id
 	return nil
 }
 
@@ -1939,7 +1923,7 @@ func (s *MemoryStore) SaveACMECertificate(ctx context.Context, cert *ACMECertifi
 
 	existing, exists := s.acmeCertificates[cert.Domain]
 	if !exists {
-		stored.ID = s.nextACMECertID.Add(1)
+		stored.ID = xid.New().String()
 		stored.CreatedAt = now
 		stored.UpdatedAt = now
 	} else {
@@ -2017,7 +2001,7 @@ func (s *MemoryStore) SaveACMEAccount(ctx context.Context, account *ACMEAccount)
 
 	existing, exists := s.acmeAccounts[account.Email]
 	if !exists {
-		stored.ID = s.nextACMEAccountID.Add(1)
+		stored.ID = xid.New().String()
 		stored.CreatedAt = now
 	} else {
 		stored.ID = existing.ID
@@ -2055,7 +2039,7 @@ func (s *MemoryStore) DeleteACMEAccount(ctx context.Context, email string) error
 // --- Recovery Code methods ---
 
 // SaveRecoveryCodes saves a set of recovery codes for a user (replaces any existing).
-func (s *MemoryStore) SaveRecoveryCodes(ctx context.Context, userID int64, codes []*RecoveryCode) error {
+func (s *MemoryStore) SaveRecoveryCodes(ctx context.Context, userID string, codes []*RecoveryCode) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -2072,7 +2056,7 @@ func (s *MemoryStore) SaveRecoveryCodes(ctx context.Context, userID int64, codes
 	newCodes := make([]*RecoveryCode, len(codes))
 	for i, code := range codes {
 		stored := *code
-		stored.ID = s.nextRecoveryCodeID.Add(1)
+		stored.ID = xid.New().String()
 		stored.UserID = userID
 		stored.CreatedAt = now
 		newCodes[i] = &stored
@@ -2085,7 +2069,7 @@ func (s *MemoryStore) SaveRecoveryCodes(ctx context.Context, userID int64, codes
 }
 
 // ListRecoveryCodes returns all recovery codes for a user.
-func (s *MemoryStore) ListRecoveryCodes(ctx context.Context, userID int64) ([]*RecoveryCode, error) {
+func (s *MemoryStore) ListRecoveryCodes(ctx context.Context, userID string) ([]*RecoveryCode, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -2104,7 +2088,7 @@ func (s *MemoryStore) ListRecoveryCodes(ctx context.Context, userID int64) ([]*R
 }
 
 // UseRecoveryCode marks a recovery code as used.
-func (s *MemoryStore) UseRecoveryCode(ctx context.Context, codeID int64) error {
+func (s *MemoryStore) UseRecoveryCode(ctx context.Context, codeID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -2130,7 +2114,7 @@ func (s *MemoryStore) UseRecoveryCode(ctx context.Context, codeID int64) error {
 }
 
 // DeleteRecoveryCodes removes all recovery codes for a user.
-func (s *MemoryStore) DeleteRecoveryCodes(ctx context.Context, userID int64) error {
+func (s *MemoryStore) DeleteRecoveryCodes(ctx context.Context, userID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -2148,7 +2132,7 @@ func (s *MemoryStore) DeleteRecoveryCodes(ctx context.Context, userID int64) err
 }
 
 // CountUnusedRecoveryCodes returns the count of unused codes for a user.
-func (s *MemoryStore) CountUnusedRecoveryCodes(ctx context.Context, userID int64) (int, error) {
+func (s *MemoryStore) CountUnusedRecoveryCodes(ctx context.Context, userID string) (int, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 

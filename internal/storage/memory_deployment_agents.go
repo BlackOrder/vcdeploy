@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"github.com/rs/xid"
 	"time"
 )
 
@@ -19,7 +20,7 @@ func (m *MemoryStore) AssignAgentToDeployment(ctx context.Context, deploymentID,
 	}
 
 	m.deploymentAgents[deploymentID] = append(m.deploymentAgents[deploymentID], DeploymentAgent{
-		ID:           int64(len(m.deploymentAgents[deploymentID]) + 1),
+		ID:           xid.New().String(),
 		DeploymentID: deploymentID,
 		AgentID:      agentID,
 		Status:       DeploymentStatusPending,

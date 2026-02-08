@@ -32,7 +32,7 @@ func (s *ComponentService) Get(ctx context.Context, namespace, slug, version str
 }
 
 // GetByID retrieves a component by its ID.
-func (s *ComponentService) GetByID(ctx context.Context, id int64) (*storage.RecipeComponent, error) {
+func (s *ComponentService) GetByID(ctx context.Context, id string) (*storage.RecipeComponent, error) {
 	return s.store.GetRecipeComponentByID(ctx, id)
 }
 
@@ -111,7 +111,7 @@ func (s *ComponentService) Update(ctx context.Context, component *storage.Recipe
 }
 
 // CreateFromSeed creates a user copy of a seed component (copy-on-write).
-func (s *ComponentService) CreateFromSeed(ctx context.Context, seedID int64, newSlug, newVersion string) (*storage.RecipeComponent, error) {
+func (s *ComponentService) CreateFromSeed(ctx context.Context, seedID string, newSlug, newVersion string) (*storage.RecipeComponent, error) {
 	seed, err := s.store.GetRecipeComponentByID(ctx, seedID)
 	if err != nil {
 		return nil, fmt.Errorf("seed component not found: %w", err)
@@ -149,7 +149,7 @@ func (s *ComponentService) CreateFromSeed(ctx context.Context, seedID int64, new
 }
 
 // ValidateVariables checks if provided bindings satisfy required variables.
-func (s *ComponentService) ValidateVariables(ctx context.Context, componentID int64, bindings map[string]string) error {
+func (s *ComponentService) ValidateVariables(ctx context.Context, componentID string, bindings map[string]string) error {
 	component, err := s.store.GetRecipeComponentByID(ctx, componentID)
 	if err != nil {
 		return err
@@ -169,7 +169,7 @@ func (s *ComponentService) ValidateVariables(ctx context.Context, componentID in
 }
 
 // Delete removes a user component.
-func (s *ComponentService) Delete(ctx context.Context, id int64) error {
+func (s *ComponentService) Delete(ctx context.Context, id string) error {
 	component, err := s.store.GetRecipeComponentByID(ctx, id)
 	if err != nil {
 		return err

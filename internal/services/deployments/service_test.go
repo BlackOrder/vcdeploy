@@ -371,7 +371,7 @@ func TestService_ListLogsAfter(t *testing.T) {
 	deployment := createTestDeployment(t, svc, "log-deploy-after", "running")
 
 	// Create multiple logs
-	var lastID int64
+	var lastID string
 	for i := 0; i < 5; i++ {
 		log := &storage.DeploymentLog{
 			DeploymentID: deployment.ID,
@@ -1000,7 +1000,7 @@ func TestService_ListLogsAfter_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
-	_, err := db.ListDeploymentLogsAfter(ctx, deployment.ID, 0)
+	_, err := db.ListDeploymentLogsAfter(ctx, deployment.ID, "")
 	if err == nil {
 		t.Error("ListDeploymentLogsAfter() expected error for cancelled context")
 	}

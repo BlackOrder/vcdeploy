@@ -19,10 +19,9 @@ func (s *MemoryStore) CreateProject(ctx context.Context, project *Project) error
 		return ErrDuplicate
 	}
 
-	if project.UID == "" {
-		project.UID = xid.New().String()
+	if project.ID == "" {
+		project.ID = xid.New().String()
 	}
-	project.ID = nextID(&s.nextProjectID)
 	now := time.Now()
 	project.CreatedAt = now
 	project.UpdatedAt = now
@@ -39,7 +38,7 @@ func (s *MemoryStore) CreateProject(ctx context.Context, project *Project) error
 }
 
 // GetProjectByID retrieves a project by ID from memory.
-func (s *MemoryStore) GetProjectByID(ctx context.Context, id int64) (*Project, error) {
+func (s *MemoryStore) GetProjectByID(ctx context.Context, id string) (*Project, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -170,7 +169,7 @@ func (s *MemoryStore) UpdateProjectByName(ctx context.Context, p *Project) error
 }
 
 // UpdateProjectHealthCheck updates health check settings for a project.
-func (s *MemoryStore) UpdateProjectHealthCheck(ctx context.Context, projectID int64, healthCheckID *int64, autoRollback, rollbackOnHealthFail bool) error {
+func (s *MemoryStore) UpdateProjectHealthCheck(ctx context.Context, projectID string, healthCheckID *string, autoRollback, rollbackOnHealthFail bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -196,7 +195,7 @@ func (s *MemoryStore) UpdateProjectHealthCheck(ctx context.Context, projectID in
 }
 
 // DeleteProjectByID removes a project by ID from memory and queues persistence.
-func (s *MemoryStore) DeleteProjectByID(ctx context.Context, id int64) error {
+func (s *MemoryStore) DeleteProjectByID(ctx context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -307,10 +306,9 @@ func (s *MemoryStore) CreateProjectType(ctx context.Context, pt *ProjectType) er
 		}
 	}
 
-	if pt.UID == "" {
-		pt.UID = xid.New().String()
+	if pt.ID == "" {
+		pt.ID = xid.New().String()
 	}
-	pt.ID = nextID(&s.nextProjectTypeID)
 	pt.CreatedAt = time.Now()
 
 	// Store a copy
@@ -398,7 +396,7 @@ func (s *MemoryStore) DeleteProjectType(ctx context.Context, name string) error 
 // --- Project Webhook operations ---
 
 // GetProjectWebhook retrieves a webhook for a project and provider from memory.
-func (s *MemoryStore) GetProjectWebhook(ctx context.Context, projectID int64, provider string) (*ProjectWebhook, error) {
+func (s *MemoryStore) GetProjectWebhook(ctx context.Context, projectID string, provider string) (*ProjectWebhook, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -413,7 +411,7 @@ func (s *MemoryStore) GetProjectWebhook(ctx context.Context, projectID int64, pr
 }
 
 // SetProjectWebhook creates or updates a webhook in memory and queues persistence.
-func (s *MemoryStore) SetProjectWebhook(ctx context.Context, projectID int64, provider string, secretEncrypted []byte, enabled, requireSecret bool) error {
+func (s *MemoryStore) SetProjectWebhook(ctx context.Context, projectID string, provider string, secretEncrypted []byte, enabled, requireSecret bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -438,8 +436,7 @@ func (s *MemoryStore) SetProjectWebhook(ctx context.Context, projectID int64, pr
 
 	// Create new
 	webhook := &ProjectWebhook{
-		UID:             xid.New().String(),
-		ID:              nextID(&s.nextWebhookID),
+		ID:              xid.New().String(),
 		ProjectID:       projectID,
 		Provider:        provider,
 		SecretEncrypted: secretEncrypted,
@@ -458,7 +455,7 @@ func (s *MemoryStore) SetProjectWebhook(ctx context.Context, projectID int64, pr
 }
 
 // ListProjectWebhooks returns all webhooks for a project from memory.
-func (s *MemoryStore) ListProjectWebhooks(ctx context.Context, projectID int64) ([]*ProjectWebhook, error) {
+func (s *MemoryStore) ListProjectWebhooks(ctx context.Context, projectID string) ([]*ProjectWebhook, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -474,7 +471,7 @@ func (s *MemoryStore) ListProjectWebhooks(ctx context.Context, projectID int64) 
 }
 
 // DeleteProjectWebhook removes a webhook from memory and queues persistence.
-func (s *MemoryStore) DeleteProjectWebhook(ctx context.Context, projectID int64, provider string) error {
+func (s *MemoryStore) DeleteProjectWebhook(ctx context.Context, projectID string, provider string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -519,8 +516,7 @@ func (s *MemoryStore) SetSecretEncrypted(ctx context.Context, project, scope, ke
 
 	// Create new
 	secret := &Secret{
-		UID:            xid.New().String(),
-		ID:             nextID(&s.nextSecretID),
+		ID:             xid.New().String(),
 		Project:        project,
 		Scope:          scope,
 		Key:            key,

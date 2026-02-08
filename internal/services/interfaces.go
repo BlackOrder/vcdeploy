@@ -66,7 +66,7 @@ type SecretServicer interface {
 
 // SecretMetadata represents secret info without the value.
 type SecretMetadata struct {
-	ID        int64
+	ID        string
 	Project   string
 	Scope     string
 	Key       string
@@ -98,7 +98,7 @@ type SettingsServicer interface {
 
 // SettingMetadata represents setting info.
 type SettingMetadata struct {
-	ID          int64
+	ID          string
 	Category    string
 	Key         string
 	Value       string
@@ -127,62 +127,62 @@ func WithTOTP(secret string) CreateUserOption {
 // UserServicer defines the interface for user management.
 type UserServicer interface {
 	Create(ctx context.Context, username, password, email, role string, opts ...CreateUserOption) (*storage.User, error)
-	GetByID(ctx context.Context, id int64) (*storage.User, error)
+	GetByID(ctx context.Context, id string) (*storage.User, error)
 	GetByUsername(ctx context.Context, username string) (*storage.User, error)
 	List(ctx context.Context) ([]*storage.User, error)
 	// H6: ListPaginated returns users with pagination support.
 	ListPaginated(ctx context.Context, p Pagination) (*ListResult[*storage.User], error)
 	Count(ctx context.Context) (int64, error)
 	Update(ctx context.Context, user *storage.User) error
-	Delete(ctx context.Context, id int64) error
-	DeleteWithCleanup(ctx context.Context, id int64) error
+	Delete(ctx context.Context, id string) error
+	DeleteWithCleanup(ctx context.Context, id string) error
 	VerifyPassword(ctx context.Context, username, password string) (*storage.User, error)
-	UpdatePassword(ctx context.Context, userID int64, newPassword string) error
-	SetTOTP(ctx context.Context, userID int64, secret string, enabled bool) error
+	UpdatePassword(ctx context.Context, userID string, newPassword string) error
+	SetTOTP(ctx context.Context, userID string, secret string, enabled bool) error
 }
 
 // SessionServicer defines the interface for session management.
 type SessionServicer interface {
-	Create(ctx context.Context, userID int64, ipAddress, userAgent string, duration time.Duration) (*storage.Session, error)
+	Create(ctx context.Context, userID string, ipAddress, userAgent string, duration time.Duration) (*storage.Session, error)
 	GetByToken(ctx context.Context, token string) (*storage.Session, error)
 	Delete(ctx context.Context, token string) error
-	DeleteAllForUser(ctx context.Context, userID int64) error
+	DeleteAllForUser(ctx context.Context, userID string) error
 	DeleteExpired(ctx context.Context) (int64, error)
-	ListForUser(ctx context.Context, userID int64) ([]*storage.Session, error)
+	ListForUser(ctx context.Context, userID string) ([]*storage.Session, error)
 }
 
 // APIKeyServicer defines the interface for API key management.
 type APIKeyServicer interface {
-	Create(ctx context.Context, userID int64, name string, scopes []string, expiresAt *time.Time) (rawKey string, key *storage.APIKey, err error)
-	GetByID(ctx context.Context, keyID int64) (*storage.APIKey, error)
+	Create(ctx context.Context, userID string, name string, scopes []string, expiresAt *time.Time) (rawKey string, key *storage.APIKey, err error)
+	GetByID(ctx context.Context, keyID string) (*storage.APIKey, error)
 	GetByRawKey(ctx context.Context, rawKey string) (*storage.APIKey, error)
-	Delete(ctx context.Context, keyID int64) error
-	List(ctx context.Context, userID int64) ([]*storage.APIKey, error)
-	UpdateUsage(ctx context.Context, keyID int64) error
+	Delete(ctx context.Context, keyID string) error
+	List(ctx context.Context, userID string) ([]*storage.APIKey, error)
+	UpdateUsage(ctx context.Context, keyID string) error
 	CleanupExpired(ctx context.Context) (int64, error)
 }
 
 // ProjectServicer defines the interface for project management.
 type ProjectServicer interface {
 	Create(ctx context.Context, name, repository, branch, deployPath, projectType string) (*storage.Project, error)
-	GetByID(ctx context.Context, id int64) (*storage.Project, error)
+	GetByID(ctx context.Context, id string) (*storage.Project, error)
 	GetByName(ctx context.Context, name string) (*storage.Project, error)
 	List(ctx context.Context) ([]*storage.Project, error)
 	ListPaginated(ctx context.Context, p Pagination) (*ListResult[*storage.Project], error)
 	Count(ctx context.Context) (int64, error)
 	UpdateByID(ctx context.Context, project *storage.Project) error
 	Update(ctx context.Context, project *storage.Project) error
-	DeleteByID(ctx context.Context, id int64) error
+	DeleteByID(ctx context.Context, id string) error
 	Delete(ctx context.Context, name string) error
 	DeleteWithCleanup(ctx context.Context, name string) error
 }
 
 // WebhookServicer defines the interface for project webhook management.
 type WebhookServicer interface {
-	Get(ctx context.Context, projectID int64, provider string) (*storage.ProjectWebhook, error)
-	Set(ctx context.Context, projectID int64, provider string, secret []byte, enabled, requireSecret bool) error
-	List(ctx context.Context, projectID int64) ([]*storage.ProjectWebhook, error)
-	Delete(ctx context.Context, projectID int64, provider string) error
+	Get(ctx context.Context, projectID string, provider string) (*storage.ProjectWebhook, error)
+	Set(ctx context.Context, projectID string, provider string, secret []byte, enabled, requireSecret bool) error
+	List(ctx context.Context, projectID string) ([]*storage.ProjectWebhook, error)
+	Delete(ctx context.Context, projectID string, provider string) error
 	// CleanupOrphanedWebhooks removes webhooks referencing deleted projects.
 	CleanupOrphanedWebhooks(ctx context.Context) (int64, error)
 }
@@ -200,7 +200,7 @@ type DeploymentServicer interface {
 	CreateLog(ctx context.Context, log *storage.DeploymentLog) error
 	CreateLogsBatch(ctx context.Context, deploymentID string, logs []*storage.DeploymentLog) error
 	ListLogs(ctx context.Context, deploymentID string) ([]*storage.DeploymentLog, error)
-	ListLogsAfter(ctx context.Context, deploymentID string, afterID int64) ([]*storage.DeploymentLog, error)
+	ListLogsAfter(ctx context.Context, deploymentID string, afterID string) ([]*storage.DeploymentLog, error)
 	ListLogsPaginated(ctx context.Context, deploymentID string, p Pagination) (*ListResult[*storage.DeploymentLog], error)
 	// Scheduled
 	CreateScheduled(ctx context.Context, id, project, target, branch string, scheduledAt time.Time, scheduledBy string) error
@@ -237,8 +237,8 @@ type HostKeyServicer interface {
 	Get(ctx context.Context, hostname string, port int, keyType string) (*storage.SSHHostKey, error)
 	GetByHost(ctx context.Context, hostname string, port int) ([]*storage.SSHHostKey, error)
 	List(ctx context.Context) ([]*storage.SSHHostKey, error)
-	UpdateTrust(ctx context.Context, id int64, trusted bool, verifiedBy string) error
-	Delete(ctx context.Context, id int64) error
+	UpdateTrust(ctx context.Context, id string, trusted bool, verifiedBy string) error
+	Delete(ctx context.Context, id string) error
 	DeleteByHost(ctx context.Context, hostname string, port int) (int64, error)
 }
 

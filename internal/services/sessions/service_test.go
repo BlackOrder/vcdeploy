@@ -18,7 +18,7 @@ func newTestService(t *testing.T) (*Service, storage.Store) {
 	return New(db), db
 }
 
-func createTestUser(t *testing.T, db storage.Store) int64 {
+func createTestUser(t *testing.T, db storage.Store) string {
 	t.Helper()
 	ctx := context.Background()
 

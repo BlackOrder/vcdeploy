@@ -24,7 +24,7 @@ func TestMemoryStore_BlockIP(t *testing.T) {
 		t.Fatalf("BlockIP() error = %v", err)
 	}
 
-	if block.ID == 0 {
+	if block.ID == "" {
 		t.Error("BlockIP() did not assign ID")
 	}
 }

@@ -17,18 +17,18 @@ func TestPlaybookResolver_HasActivePlaybook(t *testing.T) {
 	resolver := NewPlaybookResolver(db)
 
 	// Initially no active playbook
-	assert.False(t, resolver.HasActivePlaybook(ctx, 1))
+	assert.False(t, resolver.HasActivePlaybook(ctx, "test-project-1"))
 
 	// Create and activate a playbook
 	component := createResolverTestComponent(t, ctx, db, "test-comp", "v1.0.0")
 	playbook := createResolverTestPlaybook(t, ctx, db, "test-playbook", "v1.0.0", component)
 
 	activationSvc := NewActivationService(db)
-	_, err := activationSvc.Activate(ctx, 1, playbook.ID, map[string]VariableBinding{}, nil)
+	_, err := activationSvc.Activate(ctx, "test-project-1", playbook.ID, map[string]VariableBinding{}, nil)
 	require.NoError(t, err)
 
 	// Now should have active playbook
-	assert.True(t, resolver.HasActivePlaybook(ctx, 1))
+	assert.True(t, resolver.HasActivePlaybook(ctx, "test-project-1"))
 }
 
 func TestPlaybookResolver_Resolve(t *testing.T) {
@@ -69,14 +69,14 @@ func TestPlaybookResolver_Resolve(t *testing.T) {
 
 	// Activate with variables
 	activationSvc := NewActivationService(db)
-	_, err := activationSvc.Activate(ctx, 1, playbook.ID, map[string]VariableBinding{
+	_, err := activationSvc.Activate(ctx, "test-project-1", playbook.ID, map[string]VariableBinding{
 		"APP_NAME": {SourceType: "literal", LiteralValue: "myapp"},
 	}, nil)
 	require.NoError(t, err)
 
 	// Resolve
 	resolver := NewPlaybookResolver(db)
-	resolved, err := resolver.Resolve(ctx, 1, func(s string) string { return "" }, func(ctx context.Context, s string) (string, error) { return "", nil })
+	resolved, err := resolver.Resolve(ctx, "test-project-1", func(s string) string { return "" }, func(ctx context.Context, s string) (string, error) { return "", nil })
 	require.NoError(t, err)
 
 	assert.Equal(t, playbook.ID, resolved.PlaybookID)
@@ -120,12 +120,12 @@ func TestPlaybookResolver_Resolve_MultiplePhases(t *testing.T) {
 
 	// Activate
 	activationSvc := NewActivationService(db)
-	_, err := activationSvc.Activate(ctx, 1, playbook.ID, map[string]VariableBinding{}, nil)
+	_, err := activationSvc.Activate(ctx, "test-project-1", playbook.ID, map[string]VariableBinding{}, nil)
 	require.NoError(t, err)
 
 	// Resolve
 	resolver := NewPlaybookResolver(db)
-	resolved, err := resolver.Resolve(ctx, 1, func(s string) string { return "" }, func(ctx context.Context, s string) (string, error) { return "", nil })
+	resolved, err := resolver.Resolve(ctx, "test-project-1", func(s string) string { return "" }, func(ctx context.Context, s string) (string, error) { return "", nil })
 	require.NoError(t, err)
 
 	assert.Len(t, resolved.PreDeploySteps, 1)
@@ -144,7 +144,7 @@ func TestPlaybookResolver_Resolve_NoActivePlaybook(t *testing.T) {
 	ctx := context.Background()
 
 	resolver := NewPlaybookResolver(db)
-	_, err := resolver.Resolve(ctx, 999, func(s string) string { return "" }, func(ctx context.Context, s string) (string, error) { return "", nil })
+	_, err := resolver.Resolve(ctx, "nonexistent-project", func(s string) string { return "" }, func(ctx context.Context, s string) (string, error) { return "", nil })
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no active playbook")
 }
@@ -168,11 +168,11 @@ func TestPlaybookResolver_Resolve_InvalidComponentRef(t *testing.T) {
 	require.NoError(t, db.CreatePlaybook(ctx, playbook))
 
 	activationSvc := NewActivationService(db)
-	_, err := activationSvc.Activate(ctx, 1, playbook.ID, map[string]VariableBinding{}, nil)
+	_, err := activationSvc.Activate(ctx, "test-project-1", playbook.ID, map[string]VariableBinding{}, nil)
 	require.NoError(t, err)
 
 	resolver := NewPlaybookResolver(db)
-	_, err = resolver.Resolve(ctx, 1, func(s string) string { return "" }, func(ctx context.Context, s string) (string, error) { return "", nil })
+	_, err = resolver.Resolve(ctx, "test-project-1", func(s string) string { return "" }, func(ctx context.Context, s string) (string, error) { return "", nil })
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid component reference")
 }
@@ -245,12 +245,12 @@ func TestPlaybookResolver_ValidateForDeployment(t *testing.T) {
 
 	// Activate
 	activationSvc := NewActivationService(db)
-	_, err := activationSvc.Activate(ctx, 1, playbook.ID, map[string]VariableBinding{}, nil)
+	_, err := activationSvc.Activate(ctx, "test-project-1", playbook.ID, map[string]VariableBinding{}, nil)
 	require.NoError(t, err)
 
 	// Validate
 	resolver := NewPlaybookResolver(db)
-	err = resolver.ValidateForDeployment(ctx, 1)
+	err = resolver.ValidateForDeployment(ctx, "test-project-1")
 	require.NoError(t, err)
 }
 
@@ -259,7 +259,7 @@ func TestPlaybookResolver_ValidateForDeployment_NoActivation(t *testing.T) {
 	ctx := context.Background()
 
 	resolver := NewPlaybookResolver(db)
-	err := resolver.ValidateForDeployment(ctx, 999)
+	err := resolver.ValidateForDeployment(ctx, "nonexistent-project")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no active playbook")
 }
@@ -303,14 +303,14 @@ func TestPlaybookResolver_ValidateForDeployment_RawComponentNeedsApproval(t *tes
 
 	// Activation should fail without RAW approval
 	activationSvc := NewActivationService(db)
-	_, err := activationSvc.Activate(ctx, 1, playbook.ID, map[string]VariableBinding{}, nil)
+	_, err := activationSvc.Activate(ctx, "test-project-1", playbook.ID, map[string]VariableBinding{}, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "requires admin approval")
 }
 
 func TestPlaybookResolver_BuildDeployRequest(t *testing.T) {
 	resolved := &ResolvedPlaybook{
-		PlaybookID:      1,
+		PlaybookID:      "playbook-1",
 		PlaybookName:    "Test Playbook",
 		PlaybookVersion: "v1.0.0",
 		SharedDirs:      []string{"logs"},
@@ -337,7 +337,7 @@ func TestPlaybookResolver_BuildDeployRequest(t *testing.T) {
 	resolver := NewPlaybookResolver(db)
 	req := resolver.BuildDeployRequest(resolved, cfg)
 
-	assert.Equal(t, int64(1), req.PlaybookID)
+	assert.Equal(t, "playbook-1", req.PlaybookID)
 	assert.Equal(t, "Test Playbook", req.PlaybookName)
 	assert.Equal(t, "v1.0.0", req.PlaybookVersion)
 	assert.Equal(t, []string{"logs"}, req.SharedDirs)
@@ -352,7 +352,7 @@ func TestPlaybookResolver_BuildDeployRequest(t *testing.T) {
 
 func TestPlaybookResolver_BuildDeployRequest_NilConfig(t *testing.T) {
 	resolved := &ResolvedPlaybook{
-		PlaybookID:      1,
+		PlaybookID:      "playbook-1",
 		PlaybookName:    "Test",
 		PlaybookVersion: "v1.0.0",
 	}
@@ -361,7 +361,7 @@ func TestPlaybookResolver_BuildDeployRequest_NilConfig(t *testing.T) {
 	resolver := NewPlaybookResolver(db)
 	req := resolver.BuildDeployRequest(resolved, nil)
 
-	assert.Equal(t, int64(1), req.PlaybookID)
+	assert.Equal(t, "playbook-1", req.PlaybookID)
 	assert.Nil(t, req.EnvVars)
 	assert.Nil(t, req.EnvFileContent)
 }
@@ -407,7 +407,7 @@ func TestPlaybookResolver_Resolve_VariableSubstitution(t *testing.T) {
 	require.NoError(t, db.CreatePlaybook(ctx, playbook))
 
 	activationSvc := NewActivationService(db)
-	_, err := activationSvc.Activate(ctx, 1, playbook.ID, map[string]VariableBinding{
+	_, err := activationSvc.Activate(ctx, "test-project-1", playbook.ID, map[string]VariableBinding{
 		"NAME": {SourceType: "literal", LiteralValue: "TestApp"},
 		"PORT": {SourceType: "literal", LiteralValue: "8080"},
 		"HOST": {SourceType: "literal", LiteralValue: "localhost"},
@@ -415,7 +415,7 @@ func TestPlaybookResolver_Resolve_VariableSubstitution(t *testing.T) {
 	require.NoError(t, err)
 
 	resolver := NewPlaybookResolver(db)
-	resolved, err := resolver.Resolve(ctx, 1, func(s string) string { return "" }, func(ctx context.Context, s string) (string, error) { return "", nil })
+	resolved, err := resolver.Resolve(ctx, "test-project-1", func(s string) string { return "" }, func(ctx context.Context, s string) (string, error) { return "", nil })
 	require.NoError(t, err)
 
 	step := resolved.DeploySteps[0]

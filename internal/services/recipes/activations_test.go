@@ -48,13 +48,13 @@ func TestActivationService_Activate(t *testing.T) {
 	svc := NewActivationService(db)
 
 	// Activate the playbook for a project
-	activation, err := svc.Activate(ctx, 1, playbook.ID, map[string]VariableBinding{}, nil)
+	activation, err := svc.Activate(ctx, "test-project-id", playbook.ID, map[string]VariableBinding{}, nil)
 	if err != nil {
 		t.Fatalf("Activate() error = %v", err)
 	}
 
-	if activation.ProjectID != 1 {
-		t.Errorf("ProjectID = %v, want 1", activation.ProjectID)
+	if activation.ProjectID != "test-project-id" {
+		t.Errorf("ProjectID = %v, want test-project-id", activation.ProjectID)
 	}
 	if activation.PlaybookID != playbook.ID {
 		t.Errorf("PlaybookID = %v, want %v", activation.PlaybookID, playbook.ID)
@@ -104,13 +104,13 @@ func TestActivationService_Activate_MissingVariable(t *testing.T) {
 	svc := NewActivationService(db)
 
 	// Activate without providing required variable should fail
-	_, err := svc.Activate(ctx, 1, playbook.ID, map[string]VariableBinding{}, nil)
+	_, err := svc.Activate(ctx, "test-project-id", playbook.ID, map[string]VariableBinding{}, nil)
 	if err == nil {
 		t.Fatal("Activate() expected error for missing required variable")
 	}
 
 	// Activate with variable should succeed
-	_, err = svc.Activate(ctx, 1, playbook.ID, map[string]VariableBinding{
+	_, err = svc.Activate(ctx, "test-project-id", playbook.ID, map[string]VariableBinding{
 		"DB_HOST": {SourceType: storage.SourceTypeLiteral, LiteralValue: "localhost"},
 	}, nil)
 	if err != nil {
@@ -159,7 +159,7 @@ func TestActivationService_Activate_RAWRequiresApproval(t *testing.T) {
 	svc := NewActivationService(db)
 
 	// Activate without approval should fail
-	_, err := svc.Activate(ctx, 1, playbook.ID, map[string]VariableBinding{}, nil)
+	_, err := svc.Activate(ctx, "test-project-id", playbook.ID, map[string]VariableBinding{}, nil)
 	if err == nil {
 		t.Fatal("Activate() expected error for RAW component without approval")
 	}
@@ -174,7 +174,7 @@ func TestActivationService_Activate_RAWRequiresApproval(t *testing.T) {
 	}
 
 	// Now activation should succeed
-	_, err = svc.Activate(ctx, 1, playbook.ID, map[string]VariableBinding{}, nil)
+	_, err = svc.Activate(ctx, "test-project-id", playbook.ID, map[string]VariableBinding{}, nil)
 	if err != nil {
 		t.Fatalf("Activate() error = %v", err)
 	}
@@ -223,19 +223,19 @@ func TestActivationService_GetActive(t *testing.T) {
 	bindings := map[string]VariableBinding{
 		"TEST_VAR": {SourceType: storage.SourceTypeLiteral, LiteralValue: "test_value"},
 	}
-	_, err := svc.Activate(ctx, 123, playbook.ID, bindings, nil)
+	_, err := svc.Activate(ctx, "test-project-123", playbook.ID, bindings, nil)
 	if err != nil {
 		t.Fatalf("Activate() error = %v", err)
 	}
 
 	// Get active should return the activation with bindings
-	activation, err := svc.GetActive(ctx, 123)
+	activation, err := svc.GetActive(ctx, "test-project-123")
 	if err != nil {
 		t.Fatalf("GetActive() error = %v", err)
 	}
 
-	if activation.ProjectID != 123 {
-		t.Errorf("ProjectID = %v, want 123", activation.ProjectID)
+	if activation.ProjectID != "test-project-123" {
+		t.Errorf("ProjectID = %v, want test-project-123", activation.ProjectID)
 	}
 	if len(activation.Bindings) != 1 {
 		t.Errorf("len(Bindings) = %v, want 1", len(activation.Bindings))
@@ -282,19 +282,19 @@ func TestActivationService_Deactivate(t *testing.T) {
 	svc := NewActivationService(db)
 
 	// Activate
-	_, err := svc.Activate(ctx, 456, playbook.ID, map[string]VariableBinding{}, nil)
+	_, err := svc.Activate(ctx, "test-project-456", playbook.ID, map[string]VariableBinding{}, nil)
 	if err != nil {
 		t.Fatalf("Activate() error = %v", err)
 	}
 
 	// Deactivate
-	err = svc.Deactivate(ctx, 456)
+	err = svc.Deactivate(ctx, "test-project-456")
 	if err != nil {
 		t.Fatalf("Deactivate() error = %v", err)
 	}
 
 	// GetActive should now fail
-	_, err = svc.GetActive(ctx, 456)
+	_, err = svc.GetActive(ctx, "test-project-456")
 	if err == nil {
 		t.Fatal("GetActive() expected error after deactivation")
 	}

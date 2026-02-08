@@ -36,7 +36,7 @@ func (s *MasterServer) handleAdminTOTPUsers(w http.ResponseWriter, r *http.Reque
 
 	// Filter to TOTP-enabled users
 	type totpUser struct {
-		ID          int64  `json:"id"`
+		ID          string `json:"id"`
 		Username    string `json:"username"`
 		Email       string `json:"email"`
 		Role        string `json:"role"`

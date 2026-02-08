@@ -353,7 +353,7 @@ func (s *MasterServer) handleUserTOTPRecovery(w http.ResponseWriter, r *http.Req
 // handleAdminUserTOTP handles admin TOTP operations for a specific user.
 // GET /users/{id}/totp - get TOTP status for user
 // DELETE /users/{id}/totp - disable TOTP for user (admin override)
-func (s *MasterServer) handleAdminUserTOTP(w http.ResponseWriter, r *http.Request, userID int64) {
+func (s *MasterServer) handleAdminUserTOTP(w http.ResponseWriter, r *http.Request, userID string) {
 	// Require admin role
 	admin, ok := GetUserFromContext(r.Context())
 	if !ok || admin.Role != "admin" {

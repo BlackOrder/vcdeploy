@@ -15,23 +15,16 @@ import (
 
 // CreateUser creates a new user.
 func (db *DB) CreateUser(ctx context.Context, user *User) error {
-	if user.UID == "" {
-		user.UID = xid.New().String()
+	if user.ID == "" {
+		user.ID = xid.New().String()
 	}
-	result, err := db.conn.ExecContext(ctx, `
-		INSERT INTO users (uid, username, password_hash, email, role, must_change_password, totp_secret, totp_enabled)
+	_, err := db.conn.ExecContext(ctx, `
+		INSERT INTO users (id, username, password_hash, email, role, must_change_password, totp_secret, totp_enabled)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, user.UID, user.Username, user.PasswordHash, user.Email, user.Role, user.MustChangePassword, user.TOTPSecret, user.TOTPEnabled)
+	`, user.ID, user.Username, user.PasswordHash, user.Email, user.Role, user.MustChangePassword, user.TOTPSecret, user.TOTPEnabled)
 	if err != nil {
 		return fmt.Errorf("inserting user: %w", err)
 	}
-
-	id, err := result.LastInsertId()
-	if err != nil {
-		return fmt.Errorf("getting user id: %w", err)
-	}
-	user.ID = id
-
 	return nil
 }
 
@@ -41,11 +34,11 @@ func (db *DB) GetUserByUsername(ctx context.Context, username string) (*User, er
 	var totpSecret sql.NullString
 
 	err := db.conn.QueryRowContext(ctx, `
-		SELECT id, uid, username, password_hash, email, role, totp_secret, totp_enabled, 
+		SELECT id, username, password_hash, email, role, totp_secret, totp_enabled, 
 		       must_change_password, created_at, updated_at
 		FROM users WHERE username = ?
 	`, username).Scan(
-		&user.ID, &user.UID, &user.Username, &user.PasswordHash, &user.Email, &user.Role,
+		&user.ID, &user.Username, &user.PasswordHash, &user.Email, &user.Role,
 		&totpSecret, &user.TOTPEnabled, &user.MustChangePassword,
 		&user.CreatedAt, &user.UpdatedAt,
 	)
@@ -117,7 +110,7 @@ func (db *DB) DeleteExpiredSessions(ctx context.Context) (int64, error) {
 }
 
 // DeleteUserSessions deletes all sessions for a user.
-func (db *DB) DeleteUserSessions(ctx context.Context, userID int64) error {
+func (db *DB) DeleteUserSessions(ctx context.Context, userID string) error {
 	_, err := db.conn.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ?`, userID)
 	if err != nil {
 		return fmt.Errorf("deleting user sessions: %w", err)
@@ -126,7 +119,7 @@ func (db *DB) DeleteUserSessions(ctx context.Context, userID int64) error {
 }
 
 // ListUserSessions returns all active sessions for a user.
-func (db *DB) ListUserSessions(ctx context.Context, userID int64) ([]*Session, error) {
+func (db *DB) ListUserSessions(ctx context.Context, userID string) ([]*Session, error) {
 	rows, err := db.conn.QueryContext(ctx, `
 		SELECT id, user_id, ip_address, user_agent, created_at, expires_at
 		FROM sessions WHERE user_id = ? AND expires_at > ?
@@ -159,7 +152,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64) ([]*Session, e
 // ListUsers returns all users.
 func (db *DB) ListUsers(ctx context.Context) ([]*User, error) {
 	rows, err := db.conn.QueryContext(ctx, `
-		SELECT id, uid, username, password_hash, email, role, totp_secret, totp_enabled, 
+		SELECT id, username, password_hash, email, role, totp_secret, totp_enabled, 
 		       must_change_password, created_at, updated_at
 		FROM users ORDER BY username
 	`)
@@ -173,7 +166,7 @@ func (db *DB) ListUsers(ctx context.Context) ([]*User, error) {
 		var user User
 		var totpSecret sql.NullString
 		if err := rows.Scan(
-			&user.ID, &user.UID, &user.Username, &user.PasswordHash, &user.Email, &user.Role,
+			&user.ID, &user.Username, &user.PasswordHash, &user.Email, &user.Role,
 			&totpSecret, &user.TOTPEnabled, &user.MustChangePassword,
 			&user.CreatedAt, &user.UpdatedAt,
 		); err != nil {
@@ -188,7 +181,7 @@ func (db *DB) ListUsers(ctx context.Context) ([]*User, error) {
 // ListUsersPaginated returns users with pagination support (H6).
 func (db *DB) ListUsersPaginated(ctx context.Context, limit, offset int) ([]*User, error) {
 	rows, err := db.conn.QueryContext(ctx, `
-		SELECT id, uid, username, password_hash, email, role, totp_secret, totp_enabled, 
+		SELECT id, username, password_hash, email, role, totp_secret, totp_enabled, 
 		       must_change_password, created_at, updated_at
 		FROM users ORDER BY username LIMIT ? OFFSET ?
 	`, limit, offset)
@@ -202,7 +195,7 @@ func (db *DB) ListUsersPaginated(ctx context.Context, limit, offset int) ([]*Use
 		var user User
 		var totpSecret sql.NullString
 		if err := rows.Scan(
-			&user.ID, &user.UID, &user.Username, &user.PasswordHash, &user.Email, &user.Role,
+			&user.ID, &user.Username, &user.PasswordHash, &user.Email, &user.Role,
 			&totpSecret, &user.TOTPEnabled, &user.MustChangePassword,
 			&user.CreatedAt, &user.UpdatedAt,
 		); err != nil {
@@ -225,16 +218,16 @@ func (db *DB) CountUsers(ctx context.Context) (int64, error) {
 }
 
 // GetUserByID retrieves a user by ID.
-func (db *DB) GetUserByID(ctx context.Context, id int64) (*User, error) {
+func (db *DB) GetUserByID(ctx context.Context, id string) (*User, error) {
 	var user User
 	var totpSecret sql.NullString
 
 	err := db.conn.QueryRowContext(ctx, `
-		SELECT id, uid, username, password_hash, email, role, totp_secret, totp_enabled,
+		SELECT id, username, password_hash, email, role, totp_secret, totp_enabled,
 		       must_change_password, created_at, updated_at
 		FROM users WHERE id = ?
 	`, id).Scan(
-		&user.ID, &user.UID, &user.Username, &user.PasswordHash, &user.Email, &user.Role,
+		&user.ID, &user.Username, &user.PasswordHash, &user.Email, &user.Role,
 		&totpSecret, &user.TOTPEnabled, &user.MustChangePassword,
 		&user.CreatedAt, &user.UpdatedAt,
 	)
@@ -264,13 +257,13 @@ func (db *DB) UpdateUserByID(ctx context.Context, user *User) error {
 }
 
 // DeleteUser deletes a user by ID.
-func (db *DB) DeleteUser(ctx context.Context, id int64) error {
+func (db *DB) DeleteUser(ctx context.Context, id string) error {
 	// Also delete associated sessions and API keys
 	if _, err := db.conn.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ?`, id); err != nil {
-		db.logger.Warn("failed to delete user sessions", zap.Int64("userID", id), zap.Error(err))
+		db.logger.Warn("failed to delete user sessions", zap.String("userID", id), zap.Error(err))
 	}
 	if _, err := db.conn.ExecContext(ctx, `DELETE FROM api_keys WHERE user_id = ?`, id); err != nil {
-		db.logger.Warn("failed to delete user API keys", zap.Int64("userID", id), zap.Error(err))
+		db.logger.Warn("failed to delete user API keys", zap.String("userID", id), zap.Error(err))
 	}
 	_, err := db.conn.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, id)
 	if err != nil {
@@ -282,7 +275,7 @@ func (db *DB) DeleteUser(ctx context.Context, id int64) error {
 // --- Recovery Code Operations ---
 
 // SaveRecoveryCodes saves a set of recovery codes for a user (replaces any existing).
-func (db *DB) SaveRecoveryCodes(ctx context.Context, userID int64, codes []*RecoveryCode) error {
+func (db *DB) SaveRecoveryCodes(ctx context.Context, userID string, codes []*RecoveryCode) error {
 	return db.RunInTransaction(ctx, func(tx *sql.Tx) error {
 		// Delete existing codes for this user
 		if _, err := tx.ExecContext(ctx, `DELETE FROM recovery_codes WHERE user_id = ?`, userID); err != nil {
@@ -291,8 +284,8 @@ func (db *DB) SaveRecoveryCodes(ctx context.Context, userID int64, codes []*Reco
 
 		// Insert new codes
 		stmt, err := tx.PrepareContext(ctx, `
-			INSERT INTO recovery_codes (user_id, code_hash, created_at)
-			VALUES (?, ?, CURRENT_TIMESTAMP)
+			INSERT INTO recovery_codes (id, user_id, code_hash, created_at)
+			VALUES (?, ?, ?, CURRENT_TIMESTAMP)
 		`)
 		if err != nil {
 			return fmt.Errorf("preparing statement: %w", err)
@@ -300,13 +293,12 @@ func (db *DB) SaveRecoveryCodes(ctx context.Context, userID int64, codes []*Reco
 		defer stmt.Close()
 
 		for _, code := range codes {
-			result, err := stmt.ExecContext(ctx, userID, code.CodeHash)
+			if code.ID == "" {
+				code.ID = xid.New().String()
+			}
+			_, err := stmt.ExecContext(ctx, code.ID, userID, code.CodeHash)
 			if err != nil {
 				return fmt.Errorf("inserting recovery code: %w", err)
-			}
-			id, err := result.LastInsertId()
-			if err == nil {
-				code.ID = id
 			}
 		}
 		return nil
@@ -314,7 +306,7 @@ func (db *DB) SaveRecoveryCodes(ctx context.Context, userID int64, codes []*Reco
 }
 
 // ListRecoveryCodes returns all recovery codes for a user.
-func (db *DB) ListRecoveryCodes(ctx context.Context, userID int64) ([]*RecoveryCode, error) {
+func (db *DB) ListRecoveryCodes(ctx context.Context, userID string) ([]*RecoveryCode, error) {
 	rows, err := db.conn.QueryContext(ctx, `
 		SELECT id, user_id, code_hash, used_at, created_at
 		FROM recovery_codes
@@ -341,7 +333,7 @@ func (db *DB) ListRecoveryCodes(ctx context.Context, userID int64) ([]*RecoveryC
 }
 
 // UseRecoveryCode marks a recovery code as used.
-func (db *DB) UseRecoveryCode(ctx context.Context, codeID int64) error {
+func (db *DB) UseRecoveryCode(ctx context.Context, codeID string) error {
 	result, err := db.conn.ExecContext(ctx, `
 		UPDATE recovery_codes SET used_at = CURRENT_TIMESTAMP
 		WHERE id = ? AND used_at IS NULL
@@ -360,7 +352,7 @@ func (db *DB) UseRecoveryCode(ctx context.Context, codeID int64) error {
 }
 
 // DeleteRecoveryCodes removes all recovery codes for a user.
-func (db *DB) DeleteRecoveryCodes(ctx context.Context, userID int64) error {
+func (db *DB) DeleteRecoveryCodes(ctx context.Context, userID string) error {
 	_, err := db.conn.ExecContext(ctx, `DELETE FROM recovery_codes WHERE user_id = ?`, userID)
 	if err != nil {
 		return fmt.Errorf("deleting recovery codes: %w", err)
@@ -369,7 +361,7 @@ func (db *DB) DeleteRecoveryCodes(ctx context.Context, userID int64) error {
 }
 
 // CountUnusedRecoveryCodes returns the count of unused codes for a user.
-func (db *DB) CountUnusedRecoveryCodes(ctx context.Context, userID int64) (int, error) {
+func (db *DB) CountUnusedRecoveryCodes(ctx context.Context, userID string) (int, error) {
 	var count int
 	err := db.conn.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM recovery_codes

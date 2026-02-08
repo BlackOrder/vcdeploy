@@ -26,7 +26,7 @@ func createExportWithData(t *testing.T, passphrase string) (exportPath string, s
 
 	projectUID := xid.New().String()
 	_, err := srcDB.Conn().ExecContext(ctx,
-		`INSERT INTO projects (uid, name, branch) VALUES (?, ?, ?)`,
+		`INSERT INTO projects (id, name, branch) VALUES (?, ?, ?)`,
 		projectUID, "imported-project", "main",
 	)
 	if err != nil {
@@ -41,7 +41,7 @@ func createExportWithData(t *testing.T, passphrase string) (exportPath string, s
 
 	secretUID := xid.New().String()
 	_, err = srcDB.Conn().ExecContext(ctx,
-		`INSERT INTO secrets (uid, project, scope, key, value_encrypted) VALUES (?, ?, ?, ?, ?)`,
+		`INSERT INTO secrets (id, project, scope, key, value_encrypted) VALUES (?, ?, ?, ?, ?)`,
 		secretUID, "imported-project", "env", "API_KEY", secretEnc,
 	)
 	if err != nil {
@@ -104,7 +104,7 @@ func TestImport_ComputeDiff_ChangedRecords(t *testing.T) {
 	kms1, mk1 := setupTestKMS(t, srcDB)
 	projectUID := xid.New().String()
 	_, err := srcDB.Conn().ExecContext(ctx,
-		`INSERT INTO projects (uid, name, branch) VALUES (?, ?, ?)`,
+		`INSERT INTO projects (id, name, branch) VALUES (?, ?, ?)`,
 		projectUID, "my-project", "main",
 	)
 	if err != nil {
@@ -121,7 +121,7 @@ func TestImport_ComputeDiff_ChangedRecords(t *testing.T) {
 	dstDB := setupTestDB(t)
 	kms2, _ := setupTestKMS(t, dstDB)
 	_, err = dstDB.Conn().ExecContext(ctx,
-		`INSERT INTO projects (uid, name, branch) VALUES (?, ?, ?)`,
+		`INSERT INTO projects (id, name, branch) VALUES (?, ?, ?)`,
 		projectUID, "my-project-old", "develop",
 	)
 	if err != nil {
@@ -157,7 +157,7 @@ func TestImport_Execute_Replace(t *testing.T) {
 	// Insert a different project into dst that should be wiped by replace
 	dstProjectUID := xid.New().String()
 	_, err := dstDB.Conn().ExecContext(ctx,
-		`INSERT INTO projects (uid, name, branch) VALUES (?, ?, ?)`,
+		`INSERT INTO projects (id, name, branch) VALUES (?, ?, ?)`,
 		dstProjectUID, "local-project", "main",
 	)
 	if err != nil {
@@ -177,7 +177,7 @@ func TestImport_Execute_Replace(t *testing.T) {
 	// After replace, the local project should be gone
 	var count int
 	err = dstDB.Conn().QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM projects WHERE uid=?", dstProjectUID,
+		"SELECT COUNT(*) FROM projects WHERE id=?", dstProjectUID,
 	).Scan(&count)
 	if err != nil {
 		t.Fatalf("count local project: %v", err)
@@ -206,7 +206,7 @@ func TestImport_Execute_Merge(t *testing.T) {
 	// Insert a different project into dst that should be kept by merge
 	dstProjectUID := xid.New().String()
 	_, err := dstDB.Conn().ExecContext(ctx,
-		`INSERT INTO projects (uid, name, branch) VALUES (?, ?, ?)`,
+		`INSERT INTO projects (id, name, branch) VALUES (?, ?, ?)`,
 		dstProjectUID, "local-project", "develop",
 	)
 	if err != nil {
@@ -319,7 +319,7 @@ func TestImport_MasterKeyReencryption(t *testing.T) {
 	}
 	keyUID := xid.New().String()
 	_, err = srcDB.Conn().ExecContext(ctx,
-		`INSERT INTO ssh_keys (uid, name, public_key, private_key_encrypted, key_type, fingerprint, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO ssh_keys (id, name, public_key, private_key_encrypted, key_type, fingerprint, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		keyUID, "test-key", "ssh-rsa AAAA...", encPrivKey, "rsa", "SHA256:test", "testuser",
 	)
 	if err != nil {
@@ -350,7 +350,7 @@ func TestImport_MasterKeyReencryption(t *testing.T) {
 	// Read the imported encrypted private key
 	var encImported []byte
 	err = dstDB.Conn().QueryRowContext(ctx,
-		"SELECT private_key_encrypted FROM ssh_keys WHERE uid=?", keyUID,
+		"SELECT private_key_encrypted FROM ssh_keys WHERE id=?", keyUID,
 	).Scan(&encImported)
 	if err != nil {
 		t.Fatalf("read imported ssh_key: %v", err)
@@ -382,7 +382,7 @@ func TestImport_SettingsEncryptedReencryption(t *testing.T) {
 
 	settingUID := xid.New().String()
 	_, err = srcDB.Conn().ExecContext(ctx,
-		`INSERT INTO settings (uid, category, key, value, encrypted) VALUES (?, ?, ?, ?, ?)`,
+		`INSERT INTO settings (id, category, key, value, encrypted) VALUES (?, ?, ?, ?, ?)`,
 		settingUID, "smtp", "password", settingEnc, 1,
 	)
 	if err != nil {
@@ -402,7 +402,7 @@ func TestImport_SettingsEncryptedReencryption(t *testing.T) {
 		t.Fatalf("open export: %v", err)
 	}
 	var exportedVal string
-	err = exportDB.QueryRow("SELECT value FROM settings WHERE uid=?", settingUID).Scan(&exportedVal)
+	err = exportDB.QueryRow("SELECT value FROM settings WHERE id=?", settingUID).Scan(&exportedVal)
 	exportDB.Close()
 	if err != nil {
 		t.Fatalf("read exported setting: %v", err)
@@ -428,7 +428,7 @@ func TestImport_SettingsEncryptedReencryption(t *testing.T) {
 	// The imported setting should be KMS-encrypted with destination KMS
 	var importedVal string
 	err = dstDB.Conn().QueryRowContext(ctx,
-		"SELECT value FROM settings WHERE uid=?", settingUID,
+		"SELECT value FROM settings WHERE id=?", settingUID,
 	).Scan(&importedVal)
 	if err != nil {
 		t.Fatalf("read imported setting: %v", err)
@@ -520,17 +520,17 @@ func TestImport_FKResolution(t *testing.T) {
 
 	userUID := xid.New().String()
 	_, err := srcDB.Conn().ExecContext(ctx,
-		`INSERT INTO users (uid, username, password_hash, email, role) VALUES (?, ?, ?, ?, ?)`,
+		`INSERT INTO users (id, username, password_hash, email, role) VALUES (?, ?, ?, ?, ?)`,
 		userUID, "fk-test-user", "bcrypt-hash", "fk@example.com", "admin",
 	)
 	if err != nil {
 		t.Fatalf("insert user: %v", err)
 	}
 
-	// Get the user's auto-assigned integer ID
-	var srcUserID int64
+	// Get the user's ID (TEXT PK)
+	var srcUserID string
 	err = srcDB.Conn().QueryRowContext(ctx,
-		"SELECT id FROM users WHERE uid = ?", userUID,
+		"SELECT id FROM users WHERE id = ?", userUID,
 	).Scan(&srcUserID)
 	if err != nil {
 		t.Fatalf("get user id: %v", err)
@@ -538,7 +538,7 @@ func TestImport_FKResolution(t *testing.T) {
 
 	apiKeyUID := xid.New().String()
 	_, err = srcDB.Conn().ExecContext(ctx,
-		`INSERT INTO api_keys (uid, user_id, name, key_hash, key_prefix, scopes) VALUES (?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO api_keys (id, user_id, name, key_hash, key_prefix, scopes) VALUES (?, ?, ?, ?, ?, ?)`,
 		apiKeyUID, srcUserID, "test-key", "hash123", "prefix", `["admin"]`,
 	)
 	if err != nil {
@@ -558,14 +558,14 @@ func TestImport_FKResolution(t *testing.T) {
 
 	// Insert some dummy data in destination to shift auto-increment IDs
 	_, err = dstDB.Conn().ExecContext(ctx,
-		`INSERT INTO users (uid, username, password_hash, email, role) VALUES (?, ?, ?, ?, ?)`,
+		`INSERT INTO users (id, username, password_hash, email, role) VALUES (?, ?, ?, ?, ?)`,
 		xid.New().String(), "padding-user-1", "hash", "pad1@example.com", "viewer",
 	)
 	if err != nil {
 		t.Fatalf("insert padding user: %v", err)
 	}
 	_, err = dstDB.Conn().ExecContext(ctx,
-		`INSERT INTO users (uid, username, password_hash, email, role) VALUES (?, ?, ?, ?, ?)`,
+		`INSERT INTO users (id, username, password_hash, email, role) VALUES (?, ?, ?, ?, ?)`,
 		xid.New().String(), "padding-user-2", "hash", "pad2@example.com", "viewer",
 	)
 	if err != nil {
@@ -583,19 +583,19 @@ func TestImport_FKResolution(t *testing.T) {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	// Verify the user was imported with the correct UID
-	var dstUserID int64
+	// Verify the user was imported with the correct ID
+	var dstUserID string
 	err = dstDB.Conn().QueryRowContext(ctx,
-		"SELECT id FROM users WHERE uid = ?", userUID,
+		"SELECT id FROM users WHERE id = ?", userUID,
 	).Scan(&dstUserID)
 	if err != nil {
 		t.Fatalf("find imported user: %v", err)
 	}
 
 	// Verify the API key was imported
-	var apiKeyUserID int64
+	var apiKeyUserID string
 	err = dstDB.Conn().QueryRowContext(ctx,
-		"SELECT user_id FROM api_keys WHERE uid = ?", apiKeyUID,
+		"SELECT user_id FROM api_keys WHERE id = ?", apiKeyUID,
 	).Scan(&apiKeyUserID)
 	if err != nil {
 		t.Fatalf("find imported api_key: %v", err)
@@ -613,19 +613,19 @@ func TestImport_FKResolution(t *testing.T) {
 		t.Fatalf("verify FK: %v", err)
 	}
 	if userCount != 1 {
-		t.Errorf("api_key.user_id=%d does not reference a valid user (count=%d)", apiKeyUserID, userCount)
+		t.Errorf("api_key.user_id=%s does not reference a valid user (count=%d)", apiKeyUserID, userCount)
 	}
 
-	// Verify the user referenced by the api_key has the expected UID
+	// Verify the user referenced by the api_key has the expected ID
 	var referencedUID string
 	err = dstDB.Conn().QueryRowContext(ctx,
-		"SELECT uid FROM users WHERE id = ?", apiKeyUserID,
+		"SELECT id FROM users WHERE id = ?", apiKeyUserID,
 	).Scan(&referencedUID)
 	if err != nil {
-		t.Fatalf("get referenced user uid: %v", err)
+		t.Fatalf("get referenced user id: %v", err)
 	}
 	if referencedUID != userUID {
-		t.Errorf("api_key references user uid=%q, want %q", referencedUID, userUID)
+		t.Errorf("api_key references user id=%q, want %q", referencedUID, userUID)
 	}
 }
 
@@ -643,7 +643,7 @@ func TestExportImportIntegration(t *testing.T) {
 	// Create a user
 	userUID := xid.New().String()
 	_, err := srcDB.Conn().ExecContext(ctx,
-		`INSERT INTO users (uid, username, password_hash, email, role) VALUES (?, ?, ?, ?, ?)`,
+		`INSERT INTO users (id, username, password_hash, email, role) VALUES (?, ?, ?, ?, ?)`,
 		userUID, "export-user", "bcrypt-hash-123", "export@example.com", "admin",
 	)
 	if err != nil {
@@ -653,7 +653,7 @@ func TestExportImportIntegration(t *testing.T) {
 	// Create a project type
 	ptUID := xid.New().String()
 	_, err = srcDB.Conn().ExecContext(ctx,
-		`INSERT INTO project_types (uid, name) VALUES (?, ?)`,
+		`INSERT INTO project_types (id, name) VALUES (?, ?)`,
 		ptUID, "integration-type",
 	)
 	if err != nil {
@@ -663,7 +663,7 @@ func TestExportImportIntegration(t *testing.T) {
 	// Create a project
 	projUID := xid.New().String()
 	_, err = srcDB.Conn().ExecContext(ctx,
-		`INSERT INTO projects (uid, name, branch) VALUES (?, ?, ?)`,
+		`INSERT INTO projects (id, name, branch) VALUES (?, ?, ?)`,
 		projUID, "integration-project", "main",
 	)
 	if err != nil {
@@ -678,7 +678,7 @@ func TestExportImportIntegration(t *testing.T) {
 	}
 	secretUID := xid.New().String()
 	_, err = srcDB.Conn().ExecContext(ctx,
-		`INSERT INTO secrets (uid, project, scope, key, value_encrypted) VALUES (?, ?, ?, ?, ?)`,
+		`INSERT INTO secrets (id, project, scope, key, value_encrypted) VALUES (?, ?, ?, ?, ?)`,
 		secretUID, "integration-project", "env", "DB_PASSWORD", secretEnc,
 	)
 	if err != nil {
@@ -693,7 +693,7 @@ func TestExportImportIntegration(t *testing.T) {
 	}
 	sshUID := xid.New().String()
 	_, err = srcDB.Conn().ExecContext(ctx,
-		`INSERT INTO ssh_keys (uid, name, public_key, private_key_encrypted, key_type, fingerprint, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO ssh_keys (id, name, public_key, private_key_encrypted, key_type, fingerprint, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		sshUID, "integration-key", "ssh-ed25519 AAAA...", sshEnc, "ed25519", "SHA256:test", "export-user",
 	)
 	if err != nil {
@@ -708,7 +708,7 @@ func TestExportImportIntegration(t *testing.T) {
 	}
 	settingUID := xid.New().String()
 	_, err = srcDB.Conn().ExecContext(ctx,
-		`INSERT INTO settings (uid, category, key, value, encrypted) VALUES (?, ?, ?, ?, ?)`,
+		`INSERT INTO settings (id, category, key, value, encrypted) VALUES (?, ?, ?, ?, ?)`,
 		settingUID, "smtp", "password", settingEnc, 1,
 	)
 	if err != nil {
@@ -748,10 +748,10 @@ func TestExportImportIntegration(t *testing.T) {
 
 	// ---- VERIFY ALL DATA ----
 
-	// 1. User exists with correct UID and data
+	// 1. User exists with correct ID and data
 	var userName, userEmail string
 	err = dstDB.Conn().QueryRowContext(ctx,
-		"SELECT username, email FROM users WHERE uid = ?", userUID,
+		"SELECT username, email FROM users WHERE id = ?", userUID,
 	).Scan(&userName, &userEmail)
 	if err != nil {
 		t.Fatalf("find imported user: %v", err)
@@ -763,7 +763,7 @@ func TestExportImportIntegration(t *testing.T) {
 	// 2. Project type exists
 	var ptName string
 	err = dstDB.Conn().QueryRowContext(ctx,
-		"SELECT name FROM project_types WHERE uid = ?", ptUID,
+		"SELECT name FROM project_types WHERE id = ?", ptUID,
 	).Scan(&ptName)
 	if err != nil {
 		t.Fatalf("find imported project_type: %v", err)
@@ -775,7 +775,7 @@ func TestExportImportIntegration(t *testing.T) {
 	// 3. Project exists
 	var projName string
 	err = dstDB.Conn().QueryRowContext(ctx,
-		"SELECT name FROM projects WHERE uid = ?", projUID,
+		"SELECT name FROM projects WHERE id = ?", projUID,
 	).Scan(&projName)
 	if err != nil {
 		t.Fatalf("find imported project: %v", err)
@@ -787,7 +787,7 @@ func TestExportImportIntegration(t *testing.T) {
 	// 4. Secret is KMS-encrypted with destination KMS and decryptable
 	var importedSecretEnc string
 	err = dstDB.Conn().QueryRowContext(ctx,
-		"SELECT value_encrypted FROM secrets WHERE uid = ?", secretUID,
+		"SELECT value_encrypted FROM secrets WHERE id = ?", secretUID,
 	).Scan(&importedSecretEnc)
 	if err != nil {
 		t.Fatalf("find imported secret: %v", err)
@@ -806,7 +806,7 @@ func TestExportImportIntegration(t *testing.T) {
 	// 5. SSH key is MasterKey-encrypted with destination MasterKey and decryptable
 	var importedSSHEnc []byte
 	err = dstDB.Conn().QueryRowContext(ctx,
-		"SELECT private_key_encrypted FROM ssh_keys WHERE uid = ?", sshUID,
+		"SELECT private_key_encrypted FROM ssh_keys WHERE id = ?", sshUID,
 	).Scan(&importedSSHEnc)
 	if err != nil {
 		t.Fatalf("find imported ssh_key: %v", err)
@@ -822,7 +822,7 @@ func TestExportImportIntegration(t *testing.T) {
 	// 6. Encrypted setting is re-encrypted with destination KMS
 	var importedSettingEnc string
 	err = dstDB.Conn().QueryRowContext(ctx,
-		"SELECT value FROM settings WHERE uid = ?", settingUID,
+		"SELECT value FROM settings WHERE id = ?", settingUID,
 	).Scan(&importedSettingEnc)
 	if err != nil {
 		t.Fatalf("find imported setting: %v", err)

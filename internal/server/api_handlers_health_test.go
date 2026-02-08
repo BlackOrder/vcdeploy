@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -79,7 +78,7 @@ func TestHandleHealthCheckConfigs(t *testing.T) {
 		if created.Name != "test-config" {
 			t.Errorf("Expected name 'test-config', got '%s'", created.Name)
 		}
-		if created.ID == 0 {
+		if created.ID == "" {
 			t.Error("Expected config ID to be set")
 		}
 	})
@@ -120,7 +119,7 @@ func TestHandleHealthCheckConfig(t *testing.T) {
 	}
 
 	t.Run("GET - get config by ID", func(t *testing.T) {
-		req := requestWithAdminContext(httptest.NewRequest("GET", fmt.Sprintf("/api/v1/health-checks/%d", config.ID), http.NoBody), userID)
+		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/health-checks/"+config.ID, http.NoBody), userID)
 		rr := httptest.NewRecorder()
 		s.handleHealthCheckConfig(rr, req)
 
@@ -152,7 +151,7 @@ func TestHandleHealthCheckConfig(t *testing.T) {
 		}
 
 		body, _ := json.Marshal(update)
-		req := requestWithAdminContext(httptest.NewRequest("PUT", fmt.Sprintf("/api/v1/health-checks/%d", config.ID), bytes.NewReader(body)), userID)
+		req := requestWithAdminContext(httptest.NewRequest("PUT", "/api/v1/health-checks/"+config.ID, bytes.NewReader(body)), userID)
 		rr := httptest.NewRecorder()
 		s.handleHealthCheckConfig(rr, req)
 
@@ -189,7 +188,7 @@ func TestHandleHealthCheckConfig(t *testing.T) {
 			t.Fatalf("Failed to create config to delete: %v", err)
 		}
 
-		req := requestWithAdminContext(httptest.NewRequest("DELETE", fmt.Sprintf("/api/v1/health-checks/%d", toDelete.ID), http.NoBody), userID)
+		req := requestWithAdminContext(httptest.NewRequest("DELETE", "/api/v1/health-checks/"+toDelete.ID, http.NoBody), userID)
 		rr := httptest.NewRecorder()
 		s.handleHealthCheckConfig(rr, req)
 
@@ -232,7 +231,7 @@ func TestHandleHealthCheckConfig(t *testing.T) {
 			t.Skipf("No global config to test: %v", err)
 		}
 
-		req := requestWithAdminContext(httptest.NewRequest("DELETE", fmt.Sprintf("/api/v1/health-checks/%d", globalConfig.ID), http.NoBody), userID)
+		req := requestWithAdminContext(httptest.NewRequest("DELETE", "/api/v1/health-checks/"+globalConfig.ID, http.NoBody), userID)
 		rr := httptest.NewRecorder()
 		s.handleHealthCheckConfig(rr, req)
 
@@ -323,9 +322,9 @@ func TestHandleProjectHealthConfig(t *testing.T) {
 		autoRollback := true
 		rollbackOnHealth := true
 		update := struct {
-			HealthCheckID        *int64 `json:"healthCheckId"`
-			AutoRollbackEnabled  *bool  `json:"autoRollbackEnabled"`
-			RollbackOnHealthFail *bool  `json:"rollbackOnHealthFail"`
+			HealthCheckID        *string `json:"healthCheckId"`
+			AutoRollbackEnabled  *bool   `json:"autoRollbackEnabled"`
+			RollbackOnHealthFail *bool   `json:"rollbackOnHealthFail"`
 		}{
 			HealthCheckID:        &healthConfig.ID,
 			AutoRollbackEnabled:  &autoRollback,
@@ -521,7 +520,7 @@ func TestHandleRollbackRecord(t *testing.T) {
 	}
 
 	t.Run("GET - get rollback by ID", func(t *testing.T) {
-		req := requestWithAdminContext(httptest.NewRequest("GET", fmt.Sprintf("/api/v1/rollbacks/%d", rollback.ID), http.NoBody), userID)
+		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/rollbacks/"+rollback.ID, http.NoBody), userID)
 		rr := httptest.NewRecorder()
 		s.handleRollbackRecord(rr, req)
 
@@ -584,7 +583,7 @@ func TestHandleTestHealthCheck(t *testing.T) {
 	}
 
 	t.Run("POST - test health check success", func(t *testing.T) {
-		req := requestWithAdminContext(httptest.NewRequest("POST", fmt.Sprintf("/api/v1/health-checks/%d/test", config.ID), http.NoBody), userID)
+		req := requestWithAdminContext(httptest.NewRequest("POST", "/api/v1/health-checks/"+config.ID+"/test", http.NoBody), userID)
 		rr := httptest.NewRecorder()
 		s.handleHealthCheckConfig(rr, req)
 
@@ -621,7 +620,7 @@ func TestHandleTestHealthCheck(t *testing.T) {
 	}
 
 	t.Run("POST - test health check failure", func(t *testing.T) {
-		req := requestWithAdminContext(httptest.NewRequest("POST", fmt.Sprintf("/api/v1/health-checks/%d/test", failConfig.ID), http.NoBody), userID)
+		req := requestWithAdminContext(httptest.NewRequest("POST", "/api/v1/health-checks/"+failConfig.ID+"/test", http.NoBody), userID)
 		rr := httptest.NewRecorder()
 		s.handleHealthCheckConfig(rr, req)
 

@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/BlackOrder/vcdeploy/internal/security"
@@ -69,10 +68,10 @@ func (s *Service) Create(ctx context.Context, username, password, email, role st
 }
 
 // GetByID retrieves a user by ID.
-func (s *Service) GetByID(ctx context.Context, id int64) (*storage.User, error) {
+func (s *Service) GetByID(ctx context.Context, id string) (*storage.User, error) {
 	user, err := s.store.GetUserByID(ctx, id)
 	if services.IsNotFound(err) {
-		return nil, services.NotFound("users.GetByID", "user", strconv.FormatInt(id, 10))
+		return nil, services.NotFound("users.GetByID", "user", id)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("getting user: %w", err)
@@ -127,7 +126,7 @@ func (s *Service) Update(ctx context.Context, user *storage.User) error {
 }
 
 // Delete removes a user by ID.
-func (s *Service) Delete(ctx context.Context, id int64) error {
+func (s *Service) Delete(ctx context.Context, id string) error {
 	if err := s.store.DeleteUser(ctx, id); err != nil {
 		return fmt.Errorf("deleting user: %w", err)
 	}
@@ -153,7 +152,7 @@ func (s *Service) VerifyPassword(ctx context.Context, username, password string)
 }
 
 // UpdatePassword updates a user's password with validation.
-func (s *Service) UpdatePassword(ctx context.Context, userID int64, newPassword string) error {
+func (s *Service) UpdatePassword(ctx context.Context, userID string, newPassword string) error {
 	// Validate password complexity
 	if err := security.ValidatePassword(newPassword); err != nil {
 		return fmt.Errorf("password validation failed: %w", err)
@@ -182,7 +181,7 @@ func (s *Service) UpdatePassword(ctx context.Context, userID int64, newPassword 
 }
 
 // SetTOTP configures TOTP for a user.
-func (s *Service) SetTOTP(ctx context.Context, userID int64, secret string, enabled bool) error {
+func (s *Service) SetTOTP(ctx context.Context, userID string, secret string, enabled bool) error {
 	user, err := s.store.GetUserByID(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("getting user: %w", err)
@@ -208,7 +207,7 @@ func (s *Service) Count(ctx context.Context) (int64, error) {
 }
 
 // DeleteWithCleanup deletes a user and all associated data (sessions, API keys) in a transaction.
-func (s *Service) DeleteWithCleanup(ctx context.Context, userID int64) error {
+func (s *Service) DeleteWithCleanup(ctx context.Context, userID string) error {
 	return s.store.RunInTransaction(ctx, func(tx *sql.Tx) error {
 		// Delete all user's sessions
 		if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ?`, userID); err != nil {

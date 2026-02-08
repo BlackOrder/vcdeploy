@@ -62,7 +62,7 @@ func (s *Service) List(ctx context.Context) ([]*storage.SSHHostKey, error) {
 }
 
 // UpdateTrust updates the trust status of an SSH host key.
-func (s *Service) UpdateTrust(ctx context.Context, id int64, trusted bool, verifiedBy string) error {
+func (s *Service) UpdateTrust(ctx context.Context, id string, trusted bool, verifiedBy string) error {
 	if err := s.store.UpdateSSHHostKeyTrust(ctx, id, trusted, verifiedBy); err != nil {
 		return fmt.Errorf("updating host key trust: %w", err)
 	}
@@ -70,7 +70,7 @@ func (s *Service) UpdateTrust(ctx context.Context, id int64, trusted bool, verif
 }
 
 // Delete removes an SSH host key by ID.
-func (s *Service) Delete(ctx context.Context, id int64) error {
+func (s *Service) Delete(ctx context.Context, id string) error {
 	if err := s.store.DeleteSSHHostKey(ctx, id); err != nil {
 		return fmt.Errorf("deleting host key: %w", err)
 	}

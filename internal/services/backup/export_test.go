@@ -88,7 +88,7 @@ func TestExport_EncryptsSecrets(t *testing.T) {
 
 	projectUID := xid.New().String()
 	_, err := db.Conn().ExecContext(ctx,
-		`INSERT INTO projects (uid, name, branch) VALUES (?, ?, ?)`,
+		`INSERT INTO projects (id, name, branch) VALUES (?, ?, ?)`,
 		projectUID, "test-project", "main",
 	)
 	if err != nil {
@@ -103,7 +103,7 @@ func TestExport_EncryptsSecrets(t *testing.T) {
 
 	secretUID := xid.New().String()
 	_, err = db.Conn().ExecContext(ctx,
-		`INSERT INTO secrets (uid, project, scope, key, value_encrypted) VALUES (?, ?, ?, ?, ?)`,
+		`INSERT INTO secrets (id, project, scope, key, value_encrypted) VALUES (?, ?, ?, ?, ?)`,
 		secretUID, "test-project", "env", "API_KEY", encrypted,
 	)
 	if err != nil {
@@ -124,7 +124,7 @@ func TestExport_EncryptsSecrets(t *testing.T) {
 	defer exportDB.Close()
 
 	var exportedValue []byte
-	err = exportDB.QueryRow("SELECT value_encrypted FROM secrets WHERE uid=?", secretUID).Scan(&exportedValue)
+	err = exportDB.QueryRow("SELECT value_encrypted FROM secrets WHERE id=?", secretUID).Scan(&exportedValue)
 	if err != nil {
 		t.Fatalf("read exported secret: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestExport_DecryptableWithPassphrase(t *testing.T) {
 
 	projectUID := xid.New().String()
 	_, err := db.Conn().ExecContext(ctx,
-		`INSERT INTO projects (uid, name, branch) VALUES (?, ?, ?)`,
+		`INSERT INTO projects (id, name, branch) VALUES (?, ?, ?)`,
 		projectUID, "test-project", "main",
 	)
 	if err != nil {
@@ -159,7 +159,7 @@ func TestExport_DecryptableWithPassphrase(t *testing.T) {
 
 	secretUID := xid.New().String()
 	_, err = db.Conn().ExecContext(ctx,
-		`INSERT INTO secrets (uid, project, scope, key, value_encrypted) VALUES (?, ?, ?, ?, ?)`,
+		`INSERT INTO secrets (id, project, scope, key, value_encrypted) VALUES (?, ?, ?, ?, ?)`,
 		secretUID, "test-project", "env", "DB_PASS", encrypted,
 	)
 	if err != nil {
@@ -180,7 +180,7 @@ func TestExport_DecryptableWithPassphrase(t *testing.T) {
 	defer exportDB.Close()
 
 	var exportedValue []byte
-	err = exportDB.QueryRow("SELECT value_encrypted FROM secrets WHERE uid=?", secretUID).Scan(&exportedValue)
+	err = exportDB.QueryRow("SELECT value_encrypted FROM secrets WHERE id=?", secretUID).Scan(&exportedValue)
 	if err != nil {
 		t.Fatalf("read exported secret: %v", err)
 	}
@@ -252,7 +252,7 @@ func TestExport_PreservesUIDs(t *testing.T) {
 
 	projectUID := xid.New().String()
 	_, err := db.Conn().ExecContext(ctx,
-		`INSERT INTO projects (uid, name, branch) VALUES (?, ?, ?)`,
+		`INSERT INTO projects (id, name, branch) VALUES (?, ?, ?)`,
 		projectUID, "uid-test-project", "main",
 	)
 	if err != nil {
@@ -261,7 +261,7 @@ func TestExport_PreservesUIDs(t *testing.T) {
 
 	userUID := xid.New().String()
 	_, err = db.Conn().ExecContext(ctx,
-		`INSERT INTO users (uid, username, password_hash, role) VALUES (?, ?, ?, ?)`,
+		`INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)`,
 		userUID, "testuser", "$2a$12$fakehash", "admin",
 	)
 	if err != nil {
@@ -281,21 +281,21 @@ func TestExport_PreservesUIDs(t *testing.T) {
 	defer exportDB.Close()
 
 	var exportedProjectUID string
-	err = exportDB.QueryRow("SELECT uid FROM projects WHERE name='uid-test-project'").Scan(&exportedProjectUID)
+	err = exportDB.QueryRow("SELECT id FROM projects WHERE name='uid-test-project'").Scan(&exportedProjectUID)
 	if err != nil {
-		t.Fatalf("read exported project uid: %v", err)
+		t.Fatalf("read exported project id: %v", err)
 	}
 	if exportedProjectUID != projectUID {
-		t.Errorf("project uid = %q, want %q", exportedProjectUID, projectUID)
+		t.Errorf("project id = %q, want %q", exportedProjectUID, projectUID)
 	}
 
 	var exportedUserUID string
-	err = exportDB.QueryRow("SELECT uid FROM users WHERE username='testuser'").Scan(&exportedUserUID)
+	err = exportDB.QueryRow("SELECT id FROM users WHERE username='testuser'").Scan(&exportedUserUID)
 	if err != nil {
-		t.Fatalf("read exported user uid: %v", err)
+		t.Fatalf("read exported user id: %v", err)
 	}
 	if exportedUserUID != userUID {
-		t.Errorf("user uid = %q, want %q", exportedUserUID, userUID)
+		t.Errorf("user id = %q, want %q", exportedUserUID, userUID)
 	}
 }
 
@@ -332,7 +332,7 @@ func TestExport_MasterKeyEncryptedColumns(t *testing.T) {
 
 	sshUID := xid.New().String()
 	_, err = db.Conn().ExecContext(ctx,
-		`INSERT INTO ssh_keys (uid, name, public_key, private_key_encrypted, key_type, fingerprint) VALUES (?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO ssh_keys (id, name, public_key, private_key_encrypted, key_type, fingerprint) VALUES (?, ?, ?, ?, ?, ?)`,
 		sshUID, "test-key", "ssh-ed25519 AAAA...", encryptedKey, "ed25519", "SHA256:fake",
 	)
 	if err != nil {
@@ -353,7 +353,7 @@ func TestExport_MasterKeyEncryptedColumns(t *testing.T) {
 	defer exportDB.Close()
 
 	var exportedKey []byte
-	err = exportDB.QueryRow("SELECT private_key_encrypted FROM ssh_keys WHERE uid=?", sshUID).Scan(&exportedKey)
+	err = exportDB.QueryRow("SELECT private_key_encrypted FROM ssh_keys WHERE id=?", sshUID).Scan(&exportedKey)
 	if err != nil {
 		t.Fatalf("read exported ssh key: %v", err)
 	}
@@ -379,7 +379,7 @@ func TestExport_SettingsEncryptedFlag(t *testing.T) {
 
 	plainUID := xid.New().String()
 	_, err := db.Conn().ExecContext(ctx,
-		`INSERT INTO settings (uid, category, key, value, value_type, encrypted) VALUES (?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO settings (id, category, key, value, value_type, encrypted) VALUES (?, ?, ?, ?, ?, ?)`,
 		plainUID, "appearance", "theme", "dark", "string", 0,
 	)
 	if err != nil {
@@ -394,7 +394,7 @@ func TestExport_SettingsEncryptedFlag(t *testing.T) {
 
 	encUID := xid.New().String()
 	_, err = db.Conn().ExecContext(ctx,
-		`INSERT INTO settings (uid, category, key, value, value_type, encrypted) VALUES (?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO settings (id, category, key, value, value_type, encrypted) VALUES (?, ?, ?, ?, ?, ?)`,
 		encUID, "notifications", "smtp_password", encryptedValue, "string", 1,
 	)
 	if err != nil {
@@ -415,7 +415,7 @@ func TestExport_SettingsEncryptedFlag(t *testing.T) {
 	defer exportDB.Close()
 
 	var plainValue string
-	err = exportDB.QueryRow("SELECT value FROM settings WHERE uid=?", plainUID).Scan(&plainValue)
+	err = exportDB.QueryRow("SELECT value FROM settings WHERE id=?", plainUID).Scan(&plainValue)
 	if err != nil {
 		t.Fatalf("read plain setting: %v", err)
 	}
@@ -424,7 +424,7 @@ func TestExport_SettingsEncryptedFlag(t *testing.T) {
 	}
 
 	var encExportedValue string
-	err = exportDB.QueryRow("SELECT value FROM settings WHERE uid=?", encUID).Scan(&encExportedValue)
+	err = exportDB.QueryRow("SELECT value FROM settings WHERE id=?", encUID).Scan(&encExportedValue)
 	if err != nil {
 		t.Fatalf("read encrypted setting: %v", err)
 	}

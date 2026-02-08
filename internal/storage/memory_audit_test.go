@@ -24,7 +24,7 @@ func TestMemoryStore_LogAudit(t *testing.T) {
 		t.Fatalf("LogAudit() error = %v", err)
 	}
 
-	if entry.ID == 0 {
+	if entry.ID == "" {
 		t.Error("LogAudit() did not assign ID")
 	}
 	if entry.Timestamp.IsZero() {

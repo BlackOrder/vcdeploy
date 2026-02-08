@@ -6,6 +6,8 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
+
+	"github.com/rs/xid"
 )
 
 // --- Provision Job Methods ---
@@ -140,9 +142,9 @@ func (db *DB) CleanupOldProvisionJobs(ctx context.Context, before time.Time) (in
 // SaveProvisionLog saves a log entry for a provisioning job.
 func (db *DB) SaveProvisionLog(ctx context.Context, jobID, level, message string) error {
 	_, err := db.conn.ExecContext(ctx, `
-		INSERT INTO provision_logs (job_id, timestamp, level, message)
-		VALUES (?, ?, ?, ?)
-	`, jobID, time.Now(), level, message)
+		INSERT INTO provision_logs (id, job_id, timestamp, level, message)
+		VALUES (?, ?, ?, ?, ?)
+	`, xid.New().String(), jobID, time.Now(), level, message)
 	if err != nil {
 		return fmt.Errorf("saving provision log: %w", err)
 	}
@@ -174,7 +176,7 @@ func (db *DB) ListProvisionLogs(ctx context.Context, jobID string) ([]*Provision
 }
 
 // ListProvisionLogsAfter retrieves logs for a provisioning job with ID greater than afterID.
-func (db *DB) ListProvisionLogsAfter(ctx context.Context, jobID string, afterID int64) ([]*ProvisionLog, error) {
+func (db *DB) ListProvisionLogsAfter(ctx context.Context, jobID string, afterID string) ([]*ProvisionLog, error) {
 	rows, err := db.conn.QueryContext(ctx, `
 		SELECT id, job_id, timestamp, level, message
 		FROM provision_logs
@@ -182,7 +184,7 @@ func (db *DB) ListProvisionLogsAfter(ctx context.Context, jobID string, afterID 
 		ORDER BY timestamp ASC
 	`, jobID, afterID)
 	if err != nil {
-		return nil, fmt.Errorf("getting provision logs after %d: %w", afterID, err)
+		return nil, fmt.Errorf("getting provision logs after %s: %w", afterID, err)
 	}
 	defer rows.Close()
 

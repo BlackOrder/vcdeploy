@@ -20,7 +20,7 @@ type SecretService struct {
 
 // SecretEntry represents a decrypted secret.
 type SecretEntry struct {
-	ID        int64
+	ID        string
 	Project   string
 	Scope     string
 	Key       string
@@ -31,7 +31,7 @@ type SecretEntry struct {
 
 // SecretMetadata represents secret info without the value.
 type SecretMetadata struct {
-	ID        int64
+	ID        string
 	Project   string
 	Scope     string
 	Key       string

@@ -282,7 +282,7 @@ func TestSSHKeyService_GetKey_NotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	_, err := svc.GetSSHKey(ctx, 99999)
+	_, err := svc.GetSSHKey(ctx, "nonexistent")
 	require.Error(t, err)
 }
 
@@ -381,7 +381,7 @@ func TestSSHKeyService_DeleteKey_NotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	err := svc.DeleteSSHKey(ctx, 99999)
+	err := svc.DeleteSSHKey(ctx, "nonexistent")
 	require.Error(t, err)
 }
 

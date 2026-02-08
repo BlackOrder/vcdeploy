@@ -553,7 +553,7 @@ func TestHandleAgentBinary(t *testing.T) {
 	}
 
 	t.Run("GET - get binary by id", func(t *testing.T) {
-		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/binaries/1", nil), userID)
+		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/binaries/"+binary.ID, nil), userID)
 		rr := httptest.NewRecorder()
 		s.handleAgentBinary(rr, req)
 
@@ -586,8 +586,8 @@ func TestHandleAgentBinary(t *testing.T) {
 		rr := httptest.NewRecorder()
 		s.handleAgentBinary(rr, req)
 
-		if rr.Code != http.StatusBadRequest {
-			t.Errorf("Expected status %d, got %d: %s", http.StatusBadRequest, rr.Code, rr.Body.String())
+		if rr.Code != http.StatusNotFound {
+			t.Errorf("Expected status %d, got %d: %s", http.StatusNotFound, rr.Code, rr.Body.String())
 		}
 	})
 
@@ -627,7 +627,7 @@ func TestHandleAgentBinary(t *testing.T) {
 			t.Fatalf("Failed to create binary to delete: %v", err)
 		}
 
-		req := requestWithAdminContext(httptest.NewRequest("DELETE", "/api/v1/binaries/2", nil), userID)
+		req := requestWithAdminContext(httptest.NewRequest("DELETE", "/api/v1/binaries/"+binaryToDelete.ID, nil), userID)
 		rr := httptest.NewRecorder()
 		s.handleAgentBinary(rr, req)
 
@@ -685,7 +685,7 @@ func TestHandleAgentBinaryDownload(t *testing.T) {
 	}
 
 	t.Run("GET - download binary success", func(t *testing.T) {
-		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/binaries/1/download", nil), userID)
+		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/binaries/"+binary.ID+"/download", nil), userID)
 		rr := httptest.NewRecorder()
 		s.handleAgentBinary(rr, req)
 
@@ -766,7 +766,7 @@ func TestHandleSetCurrentBinary(t *testing.T) {
 	}
 
 	t.Run("POST - set current binary success", func(t *testing.T) {
-		req := requestWithAdminContext(httptest.NewRequest("POST", "/api/v1/binaries/2/current", nil), userID)
+		req := requestWithAdminContext(httptest.NewRequest("POST", "/api/v1/binaries/"+binary2.ID+"/current", nil), userID)
 		rr := httptest.NewRecorder()
 		s.handleAgentBinary(rr, req)
 

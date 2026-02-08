@@ -265,7 +265,7 @@ func TestCredentialService_Get_NotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	_, err := svc.GetCredential(ctx, 99999)
+	_, err := svc.GetCredential(ctx, "nonexistent")
 	require.Error(t, err)
 }
 
@@ -494,7 +494,7 @@ func TestCredentialService_Update_NotFound(t *testing.T) {
 	ctx := context.Background()
 
 	newName := "new-name"
-	_, err := svc.UpdateCredential(ctx, 99999, UpdateCredentialRequest{
+	_, err := svc.UpdateCredential(ctx, "nonexistent", UpdateCredentialRequest{
 		Name: &newName,
 	})
 	require.Error(t, err)
@@ -537,7 +537,7 @@ func TestCredentialService_Delete_NotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	err := svc.DeleteCredential(ctx, 99999)
+	err := svc.DeleteCredential(ctx, "nonexistent")
 	require.Error(t, err)
 }
 
@@ -650,7 +650,7 @@ func TestCredentialService_GetDecryptedCredential_NotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	_, err := svc.GetDecryptedCredential(ctx, 99999)
+	_, err := svc.GetDecryptedCredential(ctx, "nonexistent")
 	require.Error(t, err)
 }
 

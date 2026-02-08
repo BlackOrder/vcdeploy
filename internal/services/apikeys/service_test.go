@@ -18,7 +18,7 @@ func newTestService(t *testing.T) (*Service, storage.Store) {
 	return New(db), db
 }
 
-func createTestUser(t *testing.T, db storage.Store) int64 {
+func createTestUser(t *testing.T, db storage.Store) string {
 	t.Helper()
 	ctx := context.Background()
 
@@ -52,7 +52,7 @@ func TestService_Create(t *testing.T) {
 	if !hasPrefix(rawKey, "vcd_") {
 		t.Errorf("Create() raw key should start with 'vcd_', got %v", rawKey[:10])
 	}
-	if key.ID == 0 {
+	if key.ID == "" {
 		t.Error("Create() did not set key ID")
 	}
 	if key.Name != "Test Key" {

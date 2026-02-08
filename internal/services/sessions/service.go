@@ -26,7 +26,7 @@ func New(store storage.Store) *Service {
 }
 
 // Create creates a new session for a user.
-func (s *Service) Create(ctx context.Context, userID int64, ipAddress, userAgent string, duration time.Duration) (*storage.Session, error) {
+func (s *Service) Create(ctx context.Context, userID string, ipAddress, userAgent string, duration time.Duration) (*storage.Session, error) {
 	token, err := generateToken()
 	if err != nil {
 		return nil, fmt.Errorf("generating token: %w", err)
@@ -64,7 +64,7 @@ func (s *Service) Delete(ctx context.Context, token string) error {
 }
 
 // DeleteAllForUser removes all sessions for a user.
-func (s *Service) DeleteAllForUser(ctx context.Context, userID int64) error {
+func (s *Service) DeleteAllForUser(ctx context.Context, userID string) error {
 	return s.store.DeleteUserSessions(ctx, userID)
 }
 
@@ -74,7 +74,7 @@ func (s *Service) DeleteExpired(ctx context.Context) (int64, error) {
 }
 
 // ListForUser returns all active sessions for a user.
-func (s *Service) ListForUser(ctx context.Context, userID int64) ([]*storage.Session, error) {
+func (s *Service) ListForUser(ctx context.Context, userID string) ([]*storage.Session, error) {
 	return s.store.ListUserSessions(ctx, userID)
 }
 

@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/rs/xid"
 )
 
 // --- Audit log operations ---
@@ -15,10 +17,13 @@ func (db *DB) LogAudit(ctx context.Context, entry *AuditEntry) error {
 	if entry.Timestamp.IsZero() {
 		entry.Timestamp = time.Now()
 	}
+	if entry.ID == "" {
+		entry.ID = xid.New().String()
+	}
 	_, err := db.conn.ExecContext(ctx, `
-		INSERT INTO audit_logs (timestamp, source, user, action, resource, resource_id, resource_data, details, ip_address, result)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, entry.Timestamp, entry.Source, entry.User, entry.Action, entry.Resource, entry.ResourceID, entry.ResourceData, entry.Details, entry.IPAddress, entry.Result)
+		INSERT INTO audit_logs (id, timestamp, source, user, action, resource, resource_id, resource_data, details, ip_address, result)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, entry.ID, entry.Timestamp, entry.Source, entry.User, entry.Action, entry.Resource, entry.ResourceID, entry.ResourceData, entry.Details, entry.IPAddress, entry.Result)
 	if err != nil {
 		return fmt.Errorf("logging audit entry: %w", err)
 	}

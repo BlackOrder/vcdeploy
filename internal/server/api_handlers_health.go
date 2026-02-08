@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -33,8 +32,8 @@ func (s *MasterServer) handleHealthCheckConfig(w http.ResponseWriter, r *http.Re
 	// Extract ID from path
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/health-checks/")
 	idStr := strings.Split(path, "/")[0]
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
+	id := idStr
+	if id == "" {
 		s.jsonError(w, http.StatusBadRequest, "invalid health check config ID")
 		return
 	}
@@ -149,7 +148,7 @@ func (s *MasterServer) handleCreateHealthCheckConfig(w http.ResponseWriter, r *h
 }
 
 // handleGetHealthCheckConfig retrieves a health check configuration.
-func (s *MasterServer) handleGetHealthCheckConfig(w http.ResponseWriter, r *http.Request, id int64) {
+func (s *MasterServer) handleGetHealthCheckConfig(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
 	config, err := s.store.GetHealthCheckConfig(ctx, id)
@@ -167,7 +166,7 @@ func (s *MasterServer) handleGetHealthCheckConfig(w http.ResponseWriter, r *http
 }
 
 // handleUpdateHealthCheckConfig updates a health check configuration.
-func (s *MasterServer) handleUpdateHealthCheckConfig(w http.ResponseWriter, r *http.Request, id int64) {
+func (s *MasterServer) handleUpdateHealthCheckConfig(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
 	// Get existing config
@@ -277,7 +276,7 @@ func (s *MasterServer) handleUpdateHealthCheckConfig(w http.ResponseWriter, r *h
 }
 
 // handleDeleteHealthCheckConfig deletes a health check configuration.
-func (s *MasterServer) handleDeleteHealthCheckConfig(w http.ResponseWriter, r *http.Request, id int64) {
+func (s *MasterServer) handleDeleteHealthCheckConfig(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
 	if err := s.store.DeleteHealthCheckConfig(ctx, id); err != nil {
@@ -316,7 +315,7 @@ func (s *MasterServer) handleGlobalHealthCheck(w http.ResponseWriter, r *http.Re
 }
 
 // handleProjectHealthConfig handles /api/v1/projects/{id}/health-config
-func (s *MasterServer) handleProjectHealthConfig(w http.ResponseWriter, r *http.Request, projectID int64) {
+func (s *MasterServer) handleProjectHealthConfig(w http.ResponseWriter, r *http.Request, projectID string) {
 	ctx := r.Context()
 
 	switch r.Method {
@@ -337,9 +336,9 @@ func (s *MasterServer) handleProjectHealthConfig(w http.ResponseWriter, r *http.
 
 	case http.MethodPut:
 		var req struct {
-			HealthCheckID        *int64 `json:"healthCheckId"`
-			AutoRollbackEnabled  *bool  `json:"autoRollbackEnabled"`
-			RollbackOnHealthFail *bool  `json:"rollbackOnHealthFail"`
+			HealthCheckID        *string `json:"healthCheckId"`
+			AutoRollbackEnabled  *bool   `json:"autoRollbackEnabled"`
+			RollbackOnHealthFail *bool   `json:"rollbackOnHealthFail"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
 			s.jsonError(w, http.StatusBadRequest, "invalid request body")
@@ -347,7 +346,7 @@ func (s *MasterServer) handleProjectHealthConfig(w http.ResponseWriter, r *http.
 		}
 
 		// Validate health check ID if provided
-		if req.HealthCheckID != nil && *req.HealthCheckID > 0 {
+		if req.HealthCheckID != nil && *req.HealthCheckID != "" {
 			_, err := s.store.GetHealthCheckConfig(ctx, *req.HealthCheckID)
 			if services.IsNotFound(err) {
 				s.jsonError(w, http.StatusBadRequest, "health check config not found")
@@ -415,8 +414,8 @@ func (s *MasterServer) handleRollbackRecord(w http.ResponseWriter, r *http.Reque
 	// Extract ID from path
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/rollbacks/")
 	idStr := strings.Split(path, "/")[0]
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
+	id := idStr
+	if id == "" {
 		s.jsonError(w, http.StatusBadRequest, "invalid rollback ID")
 		return
 	}
@@ -439,7 +438,7 @@ func (s *MasterServer) handleRollbackRecord(w http.ResponseWriter, r *http.Reque
 
 // handleTestHealthCheck handles POST /api/v1/health-checks/{id}/test
 // This allows testing a health check configuration without triggering a deployment.
-func (s *MasterServer) handleTestHealthCheck(w http.ResponseWriter, r *http.Request, id int64) {
+func (s *MasterServer) handleTestHealthCheck(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
 	config, err := s.store.GetHealthCheckConfig(ctx, id)

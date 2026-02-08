@@ -32,7 +32,7 @@ func TestRecipeComponentStorage(t *testing.T) {
 			t.Fatalf("Failed to create component: %v", err)
 		}
 
-		if component.ID == 0 {
+		if component.ID == "" {
 			t.Error("Component ID should be set after create")
 		}
 
@@ -98,7 +98,7 @@ func TestRecipePlaybookStorage(t *testing.T) {
 			t.Fatalf("Failed to create playbook: %v", err)
 		}
 
-		if playbook.ID == 0 {
+		if playbook.ID == "" {
 			t.Error("Playbook ID should be set after create")
 		}
 
@@ -181,7 +181,7 @@ func TestRecipeActivationStorage(t *testing.T) {
 			t.Fatalf("Failed to activate playbook: %v", err)
 		}
 
-		if activation.ID == 0 {
+		if activation.ID == "" {
 			t.Error("Activation ID should be set")
 		}
 	})
@@ -197,7 +197,7 @@ func TestRecipeActivationStorage(t *testing.T) {
 		}
 
 		if activation.PlaybookID != playbook.ID {
-			t.Errorf("Expected playbook ID %d, got %d", playbook.ID, activation.PlaybookID)
+			t.Errorf("Expected playbook ID %s, got %s", playbook.ID, activation.PlaybookID)
 		}
 	})
 }

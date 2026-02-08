@@ -74,7 +74,7 @@ func TestService_Get(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	projectID := int64(1)
+	projectID := "test-project-1"
 	provider := "github"
 
 	// Set up a webhook first
@@ -104,7 +104,7 @@ func TestService_Get_NotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	_, err := svc.Get(ctx, 9999, "nonexistent")
+	_, err := svc.Get(ctx, "nonexistent", "nonexistent")
 	if err == nil {
 		t.Error("Get() expected error for nonexistent webhook")
 	}
@@ -118,7 +118,7 @@ func TestService_Get_DifferentProvider(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	projectID := int64(1)
+	projectID := "test-project-1"
 
 	// Set up a webhook for github
 	err := svc.Set(ctx, projectID, "github", []byte("secret"), true, true)
@@ -140,13 +140,13 @@ func TestService_Get_DifferentProject(t *testing.T) {
 	ctx := context.Background()
 
 	// Set up a webhook for project 1
-	err := svc.Set(ctx, 1, "github", []byte("secret"), true, true)
+	err := svc.Set(ctx, "project-1", "github", []byte("secret"), true, true)
 	if err != nil {
 		t.Fatalf("Set() error = %v", err)
 	}
 
 	// Try to get a webhook for project 2
-	_, err = svc.Get(ctx, 2, "github")
+	_, err = svc.Get(ctx, "project-2", "github")
 	if err != storage.ErrNotFound {
 		t.Errorf("Get() error = %v, want %v", err, storage.ErrNotFound)
 	}
@@ -159,7 +159,7 @@ func TestService_Set(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	projectID := int64(1)
+	projectID := "test-project-1"
 	provider := "github"
 
 	err := svc.Set(ctx, projectID, provider, []byte("secret123"), true, true)
@@ -184,7 +184,7 @@ func TestService_Set_EmptySecret(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	projectID := int64(1)
+	projectID := "test-project-1"
 	provider := "github"
 
 	// Set with empty secret
@@ -207,7 +207,7 @@ func TestService_Set_NilSecret(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	projectID := int64(1)
+	projectID := "test-project-1"
 	provider := "github"
 
 	// Set with nil secret
@@ -230,7 +230,7 @@ func TestService_Set_WithKMS(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	projectID := int64(1)
+	projectID := "test-project-1"
 	provider := "github"
 	secret := []byte("my-secret-token-123")
 
@@ -258,7 +258,7 @@ func TestService_Set_WithKMS_EmptySecret(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	projectID := int64(1)
+	projectID := "test-project-1"
 	provider := "github"
 
 	// Set with empty secret and KMS
@@ -282,7 +282,7 @@ func TestService_Set_Update(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	projectID := int64(1)
+	projectID := "test-project-1"
 	provider := "bitbucket"
 
 	// Initial set
@@ -315,7 +315,7 @@ func TestService_Set_MultipleProviders(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	projectID := int64(1)
+	projectID := "test-project-1"
 
 	providers := []string{"github", "gitlab", "bitbucket"}
 	for _, provider := range providers {
@@ -344,11 +344,11 @@ func TestService_Set_MultipleProjects(t *testing.T) {
 	ctx := context.Background()
 	provider := "github"
 
-	projectIDs := []int64{1, 2, 3}
+	projectIDs := []string{"project-1", "project-2", "project-3"}
 	for _, projectID := range projectIDs {
 		err := svc.Set(ctx, projectID, provider, []byte("secret"), true, true)
 		if err != nil {
-			t.Fatalf("Set() for project %d error = %v", projectID, err)
+			t.Fatalf("Set() for project %s error = %v", projectID, err)
 		}
 	}
 
@@ -356,7 +356,7 @@ func TestService_Set_MultipleProjects(t *testing.T) {
 	for _, projectID := range projectIDs {
 		webhook, err := svc.Get(ctx, projectID, provider)
 		if err != nil {
-			t.Fatalf("Get() for project %d error = %v", projectID, err)
+			t.Fatalf("Get() for project %s error = %v", projectID, err)
 		}
 		if webhook.ProjectID != projectID {
 			t.Errorf("Get() ProjectID = %v, want %v", webhook.ProjectID, projectID)
@@ -371,7 +371,7 @@ func TestService_List(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	projectID := int64(1)
+	projectID := "test-project-1"
 
 	// Set up multiple webhooks
 	providers := []string{"github", "gitlab", "bitbucket"}
@@ -397,7 +397,7 @@ func TestService_List_Empty(t *testing.T) {
 
 	ctx := context.Background()
 
-	webhooks, err := svc.List(ctx, 9999)
+	webhooks, err := svc.List(ctx, "nonexistent")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -413,24 +413,24 @@ func TestService_List_OnlyOwnProject(t *testing.T) {
 	ctx := context.Background()
 
 	// Set up webhooks for different projects
-	err := svc.Set(ctx, 1, "github", []byte("secret"), true, true)
+	err := svc.Set(ctx, "project-1", "github", []byte("secret"), true, true)
 	if err != nil {
 		t.Fatalf("Set() error = %v", err)
 	}
-	err = svc.Set(ctx, 2, "gitlab", []byte("secret"), true, true)
+	err = svc.Set(ctx, "project-2", "gitlab", []byte("secret"), true, true)
 	if err != nil {
 		t.Fatalf("Set() error = %v", err)
 	}
 
 	// List should only return webhooks for project 1
-	webhooks, err := svc.List(ctx, 1)
+	webhooks, err := svc.List(ctx, "project-1")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
 	if len(webhooks) != 1 {
 		t.Errorf("List() returned %d webhooks, want 1", len(webhooks))
 	}
-	if webhooks[0].ProjectID != 1 {
+	if webhooks[0].ProjectID != "project-1" {
 		t.Errorf("List() returned webhook for wrong project: %v", webhooks[0].ProjectID)
 	}
 }
@@ -442,7 +442,7 @@ func TestService_Delete(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	projectID := int64(1)
+	projectID := "test-project-1"
 	provider := "github"
 
 	// Set up a webhook
@@ -471,7 +471,7 @@ func TestService_Delete_NonExistent(t *testing.T) {
 	ctx := context.Background()
 
 	// Delete a non-existent webhook - should not error
-	err := svc.Delete(ctx, 9999, "nonexistent")
+	err := svc.Delete(ctx, "nonexistent", "nonexistent")
 	if err != nil {
 		t.Fatalf("Delete() of non-existent webhook error = %v", err)
 	}
@@ -482,7 +482,7 @@ func TestService_Delete_OnlyTargetedWebhook(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	projectID := int64(1)
+	projectID := "test-project-1"
 
 	// Set up multiple webhooks
 	err := svc.Set(ctx, projectID, "github", []byte("secret"), true, true)
@@ -523,7 +523,7 @@ func TestService_GetDecryptedSecret(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	projectID := int64(1)
+	projectID := "test-project-1"
 	provider := "gitlab"
 	secret := []byte("my-secret-token")
 
@@ -549,7 +549,7 @@ func TestService_GetDecryptedSecret_NotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	_, err := svc.GetDecryptedSecret(ctx, 9999, "nonexistent")
+	_, err := svc.GetDecryptedSecret(ctx, "nonexistent", "nonexistent")
 	if err == nil {
 		t.Error("GetDecryptedSecret() expected error for nonexistent webhook")
 	}
@@ -563,7 +563,7 @@ func TestService_GetDecryptedSecret_EmptySecret(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	projectID := int64(1)
+	projectID := "test-project-1"
 	provider := "github"
 
 	// Set a webhook without a secret
@@ -587,7 +587,7 @@ func TestService_GetDecryptedSecret_WithKMS(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	projectID := int64(1)
+	projectID := "test-project-1"
 	provider := "github"
 	secret := []byte("my-super-secret-token")
 
@@ -612,7 +612,7 @@ func TestService_GetDecryptedSecret_WithKMS_EmptySecret(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	projectID := int64(1)
+	projectID := "test-project-1"
 	provider := "github"
 
 	// Set a webhook without a secret (empty)
@@ -676,7 +676,7 @@ func TestService_GetSetDelete_Integration(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	projectID := int64(1)
+	projectID := "test-project-1"
 	provider := "github"
 
 	// Set a webhook
@@ -727,7 +727,7 @@ func TestService_FullLifecycle_WithKMS(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	projectID := int64(1)
+	projectID := "test-project-1"
 
 	providers := []string{"github", "gitlab", "bitbucket"}
 	secrets := map[string]string{
@@ -810,7 +810,7 @@ func TestService_FullLifecycle_WithKMS(t *testing.T) {
 func TestService_Set_Variations(t *testing.T) {
 	tests := []struct {
 		name          string
-		projectID     int64
+		projectID     string
 		provider      string
 		secret        []byte
 		enabled       bool
@@ -818,7 +818,7 @@ func TestService_Set_Variations(t *testing.T) {
 	}{
 		{
 			name:          "enabled_with_secret",
-			projectID:     1,
+			projectID:     "project-1",
 			provider:      "github",
 			secret:        []byte("secret123"),
 			enabled:       true,
@@ -826,7 +826,7 @@ func TestService_Set_Variations(t *testing.T) {
 		},
 		{
 			name:          "disabled_without_secret",
-			projectID:     2,
+			projectID:     "project-2",
 			provider:      "gitlab",
 			secret:        nil,
 			enabled:       false,
@@ -834,7 +834,7 @@ func TestService_Set_Variations(t *testing.T) {
 		},
 		{
 			name:          "enabled_no_secret_required",
-			projectID:     3,
+			projectID:     "project-3",
 			provider:      "bitbucket",
 			secret:        []byte("secret"),
 			enabled:       true,
@@ -842,7 +842,7 @@ func TestService_Set_Variations(t *testing.T) {
 		},
 		{
 			name:          "disabled_with_secret_required",
-			projectID:     4,
+			projectID:     "project-4",
 			provider:      "custom",
 			secret:        []byte("custom-secret"),
 			enabled:       false,
@@ -850,7 +850,7 @@ func TestService_Set_Variations(t *testing.T) {
 		},
 		{
 			name:          "empty_secret_string",
-			projectID:     5,
+			projectID:     "project-5",
 			provider:      "webhook",
 			secret:        []byte(""),
 			enabled:       true,
@@ -888,39 +888,39 @@ func TestService_Set_Variations(t *testing.T) {
 func TestService_Get_EdgeCases(t *testing.T) {
 	tests := []struct {
 		name      string
-		projectID int64
+		projectID string
 		provider  string
 		setup     func(*Service, context.Context) error
 		wantErr   bool
 	}{
 		{
 			name:      "existing_webhook",
-			projectID: 1,
+			projectID: "project-1",
 			provider:  "github",
 			setup: func(svc *Service, ctx context.Context) error {
-				return svc.Set(ctx, 1, "github", []byte("secret"), true, true)
+				return svc.Set(ctx, "project-1", "github", []byte("secret"), true, true)
 			},
 			wantErr: false,
 		},
 		{
 			name:      "nonexistent_webhook",
-			projectID: 999,
+			projectID: "nonexistent",
 			provider:  "github",
 			setup:     nil,
 			wantErr:   true,
 		},
 		{
 			name:      "wrong_provider",
-			projectID: 1,
+			projectID: "project-1",
 			provider:  "bitbucket",
 			setup: func(svc *Service, ctx context.Context) error {
-				return svc.Set(ctx, 1, "github", []byte("secret"), true, true)
+				return svc.Set(ctx, "project-1", "github", []byte("secret"), true, true)
 			},
 			wantErr: true,
 		},
 		{
-			name:      "zero_project_id",
-			projectID: 0,
+			name:      "empty_project_id",
+			projectID: "",
 			provider:  "github",
 			setup:     nil,
 			wantErr:   true,
@@ -967,7 +967,7 @@ func TestService_List_DBError(t *testing.T) {
 	// Close the DB to trigger an error
 	db.Close()
 
-	_, err := svc.List(ctx, 1)
+	_, err := svc.List(ctx, "project-1")
 	if err == nil {
 		t.Error("List() expected error when DB is closed")
 	}
@@ -982,7 +982,7 @@ func TestService_Delete_DBError(t *testing.T) {
 	// Close the DB to trigger an error
 	db.Close()
 
-	err := svc.Delete(ctx, 1, "github")
+	err := svc.Delete(ctx, "project-1", "github")
 	if err == nil {
 		t.Error("Delete() expected error when DB is closed")
 	}
@@ -1012,7 +1012,7 @@ func TestService_Set_DBError(t *testing.T) {
 	// Close the DB to trigger an error
 	db.Close()
 
-	err := svc.Set(ctx, 1, "github", []byte("secret"), true, true)
+	err := svc.Set(ctx, "project-1", "github", []byte("secret"), true, true)
 	if err == nil {
 		t.Error("Set() expected error when DB is closed")
 	}

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/BlackOrder/vcdeploy/internal/services"
@@ -43,8 +42,8 @@ func (s *MasterServer) handleSSHKeys(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(path, "/")
 
 	// Parse key ID
-	keyID, err := strconv.ParseInt(parts[0], 10, 64)
-	if err != nil {
+	keyID := parts[0]
+	if keyID == "" {
 		s.jsonError(w, http.StatusBadRequest, "invalid SSH key ID")
 		return
 	}
@@ -106,7 +105,7 @@ func (s *MasterServer) handleListSSHKeys(w http.ResponseWriter, r *http.Request)
 }
 
 // handleGetSSHKey gets a specific SSH key.
-func (s *MasterServer) handleGetSSHKey(w http.ResponseWriter, r *http.Request, id int64) {
+func (s *MasterServer) handleGetSSHKey(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
 	sshKeyService := security.NewSSHKeyService(s.store, s.kms, s.logger)
@@ -116,7 +115,7 @@ func (s *MasterServer) handleGetSSHKey(w http.ResponseWriter, r *http.Request, i
 			s.jsonError(w, http.StatusNotFound, "SSH key not found")
 			return
 		}
-		s.logger.Error("Failed to get SSH key", zap.Error(err), zap.Int64("id", id))
+		s.logger.Error("Failed to get SSH key", zap.Error(err), zap.String("id", id))
 		s.jsonError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
@@ -135,7 +134,7 @@ func (s *MasterServer) handleGenerateSSHKey(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Set creator from auth context
-	if userID, ok := GetUserIDFromContext(ctx); ok && userID > 0 {
+	if userID, ok := GetUserIDFromContext(ctx); ok && userID != "" {
 		user, err := s.userService.GetByID(ctx, userID)
 		if err == nil {
 			req.CreatedBy = user.Username
@@ -178,7 +177,7 @@ func (s *MasterServer) handleImportSSHKey(w http.ResponseWriter, r *http.Request
 	}
 
 	// Set creator from auth context
-	if userID, ok := GetUserIDFromContext(ctx); ok && userID > 0 {
+	if userID, ok := GetUserIDFromContext(ctx); ok && userID != "" {
 		user, err := s.userService.GetByID(ctx, userID)
 		if err == nil {
 			req.CreatedBy = user.Username
@@ -206,7 +205,7 @@ func (s *MasterServer) handleImportSSHKey(w http.ResponseWriter, r *http.Request
 }
 
 // handleDeleteSSHKey deletes an SSH key.
-func (s *MasterServer) handleDeleteSSHKey(w http.ResponseWriter, r *http.Request, id int64) {
+func (s *MasterServer) handleDeleteSSHKey(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
 	sshKeyService := security.NewSSHKeyService(s.store, s.kms, s.logger)
@@ -215,17 +214,17 @@ func (s *MasterServer) handleDeleteSSHKey(w http.ResponseWriter, r *http.Request
 			s.jsonError(w, http.StatusNotFound, "SSH key not found")
 			return
 		}
-		s.logger.Error("Failed to delete SSH key", zap.Error(err), zap.Int64("id", id))
+		s.logger.Error("Failed to delete SSH key", zap.Error(err), zap.String("id", id))
 		s.jsonError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
-	s.logAudit(r, "delete", "ssh_key", "Deleted SSH key ID: "+strconv.FormatInt(id, 10), "success")
+	s.logAudit(r, "delete", "ssh_key", "Deleted SSH key ID: "+id, "success")
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // handleGetSSHKeyPublic returns just the public key (for authorized_keys).
-func (s *MasterServer) handleGetSSHKeyPublic(w http.ResponseWriter, r *http.Request, id int64) {
+func (s *MasterServer) handleGetSSHKeyPublic(w http.ResponseWriter, r *http.Request, id string) {
 	if r.Method != http.MethodGet {
 		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -240,7 +239,7 @@ func (s *MasterServer) handleGetSSHKeyPublic(w http.ResponseWriter, r *http.Requ
 			s.jsonError(w, http.StatusNotFound, "SSH key not found")
 			return
 		}
-		s.logger.Error("Failed to get SSH key public key", zap.Error(err), zap.Int64("id", id))
+		s.logger.Error("Failed to get SSH key public key", zap.Error(err), zap.String("id", id))
 		s.jsonError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}

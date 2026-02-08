@@ -89,9 +89,6 @@ func (s *MemoryStore) loadUsers(ctx context.Context, db *DB) error {
 		stored := *u
 		s.users[u.ID] = &stored
 		s.usersByName[u.Username] = &stored
-		if u.ID >= s.nextUserID.Load() {
-			s.nextUserID.Store(u.ID + 1)
-		}
 	}
 	return nil
 }
@@ -99,7 +96,7 @@ func (s *MemoryStore) loadUsers(ctx context.Context, db *DB) error {
 func (s *MemoryStore) loadSessions(ctx context.Context, db *DB) error {
 	// Load sessions for all users
 	s.mu.RLock()
-	userIDs := make([]int64, 0, len(s.users))
+	userIDs := make([]string, 0, len(s.users))
 	for id := range s.users {
 		userIDs = append(userIDs, id)
 	}
@@ -123,7 +120,7 @@ func (s *MemoryStore) loadSessions(ctx context.Context, db *DB) error {
 
 func (s *MemoryStore) loadAPIKeys(ctx context.Context, db *DB) error {
 	s.mu.RLock()
-	userIDs := make([]int64, 0, len(s.users))
+	userIDs := make([]string, 0, len(s.users))
 	for id := range s.users {
 		userIDs = append(userIDs, id)
 	}
@@ -140,9 +137,6 @@ func (s *MemoryStore) loadAPIKeys(ctx context.Context, db *DB) error {
 			stored := *key
 			s.apiKeys[key.KeyHash] = &stored
 			s.apiKeysByUser[userID] = append(s.apiKeysByUser[userID], &stored)
-			if key.ID >= s.nextAPIKeyID.Load() {
-				s.nextAPIKeyID.Store(key.ID + 1)
-			}
 		}
 		s.mu.Unlock()
 	}
@@ -162,9 +156,6 @@ func (s *MemoryStore) loadSettings(ctx context.Context, db *DB) error {
 		stored := *setting
 		key := settingKey(setting.Category, setting.Key)
 		s.settings[key] = &stored
-		if setting.ID >= s.nextSettingID.Load() {
-			s.nextSettingID.Store(setting.ID + 1)
-		}
 	}
 	return nil
 }
@@ -181,9 +172,6 @@ func (s *MemoryStore) loadProjectTypes(ctx context.Context, db *DB) error {
 	for _, pt := range types {
 		stored := *pt
 		s.projectTypes[pt.ID] = &stored
-		if pt.ID >= s.nextProjectTypeID.Load() {
-			s.nextProjectTypeID.Store(pt.ID + 1)
-		}
 	}
 	return nil
 }
@@ -201,16 +189,13 @@ func (s *MemoryStore) loadProjects(ctx context.Context, db *DB) error {
 		stored := *p
 		s.projects[p.ID] = &stored
 		s.projectsByName[p.Name] = &stored
-		if p.ID >= s.nextProjectID.Load() {
-			s.nextProjectID.Store(p.ID + 1)
-		}
 	}
 	return nil
 }
 
 func (s *MemoryStore) loadWebhooks(ctx context.Context, db *DB) error {
 	s.mu.RLock()
-	projectIDs := make([]int64, 0, len(s.projects))
+	projectIDs := make([]string, 0, len(s.projects))
 	for id := range s.projects {
 		projectIDs = append(projectIDs, id)
 	}
@@ -226,9 +211,6 @@ func (s *MemoryStore) loadWebhooks(ctx context.Context, db *DB) error {
 		for _, wh := range webhooks {
 			stored := *wh
 			s.webhooks[wh.ID] = &stored
-			if wh.ID >= s.nextWebhookID.Load() {
-				s.nextWebhookID.Store(wh.ID + 1)
-			}
 		}
 		s.mu.Unlock()
 	}
@@ -248,9 +230,6 @@ func (s *MemoryStore) loadSecrets(ctx context.Context, db *DB) error {
 		stored := *secret
 		key := secretKey(secret.Project, secret.Scope, secret.Key)
 		s.secrets[key] = &stored
-		if secret.ID >= s.nextSecretID.Load() {
-			s.nextSecretID.Store(secret.ID + 1)
-		}
 	}
 	return nil
 }
@@ -290,9 +269,6 @@ func (s *MemoryStore) loadAgentBinaries(ctx context.Context, db *DB) error {
 	for _, bin := range binaries {
 		stored := *bin
 		s.agentBinaries[bin.ID] = &stored
-		if bin.ID >= s.nextAgentBinaryID.Load() {
-			s.nextAgentBinaryID.Store(bin.ID + 1)
-		}
 	}
 	return nil
 }
@@ -333,9 +309,6 @@ func (s *MemoryStore) loadDeploymentLogs(ctx context.Context, db *DB) error {
 		for _, log := range logs {
 			stored := *log
 			s.deploymentLogs[depID] = append(s.deploymentLogs[depID], &stored)
-			if log.ID >= s.nextDeploymentLogID.Load() {
-				s.nextDeploymentLogID.Store(log.ID + 1)
-			}
 		}
 		s.mu.Unlock()
 	}
@@ -364,9 +337,6 @@ func (s *MemoryStore) loadDeploymentRollbacks(ctx context.Context, db *DB) error
 		s.mu.Lock()
 		stored := *rollback
 		s.deploymentRollbacks[rollback.ID] = &stored
-		if rollback.ID >= s.nextRollbackID.Load() {
-			s.nextRollbackID.Store(rollback.ID + 1)
-		}
 		s.mu.Unlock()
 	}
 	return nil
@@ -401,9 +371,6 @@ func (s *MemoryStore) loadAuditLogs(ctx context.Context, db *DB) error {
 	for _, log := range logs {
 		stored := *log
 		s.auditLogs = append(s.auditLogs, &stored)
-		if log.ID >= s.nextAuditID.Load() {
-			s.nextAuditID.Store(log.ID + 1)
-		}
 	}
 	return nil
 }
@@ -421,9 +388,6 @@ func (s *MemoryStore) loadBlockedIPs(ctx context.Context, db *DB) error {
 	for _, b := range blocked {
 		stored := *b
 		s.blockedIPs[b.IPAddress] = &stored
-		if b.ID >= s.nextBlockedIPID.Load() {
-			s.nextBlockedIPID.Store(b.ID + 1)
-		}
 	}
 	return nil
 }
@@ -463,9 +427,6 @@ func (s *MemoryStore) loadSSHHostKeys(ctx context.Context, db *DB) error {
 	for _, key := range keys {
 		stored := *key
 		s.sshHostKeys[key.ID] = &stored
-		if key.ID >= s.nextSSHHostKeyID.Load() {
-			s.nextSSHHostKeyID.Store(key.ID + 1)
-		}
 	}
 	return nil
 }
@@ -482,9 +443,6 @@ func (s *MemoryStore) loadJumpServers(ctx context.Context, db *DB) error {
 	for _, srv := range servers {
 		stored := *srv
 		s.jumpServers[srv.ID] = &stored
-		if srv.ID >= s.nextJumpServerID.Load() {
-			s.nextJumpServerID.Store(srv.ID + 1)
-		}
 	}
 	return nil
 }
@@ -501,9 +459,6 @@ func (s *MemoryStore) loadHealthCheckConfigs(ctx context.Context, db *DB) error 
 	for _, cfg := range configs {
 		stored := *cfg
 		s.healthCheckConfigs[cfg.ID] = &stored
-		if cfg.ID >= s.nextHealthCheckID.Load() {
-			s.nextHealthCheckID.Store(cfg.ID + 1)
-		}
 	}
 	return nil
 }
@@ -545,9 +500,6 @@ func (s *MemoryStore) loadAgentCertificates(ctx context.Context, db *DB) error {
 	for _, cert := range certs {
 		stored := *cert
 		s.agentCertificates[cert.SerialNumber] = &stored
-		if cert.ID >= s.nextAgentCertID.Load() {
-			s.nextAgentCertID.Store(cert.ID + 1)
-		}
 	}
 	return nil
 }
@@ -567,9 +519,6 @@ func (s *MemoryStore) loadServerCertificates(ctx context.Context, db *DB) error 
 	for _, cert := range certs {
 		stored := *cert
 		s.serverCertificates[cert.Hostname] = &stored
-		if cert.ID >= s.nextServerCertID.Load() {
-			s.nextServerCertID.Store(cert.ID + 1)
-		}
 	}
 	return nil
 }
@@ -589,9 +538,6 @@ func (s *MemoryStore) loadRegistrationTokens(ctx context.Context, db *DB) error 
 	for _, token := range tokens {
 		stored := *token
 		s.registrationTokens[token.Token] = &stored
-		if token.ID >= s.nextRegTokenID.Load() {
-			s.nextRegTokenID.Store(token.ID + 1)
-		}
 	}
 	return nil
 }
@@ -611,9 +557,6 @@ func (s *MemoryStore) loadSourceCredentials(ctx context.Context, db *DB) error {
 	for _, cred := range creds {
 		stored := *cred
 		s.sourceCredentials[cred.ID] = &stored
-		if cred.ID >= s.nextSourceCredID.Load() {
-			s.nextSourceCredID.Store(cred.ID + 1)
-		}
 	}
 	return nil
 }
@@ -633,9 +576,6 @@ func (s *MemoryStore) loadRevokedCertificates(ctx context.Context, db *DB) error
 	for _, cert := range certs {
 		stored := *cert
 		s.revokedCertificates[cert.SerialNumber] = &stored
-		if cert.ID >= s.nextRevokedCertID.Load() {
-			s.nextRevokedCertID.Store(cert.ID + 1)
-		}
 	}
 	return nil
 }
@@ -674,9 +614,6 @@ func (s *MemoryStore) loadSSHKeys(ctx context.Context, db *DB) error {
 	for _, key := range keys {
 		stored := *key
 		s.sshKeys[key.ID] = &stored
-		if key.ID >= s.nextSSHKeyID.Load() {
-			s.nextSSHKeyID.Store(key.ID + 1)
-		}
 	}
 	return nil
 }
@@ -701,9 +638,6 @@ func (s *MemoryStore) loadCertAuditEvents(ctx context.Context, db *DB) error {
 	for _, event := range events {
 		stored := *event
 		s.certAuditEvents = append(s.certAuditEvents, &stored)
-		if event.ID >= s.nextCertAuditID.Load() {
-			s.nextCertAuditID.Store(event.ID + 1)
-		}
 	}
 	return nil
 }
@@ -723,9 +657,6 @@ func (s *MemoryStore) loadACMECertificates(ctx context.Context, db *DB) error {
 	for _, cert := range certs {
 		stored := *cert
 		s.acmeCertificates[cert.Domain] = &stored
-		if cert.ID >= s.nextACMECertID.Load() {
-			s.nextACMECertID.Store(cert.ID + 1)
-		}
 	}
 	return nil
 }
@@ -734,7 +665,7 @@ func (s *MemoryStore) loadACMEAccounts(ctx context.Context, db *DB) error {
 	// ACME accounts are loaded on-demand via email lookup
 	// We query all accounts from DB
 	rows, err := db.conn.QueryContext(ctx, `
-		SELECT id, uid, email, account_url, private_key_encrypted, directory_url, created_at
+		SELECT id, email, account_url, private_key_encrypted, directory_url, created_at
 		FROM acme_accounts ORDER BY id ASC
 	`)
 	if err != nil {
@@ -748,15 +679,12 @@ func (s *MemoryStore) loadACMEAccounts(ctx context.Context, db *DB) error {
 	for rows.Next() {
 		var account ACMEAccount
 		var accountURL string
-		if err := rows.Scan(&account.ID, &account.UID, &account.Email, &accountURL,
+		if err := rows.Scan(&account.ID, &account.Email, &accountURL,
 			&account.PrivateKeyEncrypted, &account.DirectoryURL, &account.CreatedAt); err != nil {
 			return err
 		}
 		account.AccountURL = accountURL
 		s.acmeAccounts[account.Email] = &account
-		if account.ID >= s.nextACMEAccountID.Load() {
-			s.nextACMEAccountID.Store(account.ID + 1)
-		}
 	}
 	return rows.Err()
 }
@@ -780,9 +708,6 @@ func (s *MemoryStore) loadRecoveryCodes(ctx context.Context, db *DB) error {
 			return err
 		}
 		s.recoveryCodes[code.UserID] = append(s.recoveryCodes[code.UserID], &code)
-		if code.ID >= s.nextRecoveryCodeID.Load() {
-			s.nextRecoveryCodeID.Store(code.ID + 1)
-		}
 	}
 	return rows.Err()
 }

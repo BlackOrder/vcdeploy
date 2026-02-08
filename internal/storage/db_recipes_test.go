@@ -251,7 +251,7 @@ func TestPlaybookActivation_CRUD(t *testing.T) {
 	// Create a project for testing (need to check if projects table exists)
 	// For this test, we'll use a mock project ID
 	// In real tests, you'd create a project first
-	projectID := int64(1)
+	projectID := "project-1"
 
 	// Skip the activation test if projects table doesn't have a record
 	// This is for the greenfield case

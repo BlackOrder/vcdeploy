@@ -109,13 +109,13 @@ func (s *ImportService) computeTableDiff(ctx context.Context, conn *sql.Conn, ta
 		return td, fmt.Errorf("check table %s in import: %w", tableName, err)
 	}
 
-	// Check if the table has a uid column
-	hasUID, err := tableHasColumn(ctx, conn, "imported", tableName, "uid")
+	// Check if the table has an id column (TEXT primary key)
+	hasID, err := tableHasColumn(ctx, conn, "imported", tableName, "id")
 	if err != nil {
-		return td, fmt.Errorf("check uid column: %w", err)
+		return td, fmt.Errorf("check id column: %w", err)
 	}
-	if !hasUID {
-		// Without uid, we can't diff — count total rows
+	if !hasID {
+		// Without id, we can't diff — count total rows
 		err = conn.QueryRowContext(ctx,
 			fmt.Sprintf("SELECT COUNT(*) FROM imported.%s", tableName), // #nosec G201
 		).Scan(&td.Total)
@@ -132,7 +132,7 @@ func (s *ImportService) computeTableDiff(ctx context.Context, conn *sql.Conn, ta
 
 	// New records: in imported but not in main
 	err = conn.QueryRowContext(ctx,
-		fmt.Sprintf("SELECT COUNT(*) FROM imported.%s WHERE uid NOT IN (SELECT uid FROM main.%s)", tableName, tableName), // #nosec G201
+		fmt.Sprintf("SELECT COUNT(*) FROM imported.%s WHERE id NOT IN (SELECT id FROM main.%s)", tableName, tableName), // #nosec G201
 	).Scan(&td.NewRecords)
 	if err != nil {
 		return td, fmt.Errorf("count new: %w", err)
@@ -140,13 +140,13 @@ func (s *ImportService) computeTableDiff(ctx context.Context, conn *sql.Conn, ta
 
 	// Only in main: in main but not in imported
 	err = conn.QueryRowContext(ctx,
-		fmt.Sprintf("SELECT COUNT(*) FROM main.%s WHERE uid NOT IN (SELECT uid FROM imported.%s)", tableName, tableName), // #nosec G201
+		fmt.Sprintf("SELECT COUNT(*) FROM main.%s WHERE id NOT IN (SELECT id FROM imported.%s)", tableName, tableName), // #nosec G201
 	).Scan(&td.OnlyInMain)
 	if err != nil {
 		return td, fmt.Errorf("count only-in-main: %w", err)
 	}
 
-	// Changed: in both but content differs (compare all non-id, non-uid columns)
+	// Changed: in both but content differs (compare all non-id columns)
 	td.Changed = td.Total - td.NewRecords // Approximate: total in both = total - new
 
 	return td, nil
@@ -279,35 +279,30 @@ func (s *ImportService) importMerge(ctx context.Context, tx *sql.Tx, table Table
 		return fmt.Errorf("get columns: %w", err)
 	}
 
-	// Check if table has uid column for merge-by-uid
-	hasUID := false
+	// Check if table has id column for merge-by-id
+	hasID := false
 	for _, col := range columns {
-		if col == "uid" {
-			hasUID = true
+		if col == "id" {
+			hasID = true
 			break
 		}
 	}
 
-	if !hasUID {
-		// Without uid, merge = replace (can't match records)
+	if !hasID {
+		// Without id, merge = replace (can't match records)
 		return s.importReplace(ctx, tx, table, passphrase)
 	}
 
-	// Merge strategy: skip id column — INSERT OR REPLACE uses uid for matching,
-	// and SQLite assigns new integer IDs.
-	return s.copyRows(ctx, tx, table, columns, passphrase, true, false)
+	// Merge strategy: use INSERT OR REPLACE with id for matching.
+	return s.copyRows(ctx, tx, table, columns, passphrase, true, true)
 }
 
 // copyRows copies rows from imported to main, optionally using INSERT OR REPLACE.
-// When includeID is true, the integer primary key is carried over from the source
-// (used with replace strategy after deleting all rows to preserve FK references).
+// With TEXT primary keys, the id column is always included to preserve identities.
 func (s *ImportService) copyRows(ctx context.Context, tx *sql.Tx, table TableExportConfig, columns []string, passphrase string, upsert bool, includeID bool) error {
 	insertCols := make([]string, 0, len(columns))
 	selectCols := make([]string, 0, len(columns))
 	for _, col := range columns {
-		if col == "id" && !includeID {
-			continue // Skip integer primary key — let auto-increment handle it
-		}
 		insertCols = append(insertCols, col)
 		selectCols = append(selectCols, col)
 	}

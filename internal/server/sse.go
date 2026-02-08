@@ -101,9 +101,9 @@ func (b *SSEBroker) Close() {
 // streamLogsConfig holds callbacks for the generic SSE log streaming handler.
 type streamLogsConfig struct {
 	// listLogs returns all existing log entries as JSON-marshalable objects.
-	listLogs func() ([]interface{}, int64, error)
+	listLogs func() ([]interface{}, string, error)
 	// listLogsAfter returns log entries with ID > afterID, and the new last ID.
-	listLogsAfter func(afterID int64) ([]interface{}, int64, error)
+	listLogsAfter func(afterID string) ([]interface{}, string, error)
 	// isComplete returns true and the terminal status if the resource is done.
 	isComplete func() (bool, string)
 }
@@ -177,7 +177,7 @@ func (s *MasterServer) streamLogs(w http.ResponseWriter, r *http.Request, cfg st
 				}
 				fmt.Fprintf(w, "data: %s\n\n", logJSON)
 			}
-			if newLastID > lastID {
+			if newLastID != lastID {
 				lastID = newLastID
 			}
 			flusher.Flush()

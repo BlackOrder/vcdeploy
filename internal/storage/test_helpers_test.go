@@ -21,7 +21,7 @@ func TestNewTestMemoryStore(t *testing.T) {
 
 	// Verify store is functional by creating a user
 	user := store.MustCreateUser("pingtest", "ping@example.com", "hash")
-	if user.ID == 0 {
+	if user.ID == "" {
 		t.Error("store should be functional")
 	}
 }
@@ -31,7 +31,7 @@ func TestTestMemoryStore_MustCreateUser(t *testing.T) {
 
 	user := store.MustCreateUser("testuser", "test@example.com", "passhash")
 
-	if user.ID == 0 {
+	if user.ID == "" {
 		t.Error("user.ID should be assigned")
 	}
 	if user.Username != "testuser" {
@@ -44,7 +44,7 @@ func TestTestMemoryStore_MustCreateUser(t *testing.T) {
 		t.Fatalf("GetUserByUsername() error = %v", err)
 	}
 	if got.ID != user.ID {
-		t.Errorf("GetUserByUsername().ID = %d, want %d", got.ID, user.ID)
+		t.Errorf("GetUserByUsername().ID = %s, want %s", got.ID, user.ID)
 	}
 }
 
@@ -53,7 +53,7 @@ func TestTestMemoryStore_MustCreateProject(t *testing.T) {
 
 	project := store.MustCreateProject("test-project")
 
-	if project.ID == 0 {
+	if project.ID == "" {
 		t.Error("project.ID should be assigned")
 	}
 	if project.Name != "test-project" {
@@ -66,7 +66,7 @@ func TestTestMemoryStore_MustCreateProject(t *testing.T) {
 		t.Fatalf("GetProjectByName() error = %v", err)
 	}
 	if got.ID != project.ID {
-		t.Errorf("GetProjectByName().ID = %d, want %d", got.ID, project.ID)
+		t.Errorf("GetProjectByName().ID = %s, want %s", got.ID, project.ID)
 	}
 }
 
@@ -81,7 +81,7 @@ func TestTestMemoryStore_MustCreateSession(t *testing.T) {
 		t.Error("session.ID should be assigned")
 	}
 	if session.UserID != user.ID {
-		t.Errorf("session.UserID = %d, want %d", session.UserID, user.ID)
+		t.Errorf("session.UserID = %s, want %s", session.UserID, user.ID)
 	}
 
 	// Verify it was stored
@@ -100,7 +100,7 @@ func TestTestMemoryStore_MustCreateAPIKey(t *testing.T) {
 	user := store.MustCreateUser("apikeyuser", "apikey@example.com", "hash")
 	key := store.MustCreateAPIKey(user.ID, "test-key", "key-hash-123")
 
-	if key.ID == 0 {
+	if key.ID == "" {
 		t.Error("key.ID should be assigned")
 	}
 	if key.Name != "test-key" {
@@ -113,7 +113,7 @@ func TestTestMemoryStore_MustCreateAPIKey(t *testing.T) {
 		t.Fatalf("GetAPIKeyByHash() error = %v", err)
 	}
 	if got.ID != key.ID {
-		t.Errorf("GetAPIKeyByHash().ID = %d, want %d", got.ID, key.ID)
+		t.Errorf("GetAPIKeyByHash().ID = %s, want %s", got.ID, key.ID)
 	}
 }
 
@@ -183,7 +183,7 @@ func TestTestMemoryStore_MustBlockIP(t *testing.T) {
 	expires := time.Now().Add(time.Hour)
 	blocked := store.MustBlockIP("192.168.1.100", "testing", expires)
 
-	if blocked.ID == 0 {
+	if blocked.ID == "" {
 		t.Error("blocked.ID should be assigned")
 	}
 	if blocked.IPAddress != "192.168.1.100" {
@@ -205,7 +205,7 @@ func TestTestMemoryStore_MustLogAudit(t *testing.T) {
 
 	entry := store.MustLogAudit("test_action", "testuser", "test_resource")
 
-	if entry.ID == 0 {
+	if entry.ID == "" {
 		t.Error("entry.ID should be assigned")
 	}
 	if entry.Action != "test_action" {
@@ -221,7 +221,7 @@ func TestTestMemoryStore_MustLogAudit(t *testing.T) {
 		t.Fatalf("len(entries) = %d, want 1", len(entries))
 	}
 	if entries[0].ID != entry.ID {
-		t.Errorf("entries[0].ID = %d, want %d", entries[0].ID, entry.ID)
+		t.Errorf("entries[0].ID = %s, want %s", entries[0].ID, entry.ID)
 	}
 }
 
@@ -231,16 +231,16 @@ func TestTestMemoryStore_SeedTestData(t *testing.T) {
 	data := store.SeedTestData()
 
 	// Verify all data was created
-	if data.AdminUser == nil || data.AdminUser.ID == 0 {
+	if data.AdminUser == nil || data.AdminUser.ID == "" {
 		t.Error("AdminUser should be created")
 	}
-	if data.RegularUser == nil || data.RegularUser.ID == 0 {
+	if data.RegularUser == nil || data.RegularUser.ID == "" {
 		t.Error("RegularUser should be created")
 	}
-	if data.Project1 == nil || data.Project1.ID == 0 {
+	if data.Project1 == nil || data.Project1.ID == "" {
 		t.Error("Project1 should be created")
 	}
-	if data.Project2 == nil || data.Project2.ID == 0 {
+	if data.Project2 == nil || data.Project2.ID == "" {
 		t.Error("Project2 should be created")
 	}
 	if data.AdminSession == nil || data.AdminSession.ID == "" {
@@ -249,7 +249,7 @@ func TestTestMemoryStore_SeedTestData(t *testing.T) {
 	if data.UserSession == nil || data.UserSession.ID == "" {
 		t.Error("UserSession should be created")
 	}
-	if data.AdminAPIKey == nil || data.AdminAPIKey.ID == 0 {
+	if data.AdminAPIKey == nil || data.AdminAPIKey.ID == "" {
 		t.Error("AdminAPIKey should be created")
 	}
 	if data.Agent1 == nil || data.Agent1.ID == "" {
@@ -286,7 +286,7 @@ func TestTestMemoryStore_SeedTestData_DataRelationships(t *testing.T) {
 		t.Fatalf("GetSessionByToken() error = %v", err)
 	}
 	if session.UserID != data.AdminUser.ID {
-		t.Errorf("AdminSession.UserID = %d, want %d", session.UserID, data.AdminUser.ID)
+		t.Errorf("AdminSession.UserID = %s, want %s", session.UserID, data.AdminUser.ID)
 	}
 
 	// Verify API key belongs to correct user
@@ -295,7 +295,7 @@ func TestTestMemoryStore_SeedTestData_DataRelationships(t *testing.T) {
 		t.Fatalf("GetAPIKeyByHash() error = %v", err)
 	}
 	if apiKey.UserID != data.AdminUser.ID {
-		t.Errorf("AdminAPIKey.UserID = %d, want %d", apiKey.UserID, data.AdminUser.ID)
+		t.Errorf("AdminAPIKey.UserID = %s, want %s", apiKey.UserID, data.AdminUser.ID)
 	}
 
 	// Verify deployment belongs to correct project

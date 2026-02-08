@@ -29,7 +29,7 @@ func TestRawApprovalService_Approve_Success(t *testing.T) {
 	svc := NewRawApprovalService(db)
 
 	// Approve
-	err := svc.Approve(ctx, component.ID, 123, "Reviewed and verified safe")
+	err := svc.Approve(ctx, component.ID, "user-123", "Reviewed and verified safe")
 	if err != nil {
 		t.Fatalf("Approve() error = %v", err)
 	}
@@ -42,8 +42,8 @@ func TestRawApprovalService_Approve_Success(t *testing.T) {
 	if !status.IsApproved {
 		t.Error("IsApproved = false, want true")
 	}
-	if status.ApprovedBy != 123 {
-		t.Errorf("ApprovedBy = %v, want 123", status.ApprovedBy)
+	if status.ApprovedBy != "user-123" {
+		t.Errorf("ApprovedBy = %v, want user-123", status.ApprovedBy)
 	}
 	if status.ApprovalNote != "Reviewed and verified safe" {
 		t.Errorf("ApprovalNote = %v, want 'Reviewed and verified safe'", status.ApprovalNote)
@@ -71,7 +71,7 @@ func TestRawApprovalService_Approve_NotRaw(t *testing.T) {
 	svc := NewRawApprovalService(db)
 
 	// Attempt to approve - should fail
-	err := svc.Approve(ctx, component.ID, 123, "test")
+	err := svc.Approve(ctx, component.ID, "user-123", "test")
 	if err == nil {
 		t.Fatal("Approve() expected error for non-RAW component")
 	}
@@ -98,13 +98,13 @@ func TestRawApprovalService_Approve_AlreadyApproved(t *testing.T) {
 	svc := NewRawApprovalService(db)
 
 	// First approval
-	err := svc.Approve(ctx, component.ID, 123, "first approval")
+	err := svc.Approve(ctx, component.ID, "user-123", "first approval")
 	if err != nil {
 		t.Fatalf("First Approve() error = %v", err)
 	}
 
 	// Second approval should fail
-	err = svc.Approve(ctx, component.ID, 456, "second approval")
+	err = svc.Approve(ctx, component.ID, "user-456", "second approval")
 	if err == nil {
 		t.Fatal("Second Approve() expected error")
 	}
@@ -131,13 +131,13 @@ func TestRawApprovalService_RevokeApproval(t *testing.T) {
 	svc := NewRawApprovalService(db)
 
 	// Approve first
-	err := svc.Approve(ctx, component.ID, 123, "test")
+	err := svc.Approve(ctx, component.ID, "user-123", "test")
 	if err != nil {
 		t.Fatalf("Approve() error = %v", err)
 	}
 
 	// Revoke
-	err = svc.RevokeApproval(ctx, component.ID, 456)
+	err = svc.RevokeApproval(ctx, component.ID, "user-456")
 	if err != nil {
 		t.Fatalf("RevokeApproval() error = %v", err)
 	}
@@ -205,7 +205,7 @@ func TestRawApprovalService_RequiresApproval(t *testing.T) {
 	}
 
 	// Approve RAW component
-	err = svc.Approve(ctx, rawComponent.ID, 123, "approved")
+	err = svc.Approve(ctx, rawComponent.ID, "user-123", "approved")
 	if err != nil {
 		t.Fatalf("Approve() error = %v", err)
 	}
@@ -271,7 +271,7 @@ func TestRawApprovalService_ListPendingApprovals(t *testing.T) {
 	}
 
 	// Approve one
-	err = svc.Approve(ctx, raw1.ID, 123, "approved")
+	err = svc.Approve(ctx, raw1.ID, "user-123", "approved")
 	if err != nil {
 		t.Fatalf("Approve() error = %v", err)
 	}

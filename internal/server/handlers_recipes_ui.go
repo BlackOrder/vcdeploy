@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/BlackOrder/vcdeploy/internal/services/recipes"
@@ -212,8 +211,8 @@ func (s *MasterServer) handleComponentDetailPartial(w http.ResponseWriter, r *ht
 	path := strings.TrimPrefix(r.URL.Path, "/partials/recipes/components/")
 	path = strings.TrimSuffix(path, "/")
 
-	id, err := strconv.ParseInt(path, 10, 64)
-	if err != nil {
+	id := path
+	if id == "" {
 		http.Error(w, "invalid component ID", http.StatusBadRequest)
 		return
 	}
@@ -348,8 +347,8 @@ func (s *MasterServer) renderComponentDetailPartial(w http.ResponseWriter, c *st
 	// Actions (only for user components)
 	if c.Namespace == "user" {
 		sb.WriteString(`<div class="flex justify-end space-x-3 pt-4 border-t border-dark-border">`)
-		sb.WriteString(fmt.Sprintf(`<button onclick="editComponent(%d)" class="px-4 py-2 text-sm font-medium text-dark-muted hover:text-white border border-dark-border rounded-md">Edit</button>`, c.ID))
-		sb.WriteString(fmt.Sprintf(`<button onclick="deleteComponent(%d)" class="px-4 py-2 text-sm font-medium text-red-400 hover:text-red-300 border border-red-500/50 rounded-md">Delete</button>`, c.ID))
+		sb.WriteString(fmt.Sprintf(`<button onclick="editComponent('%s')" class="px-4 py-2 text-sm font-medium text-dark-muted hover:text-white border border-dark-border rounded-md">Edit</button>`, c.ID))
+		sb.WriteString(fmt.Sprintf(`<button onclick="deleteComponent('%s')" class="px-4 py-2 text-sm font-medium text-red-400 hover:text-red-300 border border-red-500/50 rounded-md">Delete</button>`, c.ID))
 		sb.WriteString(`</div>`)
 	}
 
@@ -366,8 +365,8 @@ func (s *MasterServer) handlePlaybookDetailPartial(w http.ResponseWriter, r *htt
 	path := strings.TrimPrefix(r.URL.Path, "/partials/recipes/playbooks/")
 	path = strings.TrimSuffix(path, "/")
 
-	id, err := strconv.ParseInt(path, 10, 64)
-	if err != nil {
+	id := path
+	if id == "" {
 		http.Error(w, "invalid playbook ID", http.StatusBadRequest)
 		return
 	}
@@ -486,8 +485,8 @@ func (s *MasterServer) renderPlaybookDetailPartial(w http.ResponseWriter, p *sto
 	// Actions (only for user playbooks)
 	if p.Namespace == "user" {
 		sb.WriteString(`<div class="flex justify-end space-x-3 pt-4 border-t border-dark-border">`)
-		sb.WriteString(fmt.Sprintf(`<button onclick="editPlaybook(%d)" class="px-4 py-2 text-sm font-medium text-dark-muted hover:text-white border border-dark-border rounded-md">Edit</button>`, p.ID))
-		sb.WriteString(fmt.Sprintf(`<button onclick="deletePlaybook(%d)" class="px-4 py-2 text-sm font-medium text-red-400 hover:text-red-300 border border-red-500/50 rounded-md">Delete</button>`, p.ID))
+		sb.WriteString(fmt.Sprintf(`<button onclick="editPlaybook('%s')" class="px-4 py-2 text-sm font-medium text-dark-muted hover:text-white border border-dark-border rounded-md">Edit</button>`, p.ID))
+		sb.WriteString(fmt.Sprintf(`<button onclick="deletePlaybook('%s')" class="px-4 py-2 text-sm font-medium text-red-400 hover:text-red-300 border border-red-500/50 rounded-md">Delete</button>`, p.ID))
 		sb.WriteString(`</div>`)
 	}
 
@@ -508,8 +507,8 @@ func (s *MasterServer) handlePlaybookComposerUI(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
+	id := idStr
+	if id == "" {
 		http.Error(w, "Invalid playbook ID", http.StatusBadRequest)
 		return
 	}
@@ -522,7 +521,7 @@ func (s *MasterServer) handlePlaybookComposerUI(w http.ResponseWriter, r *http.R
 	// Get the playbook
 	playbook, err := s.playbookService.GetByID(ctx, id)
 	if err != nil {
-		s.logger.Error("Failed to get playbook", zap.Error(err), zap.Int64("id", id))
+		s.logger.Error("Failed to get playbook", zap.Error(err), zap.String("id", id))
 		http.Error(w, "Playbook not found", http.StatusNotFound)
 		return
 	}

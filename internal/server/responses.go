@@ -3,6 +3,14 @@ package server
 
 import "time"
 
+// derefStr safely dereferences a *string, returning "" if nil.
+func derefStr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
 // --- Standard Response Types ---
 
 // StatusResponse is used for simple status messages (delete, update, etc.)

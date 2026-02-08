@@ -96,7 +96,7 @@ func (s *MasterServer) handleHostKeys(w http.ResponseWriter, r *http.Request) {
 
 		userID, _ := GetUserIDFromContext(ctx)
 		addedBy := "system"
-		if userID > 0 {
+		if userID != "" {
 			if user, err := s.userService.GetByID(ctx, userID); err == nil {
 				addedBy = user.Username
 			}
@@ -135,8 +135,8 @@ func (s *MasterServer) handleHostKey(w http.ResponseWriter, r *http.Request) {
 
 	// Extract ID from path
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/host-keys/")
-	id, err := strconv.ParseInt(path, 10, 64)
-	if err != nil {
+	id := path
+	if id == "" {
 		s.jsonError(w, http.StatusBadRequest, "invalid host key ID")
 		return
 	}
@@ -188,7 +188,7 @@ func (s *MasterServer) handleHostKey(w http.ResponseWriter, r *http.Request) {
 
 		userID, _ := GetUserIDFromContext(ctx)
 		verifiedBy := "system"
-		if userID > 0 {
+		if userID != "" {
 			if user, err := s.userService.GetByID(ctx, userID); err == nil {
 				verifiedBy = user.Username
 			}
@@ -270,11 +270,11 @@ func (s *MasterServer) handleJumpServers(w http.ResponseWriter, r *http.Request)
 		}
 
 		var input struct {
-			Name     string `json:"name"`
-			Host     string `json:"host"`
-			Port     int    `json:"port"`
-			Username string `json:"username"`
-			SSHKeyID *int64 `json:"sshKeyId,omitempty"`
+			Name     string  `json:"name"`
+			Host     string  `json:"host"`
+			Port     int     `json:"port"`
+			Username string  `json:"username"`
+			SSHKeyID *string `json:"sshKeyId,omitempty"`
 		}
 
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&input); err != nil {
@@ -326,8 +326,8 @@ func (s *MasterServer) handleJumpServer(w http.ResponseWriter, r *http.Request) 
 
 	// Extract ID from path
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/jump-servers/")
-	id, err := strconv.ParseInt(path, 10, 64)
-	if err != nil {
+	id := path
+	if id == "" {
 		s.jsonError(w, http.StatusBadRequest, "invalid jump server ID")
 		return
 	}
@@ -359,11 +359,11 @@ func (s *MasterServer) handleJumpServer(w http.ResponseWriter, r *http.Request) 
 		}
 
 		var input struct {
-			Name     string `json:"name"`
-			Host     string `json:"host"`
-			Port     int    `json:"port"`
-			Username string `json:"username"`
-			SSHKeyID *int64 `json:"sshKeyId,omitempty"`
+			Name     string  `json:"name"`
+			Host     string  `json:"host"`
+			Port     int     `json:"port"`
+			Username string  `json:"username"`
+			SSHKeyID *string `json:"sshKeyId,omitempty"`
 		}
 
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&input); err != nil {
@@ -485,7 +485,7 @@ func (s *MasterServer) handleBlockedIPs(w http.ResponseWriter, r *http.Request) 
 
 		userID, _ := GetUserIDFromContext(ctx)
 		blockedBy := "system"
-		if userID > 0 {
+		if userID != "" {
 			if user, err := s.userService.GetByID(ctx, userID); err == nil {
 				blockedBy = user.Username
 			}
@@ -612,11 +612,11 @@ func (s *MasterServer) handleProvisionJobs(w http.ResponseWriter, r *http.Reques
 		}
 
 		var input struct {
-			TargetHost    string `json:"targetHost"`
-			TargetPort    int    `json:"targetPort"`
-			TargetUser    string `json:"targetUser"`
-			SSHKeyID      *int64 `json:"sshKeyId,omitempty"`
-			AgentBinaryID *int64 `json:"agentBinaryId,omitempty"`
+			TargetHost    string  `json:"targetHost"`
+			TargetPort    int     `json:"targetPort"`
+			TargetUser    string  `json:"targetUser"`
+			SSHKeyID      *string `json:"sshKeyId,omitempty"`
+			AgentBinaryID *string `json:"agentBinaryId,omitempty"`
 		}
 
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&input); err != nil {

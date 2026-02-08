@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -290,7 +289,7 @@ func TestHandleRawApproval_Approve(t *testing.T) {
 	}
 
 	body := `{"note": "Approved after review"}`
-	url := fmt.Sprintf("/api/v1/recipes/raw-approvals/%d", comp.ID)
+	url := "/api/v1/recipes/raw-approvals/" + comp.ID
 
 	req := httptest.NewRequest("POST", url, bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -321,14 +320,14 @@ func TestHandleMigrationPreview(t *testing.T) {
 
 	// Create test project
 	project := &storage.Project{
-		Name: "test-project",
-		Type: "laravel",
+		Name:   "test-project",
+		TypeID: strPtr("laravel"),
 	}
 	if err := server.store.CreateProject(context.Background(), project); err != nil {
 		t.Fatalf("failed to create project: %v", err)
 	}
 
-	req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/recipes/migration/preview/%d", project.ID), nil)
+	req := httptest.NewRequest("GET", "/api/v1/recipes/migration/preview/"+project.ID, nil)
 	req.Header.Set("X-API-Key", apiKey)
 	w := httptest.NewRecorder()
 

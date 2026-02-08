@@ -243,20 +243,19 @@ func TestValidateOneOf(t *testing.T) {
 func TestValidateID(t *testing.T) {
 	tests := []struct {
 		name    string
-		id      int64
+		id      string
 		wantErr bool
 	}{
-		{"positive", 1, false},
-		{"large positive", 9999999, false},
-		{"zero", 0, true},
-		{"negative", -1, true},
+		{"valid", "abc123", false},
+		{"valid-long", "abc123xyz789", false},
+		{"empty", "", true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := ValidateID("user_id", tt.id)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("ValidateID(%d) error = %v, wantErr %v", tt.id, err, tt.wantErr)
+				t.Errorf("ValidateID(%q) error = %v, wantErr %v", tt.id, err, tt.wantErr)
 			}
 		})
 	}

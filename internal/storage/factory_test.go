@@ -202,7 +202,7 @@ func TestCachedStore_Recipe_Integration(t *testing.T) {
 	if err := store.CreateRecipeComponent(ctx, component); err != nil {
 		t.Fatalf("CreateRecipeComponent failed: %v", err)
 	}
-	if component.ID == 0 {
+	if component.ID == "" {
 		t.Error("Component ID should be set after creation")
 	}
 
@@ -242,7 +242,7 @@ func TestCachedStore_Recipe_Integration(t *testing.T) {
 	if err := store.CreatePlaybook(ctx, playbook); err != nil {
 		t.Fatalf("CreatePlaybook failed: %v", err)
 	}
-	if playbook.ID == 0 {
+	if playbook.ID == "" {
 		t.Error("Playbook ID should be set after creation")
 	}
 
@@ -290,7 +290,7 @@ func TestCachedStore_Recipe_Integration(t *testing.T) {
 		t.Fatalf("GetPlaybookActivation failed: %v", err)
 	}
 	if readActivation.PlaybookID != playbook.ID {
-		t.Errorf("Expected playbook ID %d, got %d", playbook.ID, readActivation.PlaybookID)
+		t.Errorf("Expected playbook ID %s, got %s", playbook.ID, readActivation.PlaybookID)
 	}
 
 	// Test 10: Delete activation

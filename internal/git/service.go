@@ -154,7 +154,7 @@ func (g *Service) findCredential(ctx context.Context, repoURL string) (*decrypte
 		pattern, err := regexp.Compile(cred.URLPattern)
 		if err != nil {
 			g.logger.Warn("Invalid credential URL pattern",
-				zap.Int64("id", cred.ID),
+				zap.String("id", cred.ID),
 				zap.String("pattern", cred.URLPattern),
 				zap.Error(err),
 			)
@@ -163,7 +163,7 @@ func (g *Service) findCredential(ctx context.Context, repoURL string) (*decrypte
 
 		if pattern.MatchString(repoURL) {
 			g.logger.Debug("Found matching credential",
-				zap.Int64("id", cred.ID),
+				zap.String("id", cred.ID),
 				zap.String("type", cred.Type),
 			)
 

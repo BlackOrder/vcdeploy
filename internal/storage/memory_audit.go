@@ -15,7 +15,9 @@ func (s *MemoryStore) LogAudit(ctx context.Context, entry *AuditEntry) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	entry.ID = nextID(&s.nextAuditID)
+	if entry.ID == "" {
+		entry.ID = xid.New().String()
+	}
 	if entry.Timestamp.IsZero() {
 		entry.Timestamp = time.Now()
 	}
@@ -124,8 +126,7 @@ func (s *MemoryStore) SetSetting(ctx context.Context, category, key, value, valu
 	}
 
 	setting := &Setting{
-		UID:       xid.New().String(),
-		ID:        nextID(&s.nextSettingID),
+		ID:        xid.New().String(),
 		Category:  category,
 		Key:       key,
 		Value:     value,
@@ -153,8 +154,7 @@ func (s *MemoryStore) InitSetting(ctx context.Context, category, key, value, val
 
 	now := time.Now()
 	setting := &Setting{
-		UID:       xid.New().String(),
-		ID:        nextID(&s.nextSettingID),
+		ID:        xid.New().String(),
 		Category:  category,
 		Key:       key,
 		Value:     value,

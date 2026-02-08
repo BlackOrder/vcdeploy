@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/BlackOrder/vcdeploy/internal/services"
@@ -37,8 +36,8 @@ func (s *MasterServer) handleCredentials(w http.ResponseWriter, r *http.Request)
 	parts := strings.Split(path, "/")
 
 	// Parse credential ID
-	credID, err := strconv.ParseInt(parts[0], 10, 64)
-	if err != nil {
+	credID := parts[0]
+	if credID == "" {
 		s.jsonError(w, http.StatusBadRequest, "invalid credential ID")
 		return
 	}
@@ -102,7 +101,7 @@ func (s *MasterServer) handleListCredentials(w http.ResponseWriter, r *http.Requ
 }
 
 // handleGetCredential gets a specific credential.
-func (s *MasterServer) handleGetCredential(w http.ResponseWriter, r *http.Request, id int64) {
+func (s *MasterServer) handleGetCredential(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
 	credService := security.NewCredentialService(s.store, s.kms, s.logger)
@@ -112,7 +111,7 @@ func (s *MasterServer) handleGetCredential(w http.ResponseWriter, r *http.Reques
 			s.jsonError(w, http.StatusNotFound, "credential not found")
 			return
 		}
-		s.logger.Error("Failed to get credential", zap.Error(err), zap.Int64("id", id))
+		s.logger.Error("Failed to get credential", zap.Error(err), zap.String("id", id))
 		s.jsonError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
@@ -131,7 +130,7 @@ func (s *MasterServer) handleCreateCredential(w http.ResponseWriter, r *http.Req
 	}
 
 	// Set creator from auth context
-	if userID, ok := GetUserIDFromContext(ctx); ok && userID > 0 {
+	if userID, ok := GetUserIDFromContext(ctx); ok && userID != "" {
 		user, err := s.userService.GetByID(ctx, userID)
 		if err == nil {
 			req.CreatedBy = user.Username
@@ -159,7 +158,7 @@ func (s *MasterServer) handleCreateCredential(w http.ResponseWriter, r *http.Req
 }
 
 // handleUpdateCredential updates an existing credential.
-func (s *MasterServer) handleUpdateCredential(w http.ResponseWriter, r *http.Request, id int64) {
+func (s *MasterServer) handleUpdateCredential(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
 	var req security.UpdateCredentialRequest
@@ -180,7 +179,7 @@ func (s *MasterServer) handleUpdateCredential(w http.ResponseWriter, r *http.Req
 			s.jsonError(w, http.StatusBadRequest, inputErr.Message)
 			return
 		}
-		s.logger.Error("Failed to update credential", zap.Error(err), zap.Int64("id", id))
+		s.logger.Error("Failed to update credential", zap.Error(err), zap.String("id", id))
 		s.jsonError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
@@ -190,7 +189,7 @@ func (s *MasterServer) handleUpdateCredential(w http.ResponseWriter, r *http.Req
 }
 
 // handleDeleteCredential deletes a credential.
-func (s *MasterServer) handleDeleteCredential(w http.ResponseWriter, r *http.Request, id int64) {
+func (s *MasterServer) handleDeleteCredential(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
 	credService := security.NewCredentialService(s.store, s.kms, s.logger)
@@ -199,12 +198,12 @@ func (s *MasterServer) handleDeleteCredential(w http.ResponseWriter, r *http.Req
 			s.jsonError(w, http.StatusNotFound, "credential not found")
 			return
 		}
-		s.logger.Error("Failed to delete credential", zap.Error(err), zap.Int64("id", id))
+		s.logger.Error("Failed to delete credential", zap.Error(err), zap.String("id", id))
 		s.jsonError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
-	s.logAudit(r, "delete", "credential", "Deleted credential ID: "+strconv.FormatInt(id, 10), "success")
+	s.logAudit(r, "delete", "credential", "Deleted credential ID: "+id, "success")
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -214,7 +213,7 @@ type TestCredentialRequestBody struct {
 }
 
 // handleTestCredential tests a credential against a repo URL.
-func (s *MasterServer) handleTestCredential(w http.ResponseWriter, r *http.Request, id int64) {
+func (s *MasterServer) handleTestCredential(w http.ResponseWriter, r *http.Request, id string) {
 	if r.Method != http.MethodPost {
 		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -240,7 +239,7 @@ func (s *MasterServer) handleTestCredential(w http.ResponseWriter, r *http.Reque
 			s.jsonError(w, http.StatusNotFound, "credential not found")
 			return
 		}
-		s.logger.Error("Failed to test credential", zap.Error(err), zap.Int64("id", id))
+		s.logger.Error("Failed to test credential", zap.Error(err), zap.String("id", id))
 		s.jsonError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}

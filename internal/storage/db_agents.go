@@ -6,6 +6,8 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
+
+	"github.com/rs/xid"
 )
 
 // --- Agent operations ---
@@ -226,23 +228,21 @@ func (db *DB) DeleteAgent(ctx context.Context, id string) error {
 
 // CreateAgentBinary creates a new agent binary record.
 func (db *DB) CreateAgentBinary(ctx context.Context, binary *AgentBinary) error {
-	result, err := db.conn.ExecContext(ctx, `
-		INSERT INTO agent_binaries (version, os, arch, path, checksum_sha256, size_bytes, uploaded_at, is_current)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, binary.Version, binary.OS, binary.Arch, binary.Path, binary.ChecksumSHA256, binary.SizeBytes, binary.UploadedAt, binary.IsCurrent)
+	if binary.ID == "" {
+		binary.ID = xid.New().String()
+	}
+	_, err := db.conn.ExecContext(ctx, `
+		INSERT INTO agent_binaries (id, version, os, arch, path, checksum_sha256, size_bytes, uploaded_at, is_current)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, binary.ID, binary.Version, binary.OS, binary.Arch, binary.Path, binary.ChecksumSHA256, binary.SizeBytes, binary.UploadedAt, binary.IsCurrent)
 	if err != nil {
 		return fmt.Errorf("creating agent binary: %w", err)
 	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		return fmt.Errorf("getting last insert id: %w", err)
-	}
-	binary.ID = id
 	return nil
 }
 
 // GetAgentBinary retrieves an agent binary by ID.
-func (db *DB) GetAgentBinary(ctx context.Context, id int64) (*AgentBinary, error) {
+func (db *DB) GetAgentBinary(ctx context.Context, id string) (*AgentBinary, error) {
 	var binary AgentBinary
 	err := db.conn.QueryRowContext(ctx, `
 		SELECT id, version, os, arch, path, checksum_sha256, size_bytes, uploaded_at, is_current
@@ -316,7 +316,7 @@ func (db *DB) ListAgentBinaries(ctx context.Context) ([]*AgentBinary, error) {
 }
 
 // SetCurrentAgentBinary sets a binary as current and unsets all others for the same OS/arch.
-func (db *DB) SetCurrentAgentBinary(ctx context.Context, id int64) error {
+func (db *DB) SetCurrentAgentBinary(ctx context.Context, id string) error {
 	// Get the binary to find its OS and arch
 	binary, err := db.GetAgentBinary(ctx, id)
 	if err != nil {
@@ -349,7 +349,7 @@ func (db *DB) SetCurrentAgentBinary(ctx context.Context, id int64) error {
 }
 
 // DeleteAgentBinary deletes an agent binary by ID.
-func (db *DB) DeleteAgentBinary(ctx context.Context, id int64) error {
+func (db *DB) DeleteAgentBinary(ctx context.Context, id string) error {
 	result, err := db.conn.ExecContext(ctx, `DELETE FROM agent_binaries WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("deleting agent binary: %w", err)
@@ -368,23 +368,21 @@ func (db *DB) DeleteAgentBinary(ctx context.Context, id int64) error {
 
 // CreateAgentUpdateHistory creates a new agent update history record.
 func (db *DB) CreateAgentUpdateHistory(ctx context.Context, history *AgentUpdateHistory) error {
-	result, err := db.conn.ExecContext(ctx, `
-		INSERT INTO agent_update_history (agent_id, from_version, to_version, status, error_message, started_at, completed_at, rolled_back)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, history.AgentID, history.FromVersion, history.ToVersion, history.Status, history.ErrorMessage, history.StartedAt, history.CompletedAt, history.RolledBack)
+	if history.ID == "" {
+		history.ID = xid.New().String()
+	}
+	_, err := db.conn.ExecContext(ctx, `
+		INSERT INTO agent_update_history (id, agent_id, from_version, to_version, status, error_message, started_at, completed_at, rolled_back)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, history.ID, history.AgentID, history.FromVersion, history.ToVersion, history.Status, history.ErrorMessage, history.StartedAt, history.CompletedAt, history.RolledBack)
 	if err != nil {
 		return fmt.Errorf("creating agent update history: %w", err)
 	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		return fmt.Errorf("getting last insert id: %w", err)
-	}
-	history.ID = id
 	return nil
 }
 
 // GetAgentUpdateHistory retrieves an agent update history record by ID.
-func (db *DB) GetAgentUpdateHistory(ctx context.Context, id int64) (*AgentUpdateHistory, error) {
+func (db *DB) GetAgentUpdateHistory(ctx context.Context, id string) (*AgentUpdateHistory, error) {
 	var history AgentUpdateHistory
 	var completedAt sql.NullTime
 	var errorMsg sql.NullString

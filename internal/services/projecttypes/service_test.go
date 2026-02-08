@@ -45,7 +45,7 @@ func TestService_Create(t *testing.T) {
 	if pt == nil {
 		t.Fatal("Create() returned nil")
 	}
-	if pt.ID == 0 {
+	if pt.ID == "" {
 		t.Error("Create() did not set ID")
 	}
 	if pt.Name != "golang" {
@@ -224,8 +224,8 @@ func TestService_List(t *testing.T) {
 		t.Fatalf("List() error = %v", err)
 	}
 
-	if len(list) != 3 {
-		t.Errorf("List() returned %v items, want %v", len(list), 3)
+	if len(list) != 4 {
+		t.Errorf("List() returned %v items, want %v (3 custom + 1 seeded generic)", len(list), 4)
 	}
 }
 
@@ -243,8 +243,8 @@ func TestService_List_Empty(t *testing.T) {
 		list = []*storage.ProjectType{}
 	}
 
-	if len(list) != 0 {
-		t.Errorf("List() returned %v items, want 0", len(list))
+	if len(list) != 1 {
+		t.Errorf("List() returned %v items, want 1 (seeded generic)", len(list))
 	}
 }
 
@@ -271,19 +271,22 @@ func TestService_List_OrderedByName(t *testing.T) {
 		t.Fatalf("List() error = %v", err)
 	}
 
-	if len(list) != 3 {
-		t.Fatalf("List() returned %v items, want 3", len(list))
+	if len(list) != 4 {
+		t.Fatalf("List() returned %v items, want 4 (3 custom + 1 seeded generic)", len(list))
 	}
 
-	// Check ordering (should be alphabetical)
+	// Check ordering (should be alphabetical): alpha, beta, generic (seeded), zebra
 	if list[0].Name != "alpha" {
 		t.Errorf("List()[0].Name = %v, want alpha", list[0].Name)
 	}
 	if list[1].Name != "beta" {
 		t.Errorf("List()[1].Name = %v, want beta", list[1].Name)
 	}
-	if list[2].Name != "zebra" {
-		t.Errorf("List()[2].Name = %v, want zebra", list[2].Name)
+	if list[2].Name != "generic" {
+		t.Errorf("List()[2].Name = %v, want generic", list[2].Name)
+	}
+	if list[3].Name != "zebra" {
+		t.Errorf("List()[3].Name = %v, want zebra", list[3].Name)
 	}
 }
 
@@ -502,8 +505,8 @@ func TestService_Delete_DoesNotAffectOthers(t *testing.T) {
 		t.Fatalf("List() error = %v", err)
 	}
 
-	if len(list) != 2 {
-		t.Errorf("List() returned %v items, want 2", len(list))
+	if len(list) != 3 {
+		t.Errorf("List() returned %v items, want 3 (2 remaining + 1 seeded generic)", len(list))
 	}
 
 	// Verify type1 and type3 still exist
@@ -609,8 +612,8 @@ func TestService_MultipleConcurrentOperations(t *testing.T) {
 		t.Fatalf("List() error = %v", err)
 	}
 
-	if len(list) != 10 {
-		t.Errorf("List() returned %v items, want 10", len(list))
+	if len(list) != 11 {
+		t.Errorf("List() returned %v items, want 11 (10 custom + 1 seeded generic)", len(list))
 	}
 
 	// Update all
@@ -635,8 +638,8 @@ func TestService_MultipleConcurrentOperations(t *testing.T) {
 		t.Fatalf("List() error = %v", err)
 	}
 
-	if len(list) != 5 {
-		t.Errorf("List() after delete returned %v items, want 5", len(list))
+	if len(list) != 6 {
+		t.Errorf("List() after delete returned %v items, want 6 (5 remaining + 1 seeded generic)", len(list))
 	}
 }
 
