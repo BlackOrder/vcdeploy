@@ -47,7 +47,7 @@ func (s *MasterServer) maintenanceMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("Retry-After", "1800")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(map[string]string{
+		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": "Server is in maintenance mode. Only read operations are allowed.",
 		})
 	})

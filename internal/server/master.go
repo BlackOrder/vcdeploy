@@ -335,7 +335,7 @@ func NewMasterServer(cfg *config.MasterConfig, store storage.Store, logger *zap.
 			return nil, fmt.Errorf("generate master key: %w", mkErr)
 		}
 		// Ensure data directory exists (first boot)
-		if err := os.MkdirAll(filepath.Dir(masterKeyPath), 0700); err != nil {
+		if err := os.MkdirAll(filepath.Dir(masterKeyPath), 0o700); err != nil {
 			return nil, fmt.Errorf("create data directory: %w", err)
 		}
 		if err := masterKey.SaveToFile(masterKeyPath); err != nil {

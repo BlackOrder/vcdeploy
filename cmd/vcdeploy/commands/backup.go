@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -109,7 +110,7 @@ func promptPassphrase() (string, error) {
 		return "", err
 	}
 
-	if string(pass1) != string(pass2) {
+	if !bytes.Equal(pass1, pass2) {
 		return "", fmt.Errorf("passphrases do not match")
 	}
 

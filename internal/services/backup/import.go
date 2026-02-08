@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -101,8 +102,11 @@ func (s *ImportService) computeTableDiff(ctx context.Context, conn *sql.Conn, ta
 	err := conn.QueryRowContext(ctx,
 		"SELECT name FROM imported.sqlite_master WHERE type='table' AND name=?", tableName,
 	).Scan(&importedName)
-	if err != nil {
+	if errors.Is(err, sql.ErrNoRows) {
 		return td, nil // Table not in import, skip
+	}
+	if err != nil {
+		return td, fmt.Errorf("check table %s in import: %w", tableName, err)
 	}
 
 	// Check if the table has a uid column

@@ -67,7 +67,7 @@ var ExportableTables = []TableExportConfig{
 		},
 	},
 	{
-		Name: "ssh_jump_servers",
+		Name:      "ssh_jump_servers",
 		DependsOn: []string{"ssh_keys"},
 	},
 	{
