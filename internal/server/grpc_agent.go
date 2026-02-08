@@ -51,6 +51,9 @@ type AgentServer struct {
 	// allowAutoRegister enables agents to register without a pre-generated token (for testing)
 	allowAutoRegister bool
 
+	// isMaintenanceMode returns true when the server is in maintenance mode
+	isMaintenanceMode func() bool
+
 	// tokens maps agent IDs to their registration tokens
 	tokens     map[string]string
 	tokenMutex sync.RWMutex
@@ -101,6 +104,11 @@ func (s *AgentServer) SetAlertManager(alertMgr *alerting.Manager) {
 // SetAgentEventCallback sets the callback function for agent events (for SSE).
 func (s *AgentServer) SetAgentEventCallback(cb func(id, name, status, hostname string)) {
 	s.onAgentEvent = cb
+}
+
+// SetMaintenanceCheck sets the function used to check maintenance mode.
+func (s *AgentServer) SetMaintenanceCheck(fn func() bool) {
+	s.isMaintenanceMode = fn
 }
 
 // SetGitService sets the git service for repository operations.
@@ -277,6 +285,11 @@ func (s *AgentServer) Register(ctx context.Context, req *proto.RegisterRequest) 
 
 // Connect handles bi-directional streaming between agent and master.
 func (s *AgentServer) Connect(stream proto.AgentService_ConnectServer) error {
+	// Reject new connections during maintenance mode
+	if s.isMaintenanceMode != nil && s.isMaintenanceMode() {
+		return status.Error(codes.Unavailable, "Server is in maintenance mode")
+	}
+
 	ctx := stream.Context()
 
 	// Wait for the AgentReady message to identify the agent

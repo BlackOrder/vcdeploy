@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/BlackOrder/vcdeploy/internal/alerting"
@@ -211,6 +212,9 @@ type MasterServer struct {
 
 	// Setup state - true when no users exist and env credentials not provided
 	requiresSetup bool
+
+	// Maintenance mode - blocks mutations, allows reads and admin endpoints
+	maintenanceMode atomic.Bool
 }
 
 // AgentConnection tracks a connected agent.
@@ -401,6 +405,7 @@ func NewMasterServer(cfg *config.MasterConfig, store storage.Store, logger *zap.
 				// Create the gRPC agent server with the CA manager
 				s.agentServer = NewAgentServer(s.store, ca, s.logger)
 				s.agentServer.SetServices(s.agentService, s.deploymentService)
+				s.agentServer.SetMaintenanceCheck(s.maintenanceMode.Load)
 
 				// Set SSE event callback for agent events
 				s.agentServer.SetAgentEventCallback(s.publishAgentEvent)
@@ -468,6 +473,7 @@ func (s *MasterServer) SetCAManager(ca *security.CAManager) {
 	s.caManager = ca
 	// Create the gRPC agent server with the CA manager
 	s.agentServer = NewAgentServer(s.store, ca, s.logger)
+	s.agentServer.SetMaintenanceCheck(s.maintenanceMode.Load)
 
 	// Set SSE event callback for agent events
 	s.agentServer.SetAgentEventCallback(s.publishAgentEvent)
@@ -819,6 +825,9 @@ func (s *MasterServer) buildMainHandler() (http.Handler, error) {
 	mux.HandleFunc("/api/v1/settings/", s.withAuth(s.handleSettingsCategory))
 	mux.HandleFunc("/api/v1/settings", s.withAuth(s.handleSettingsAll))
 
+	// Admin API
+	mux.HandleFunc("/api/v1/admin/maintenance", s.withAuth(s.handleMaintenanceToggle))
+
 	// Stats API
 	mux.HandleFunc("/api/v1/stats/deployments", s.withAuth(s.handleDeploymentStats))
 	mux.HandleFunc("/api/v1/stats/agents", s.withAuth(s.handleAgentStats))
@@ -1009,6 +1018,9 @@ func (s *MasterServer) buildMainHandler() (http.Handler, error) {
 	if s.rateLimiter != nil {
 		handler = s.rateLimiter.Middleware(handler)
 	}
+
+	// Add maintenance mode middleware (blocks mutations during maintenance)
+	handler = s.maintenanceMiddleware(handler)
 
 	// Add setup required middleware (redirects to /setup when system needs initial configuration)
 	handler = s.setupRequiredMiddleware(handler)

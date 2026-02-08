@@ -77,6 +77,9 @@ func (db *DB) Conn() *sql.DB {
 	return db.conn
 }
 
+// FlushPending is a no-op for DB — writes go directly to SQLite.
+func (db *DB) FlushPending() error { return nil }
+
 // RunInTransaction executes the given function within a database transaction.
 // If the function returns an error, the transaction is rolled back.
 // Otherwise, the transaction is committed.
