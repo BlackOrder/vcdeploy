@@ -5,8 +5,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/rs/xid"
 	"time"
+
+	"github.com/rs/xid"
 
 	"go.uber.org/zap"
 )

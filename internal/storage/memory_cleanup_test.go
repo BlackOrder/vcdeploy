@@ -2,9 +2,10 @@ package storage
 
 import (
 	"context"
-	"github.com/rs/xid"
 	"testing"
 	"time"
+
+	"github.com/rs/xid"
 )
 
 func TestMemoryStore_CleanupExpiredSessions(t *testing.T) {
