@@ -78,13 +78,13 @@ type Store interface {
 type UserStore interface {
 	CreateUser(ctx context.Context, user *User) error
 	GetUserByUsername(ctx context.Context, username string) (*User, error)
-	GetUserByID(ctx context.Context, id int64) (*User, error)
+	GetUserByID(ctx context.Context, id string) (*User, error)
 	ListUsers(ctx context.Context) ([]*User, error)
 	// H6: ListUsersPaginated returns users with pagination support.
 	ListUsersPaginated(ctx context.Context, limit, offset int) ([]*User, error)
 	CountUsers(ctx context.Context) (int64, error)
 	UpdateUserByID(ctx context.Context, user *User) error
-	DeleteUser(ctx context.Context, id int64) error
+	DeleteUser(ctx context.Context, id string) error
 }
 
 // SessionStore defines session-related operations.
@@ -93,18 +93,18 @@ type SessionStore interface {
 	GetSessionByToken(ctx context.Context, token string) (*Session, error)
 	DeleteSession(ctx context.Context, token string) error
 	DeleteExpiredSessions(ctx context.Context) (int64, error)
-	DeleteUserSessions(ctx context.Context, userID int64) error
-	ListUserSessions(ctx context.Context, userID int64) ([]*Session, error)
+	DeleteUserSessions(ctx context.Context, userID string) error
+	ListUserSessions(ctx context.Context, userID string) ([]*Session, error)
 }
 
 // APIKeyStore defines API key-related operations.
 type APIKeyStore interface {
 	CreateAPIKey(ctx context.Context, key *APIKey) error
-	GetAPIKeyByID(ctx context.Context, keyID int64) (*APIKey, error)
+	GetAPIKeyByID(ctx context.Context, keyID string) (*APIKey, error)
 	GetAPIKeyByHash(ctx context.Context, keyHash string) (*APIKey, error)
-	UpdateAPIKeyUsage(ctx context.Context, keyID int64) error
-	DeleteAPIKey(ctx context.Context, keyID int64) error
-	ListAPIKeys(ctx context.Context, userID int64) ([]*APIKey, error)
+	UpdateAPIKeyUsage(ctx context.Context, keyID string) error
+	DeleteAPIKey(ctx context.Context, keyID string) error
+	ListAPIKeys(ctx context.Context, userID string) ([]*APIKey, error)
 }
 
 // AgentStore defines agent-related operations.
@@ -125,18 +125,18 @@ type AgentStore interface {
 // AgentBinaryStore defines agent binary-related operations.
 type AgentBinaryStore interface {
 	CreateAgentBinary(ctx context.Context, binary *AgentBinary) error
-	GetAgentBinary(ctx context.Context, id int64) (*AgentBinary, error)
+	GetAgentBinary(ctx context.Context, id string) (*AgentBinary, error)
 	GetAgentBinaryByVersion(ctx context.Context, version, os, arch string) (*AgentBinary, error)
 	GetCurrentAgentBinary(ctx context.Context, os, arch string) (*AgentBinary, error)
 	ListAgentBinaries(ctx context.Context) ([]*AgentBinary, error)
-	SetCurrentAgentBinary(ctx context.Context, id int64) error
-	DeleteAgentBinary(ctx context.Context, id int64) error
+	SetCurrentAgentBinary(ctx context.Context, id string) error
+	DeleteAgentBinary(ctx context.Context, id string) error
 }
 
 // AgentUpdateStore defines agent update history operations.
 type AgentUpdateStore interface {
 	CreateAgentUpdateHistory(ctx context.Context, history *AgentUpdateHistory) error
-	GetAgentUpdateHistory(ctx context.Context, id int64) (*AgentUpdateHistory, error)
+	GetAgentUpdateHistory(ctx context.Context, id string) (*AgentUpdateHistory, error)
 	UpdateAgentUpdateHistory(ctx context.Context, history *AgentUpdateHistory) error
 	ListAgentUpdateHistory(ctx context.Context, agentID string, limit, offset int) ([]*AgentUpdateHistory, int64, error)
 	ListAllAgentUpdateHistory(ctx context.Context, limit, offset int) ([]*AgentUpdateHistory, int64, error)
@@ -158,7 +158,7 @@ type DeploymentStore interface {
 type DeploymentLogStore interface {
 	CreateDeploymentLog(ctx context.Context, log *DeploymentLog) error
 	ListDeploymentLogs(ctx context.Context, deploymentID string) ([]*DeploymentLog, error)
-	ListDeploymentLogsAfter(ctx context.Context, deploymentID string, afterID int64) ([]*DeploymentLog, error)
+	ListDeploymentLogsAfter(ctx context.Context, deploymentID string, afterID string) ([]*DeploymentLog, error)
 	ListDeploymentLogsPaginated(ctx context.Context, deploymentID string, limit, offset int) ([]*DeploymentLog, error)
 	CountDeploymentLogs(ctx context.Context, deploymentID string) (int64, error)
 }
@@ -180,7 +180,7 @@ type DeploymentAgentStore interface {
 // DeploymentRollbackStore defines rollback operations.
 type DeploymentRollbackStore interface {
 	CreateDeploymentRollback(ctx context.Context, rollback *DeploymentRollback) error
-	GetDeploymentRollback(ctx context.Context, id int64) (*DeploymentRollback, error)
+	GetDeploymentRollback(ctx context.Context, id string) (*DeploymentRollback, error)
 	UpdateDeploymentRollback(ctx context.Context, rollback *DeploymentRollback) error
 	ListDeploymentRollbacks(ctx context.Context, projectName string, limit, offset int) ([]*DeploymentRollback, int64, error)
 	GetLatestRollbackForDeployment(ctx context.Context, deploymentID string) (*DeploymentRollback, error)
@@ -217,15 +217,15 @@ type SecretStore interface {
 // ProjectStore defines project-related operations.
 type ProjectStore interface {
 	CreateProject(ctx context.Context, project *Project) error
-	GetProjectByID(ctx context.Context, id int64) (*Project, error)
+	GetProjectByID(ctx context.Context, id string) (*Project, error)
 	GetProjectByName(ctx context.Context, name string) (*Project, error)
 	ListProjects(ctx context.Context) ([]*Project, error)
 	ListProjectsPaginated(ctx context.Context, limit, offset int) ([]*Project, error)
 	CountProjects(ctx context.Context) (int64, error)
 	UpdateProjectByID(ctx context.Context, p *Project) error
 	UpdateProjectByName(ctx context.Context, p *Project) error
-	UpdateProjectHealthCheck(ctx context.Context, projectID int64, healthCheckID *int64, autoRollback, rollbackOnHealthFail bool) error
-	DeleteProjectByID(ctx context.Context, id int64) error
+	UpdateProjectHealthCheck(ctx context.Context, projectID string, healthCheckID *string, autoRollback, rollbackOnHealthFail bool) error
+	DeleteProjectByID(ctx context.Context, id string) error
 	DeleteProject(ctx context.Context, name string) error
 }
 
@@ -240,10 +240,10 @@ type ProjectTypeStore interface {
 
 // ProjectWebhookStore defines project webhook operations.
 type ProjectWebhookStore interface {
-	GetProjectWebhook(ctx context.Context, projectID int64, provider string) (*ProjectWebhook, error)
-	SetProjectWebhook(ctx context.Context, projectID int64, provider string, secretEncrypted []byte, enabled, requireSecret bool) error
-	ListProjectWebhooks(ctx context.Context, projectID int64) ([]*ProjectWebhook, error)
-	DeleteProjectWebhook(ctx context.Context, projectID int64, provider string) error
+	GetProjectWebhook(ctx context.Context, projectID string, provider string) (*ProjectWebhook, error)
+	SetProjectWebhook(ctx context.Context, projectID string, provider string, secretEncrypted []byte, enabled, requireSecret bool) error
+	ListProjectWebhooks(ctx context.Context, projectID string) ([]*ProjectWebhook, error)
+	DeleteProjectWebhook(ctx context.Context, projectID string, provider string) error
 }
 
 // SettingStore defines settings operations.
@@ -263,19 +263,19 @@ type SSHHostKeyStore interface {
 	GetSSHHostKey(ctx context.Context, hostname string, port int, keyType string) (*SSHHostKey, error)
 	GetSSHHostKeysByHost(ctx context.Context, hostname string, port int) ([]*SSHHostKey, error)
 	ListSSHHostKeys(ctx context.Context) ([]*SSHHostKey, error)
-	UpdateSSHHostKeyTrust(ctx context.Context, id int64, trusted bool, verifiedBy string) error
-	DeleteSSHHostKey(ctx context.Context, id int64) error
+	UpdateSSHHostKeyTrust(ctx context.Context, id string, trusted bool, verifiedBy string) error
+	DeleteSSHHostKey(ctx context.Context, id string) error
 	DeleteSSHHostKeysByHost(ctx context.Context, hostname string, port int) (int64, error)
 }
 
 // JumpServerStore defines SSH jump server operations.
 type JumpServerStore interface {
 	CreateJumpServer(ctx context.Context, js *SSHJumpServer) error
-	GetJumpServer(ctx context.Context, id int64) (*SSHJumpServer, error)
+	GetJumpServer(ctx context.Context, id string) (*SSHJumpServer, error)
 	GetJumpServerByName(ctx context.Context, name string) (*SSHJumpServer, error)
 	ListJumpServers(ctx context.Context) ([]*SSHJumpServer, error)
 	UpdateJumpServer(ctx context.Context, js *SSHJumpServer) error
-	DeleteJumpServer(ctx context.Context, id int64) error
+	DeleteJumpServer(ctx context.Context, id string) error
 }
 
 // BlockedIPStore defines IP blocking operations.
@@ -306,7 +306,7 @@ type ProvisionStore interface {
 type ProvisionLogStore interface {
 	SaveProvisionLog(ctx context.Context, jobID, level, message string) error
 	ListProvisionLogs(ctx context.Context, jobID string) ([]*ProvisionLog, error)
-	ListProvisionLogsAfter(ctx context.Context, jobID string, afterID int64) ([]*ProvisionLog, error)
+	ListProvisionLogsAfter(ctx context.Context, jobID string, afterID string) ([]*ProvisionLog, error)
 }
 
 // ACMEStore defines ACME certificate and account storage operations.
@@ -326,12 +326,12 @@ type ACMEStore interface {
 // HealthCheckStore defines health check configuration operations.
 type HealthCheckStore interface {
 	CreateHealthCheckConfig(ctx context.Context, config *HealthCheckConfig) error
-	GetHealthCheckConfig(ctx context.Context, id int64) (*HealthCheckConfig, error)
+	GetHealthCheckConfig(ctx context.Context, id string) (*HealthCheckConfig, error)
 	GetGlobalHealthCheckConfig(ctx context.Context) (*HealthCheckConfig, error)
-	GetHealthCheckConfigForProject(ctx context.Context, projectID int64) (*HealthCheckConfig, error)
+	GetHealthCheckConfigForProject(ctx context.Context, projectID string) (*HealthCheckConfig, error)
 	UpdateHealthCheckConfig(ctx context.Context, config *HealthCheckConfig) error
 	ListHealthCheckConfigs(ctx context.Context) ([]*HealthCheckConfig, error)
-	DeleteHealthCheckConfig(ctx context.Context, id int64) error
+	DeleteHealthCheckConfig(ctx context.Context, id string) error
 }
 
 // CleanupStore defines cleanup/maintenance operations.
@@ -420,7 +420,7 @@ type RegistrationTokenStore interface {
 // SourceCredentialStore defines source credential operations.
 type SourceCredentialStore interface {
 	// GetSourceCredential returns a credential by ID.
-	GetSourceCredential(ctx context.Context, id int64) (*SourceCredential, error)
+	GetSourceCredential(ctx context.Context, id string) (*SourceCredential, error)
 	// GetSourceCredentialByName returns a credential by name.
 	GetSourceCredentialByName(ctx context.Context, name string) (*SourceCredential, error)
 	// ListSourceCredentials returns all source credentials.
@@ -428,7 +428,7 @@ type SourceCredentialStore interface {
 	// SaveSourceCredential creates or updates a source credential.
 	SaveSourceCredential(ctx context.Context, cred *SourceCredential) error
 	// DeleteSourceCredential removes a source credential.
-	DeleteSourceCredential(ctx context.Context, id int64) error
+	DeleteSourceCredential(ctx context.Context, id string) error
 }
 
 // RevokedCertificateStore defines CRL operations.
@@ -458,7 +458,7 @@ type EncryptionKeyStore interface {
 // SSHKeyStore defines SSH key operations.
 type SSHKeyStore interface {
 	// GetSSHKey returns an SSH key by ID.
-	GetSSHKey(ctx context.Context, id int64) (*SSHKey, error)
+	GetSSHKey(ctx context.Context, id string) (*SSHKey, error)
 	// GetSSHKeyByName returns an SSH key by name.
 	GetSSHKeyByName(ctx context.Context, name string) (*SSHKey, error)
 	// ListSSHKeys returns all SSH keys.
@@ -466,7 +466,7 @@ type SSHKeyStore interface {
 	// SaveSSHKey creates or updates an SSH key.
 	SaveSSHKey(ctx context.Context, key *SSHKey) error
 	// DeleteSSHKey removes an SSH key.
-	DeleteSSHKey(ctx context.Context, id int64) error
+	DeleteSSHKey(ctx context.Context, id string) error
 }
 
 // CertAuditStore defines certificate audit log operations.
@@ -480,15 +480,15 @@ type CertAuditStore interface {
 // RecoveryCodeStore defines TOTP recovery code operations.
 type RecoveryCodeStore interface {
 	// SaveRecoveryCodes saves a set of recovery codes for a user (replaces any existing).
-	SaveRecoveryCodes(ctx context.Context, userID int64, codes []*RecoveryCode) error
+	SaveRecoveryCodes(ctx context.Context, userID string, codes []*RecoveryCode) error
 	// ListRecoveryCodes returns all recovery codes for a user.
-	ListRecoveryCodes(ctx context.Context, userID int64) ([]*RecoveryCode, error)
+	ListRecoveryCodes(ctx context.Context, userID string) ([]*RecoveryCode, error)
 	// UseRecoveryCode marks a recovery code as used.
-	UseRecoveryCode(ctx context.Context, codeID int64) error
+	UseRecoveryCode(ctx context.Context, codeID string) error
 	// DeleteRecoveryCodes removes all recovery codes for a user.
-	DeleteRecoveryCodes(ctx context.Context, userID int64) error
+	DeleteRecoveryCodes(ctx context.Context, userID string) error
 	// CountUnusedRecoveryCodes returns the count of unused codes for a user.
-	CountUnusedRecoveryCodes(ctx context.Context, userID int64) (int, error)
+	CountUnusedRecoveryCodes(ctx context.Context, userID string) (int, error)
 }
 
 // --- Recipe System Store Interfaces ---
@@ -500,7 +500,7 @@ type RecipeComponentStore interface {
 	// GetRecipeComponent returns a component by namespace, slug, and version.
 	GetRecipeComponent(ctx context.Context, namespace, slug, version string) (*RecipeComponent, error)
 	// GetRecipeComponentByID returns a component by ID.
-	GetRecipeComponentByID(ctx context.Context, id int64) (*RecipeComponent, error)
+	GetRecipeComponentByID(ctx context.Context, id string) (*RecipeComponent, error)
 	// ListRecipeComponents returns all components in a namespace.
 	ListRecipeComponents(ctx context.Context, namespace string, includeDeprecated bool) ([]*RecipeComponent, error)
 	// ListRecipeComponentVersions returns all versions of a component.
@@ -508,7 +508,7 @@ type RecipeComponentStore interface {
 	// UpdateRecipeComponent updates an existing component.
 	UpdateRecipeComponent(ctx context.Context, component *RecipeComponent) error
 	// DeleteRecipeComponent deletes a component by ID.
-	DeleteRecipeComponent(ctx context.Context, id int64) error
+	DeleteRecipeComponent(ctx context.Context, id string) error
 }
 
 // PlaybookStore defines playbook operations.
@@ -518,7 +518,7 @@ type PlaybookStore interface {
 	// GetPlaybook returns a playbook by namespace, slug, and version.
 	GetPlaybook(ctx context.Context, namespace, slug, version string) (*Playbook, error)
 	// GetPlaybookByID returns a playbook by ID.
-	GetPlaybookByID(ctx context.Context, id int64) (*Playbook, error)
+	GetPlaybookByID(ctx context.Context, id string) (*Playbook, error)
 	// ListPlaybooks returns playbooks filtered by namespace and/or framework type.
 	ListPlaybooks(ctx context.Context, namespace, frameworkType string, includeDeprecated bool) ([]*Playbook, error)
 	// ListPlaybookVersions returns all versions of a playbook.
@@ -526,7 +526,7 @@ type PlaybookStore interface {
 	// UpdatePlaybook updates an existing playbook.
 	UpdatePlaybook(ctx context.Context, playbook *Playbook) error
 	// DeletePlaybook deletes a playbook by ID.
-	DeletePlaybook(ctx context.Context, id int64) error
+	DeletePlaybook(ctx context.Context, id string) error
 }
 
 // PlaybookActivationStore defines playbook activation operations.
@@ -534,13 +534,13 @@ type PlaybookActivationStore interface {
 	// CreatePlaybookActivation creates a new activation linking a project to a playbook.
 	CreatePlaybookActivation(ctx context.Context, activation *PlaybookActivation) error
 	// GetPlaybookActivation returns the activation for a project.
-	GetPlaybookActivation(ctx context.Context, projectID int64) (*PlaybookActivation, error)
+	GetPlaybookActivation(ctx context.Context, projectID string) (*PlaybookActivation, error)
 	// GetPlaybookActivationByID returns an activation by ID.
-	GetPlaybookActivationByID(ctx context.Context, id int64) (*PlaybookActivation, error)
+	GetPlaybookActivationByID(ctx context.Context, id string) (*PlaybookActivation, error)
 	// ListActivationsByPlaybook returns all activations using a specific playbook.
-	ListActivationsByPlaybook(ctx context.Context, playbookID int64) ([]*PlaybookActivation, error)
+	ListActivationsByPlaybook(ctx context.Context, playbookID string) ([]*PlaybookActivation, error)
 	// DeletePlaybookActivation deletes an activation by ID.
-	DeletePlaybookActivation(ctx context.Context, id int64) error
+	DeletePlaybookActivation(ctx context.Context, id string) error
 }
 
 // PlaybookVariableBindingStore defines variable binding operations.
@@ -548,11 +548,11 @@ type PlaybookVariableBindingStore interface {
 	// CreateVariableBinding creates a new variable binding.
 	CreateVariableBinding(ctx context.Context, binding *PlaybookVariableBinding) error
 	// GetVariableBindings returns all bindings for an activation.
-	GetVariableBindings(ctx context.Context, activationID int64) ([]*PlaybookVariableBinding, error)
+	GetVariableBindings(ctx context.Context, activationID string) ([]*PlaybookVariableBinding, error)
 	// UpdateVariableBinding updates an existing binding.
 	UpdateVariableBinding(ctx context.Context, binding *PlaybookVariableBinding) error
 	// DeleteVariableBinding deletes a binding by ID.
-	DeleteVariableBinding(ctx context.Context, id int64) error
+	DeleteVariableBinding(ctx context.Context, id string) error
 	// FindBindingsBySourceRef finds bindings that reference a specific source (env key or secret).
 	FindBindingsBySourceRef(ctx context.Context, sourceType, sourceRef string) ([]*PlaybookVariableBinding, error)
 }
@@ -562,9 +562,9 @@ type RawCommandApprovalStore interface {
 	// CreateRawApproval creates an approval record for a RAW component.
 	CreateRawApproval(ctx context.Context, approval *RawCommandApproval) error
 	// GetRawApproval returns the approval for a component.
-	GetRawApproval(ctx context.Context, componentID int64) (*RawCommandApproval, error)
+	GetRawApproval(ctx context.Context, componentID string) (*RawCommandApproval, error)
 	// DeleteRawApproval deletes an approval by component ID.
-	DeleteRawApproval(ctx context.Context, componentID int64) error
+	DeleteRawApproval(ctx context.Context, componentID string) error
 	// ListRawApprovals returns all RAW command approvals.
 	ListRawApprovals(ctx context.Context) ([]*RawCommandApproval, error)
 }
