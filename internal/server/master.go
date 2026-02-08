@@ -827,6 +827,8 @@ func (s *MasterServer) buildMainHandler() (http.Handler, error) {
 
 	// Admin API
 	mux.HandleFunc("/api/v1/admin/maintenance", s.withAuth(s.handleMaintenanceToggle))
+	mux.HandleFunc("/api/v1/admin/backup/export", s.withAuth(s.handleBackupExport))
+	mux.HandleFunc("/api/v1/admin/backup/download/", s.withAuth(s.handleBackupDownload))
 
 	// Stats API
 	mux.HandleFunc("/api/v1/stats/deployments", s.withAuth(s.handleDeploymentStats))
