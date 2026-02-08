@@ -266,7 +266,9 @@ func (s *ImportService) importReplace(ctx context.Context, tx *sql.Tx, table Tab
 		return fmt.Errorf("get columns: %w", err)
 	}
 
-	return s.copyRows(ctx, tx, table, columns, passphrase, false)
+	// Replace strategy: include the id column to preserve FK references.
+	// Since we deleted all rows first, explicit IDs are safe.
+	return s.copyRows(ctx, tx, table, columns, passphrase, false, true)
 }
 
 // importMerge inserts new records and updates changed records (by uid).
@@ -291,16 +293,19 @@ func (s *ImportService) importMerge(ctx context.Context, tx *sql.Tx, table Table
 		return s.importReplace(ctx, tx, table, passphrase)
 	}
 
-	return s.copyRows(ctx, tx, table, columns, passphrase, true)
+	// Merge strategy: skip id column — INSERT OR REPLACE uses uid for matching,
+	// and SQLite assigns new integer IDs.
+	return s.copyRows(ctx, tx, table, columns, passphrase, true, false)
 }
 
 // copyRows copies rows from imported to main, optionally using INSERT OR REPLACE.
-func (s *ImportService) copyRows(ctx context.Context, tx *sql.Tx, table TableExportConfig, columns []string, passphrase string, upsert bool) error {
-	// Exclude the auto-increment id column — let SQLite assign new IDs
+// When includeID is true, the integer primary key is carried over from the source
+// (used with replace strategy after deleting all rows to preserve FK references).
+func (s *ImportService) copyRows(ctx context.Context, tx *sql.Tx, table TableExportConfig, columns []string, passphrase string, upsert bool, includeID bool) error {
 	insertCols := make([]string, 0, len(columns))
 	selectCols := make([]string, 0, len(columns))
 	for _, col := range columns {
-		if col == "id" {
+		if col == "id" && !includeID {
 			continue // Skip integer primary key — let auto-increment handle it
 		}
 		insertCols = append(insertCols, col)

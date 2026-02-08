@@ -5,10 +5,12 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/BlackOrder/vcdeploy/internal/storage"
+	"github.com/rs/xid"
 )
 
 func setupTestKMSDB(t *testing.T) storage.Store {
@@ -676,5 +678,312 @@ func TestDefaultKMSConfig(t *testing.T) {
 
 	if config.AutoRotationPeriod != 0 {
 		t.Errorf("DefaultKMSConfig().AutoRotationPeriod = %v, want 0 (disabled)", config.AutoRotationPeriod)
+	}
+}
+
+// --- Stage 11 tests: KMS security invariants ---
+
+// TestMasterKeyMetaPopulated verifies that after KMS init, the encryption_keys
+// table has at least one row with a valid XID-format key_id.
+func TestMasterKeyMetaPopulated(t *testing.T) {
+	db := setupTestKMSDB(t)
+	defer db.Close()
+	ctx := context.Background()
+
+	mk := testMasterKey(t)
+	kms, err := NewKMS(ctx, db, nil, mk)
+	if err != nil {
+		t.Fatalf("NewKMS: %v", err)
+	}
+	if err := kms.Initialize(ctx); err != nil {
+		t.Fatalf("Initialize: %v", err)
+	}
+
+	// Query raw DB for encryption_keys rows
+	rows, err := db.Conn().QueryContext(ctx, "SELECT id FROM encryption_keys")
+	if err != nil {
+		t.Fatalf("query encryption_keys: %v", err)
+	}
+	defer rows.Close()
+
+	var count int
+	for rows.Next() {
+		var keyID string
+		if err := rows.Scan(&keyID); err != nil {
+			t.Fatalf("scan key_id: %v", err)
+		}
+		count++
+		// Verify XID format: 20 chars, parseable
+		if len(keyID) != 20 {
+			t.Errorf("key ID %q length = %d, want 20", keyID, len(keyID))
+		}
+		if _, err := xid.FromString(keyID); err != nil {
+			t.Errorf("key ID %q is not valid XID: %v", keyID, err)
+		}
+	}
+	if count == 0 {
+		t.Error("encryption_keys table is empty after Initialize")
+	}
+}
+
+// TestKMSEncryptsKeyMaterial reads raw key_material_encrypted from the DB and
+// verifies it is NOT the plaintext 32-byte key material.
+func TestKMSEncryptsKeyMaterial(t *testing.T) {
+	db := setupTestKMSDB(t)
+	defer db.Close()
+	ctx := context.Background()
+
+	mk := testMasterKey(t)
+	kms, err := NewKMS(ctx, db, nil, mk)
+	if err != nil {
+		t.Fatalf("NewKMS: %v", err)
+	}
+	if err := kms.Initialize(ctx); err != nil {
+		t.Fatalf("Initialize: %v", err)
+	}
+
+	// Get the in-memory key material
+	currentKey := kms.GetCurrentKey()
+	if currentKey == nil {
+		t.Fatal("no current key after Initialize")
+	}
+	rawKeyMaterial := currentKey.KeyMaterial // 32 bytes
+
+	// Read the stored value directly from SQLite
+	var storedMaterial []byte
+	err = db.Conn().QueryRowContext(ctx,
+		"SELECT key_material_encrypted FROM encryption_keys WHERE id = ?",
+		currentKey.ID,
+	).Scan(&storedMaterial)
+	if err != nil {
+		t.Fatalf("read raw key_material_encrypted: %v", err)
+	}
+
+	// The stored value must NOT be the raw key material
+	if bytes.Equal(storedMaterial, rawKeyMaterial) {
+		t.Fatal("key_material_encrypted in DB is raw plaintext — encryption not working")
+	}
+
+	// The stored value should be longer (nonce + ciphertext + tag)
+	if len(storedMaterial) <= 32 {
+		t.Errorf("stored material length = %d, expected > 32 (nonce + ciphertext + tag)", len(storedMaterial))
+	}
+
+	// Verify the stored value IS decryptable with the MasterKey
+	decrypted, err := mk.Decrypt(storedMaterial)
+	if err != nil {
+		t.Fatalf("MasterKey.Decrypt(stored material) failed: %v", err)
+	}
+	if !bytes.Equal(decrypted, rawKeyMaterial) {
+		t.Error("MasterKey.Decrypt(stored) != original key material")
+	}
+}
+
+// TestKMSWithDifferentMasterKey verifies that opening a KMS with the wrong
+// MasterKey fails to decrypt stored key material.
+func TestKMSWithDifferentMasterKey(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+	ctx := context.Background()
+
+	// Create KMS with MasterKey A
+	mkA := testMasterKey(t)
+	store1, err := storage.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open db: %v", err)
+	}
+	kms1, err := NewKMS(ctx, store1, nil, mkA)
+	if err != nil {
+		t.Fatalf("NewKMS(A): %v", err)
+	}
+	if err := kms1.Initialize(ctx); err != nil {
+		t.Fatalf("Initialize(A): %v", err)
+	}
+	store1.Close()
+
+	// Reopen with MasterKey B — should fail
+	mkB := testMasterKey(t)
+	store2, err := storage.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open db (2): %v", err)
+	}
+	defer store2.Close()
+
+	_, err = NewKMS(ctx, store2, nil, mkB)
+	if err == nil {
+		t.Fatal("NewKMS with wrong MasterKey should have failed, but succeeded")
+	}
+	// Error should mention decryption failure
+	if !strings.Contains(err.Error(), "decrypt") {
+		t.Errorf("expected decryption error, got: %v", err)
+	}
+}
+
+// TestKMSKeyIDIsXID verifies that generated key IDs are valid 20-char XIDs.
+func TestKMSKeyIDIsXID(t *testing.T) {
+	db := setupTestKMSDB(t)
+	defer db.Close()
+	ctx := context.Background()
+
+	kms, err := NewKMS(ctx, db, nil, testMasterKey(t))
+	if err != nil {
+		t.Fatalf("NewKMS: %v", err)
+	}
+	if err := kms.Initialize(ctx); err != nil {
+		t.Fatalf("Initialize: %v", err)
+	}
+
+	key := kms.GetCurrentKey()
+	if key == nil {
+		t.Fatal("no current key")
+	}
+
+	// XID is exactly 20 characters
+	if len(key.ID) != 20 {
+		t.Errorf("key.ID length = %d, want 20", len(key.ID))
+	}
+
+	// Must be parseable as XID
+	parsed, err := xid.FromString(key.ID)
+	if err != nil {
+		t.Fatalf("xid.FromString(%q) failed: %v", key.ID, err)
+	}
+
+	// Round-trip: parsed XID string should match
+	if parsed.String() != key.ID {
+		t.Errorf("XID round-trip mismatch: %q != %q", parsed.String(), key.ID)
+	}
+
+	// Rotate and verify the new key also has valid XID
+	newKey, err := kms.RotateKey(ctx)
+	if err != nil {
+		t.Fatalf("RotateKey: %v", err)
+	}
+	if len(newKey.ID) != 20 {
+		t.Errorf("rotated key.ID length = %d, want 20", len(newKey.ID))
+	}
+	if _, err := xid.FromString(newKey.ID); err != nil {
+		t.Errorf("rotated key ID not valid XID: %v", err)
+	}
+}
+
+// TestMasterKeyRotation verifies that encrypting data with MasterKey A, then
+// attempting to access with MasterKey B (without re-encryption) fails.
+// True MasterKey rotation requires re-encrypting all KMS key material.
+func TestMasterKeyRotation(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+	ctx := context.Background()
+
+	// Init with MasterKey A
+	mkA := testMasterKey(t)
+	store1, err := storage.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open db: %v", err)
+	}
+	kmsA, err := NewKMS(ctx, store1, nil, mkA)
+	if err != nil {
+		t.Fatalf("NewKMS(A): %v", err)
+	}
+	if err := kmsA.Initialize(ctx); err != nil {
+		t.Fatalf("Initialize(A): %v", err)
+	}
+
+	// Encrypt some data
+	plaintext := []byte("sensitive data for rotation test")
+	ciphertext, err := kmsA.Encrypt(ctx, plaintext)
+	if err != nil {
+		t.Fatalf("Encrypt: %v", err)
+	}
+
+	// Verify decryption works with A
+	decrypted, err := kmsA.Decrypt(ctx, ciphertext)
+	if err != nil {
+		t.Fatalf("Decrypt with A: %v", err)
+	}
+	if !bytes.Equal(decrypted, plaintext) {
+		t.Fatal("Decrypt mismatch with original MasterKey")
+	}
+	store1.Close()
+
+	// Attempt to open with MasterKey B — should fail (key material can't be decrypted)
+	mkB := testMasterKey(t)
+	store2, err := storage.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open db (2): %v", err)
+	}
+	defer store2.Close()
+
+	_, err = NewKMS(ctx, store2, nil, mkB)
+	if err == nil {
+		t.Fatal("NewKMS with rotated MasterKey B should fail without re-encryption")
+	}
+
+	// Reopen with original MasterKey A — should still work
+	store3, err := storage.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open db (3): %v", err)
+	}
+	defer store3.Close()
+
+	kmsA2, err := NewKMS(ctx, store3, nil, mkA)
+	if err != nil {
+		t.Fatalf("NewKMS(A again): %v", err)
+	}
+	decrypted2, err := kmsA2.Decrypt(ctx, ciphertext)
+	if err != nil {
+		t.Fatalf("Decrypt with A after failed B: %v", err)
+	}
+	if !bytes.Equal(decrypted2, plaintext) {
+		t.Error("Decrypt mismatch after reopening with original MasterKey")
+	}
+}
+
+// TestRawDBSecurityOpaque opens the SQLite file directly and verifies that
+// the key_material_encrypted column contains opaque (encrypted) data, not
+// the raw AES key bytes.
+func TestRawDBSecurityOpaque(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+	ctx := context.Background()
+
+	mk := testMasterKey(t)
+	store1, err := storage.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open db: %v", err)
+	}
+	kms1, err := NewKMS(ctx, store1, nil, mk)
+	if err != nil {
+		t.Fatalf("NewKMS: %v", err)
+	}
+	if err := kms1.Initialize(ctx); err != nil {
+		t.Fatalf("Initialize: %v", err)
+	}
+	inMemoryKey := kms1.GetCurrentKey().KeyMaterial
+	store1.Close()
+
+	// Open the raw SQLite file directly (no KMS, no MasterKey — just raw SQL)
+	rawDB, err := storage.Open(dbPath)
+	if err != nil {
+		t.Fatalf("raw open: %v", err)
+	}
+	defer rawDB.Close()
+
+	var rawMaterial []byte
+	err = rawDB.Conn().QueryRowContext(ctx,
+		"SELECT key_material_encrypted FROM encryption_keys LIMIT 1",
+	).Scan(&rawMaterial)
+	if err != nil {
+		t.Fatalf("raw read key_material_encrypted: %v", err)
+	}
+
+	// Must NOT be the raw 32-byte key
+	if bytes.Equal(rawMaterial, inMemoryKey) {
+		t.Fatal("SECURITY VIOLATION: raw DB contains plaintext key material")
+	}
+
+	// Must be opaque (longer than 32 bytes due to nonce + tag)
+	if len(rawMaterial) <= 32 {
+		t.Errorf("stored material is only %d bytes — expected nonce+ciphertext+tag > 32", len(rawMaterial))
 	}
 }

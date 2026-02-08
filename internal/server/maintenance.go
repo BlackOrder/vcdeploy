@@ -102,9 +102,12 @@ func (s *MasterServer) handleMaintenanceToggle(w http.ResponseWriter, r *http.Re
 				"maintenance": true,
 			})
 		} else {
-			// Exit maintenance: clear flag
+			// Exit maintenance: refresh cache from DB (import may have changed it), then clear flag
+			if err := s.store.Reload(r.Context()); err != nil {
+				s.logger.Error("failed to reload store after maintenance exit", zap.Error(err))
+			}
 			s.maintenanceMode.Store(false)
-			s.logger.Info("maintenance mode disabled")
+			s.logger.Info("maintenance mode disabled, store reloaded")
 
 			s.logAudit(r, "update", "system", "Exited maintenance mode", "success")
 			s.jsonResponse(w, map[string]interface{}{
