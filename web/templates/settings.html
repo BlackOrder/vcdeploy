@@ -267,11 +267,11 @@
                             <th class="px-6 py-3 text-left text-xs font-medium text-dark-muted uppercase tracking-wider">User</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-dark-muted uppercase tracking-wider">Role</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-dark-muted uppercase tracking-wider">2FA</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-dark-muted uppercase tracking-wider">Last Login</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-dark-muted uppercase tracking-wider">Created</th>
                             <th class="px-6 py-3 text-right text-xs font-medium text-dark-muted uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-dark-border" hx-get="/api/v1/users" hx-trigger="load" hx-swap="innerHTML">
+                    <tbody id="users-table-body" class="divide-y divide-dark-border">
                         <tr>
                             <td colspan="5" class="px-6 py-4 text-center text-dark-muted">Loading users...</td>
                         </tr>
@@ -295,7 +295,7 @@
                 </svg>
             </button>
         </div>
-        <form hx-post="/api/v1/users" hx-target="#panel-users tbody" hx-swap="innerHTML" class="p-6 space-y-4">
+        <form id="add-user-form" class="p-6 space-y-4">
             <div>
                 <label class="block text-sm font-medium text-dark-muted mb-1">Username</label>
                 <input type="text" name="username" required
@@ -319,6 +319,7 @@
                     <option value="admin">Admin</option>
                 </select>
             </div>
+            <div id="add-user-error" class="hidden text-red-400 text-sm"></div>
             <div class="flex justify-end space-x-3 pt-4">
                 <button type="button" onclick="document.getElementById('add-user-modal').classList.add('hidden')"
                     class="px-4 py-2 text-sm font-medium text-dark-text hover:text-white border border-dark-border rounded-md">
@@ -330,6 +331,50 @@
                 </button>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- Admin Disable 2FA Modal -->
+<div id="admin-disable-2fa-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-dark-card border border-dark-border rounded-lg max-w-md w-full mx-4">
+        <div class="px-6 py-4 border-b border-dark-border flex items-center justify-between">
+            <h3 class="text-lg font-medium text-red-400">Disable 2FA for User</h3>
+            <button onclick="closeAdminDisable2FAModal()" class="text-dark-muted hover:text-white">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        <div class="p-6 space-y-4">
+            <div class="bg-yellow-900/30 border border-yellow-500/50 rounded-lg p-4">
+                <p class="text-sm text-yellow-200">You are about to disable 2FA for <strong id="disable-2fa-username"></strong>.</p>
+                <p class="text-sm text-yellow-200 mt-1">This should only be done if the user has lost access to their authenticator and recovery codes.</p>
+            </div>
+            <input type="hidden" id="disable-2fa-target-username">
+            <div>
+                <label class="block text-sm font-medium text-dark-muted mb-1">Reason (required):</label>
+                <textarea id="disable-2fa-reason" required minlength="10" rows="2"
+                    class="w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text"
+                    placeholder="e.g., User lost phone, verified via video call"></textarea>
+            </div>
+            {{if .CurrentUserTOTPEnabled}}
+            <div>
+                <label class="block text-sm font-medium text-dark-muted mb-1">Your 2FA Code:</label>
+                <input type="text" id="admin-totp-code" pattern="[0-9]{6}" maxlength="6"
+                    class="w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text text-center text-xl tracking-widest font-mono"
+                    placeholder="000000" autocomplete="off">
+            </div>
+            {{end}}
+            <div id="admin-disable-error" class="hidden text-red-400 text-sm"></div>
+            <div class="flex space-x-3">
+                <button onclick="closeAdminDisable2FAModal()" class="flex-1 px-4 py-2 text-sm font-medium text-dark-text hover:text-white border border-dark-border rounded-md">
+                    Cancel
+                </button>
+                <button onclick="adminDisable2FA()" class="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-md">
+                    Disable 2FA
+                </button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -348,6 +393,185 @@ function showTab(tabName) {
     const tab = document.getElementById('tab-' + tabName);
     tab.classList.add('border-accent-500', 'text-white');
     tab.classList.remove('border-transparent', 'text-dark-muted');
+    
+    // Load users when switching to users tab
+    if (tabName === 'users') {
+        loadUsers();
+    }
 }
+
+// Load users on page load when users tab is visible or when clicked
+async function loadUsers() {
+    const tbody = document.getElementById('users-table-body');
+    try {
+        const resp = await fetch('/api/v1/users');
+        const data = await resp.json();
+        
+        if (!resp.ok) throw new Error(data.error || 'Failed to load users');
+        
+        const users = data.items || [];
+        if (users.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-dark-muted">No users found</td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = users.map(u => `
+            <tr>
+                <td class="px-6 py-4">
+                    <div class="text-sm font-medium text-dark-text">${escapeHtml(u.username)}</div>
+                    <div class="text-sm text-dark-muted">${escapeHtml(u.email || '')}</div>
+                </td>
+                <td class="px-6 py-4">
+                    <span class="px-2 py-1 text-xs font-medium rounded-full ${getRoleBadgeClass(u.role)}">${escapeHtml(u.role)}</span>
+                </td>
+                <td class="px-6 py-4">
+                    ${u.totpEnabled 
+                        ? '<span class="inline-flex items-center text-green-400 text-sm"><svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>Enabled</span>'
+                        : '<span class="text-dark-muted text-sm">Disabled</span>'
+                    }
+                </td>
+                <td class="px-6 py-4 text-sm text-dark-muted">${formatDate(u.createdAt)}</td>
+                <td class="px-6 py-4 text-right space-x-2">
+                    ${u.totpEnabled ? `<button onclick="showAdminDisable2FAModal('${escapeHtml(u.username)}')" class="text-yellow-400 hover:text-yellow-300 text-sm">Disable 2FA</button>` : ''}
+                    <button onclick="deleteUser(${u.id}, '${escapeHtml(u.username)}')" class="text-red-400 hover:text-red-300 text-sm">Delete</button>
+                </td>
+            </tr>
+        `).join('');
+    } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-red-400">Error: ${escapeHtml(err.message)}</td></tr>`;
+    }
+}
+
+function getRoleBadgeClass(role) {
+    switch (role) {
+        case 'admin': return 'bg-red-900/50 text-red-400';
+        case 'deployer': return 'bg-blue-900/50 text-blue-400';
+        default: return 'bg-dark-border text-dark-muted';
+    }
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+function formatDate(dateStr) {
+    if (!dateStr) return '-';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+}
+
+// Add user form
+document.getElementById('add-user-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const errorDiv = document.getElementById('add-user-error');
+    
+    const data = {
+        username: form.username.value,
+        email: form.email.value,
+        password: form.password.value,
+        role: form.role.value
+    };
+    
+    try {
+        const resp = await fetch('/api/v1/users', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        const result = await resp.json();
+        
+        if (!resp.ok) {
+            errorDiv.textContent = result.error || 'Failed to create user';
+            errorDiv.classList.remove('hidden');
+            return;
+        }
+        
+        document.getElementById('add-user-modal').classList.add('hidden');
+        form.reset();
+        errorDiv.classList.add('hidden');
+        loadUsers();
+    } catch (err) {
+        errorDiv.textContent = 'Error: ' + err.message;
+        errorDiv.classList.remove('hidden');
+    }
+};
+
+async function deleteUser(id, username) {
+    if (!confirm(`Are you sure you want to delete user "${username}"?`)) return;
+    
+    try {
+        const resp = await fetch(`/api/v1/users/${id}`, { method: 'DELETE' });
+        if (!resp.ok) {
+            const data = await resp.json();
+            alert(data.error || 'Failed to delete user');
+            return;
+        }
+        loadUsers();
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+// Admin Disable 2FA
+function showAdminDisable2FAModal(username) {
+    document.getElementById('disable-2fa-username').textContent = username;
+    document.getElementById('disable-2fa-target-username').value = username;
+    document.getElementById('disable-2fa-reason').value = '';
+    const totpInput = document.getElementById('admin-totp-code');
+    if (totpInput) totpInput.value = '';
+    document.getElementById('admin-disable-error').classList.add('hidden');
+    document.getElementById('admin-disable-2fa-modal').classList.remove('hidden');
+}
+
+function closeAdminDisable2FAModal() {
+    document.getElementById('admin-disable-2fa-modal').classList.add('hidden');
+}
+
+async function adminDisable2FA() {
+    const username = document.getElementById('disable-2fa-target-username').value;
+    const reason = document.getElementById('disable-2fa-reason').value;
+    const totpInput = document.getElementById('admin-totp-code');
+    const totpCode = totpInput ? totpInput.value : '';
+    const errorDiv = document.getElementById('admin-disable-error');
+    
+    if (reason.length < 10) {
+        errorDiv.textContent = 'Reason must be at least 10 characters';
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+    
+    try {
+        const resp = await fetch('/api/v1/admin/totp/disable', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, reason, totp_code: totpCode })
+        });
+        const data = await resp.json();
+        
+        if (!resp.ok) {
+            errorDiv.textContent = data.error || 'Failed to disable 2FA';
+            errorDiv.classList.remove('hidden');
+            return;
+        }
+        
+        closeAdminDisable2FAModal();
+        loadUsers();
+    } catch (err) {
+        errorDiv.textContent = 'Error: ' + err.message;
+        errorDiv.classList.remove('hidden');
+    }
+}
+
+// Load users when page loads if users tab starts visible
+document.addEventListener('DOMContentLoaded', function() {
+    // Check if users tab is visible (might be opened via URL hash or similar)
+    if (!document.getElementById('panel-users').classList.contains('hidden')) {
+        loadUsers();
+    }
+});
 </script>
 {{end}}

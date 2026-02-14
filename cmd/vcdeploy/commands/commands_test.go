@@ -18,6 +18,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func strPtr(s string) *string { return &s }
+
 // setupTestDB creates a test database in a temporary directory.
 func setupTestDB(t *testing.T) (storage.Store, func()) {
 	t.Helper()
@@ -118,26 +120,27 @@ func TestProjectDBOperations(t *testing.T) {
 
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
+	ctx := context.Background()
 
 	// Test CreateProject
 	project := &storage.Project{
 		Name:       "test-project",
 		Repository: "https://github.com/example/repo",
 		Branch:     "main",
-		Type:       "nodejs",
+		TypeID:     strPtr("nodejs"),
 		DeployPath: "/var/www/app",
 	}
 
-	if err := db.CreateProject(project); err != nil {
+	if err := db.CreateProject(ctx, project); err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 
-	if project.ID == 0 {
+	if project.ID == "" {
 		t.Error("CreateProject() did not set project ID")
 	}
 
 	// Test GetProjectByName
-	retrieved, err := db.GetProjectByName(context.Background(), project.Name)
+	retrieved, err := db.GetProjectByName(ctx, project.Name)
 	if err != nil {
 		t.Fatalf("GetProjectByName() error = %v", err)
 	}
@@ -150,7 +153,7 @@ func TestProjectDBOperations(t *testing.T) {
 	}
 
 	// Test ListProjects
-	projects, err := db.ListProjects()
+	projects, err := db.ListProjects(ctx)
 	if err != nil {
 		t.Fatalf("ListProjects() error = %v", err)
 	}
@@ -160,7 +163,7 @@ func TestProjectDBOperations(t *testing.T) {
 	}
 
 	// Test DeleteProject
-	if err := db.DeleteProject(project.Name); err != nil {
+	if err := db.DeleteProject(ctx, project.Name); err != nil {
 		t.Fatalf("DeleteProject() error = %v", err)
 	}
 
@@ -176,6 +179,7 @@ func TestProjectTypeDBOperations(t *testing.T) {
 
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
+	ctx := context.Background()
 
 	// Test CreateProjectType
 	pt := &storage.ProjectType{
@@ -184,12 +188,12 @@ func TestProjectTypeDBOperations(t *testing.T) {
 		BuildCmd:    "npm install && npm run build",
 	}
 
-	if err := db.CreateProjectType(pt); err != nil {
+	if err := db.CreateProjectType(ctx, pt); err != nil {
 		t.Fatalf("CreateProjectType() error = %v", err)
 	}
 
 	// Test GetProjectTypeByName
-	retrieved, err := db.GetProjectTypeByName(pt.Name)
+	retrieved, err := db.GetProjectTypeByName(ctx, pt.Name)
 	if err != nil {
 		t.Fatalf("GetProjectTypeByName() error = %v", err)
 	}
@@ -202,21 +206,21 @@ func TestProjectTypeDBOperations(t *testing.T) {
 	}
 
 	// Test ListProjectTypes
-	types, err := db.ListProjectTypes()
+	types, err := db.ListProjectTypes(ctx)
 	if err != nil {
 		t.Fatalf("ListProjectTypes() error = %v", err)
 	}
 
-	if len(types) != 1 {
-		t.Errorf("ListProjectTypes() returned %d types, want 1", len(types))
+	if len(types) != 2 {
+		t.Errorf("ListProjectTypes() returned %d types, want 2 (1 custom + 1 seeded generic)", len(types))
 	}
 
 	// Test DeleteProjectType
-	if err := db.DeleteProjectType(pt.Name); err != nil {
+	if err := db.DeleteProjectType(ctx, pt.Name); err != nil {
 		t.Fatalf("DeleteProjectType() error = %v", err)
 	}
 
-	deleted, _ := db.GetProjectTypeByName(pt.Name)
+	deleted, _ := db.GetProjectTypeByName(ctx, pt.Name)
 	if deleted != nil {
 		t.Error("DeleteProjectType() didn't delete type")
 	}
@@ -240,7 +244,7 @@ func TestSecretDBOperations(t *testing.T) {
 	}
 
 	// Test ListSecrets
-	secrets, err := db.ListSecrets(scope)
+	secrets, err := db.ListSecrets(ctx, scope)
 	if err != nil {
 		t.Fatalf("ListSecrets() error = %v", err)
 	}
@@ -250,11 +254,11 @@ func TestSecretDBOperations(t *testing.T) {
 	}
 
 	// Test DeleteSecret
-	if err := db.DeleteSecret(scope, key); err != nil {
+	if err := db.DeleteSecret(ctx, scope, key); err != nil {
 		t.Fatalf("DeleteSecret() error = %v", err)
 	}
 
-	secretsAfterDelete, _ := db.ListSecrets(scope)
+	secretsAfterDelete, _ := db.ListSecrets(ctx, scope)
 	if len(secretsAfterDelete) != 0 {
 		t.Error("DeleteSecret() didn't delete secret")
 	}
@@ -301,7 +305,7 @@ func TestProjectCmdStructure(t *testing.T) {
 		subcommands[cmd.Name()] = true
 	}
 
-	expectedCommands := []string{"list", "add", "edit", "delete", "validate", "deploy"}
+	expectedCommands := []string{"list", "create", "update", "delete", "validate"}
 	for _, name := range expectedCommands {
 		if !subcommands[name] {
 			t.Errorf("expected project subcommand %q not found", name)
@@ -395,176 +399,55 @@ func TestGlobalFlags(t *testing.T) {
 	}
 }
 
-// TestEditProjectFlags tests the edit project command has expected flags.
-func TestEditProjectFlags(t *testing.T) {
+// TestUpdateProjectFlags tests the update project command has expected flags.
+func TestUpdateProjectFlags(t *testing.T) {
 	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
-	// Find the edit command under project
-	var editCmd *cobra.Command
+	// Find the update command under project
+	var updateCmd *cobra.Command
 	for _, cmd := range projectCmd.Commands() {
-		if cmd.Name() == "edit" {
-			editCmd = cmd
+		if cmd.Name() == "update" {
+			updateCmd = cmd
 			break
 		}
 	}
 
-	if editCmd == nil {
-		t.Fatal("project edit command not found")
+	if updateCmd == nil {
+		t.Fatal("project update command not found")
 	}
 
 	expectedFlags := []string{"repo", "branch", "path", "type"}
 	for _, name := range expectedFlags {
-		flag := editCmd.Flags().Lookup(name)
+		flag := updateCmd.Flags().Lookup(name)
 		if flag == nil {
-			t.Errorf("expected flag --%s not found on project edit", name)
+			t.Errorf("expected flag --%s not found on project update", name)
 		}
 	}
 }
 
-// TestDeployFlags tests the deploy command has expected flags.
-func TestDeployFlags(t *testing.T) {
+// TestDeployCreateFlags tests the deploy create command has expected flags.
+func TestDeployCreateFlags(t *testing.T) {
 	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
-	// Find the deploy command under project
-	var deployCmd *cobra.Command
-	for _, cmd := range projectCmd.Commands() {
-		if cmd.Name() == "deploy" {
-			deployCmd = cmd
+	// Find the create command under deploy
+	var createCmd *cobra.Command
+	for _, cmd := range deploymentCmd.Commands() {
+		if cmd.Name() == "create" {
+			createCmd = cmd
 			break
 		}
 	}
 
-	if deployCmd == nil {
-		t.Fatal("project deploy command not found")
+	if createCmd == nil {
+		t.Fatal("deploy create command not found")
 	}
 
-	expectedFlags := []string{"target", "dry-run", "force"}
+	expectedFlags := []string{"project", "target", "dry-run", "force", "branch", "follow"}
 	for _, name := range expectedFlags {
-		flag := deployCmd.Flags().Lookup(name)
+		flag := createCmd.Flags().Lookup(name)
 		if flag == nil {
-			t.Errorf("expected flag --%s not found on project deploy", name)
+			t.Errorf("expected flag --%s not found on deploy create", name)
 		}
-	}
-}
-
-// TestShowCommandStructure tests the show command has expected subcommands.
-func TestShowCommandStructure(t *testing.T) {
-	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
-
-	// Verify showCmd exists
-	if showCmd == nil {
-		t.Fatal("show command not initialized")
-	}
-
-	// Check subcommands are present
-	expectedSubcmds := map[string]int{
-		"project":    1, // requires 1 arg
-		"agent":      1, // requires 1 arg
-		"deployment": 1, // requires 1 arg
-	}
-
-	for name, expectedArgs := range expectedSubcmds {
-		var subCmd *cobra.Command
-		for _, cmd := range showCmd.Commands() {
-			if cmd.Name() == name {
-				subCmd = cmd
-				break
-			}
-		}
-
-		if subCmd == nil {
-			t.Errorf("show subcommand %q not found", name)
-			continue
-		}
-
-		// Check args validation
-		if err := subCmd.Args(subCmd, []string{}); err == nil && expectedArgs > 0 {
-			t.Errorf("show %s should require %d arguments", name, expectedArgs)
-		}
-	}
-}
-
-// TestShowProjectCommand tests the show project command.
-func TestShowProjectCommand(t *testing.T) {
-	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
-
-	var projectShowCmd *cobra.Command
-	for _, cmd := range showCmd.Commands() {
-		if cmd.Name() == "project" {
-			projectShowCmd = cmd
-			break
-		}
-	}
-
-	if projectShowCmd == nil {
-		t.Fatal("show project command not found")
-	}
-
-	// Test args validation - should fail with no args
-	if err := projectShowCmd.Args(projectShowCmd, []string{}); err == nil {
-		t.Error("show project should require exactly 1 argument")
-	}
-
-	// Test args validation - should fail with too many args
-	if err := projectShowCmd.Args(projectShowCmd, []string{"arg1", "arg2"}); err == nil {
-		t.Error("show project should fail with more than 1 argument")
-	}
-
-	// Test args validation - should succeed with exactly 1 arg
-	if err := projectShowCmd.Args(projectShowCmd, []string{"my-project"}); err != nil {
-		t.Errorf("show project should accept 1 argument, got error: %v", err)
-	}
-}
-
-// TestShowAgentCommand tests the show agent command.
-func TestShowAgentCommand(t *testing.T) {
-	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
-
-	var agentShowCmd *cobra.Command
-	for _, cmd := range showCmd.Commands() {
-		if cmd.Name() == "agent" {
-			agentShowCmd = cmd
-			break
-		}
-	}
-
-	if agentShowCmd == nil {
-		t.Fatal("show agent command not found")
-	}
-
-	// Test args validation
-	if err := agentShowCmd.Args(agentShowCmd, []string{}); err == nil {
-		t.Error("show agent should require exactly 1 argument")
-	}
-
-	if err := agentShowCmd.Args(agentShowCmd, []string{"agent-123"}); err != nil {
-		t.Errorf("show agent should accept 1 argument, got error: %v", err)
-	}
-}
-
-// TestShowDeploymentCommand tests the show deployment command.
-func TestShowDeploymentCommand(t *testing.T) {
-	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
-
-	var deploymentShowCmd *cobra.Command
-	for _, cmd := range showCmd.Commands() {
-		if cmd.Name() == "deployment" {
-			deploymentShowCmd = cmd
-			break
-		}
-	}
-
-	if deploymentShowCmd == nil {
-		t.Fatal("show deployment command not found")
-	}
-
-	// Test args validation
-	if err := deploymentShowCmd.Args(deploymentShowCmd, []string{}); err == nil {
-		t.Error("show deployment should require exactly 1 argument")
-	}
-
-	if err := deploymentShowCmd.Args(deploymentShowCmd, []string{"deploy-456"}); err != nil {
-		t.Errorf("show deployment should accept 1 argument, got error: %v", err)
 	}
 }
 
@@ -660,25 +543,19 @@ func TestAuditExportFlags(t *testing.T) {
 	}
 }
 
-// TestRootCommandHasShowAndAudit tests that root command has show and audit.
-func TestRootCommandHasShowAndAudit(t *testing.T) {
+// TestRootCommandHasAudit tests that root command has the audit command.
+func TestRootCommandHasAudit(t *testing.T) {
 	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
-	foundShow := false
 	foundAudit := false
 
 	for _, cmd := range rootCmd.Commands() {
-		switch cmd.Name() {
-		case "show":
-			foundShow = true
-		case "audit":
+		if cmd.Name() == "audit" {
 			foundAudit = true
+			break
 		}
 	}
 
-	if !foundShow {
-		t.Error("root command should have 'show' subcommand")
-	}
 	if !foundAudit {
 		t.Error("root command should have 'audit' subcommand")
 	}
@@ -722,8 +599,7 @@ func mockAPIServer(t *testing.T) *httptest.Server {
 
 	mux.HandleFunc("/api/v1/users/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodDelete {
-			w.WriteHeader(http.StatusOK)
-			fmt.Fprint(w, `{"status":"deleted"}`)
+			w.WriteHeader(http.StatusNoContent)
 		}
 	})
 
@@ -809,7 +685,7 @@ func mockAPIServer(t *testing.T) *httptest.Server {
 	mux.HandleFunc("/api/v1/config", func(w http.ResponseWriter, r *http.Request) {
 		config := map[string]interface{}{
 			"server": map[string]interface{}{
-				"port": 8080,
+				"port": 9000,
 				"host": "0.0.0.0",
 			},
 			"security": map[string]interface{}{
@@ -820,7 +696,7 @@ func mockAPIServer(t *testing.T) *httptest.Server {
 	})
 
 	// API key endpoints
-	mux.HandleFunc("/api/v1/apikeys", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/api-keys", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			keys := []map[string]interface{}{
@@ -838,7 +714,7 @@ func mockAPIServer(t *testing.T) *httptest.Server {
 		}
 	})
 
-	mux.HandleFunc("/api/v1/apikeys/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/api-keys/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodDelete {
 			w.WriteHeader(http.StatusOK)
 		}
@@ -1073,8 +949,8 @@ func TestE2E_ConfigShowCommand(t *testing.T) {
 	if !strings.Contains(stdout, "server") {
 		t.Errorf("expected 'server' in output, got: %s", stdout)
 	}
-	if !strings.Contains(stdout, "8080") {
-		t.Errorf("expected '8080' in output, got: %s", stdout)
+	if !strings.Contains(stdout, "9000") {
+		t.Errorf("expected '9000' in output, got: %s", stdout)
 	}
 }
 
@@ -1084,11 +960,11 @@ func TestE2E_APIKeyListCommand(t *testing.T) {
 	defer server.Close()
 
 	cmd := &cobra.Command{Use: "vcdeploy"}
-	apikeyCmdTest := &cobra.Command{
-		Use:   "apikey",
+	apiKeyCmdTest := &cobra.Command{
+		Use:   "api-key",
 		Short: "API key management",
 	}
-	apikeyCmdTest.AddCommand(&cobra.Command{
+	apiKeyCmdTest.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List all API keys",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -1096,7 +972,7 @@ func TestE2E_APIKeyListCommand(t *testing.T) {
 			token, _ := cmd.Flags().GetString("token")
 
 			client := &http.Client{Timeout: 10 * time.Second}
-			req, err := http.NewRequest("GET", masterURL+"/api/v1/apikeys", http.NoBody)
+			req, err := http.NewRequest("GET", masterURL+"/api/v1/api-keys", http.NoBody)
 			if err != nil {
 				return err
 			}
@@ -1113,11 +989,11 @@ func TestE2E_APIKeyListCommand(t *testing.T) {
 			return nil
 		},
 	})
-	cmd.AddCommand(apikeyCmdTest)
+	cmd.AddCommand(apiKeyCmdTest)
 	cmd.PersistentFlags().String("master", server.URL, "Master server URL")
 	cmd.PersistentFlags().String("token", "test-token", "API token")
 
-	stdout, _, err := executeCommand(cmd, "apikey", "list", "--master", server.URL, "--token", "test-token")
+	stdout, _, err := executeCommand(cmd, "api-key", "list", "--master", server.URL, "--token", "test-token")
 	if err != nil {
 		t.Fatalf("apikey list failed: %v", err)
 	}
@@ -1133,8 +1009,8 @@ func TestE2E_APIKeyCreateCommand(t *testing.T) {
 	defer server.Close()
 
 	cmd := &cobra.Command{Use: "vcdeploy"}
-	apikeyCmdTest := &cobra.Command{
-		Use:   "apikey",
+	apiKeyCmdTest := &cobra.Command{
+		Use:   "api-key",
 		Short: "API key management",
 	}
 	createCmd := &cobra.Command{
@@ -1149,7 +1025,7 @@ func TestE2E_APIKeyCreateCommand(t *testing.T) {
 			client := &http.Client{Timeout: 10 * time.Second}
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			req, err := http.NewRequestWithContext(ctx, "POST", masterURL+"/api/v1/apikeys", bytes.NewReader(data))
+			req, err := http.NewRequestWithContext(ctx, "POST", masterURL+"/api/v1/api-keys", bytes.NewReader(data))
 			if err != nil {
 				return err
 			}
@@ -1171,12 +1047,12 @@ func TestE2E_APIKeyCreateCommand(t *testing.T) {
 			return nil
 		},
 	}
-	apikeyCmdTest.AddCommand(createCmd)
-	cmd.AddCommand(apikeyCmdTest)
+	apiKeyCmdTest.AddCommand(createCmd)
+	cmd.AddCommand(apiKeyCmdTest)
 	cmd.PersistentFlags().String("master", server.URL, "Master server URL")
 	cmd.PersistentFlags().String("token", "test-token", "API token")
 
-	stdout, _, err := executeCommand(cmd, "apikey", "create", "test-key", "--master", server.URL, "--token", "test-token")
+	stdout, _, err := executeCommand(cmd, "api-key", "create", "test-key", "--master", server.URL, "--token", "test-token")
 	if err != nil {
 		t.Fatalf("apikey create failed: %v", err)
 	}
@@ -1502,5 +1378,232 @@ func TestE2E_ConnectionTimeout(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "connection") {
 		t.Errorf("expected connection error, got: %v", err)
+	}
+}
+
+// =============================================================================
+// CLI Command Structure Tests for Certificates, Credentials, Provision, Recipes
+// =============================================================================
+
+// TestCertsCmdStructure tests the certs command structure.
+func TestCertsCmdStructure(t *testing.T) {
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
+
+	if certCmd == nil {
+		t.Fatal("certCmd is nil")
+	}
+
+	// Check subcommands exist
+	subcommands := make(map[string]bool)
+	for _, cmd := range certCmd.Commands() {
+		subcommands[cmd.Name()] = true
+	}
+
+	expectedCommands := []string{"list", "show", "revoke", "ca", "audit"}
+	for _, name := range expectedCommands {
+		if !subcommands[name] {
+			t.Errorf("expected certs subcommand %q not found", name)
+		}
+	}
+}
+
+// TestCredentialsCmdStructure tests the credentials command structure.
+func TestCredentialsCmdStructure(t *testing.T) {
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
+
+	if credentialCmd == nil {
+		t.Fatal("credentialCmd is nil")
+	}
+
+	// Check subcommands exist
+	subcommands := make(map[string]bool)
+	for _, cmd := range credentialCmd.Commands() {
+		subcommands[cmd.Name()] = true
+	}
+
+	expectedCommands := []string{"list", "create", "delete", "test"}
+	for _, name := range expectedCommands {
+		if !subcommands[name] {
+			t.Errorf("expected credentials subcommand %q not found", name)
+		}
+	}
+}
+
+// TestRecipeCmdStructure tests the recipe command structure.
+func TestRecipeCmdStructure(t *testing.T) {
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
+
+	if recipeCmd == nil {
+		t.Fatal("recipeCmd is nil")
+	}
+
+	// Check subcommands exist
+	subcommands := make(map[string]bool)
+	for _, cmd := range recipeCmd.Commands() {
+		subcommands[cmd.Name()] = true
+	}
+
+	// recipeCmd has import-yaml subcommand
+	expectedCommands := []string{"import-yaml"}
+	for _, name := range expectedCommands {
+		if !subcommands[name] {
+			t.Errorf("expected recipe subcommand %q not found", name)
+		}
+	}
+}
+
+// TestSSHKeyCmdStructure tests the ssh-key command structure.
+func TestSSHKeyCmdStructure(t *testing.T) {
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
+
+	if sshKeyCmd == nil {
+		t.Fatal("sshKeyCmd is nil")
+	}
+
+	// Check subcommands exist
+	subcommands := make(map[string]bool)
+	for _, cmd := range sshKeyCmd.Commands() {
+		subcommands[cmd.Name()] = true
+	}
+
+	expectedCommands := []string{"list", "generate", "delete"}
+	for _, name := range expectedCommands {
+		if !subcommands[name] {
+			t.Errorf("expected ssh-key subcommand %q not found", name)
+		}
+	}
+}
+
+// TestCertsAddFlags tests the certs add command flags.
+func TestCertsAddFlags(t *testing.T) {
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
+
+	var showCmd *cobra.Command
+	for _, cmd := range certCmd.Commands() {
+		if cmd.Name() == "show" {
+			showCmd = cmd
+			break
+		}
+	}
+
+	if showCmd == nil {
+		t.Fatal("certs show command not found")
+	}
+
+	// Test args validation - requires exactly 1 arg (agent-id)
+	if err := showCmd.Args(showCmd, []string{}); err == nil {
+		t.Error("certs show should require exactly 1 argument")
+	}
+
+	if err := showCmd.Args(showCmd, []string{"agent-001"}); err != nil {
+		t.Errorf("certs show should accept 1 argument, got error: %v", err)
+	}
+}
+
+// TestCredentialsCreateFlags tests the credentials create command flags.
+func TestCredentialsCreateFlags(t *testing.T) {
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
+
+	var createCmd *cobra.Command
+	for _, cmd := range credentialCmd.Commands() {
+		if cmd.Name() == "create" {
+			createCmd = cmd
+			break
+		}
+	}
+
+	if createCmd == nil {
+		t.Fatal("credentials create command not found")
+	}
+
+	// Check required flags exist
+	nameFlag := createCmd.Flags().Lookup("name")
+	if nameFlag == nil {
+		t.Error("expected flag --name not found on credentials create")
+	}
+
+	typeFlag := createCmd.Flags().Lookup("type")
+	if typeFlag == nil {
+		t.Error("expected flag --type not found on credentials create")
+	}
+
+	urlPatternFlag := createCmd.Flags().Lookup("url-pattern")
+	if urlPatternFlag == nil {
+		t.Error("expected flag --url-pattern not found on credentials create")
+	}
+}
+
+// TestRecipesImportYAMLFlags tests the recipes import-yaml command flags.
+func TestRecipeImportYAMLFlags(t *testing.T) {
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
+
+	var importCmd *cobra.Command
+	for _, cmd := range recipeCmd.Commands() {
+		if cmd.Name() == "import-yaml" {
+			importCmd = cmd
+			break
+		}
+	}
+
+	if importCmd == nil {
+		t.Fatal("recipe import-yaml command not found")
+	}
+
+	// Check flags exist
+	projectIDFlag := importCmd.Flags().Lookup("project-id")
+	if projectIDFlag == nil {
+		t.Error("expected flag --project-id not found on recipe import-yaml")
+	}
+
+	nameFlag := importCmd.Flags().Lookup("name")
+	if nameFlag == nil {
+		t.Error("expected flag --name not found on recipes import-yaml")
+	}
+
+	versionFlag := importCmd.Flags().Lookup("version")
+	if versionFlag == nil {
+		t.Error("expected flag --version not found on recipes import-yaml")
+	}
+
+	previewFlag := importCmd.Flags().Lookup("preview")
+	if previewFlag == nil {
+		t.Error("expected flag --preview not found on recipes import-yaml")
+	}
+
+	// Test args validation - requires exactly 1 arg (yaml file)
+	if err := importCmd.Args(importCmd, []string{}); err == nil {
+		t.Error("recipes import-yaml should require exactly 1 argument")
+	}
+
+	if err := importCmd.Args(importCmd, []string{"project.yaml"}); err != nil {
+		t.Errorf("recipes import-yaml should accept 1 argument, got error: %v", err)
+	}
+}
+
+// TestSSHKeyGenerateFlags tests the ssh-key generate command flags.
+func TestSSHKeyGenerateFlags(t *testing.T) {
+	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
+
+	var genCmd *cobra.Command
+	for _, cmd := range sshKeyCmd.Commands() {
+		if cmd.Name() == "generate" {
+			genCmd = cmd
+			break
+		}
+	}
+
+	if genCmd == nil {
+		t.Fatal("ssh-key generate command not found")
+	}
+
+	// Check required flags exist
+	nameFlag := genCmd.Flags().Lookup("name")
+	if nameFlag == nil {
+		t.Error("expected flag --name not found on ssh-key generate")
+	}
+
+	commentFlag := genCmd.Flags().Lookup("comment")
+	if commentFlag == nil {
+		t.Error("expected flag --comment not found on ssh-key generate")
 	}
 }

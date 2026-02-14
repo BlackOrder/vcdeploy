@@ -3,11 +3,143 @@ package storage
 
 import "time"
 
+// =============================================================================
+// Status Type Definitions
+// =============================================================================
+
+// DeploymentStatus represents the status of a deployment.
+type DeploymentStatus string
+
+const (
+	DeploymentStatusPending   DeploymentStatus = "pending"
+	DeploymentStatusScheduled DeploymentStatus = "scheduled"
+	DeploymentStatusRunning   DeploymentStatus = "running"
+	DeploymentStatusSuccess   DeploymentStatus = "success"
+	DeploymentStatusFailed    DeploymentStatus = "failed"
+	DeploymentStatusCancelled DeploymentStatus = "cancelled" // British spelling
+)
+
+// IsTerminal returns true if the deployment status is a terminal state.
+func (s DeploymentStatus) IsTerminal() bool {
+	switch s {
+	case DeploymentStatusSuccess, DeploymentStatusFailed, DeploymentStatusCancelled:
+		return true
+	}
+	return false
+}
+
+// String returns the string representation of the deployment status.
+func (s DeploymentStatus) String() string { return string(s) }
+
+// AgentStatus represents the status of an agent.
+type AgentStatus string
+
+const (
+	AgentStatusOnline       AgentStatus = "online"
+	AgentStatusOffline      AgentStatus = "offline"
+	AgentStatusConnected    AgentStatus = "connected"
+	AgentStatusDisconnected AgentStatus = "disconnected"
+	AgentStatusStale        AgentStatus = "stale"
+	AgentStatusPending      AgentStatus = "pending"
+)
+
+// IsHealthy returns true if the agent is in a healthy state.
+func (s AgentStatus) IsHealthy() bool {
+	return s == AgentStatusOnline || s == AgentStatusConnected
+}
+
+// String returns the string representation of the agent status.
+func (s AgentStatus) String() string { return string(s) }
+
+// ProvisionStatus represents the status of a provision job.
+type ProvisionStatus string
+
+const (
+	ProvisionStatusPending    ProvisionStatus = "pending"
+	ProvisionStatusInProgress ProvisionStatus = "in_progress"
+	ProvisionStatusCompleted  ProvisionStatus = "completed"
+	ProvisionStatusFailed     ProvisionStatus = "failed"
+	ProvisionStatusCancelled  ProvisionStatus = "cancelled" // British spelling
+)
+
+// IsTerminal returns true if the provision status is a terminal state.
+func (s ProvisionStatus) IsTerminal() bool {
+	switch s {
+	case ProvisionStatusCompleted, ProvisionStatusFailed, ProvisionStatusCancelled:
+		return true
+	}
+	return false
+}
+
+// String returns the string representation of the provision status.
+func (s ProvisionStatus) String() string { return string(s) }
+
+// UpdateStatus represents the status of an agent update operation.
+type UpdateStatus string
+
+const (
+	UpdateStatusPending    UpdateStatus = "pending"
+	UpdateStatusInProgress UpdateStatus = "in_progress"
+	UpdateStatusCompleted  UpdateStatus = "completed"
+	UpdateStatusFailed     UpdateStatus = "failed"
+	UpdateStatusRolledBack UpdateStatus = "rolled_back"
+)
+
+// IsTerminal returns true if the update status is a terminal state.
+func (s UpdateStatus) IsTerminal() bool {
+	switch s {
+	case UpdateStatusCompleted, UpdateStatusFailed, UpdateStatusRolledBack:
+		return true
+	}
+	return false
+}
+
+// String returns the string representation of the update status.
+func (s UpdateStatus) String() string { return string(s) }
+
+// RollbackStatus represents the status of a deployment rollback.
+type RollbackStatus string
+
+const (
+	RollbackStatusPending    RollbackStatus = "pending"
+	RollbackStatusInProgress RollbackStatus = "in_progress"
+	RollbackStatusCompleted  RollbackStatus = "completed"
+	RollbackStatusFailed     RollbackStatus = "failed"
+)
+
+// IsTerminal returns true if the rollback status is a terminal state.
+func (s RollbackStatus) IsTerminal() bool {
+	switch s {
+	case RollbackStatusCompleted, RollbackStatusFailed:
+		return true
+	}
+	return false
+}
+
+// String returns the string representation of the rollback status.
+func (s RollbackStatus) String() string { return string(s) }
+
+// ScheduledDeploymentStatus represents the status of a scheduled deployment.
+type ScheduledDeploymentStatus string
+
+const (
+	ScheduledDeploymentStatusPending   ScheduledDeploymentStatus = "pending"
+	ScheduledDeploymentStatusTriggered ScheduledDeploymentStatus = "triggered"
+	ScheduledDeploymentStatusCancelled ScheduledDeploymentStatus = "cancelled" // British spelling
+)
+
+// String returns the string representation of the scheduled deployment status.
+func (s ScheduledDeploymentStatus) String() string { return string(s) }
+
+// =============================================================================
+// Model Definitions
+// =============================================================================
+
 // --- User Model ---
 
 // User represents a user in the system.
 type User struct {
-	ID                 int64
+	ID                 string
 	Username           string
 	PasswordHash       string
 	Email              string
@@ -27,10 +159,11 @@ type Agent struct {
 	Hostname     string
 	Labels       map[string]string
 	Capabilities string // JSON string
-	Status       string
+	Status       AgentStatus
 	LastSeenAt   time.Time
 	RegisteredAt time.Time
 	Certificate  string
+	HMACSecret   []byte // For HMAC-based re-authentication
 
 	// Version and platform info
 	Version string
@@ -54,11 +187,11 @@ const (
 
 // AgentUpdateHistory represents a record of an agent update attempt.
 type AgentUpdateHistory struct {
-	ID           int64
+	ID           string
 	AgentID      string
 	FromVersion  string
 	ToVersion    string
-	Status       string // "pending", "in_progress", "completed", "failed", "rolled_back"
+	Status       UpdateStatus
 	ErrorMessage string
 	StartedAt    time.Time
 	CompletedAt  *time.Time
@@ -72,11 +205,11 @@ type AgentUpdateHistory struct {
 type DeploymentRecord struct {
 	ID            string
 	Project       string
-	ProjectID     *int64 // FK to projects table (optional for backward compatibility)
+	ProjectID     *string // FK to projects table (optional for backward compatibility)
 	Target        string
 	Branch        string
 	CommitHash    string
-	Status        string
+	Status        DeploymentStatus
 	ReleaseNumber int
 	StartedAt     time.Time
 	CompletedAt   *time.Time
@@ -87,7 +220,7 @@ type DeploymentRecord struct {
 
 // DeploymentLog represents a log entry for a deployment.
 type DeploymentLog struct {
-	ID           int64
+	ID           string
 	DeploymentID string
 	Level        string
 	Message      string
@@ -95,16 +228,17 @@ type DeploymentLog struct {
 	CreatedAt    time.Time
 }
 
-// DeploymentCLI is a simplified deployment struct for CLI use.
-type DeploymentCLI struct {
-	ID          string
-	ProjectID   int64
-	ProjectName string
-	Target      string
-	Status      string
-	TriggeredBy string
-	StartedAt   time.Time
-	FinishedAt  *time.Time
+// DeploymentAgent tracks an agent's participation in a multi-agent deployment.
+// Each deployment can have multiple agents, and this table tracks the status
+// of each agent's deployment execution independently.
+type DeploymentAgent struct {
+	ID           string
+	DeploymentID string
+	AgentID      string
+	Status       DeploymentStatus // pending, running, success, failed, cancelled
+	StartedAt    *time.Time
+	CompletedAt  *time.Time
+	ErrorMessage string
 }
 
 // ScheduledDeployment represents a deployment scheduled for future execution.
@@ -115,14 +249,14 @@ type ScheduledDeployment struct {
 	Branch      string
 	ScheduledAt time.Time
 	ScheduledBy string
-	Status      string
+	Status      ScheduledDeploymentStatus
 }
 
 // --- Audit Model ---
 
 // AuditEntry represents an audit log entry.
 type AuditEntry struct {
-	ID           int64
+	ID           string
 	Timestamp    time.Time
 	Source       string
 	User         string
@@ -139,9 +273,9 @@ type AuditEntry struct {
 
 // Secret represents an encrypted secret.
 type Secret struct {
-	ID             int64
+	ID             string
 	Project        string
-	ProjectID      *int64 // FK to projects table (optional for backward compatibility)
+	ProjectID      *string // FK to projects table (optional for backward compatibility)
 	Scope          string
 	Key            string
 	ValueEncrypted []byte
@@ -160,24 +294,24 @@ type SecretInfo struct {
 
 // Project represents a deployment project.
 type Project struct {
-	ID                   int64
-	Name                 string
-	Repository           string
-	Branch               string
-	DeployPath           string
-	Type                 string
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
-	LastDeployAt         *time.Time
-	LastDeployStatus     string
-	HealthCheckID        *int64 // Reference to health_check_configs, nil uses global
-	AutoRollbackEnabled  bool   // Whether to auto-rollback on deployment issues
-	RollbackOnHealthFail bool   // Whether to rollback if health check fails
+	ID                   string     `json:"id"`
+	Name                 string     `json:"name"`
+	Repository           string     `json:"repository"`
+	Branch               string     `json:"branch"`
+	DeployPath           string     `json:"deployPath"`
+	TypeID               *string    `json:"typeId,omitempty"`
+	CreatedAt            time.Time  `json:"createdAt"`
+	UpdatedAt            time.Time  `json:"updatedAt"`
+	LastDeployAt         *time.Time `json:"lastDeployAt,omitempty"`
+	LastDeployStatus     string     `json:"lastDeployStatus,omitempty"`
+	HealthCheckID        *string    `json:"healthCheckId,omitempty"` // Reference to health_check_configs, nil uses global
+	AutoRollbackEnabled  bool       `json:"autoRollbackEnabled"`     // Whether to auto-rollback on deployment issues
+	RollbackOnHealthFail bool       `json:"rollbackOnHealthFail"`    // Whether to rollback if health check fails
 }
 
 // ProjectType represents a project type template.
 type ProjectType struct {
-	ID           int64
+	ID           string
 	Name         string
 	Description  string
 	BuildCmd     string
@@ -187,8 +321,8 @@ type ProjectType struct {
 
 // ProjectWebhook represents a project-specific webhook configuration.
 type ProjectWebhook struct {
-	ID              int64
-	ProjectID       int64
+	ID              string
+	ProjectID       string
 	Provider        string
 	SecretEncrypted []byte
 	Enabled         bool
@@ -202,7 +336,7 @@ type ProjectWebhook struct {
 // Session represents a user session.
 type Session struct {
 	ID        string // TEXT primary key
-	UserID    int64
+	UserID    string
 	Token     string // Same as ID for sessions
 	IPAddress string
 	UserAgent string
@@ -215,15 +349,15 @@ type Session struct {
 
 // APIKey represents an API key.
 type APIKey struct {
-	ID         int64
-	UserID     int64
-	Name       string
-	KeyHash    string // SHA-256 hash of the key
-	KeyPrefix  string // First 8 characters of the key for identification
-	Scopes     string // JSON array of scopes/permissions
-	ExpiresAt  *time.Time
-	LastUsedAt *time.Time
-	CreatedAt  time.Time
+	ID         string     `json:"id"`
+	UserID     string     `json:"userId"`
+	Name       string     `json:"name"`
+	KeyHash    string     `json:"-"` // Never expose in JSON
+	KeyPrefix  string     `json:"keyPrefix,omitempty"`
+	Scopes     string     `json:"scopes,omitempty"`
+	ExpiresAt  *time.Time `json:"expiresAt"`
+	LastUsedAt *time.Time `json:"lastUsedAt,omitempty"`
+	CreatedAt  time.Time  `json:"createdAt"`
 }
 
 // IsValid checks if an API key is valid (not expired).
@@ -241,7 +375,7 @@ func (key *APIKey) IsValid() bool {
 
 // Setting represents a configuration setting.
 type Setting struct {
-	ID          int64
+	ID          string
 	Category    string
 	Key         string
 	Value       string
@@ -256,7 +390,7 @@ type Setting struct {
 
 // SSHHostKey represents a stored SSH host key.
 type SSHHostKey struct {
-	ID          int64
+	ID          string
 	Hostname    string
 	Port        int
 	KeyType     string
@@ -273,12 +407,12 @@ type SSHHostKey struct {
 
 // SSHJumpServer represents a bastion/jump server for SSH connections.
 type SSHJumpServer struct {
-	ID        int64
+	ID        string
 	Name      string
 	Host      string
 	Port      int
 	Username  string
-	SSHKeyID  *int64 // Optional foreign key to ssh_keys
+	SSHKeyID  *string // Optional foreign key to ssh_keys
 	CreatedAt time.Time
 }
 
@@ -286,7 +420,7 @@ type SSHJumpServer struct {
 
 // BlockedIP represents a blocked IP address.
 type BlockedIP struct {
-	ID        int64
+	ID        string
 	IPAddress string
 	Reason    string
 	BlockedAt time.Time
@@ -296,7 +430,7 @@ type BlockedIP struct {
 
 // RateLimitRecord represents a rate limit tracking record.
 type RateLimitRecord struct {
-	ID          int64
+	ID          string
 	Key         string
 	Bucket      string
 	Count       int
@@ -312,9 +446,9 @@ type ProvisionJob struct {
 	TargetHost    string
 	TargetPort    int
 	TargetUser    string
-	SSHKeyID      *int64
-	AgentBinaryID *int64
-	Status        string
+	SSHKeyID      *string
+	AgentBinaryID *string
+	Status        ProvisionStatus
 	Stage         string
 	Progress      int
 	ErrorMessage  string
@@ -323,9 +457,18 @@ type ProvisionJob struct {
 	CompletedAt   *time.Time
 }
 
+// ProvisionLog represents a log entry for a provisioning job.
+type ProvisionLog struct {
+	ID        string
+	JobID     string
+	Timestamp time.Time
+	Level     string // info, warn, error
+	Message   string
+}
+
 // AgentBinary represents an agent binary release.
 type AgentBinary struct {
-	ID             int64
+	ID             string
 	Version        string
 	OS             string
 	Arch           string
@@ -341,8 +484,8 @@ type AgentBinary struct {
 // HealthCheckConfig represents a health check configuration.
 // Can be global (is_global=true, project_id=nil) or per-project.
 type HealthCheckConfig struct {
-	ID                int64
-	ProjectID         *int64 // nil for global config
+	ID                string
+	ProjectID         *string // nil for global config
 	Name              string
 	URL               string // Can include template vars like {{.URL}}
 	Method            string // GET, POST, etc.
@@ -361,7 +504,7 @@ type HealthCheckConfig struct {
 
 // HealthCheckResult represents the result of a health check execution.
 type HealthCheckResult struct {
-	ConfigID       int64
+	ConfigID       string
 	DeploymentID   string
 	Success        bool
 	StatusCode     int
@@ -373,7 +516,7 @@ type HealthCheckResult struct {
 
 // DeploymentRollback represents a rollback event.
 type DeploymentRollback struct {
-	ID                int64
+	ID                string
 	DeploymentID      string
 	ProjectName       string
 	FromRelease       int
@@ -382,7 +525,7 @@ type DeploymentRollback struct {
 	TriggeredBy       string // "user", "auto_health_fail", "manual"
 	HealthCheckFailed bool
 	HealthCheckError  string
-	Status            string // "pending", "in_progress", "completed", "failed"
+	Status            RollbackStatus
 	ErrorMessage      string
 	StartedAt         time.Time
 	CompletedAt       *time.Time

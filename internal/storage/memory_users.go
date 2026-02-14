@@ -3,6 +3,8 @@ package storage
 import (
 	"context"
 	"time"
+
+	"github.com/rs/xid"
 )
 
 // --- User operations ---
@@ -18,7 +20,9 @@ func (s *MemoryStore) CreateUser(ctx context.Context, user *User) error {
 	}
 
 	// Assign ID
-	user.ID = nextID(&s.nextUserID)
+	if user.ID == "" {
+		user.ID = xid.New().String()
+	}
 	now := time.Now()
 	user.CreatedAt = now
 	user.UpdatedAt = now
@@ -50,7 +54,7 @@ func (s *MemoryStore) GetUserByUsername(ctx context.Context, username string) (*
 }
 
 // GetUserByID retrieves a user by ID from memory.
-func (s *MemoryStore) GetUserByID(ctx context.Context, id int64) (*User, error) {
+func (s *MemoryStore) GetUserByID(ctx context.Context, id string) (*User, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -76,6 +80,30 @@ func (s *MemoryStore) ListUsers(ctx context.Context) ([]*User, error) {
 	}
 
 	return users, nil
+}
+
+// ListUsersPaginated returns users with pagination support (H6).
+func (s *MemoryStore) ListUsersPaginated(ctx context.Context, limit, offset int) ([]*User, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Convert map to slice
+	all := make([]*User, 0, len(s.users))
+	for _, user := range s.users {
+		copied := *user
+		all = append(all, &copied)
+	}
+
+	// Apply pagination
+	if offset >= len(all) {
+		return []*User{}, nil
+	}
+	end := offset + limit
+	if end > len(all) {
+		end = len(all)
+	}
+
+	return all[offset:end], nil
 }
 
 // CountUsers returns the total number of users.
@@ -119,7 +147,7 @@ func (s *MemoryStore) UpdateUserByID(ctx context.Context, user *User) error {
 }
 
 // DeleteUser removes a user from memory and queues persistence.
-func (s *MemoryStore) DeleteUser(ctx context.Context, id int64) error {
+func (s *MemoryStore) DeleteUser(ctx context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -146,7 +174,7 @@ func (s *MemoryStore) DeleteUser(ctx context.Context, id int64) error {
 	}
 
 	// Queue persistence
-	s.queueWrite(s.coreWrites, NewWriteOp(WriteOpDelete, "users", map[string]int64{"id": id}))
+	s.queueWrite(s.coreWrites, NewWriteOp(WriteOpDelete, "users", map[string]string{"id": id}))
 
 	return nil
 }
@@ -232,7 +260,7 @@ func (s *MemoryStore) DeleteExpiredSessions(ctx context.Context) (int64, error) 
 }
 
 // DeleteUserSessions removes all sessions for a user from memory and queues persistence.
-func (s *MemoryStore) DeleteUserSessions(ctx context.Context, userID int64) error {
+func (s *MemoryStore) DeleteUserSessions(ctx context.Context, userID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -243,13 +271,13 @@ func (s *MemoryStore) DeleteUserSessions(ctx context.Context, userID int64) erro
 	}
 
 	// Queue persistence
-	s.queueWrite(s.coreWrites, NewWriteOp(WriteOpDelete, "sessions", map[string]int64{"user_id": userID}))
+	s.queueWrite(s.coreWrites, NewWriteOp(WriteOpDelete, "sessions", map[string]string{"user_id": userID}))
 
 	return nil
 }
 
 // ListUserSessions returns all sessions for a user from memory.
-func (s *MemoryStore) ListUserSessions(ctx context.Context, userID int64) ([]*Session, error) {
+func (s *MemoryStore) ListUserSessions(ctx context.Context, userID string) ([]*Session, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -280,7 +308,9 @@ func (s *MemoryStore) CreateAPIKey(ctx context.Context, key *APIKey) error {
 		return ErrDuplicate
 	}
 
-	key.ID = nextID(&s.nextAPIKeyID)
+	if key.ID == "" {
+		key.ID = xid.New().String()
+	}
 	key.CreatedAt = time.Now()
 
 	s.apiKeys[key.KeyHash] = key
@@ -290,6 +320,26 @@ func (s *MemoryStore) CreateAPIKey(ctx context.Context, key *APIKey) error {
 	s.queueWrite(s.coreWrites, NewWriteOp(WriteOpInsert, "api_keys", key))
 
 	return nil
+}
+
+// GetAPIKeyByID retrieves an API key by ID from memory.
+func (s *MemoryStore) GetAPIKeyByID(ctx context.Context, keyID string) (*APIKey, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for _, key := range s.apiKeys {
+		if key.ID == keyID {
+			// Check if expired
+			if key.ExpiresAt != nil && time.Now().After(*key.ExpiresAt) {
+				return nil, ErrNotFound
+			}
+			// Return a copy
+			copied := *key
+			return &copied, nil
+		}
+	}
+
+	return nil, ErrNotFound
 }
 
 // GetAPIKeyByHash retrieves an API key by hash from memory.
@@ -313,7 +363,7 @@ func (s *MemoryStore) GetAPIKeyByHash(ctx context.Context, keyHash string) (*API
 }
 
 // UpdateAPIKeyUsage updates the last used timestamp for an API key.
-func (s *MemoryStore) UpdateAPIKeyUsage(ctx context.Context, keyID int64) error {
+func (s *MemoryStore) UpdateAPIKeyUsage(ctx context.Context, keyID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -336,12 +386,12 @@ func (s *MemoryStore) UpdateAPIKeyUsage(ctx context.Context, keyID int64) error 
 }
 
 // DeleteAPIKey removes an API key from memory and queues persistence.
-func (s *MemoryStore) DeleteAPIKey(ctx context.Context, keyID int64) error {
+func (s *MemoryStore) DeleteAPIKey(ctx context.Context, keyID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	var keyHash string
-	var userID int64
+	var userID string
 
 	for hash, key := range s.apiKeys {
 		if key.ID == keyID {
@@ -367,13 +417,13 @@ func (s *MemoryStore) DeleteAPIKey(ctx context.Context, keyID int64) error {
 	}
 
 	// Queue persistence
-	s.queueWrite(s.coreWrites, NewWriteOp(WriteOpDelete, "api_keys", map[string]int64{"id": keyID}))
+	s.queueWrite(s.coreWrites, NewWriteOp(WriteOpDelete, "api_keys", map[string]string{"id": keyID}))
 
 	return nil
 }
 
 // ListAPIKeys returns all API keys for a user from memory.
-func (s *MemoryStore) ListAPIKeys(ctx context.Context, userID int64) ([]*APIKey, error) {
+func (s *MemoryStore) ListAPIKeys(ctx context.Context, userID string) ([]*APIKey, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 

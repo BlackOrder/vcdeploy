@@ -34,8 +34,9 @@ func (s *Service) Create(ctx context.Context, name, repository, branch, deployPa
 	if branch == "" {
 		branch = "main"
 	}
-	if projectType == "" {
-		projectType = "generic"
+	var typeIDPtr *string
+	if projectType != "" {
+		typeIDPtr = &projectType
 	}
 
 	project := &storage.Project{
@@ -43,14 +44,23 @@ func (s *Service) Create(ctx context.Context, name, repository, branch, deployPa
 		Repository: repository,
 		Branch:     branch,
 		DeployPath: deployPath,
-		Type:       projectType,
+		TypeID:     typeIDPtr,
 		CreatedAt:  time.Now(),
 	}
 
-	if err := s.store.CreateProject(project); err != nil {
+	if err := s.store.CreateProject(ctx, project); err != nil {
 		return nil, fmt.Errorf("creating project: %w", err)
 	}
 
+	return project, nil
+}
+
+// GetByID retrieves a project by ID.
+func (s *Service) GetByID(ctx context.Context, id string) (*storage.Project, error) {
+	project, err := s.store.GetProjectByID(ctx, id)
+	if err != nil {
+		return nil, err // Returns ErrNotFound if not found
+	}
 	return project, nil
 }
 
@@ -65,7 +75,41 @@ func (s *Service) GetByName(ctx context.Context, name string) (*storage.Project,
 
 // List returns all projects.
 func (s *Service) List(ctx context.Context) ([]*storage.Project, error) {
-	return s.store.ListProjects()
+	return s.store.ListProjects(ctx)
+}
+
+// ListPaginated returns projects with pagination support.
+func (s *Service) ListPaginated(ctx context.Context, p services.Pagination) (*services.ListResult[*storage.Project], error) {
+	projects, err := s.store.ListProjectsPaginated(ctx, p.Limit, p.Offset)
+	if err != nil {
+		return nil, fmt.Errorf("listing projects: %w", err)
+	}
+	count, err := s.store.CountProjects(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("counting projects: %w", err)
+	}
+	return &services.ListResult[*storage.Project]{
+		Items:      projects,
+		TotalCount: count,
+		Pagination: p,
+	}, nil
+}
+
+// Count returns the total number of projects.
+func (s *Service) Count(ctx context.Context) (int64, error) {
+	count, err := s.store.CountProjects(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("counting projects: %w", err)
+	}
+	return count, nil
+}
+
+// UpdateByID updates a project by ID.
+func (s *Service) UpdateByID(ctx context.Context, project *storage.Project) error {
+	if err := s.store.UpdateProjectByID(ctx, project); err != nil {
+		return fmt.Errorf("updating project: %w", err)
+	}
+	return nil
 }
 
 // Update updates a project.
@@ -76,9 +120,17 @@ func (s *Service) Update(ctx context.Context, project *storage.Project) error {
 	return nil
 }
 
+// DeleteByID removes a project by ID.
+func (s *Service) DeleteByID(ctx context.Context, id string) error {
+	if err := s.store.DeleteProjectByID(ctx, id); err != nil {
+		return fmt.Errorf("deleting project: %w", err)
+	}
+	return nil
+}
+
 // Delete removes a project by name.
 func (s *Service) Delete(ctx context.Context, name string) error {
-	if err := s.store.DeleteProject(name); err != nil {
+	if err := s.store.DeleteProject(ctx, name); err != nil {
 		return fmt.Errorf("deleting project: %w", err)
 	}
 	return nil

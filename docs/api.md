@@ -6,7 +6,7 @@ vcdeploy provides a comprehensive REST API for managing deployments, projects, a
 
 All API endpoints are relative to your vcdeploy master server URL:
 
-- **Local development:** `http://localhost:8080`
+- **Local development:** `http://localhost:9000`
 - **Production:** Your configured server URL (via `server.listen` in master config)
 
 ## Authentication
@@ -58,6 +58,7 @@ API requests are rate limited. When exceeded, endpoints return `429 Too Many Req
 | 401 | Unauthorized - authentication required |
 | 403 | Forbidden - insufficient permissions |
 | 404 | Not Found |
+| 409 | Conflict - resource already exists |
 | 429 | Too Many Requests - rate limited |
 | 500 | Internal Server Error |
 
@@ -90,15 +91,22 @@ All error responses follow this format:
 | Agents | `/api/v1/agents`, `/api/v1/agents/{id}` | Yes |
 | Secrets | `/api/v1/secrets` | Yes |
 | Project Types | `/api/v1/project-types`, `/api/v1/project-types/{id}` | Yes |
-| API Keys | `/api/v1/apikeys`, `/api/v1/apikeys/{id}` | Admin |
+| API Keys | `/api/v1/api-keys`, `/api/v1/api-keys/{id}` | Admin |
 | Audit | `/api/v1/audit` | Admin |
-| Host Keys | `/api/v1/hostkeys`, `/api/v1/hostkeys/{id}` | Yes/Admin |
-| Jump Servers | `/api/v1/jumpservers`, `/api/v1/jumpservers/{id}` | Yes/Admin |
-| Blocked IPs | `/api/v1/blocked`, `/api/v1/blocked/{ip}` | Admin |
-| Provision | `/api/v1/provision`, `/api/v1/provision/{id}` | Admin |
+| Host Keys | `/api/v1/host-keys`, `/api/v1/host-keys/{id}` | Yes/Admin |
+| Jump Servers | `/api/v1/jump-servers`, `/api/v1/jump-servers/{id}` | Yes/Admin |
+| Blocked IPs | `/api/v1/blocked-ips`, `/api/v1/blocked-ips/{ip}` | Admin |
+| Provision | `/api/v1/provision-jobs`, `/api/v1/provision-jobs/{id}` | Admin |
 | Agent Binaries | `/api/v1/binaries`, `/api/v1/binaries/latest` | Yes |
+| Certificates | `/api/v1/certificates`, `/api/v1/certificates/{id}` | Admin |
+| TLS | `/api/v1/tls`, `/api/v1/tls/renew` | Admin |
+| Credentials | `/api/v1/credentials`, `/api/v1/credentials/{id}` | Admin |
+| SSH Keys | `/api/v1/ssh-keys`, `/api/v1/ssh-keys/{id}` | Admin |
 | Health Checks | `/api/v1/health-checks`, `/api/v1/health-checks/global` | Yes |
 | Rollbacks | `/api/v1/rollbacks`, `/api/v1/rollbacks/{id}` | Yes |
+| Recipes | `/api/v1/recipes/components`, `/api/v1/recipes/playbooks` | Yes |
+| Activations | `/api/v1/recipes/activations` | Yes |
+| RAW Approvals | `/api/v1/recipes/raw-approvals` | Admin |
 | Webhooks | `/webhook/github/{project}`, `/webhook/gitlab/{project}`, `/webhook/bitbucket/{project}` | Signature |
 
 ---
@@ -206,6 +214,163 @@ Authenticate with username and password to receive a JWT token.
 
 ---
 
+## TOTP (Two-Factor Authentication) Endpoints
+
+### Setup TOTP
+
+```
+POST /api/v1/totp/setup
+```
+
+Initialize TOTP setup for the current user. Returns a secret and URI for authenticator app configuration.
+
+**Response:**
+```json
+{
+  "secret": "JBSWY3DPEHPK3PXP",
+  "uri": "otpauth://totp/vcdeploy:username?secret=JBSWY3DPEHPK3PXP&issuer=vcdeploy"
+}
+```
+
+> **Note:** Recovery codes are returned from `/api/v1/totp/enable`, not `/setup`.
+
+### Enable TOTP
+
+```
+POST /api/v1/totp/enable
+```
+
+Enable TOTP after verifying setup with a valid code. Returns recovery codes.
+
+**Request:**
+```json
+{
+  "secret": "JBSWY3DPEHPK3PXP",
+  "totp_code": "123456"
+}
+```
+
+**Response:**
+```json
+{
+  "message": "TOTP enabled successfully",
+  "recovery_codes": ["XXXXXXXX", "YYYYYYYY", "ZZZZZZZZ", "..."]
+}
+```
+
+### Disable TOTP
+
+```
+POST /api/v1/totp/disable
+```
+
+Disable TOTP for the current user.
+
+**Request:**
+```json
+{
+  "code": "123456"
+}
+```
+
+**Response:**
+```json
+{
+  "enabled": false,
+  "message": "TOTP disabled successfully"
+}
+```
+
+### Regenerate Recovery Codes
+
+```
+POST /api/v1/totp/recovery/regenerate
+```
+
+Generate new recovery codes. Previous codes are invalidated.
+
+**Request:**
+```json
+{
+  "code": "123456"
+}
+```
+
+**Response:**
+```json
+{
+  "recovery_codes": ["XXXX-XXXX-XXXX", "YYYY-YYYY-YYYY", ...]
+}
+```
+
+---
+
+## Admin TOTP Endpoints
+
+### List Users with TOTP
+
+```
+GET /api/v1/admin/totp/users
+```
+
+Returns all users with their TOTP status. **Admin only.**
+
+**Response:**
+```json
+{
+  "users": [
+    {
+      "id": 1,
+      "username": "admin",
+      "totp_enabled": true,
+      "totp_configured_at": "2024-01-15T10:30:00Z"
+    }
+  ]
+}
+```
+
+### Get User TOTP Status
+
+```
+GET /api/v1/admin/totp/status/{username}
+```
+
+Returns detailed TOTP status for a specific user. **Admin only.**
+
+**Response:**
+```json
+{
+  "username": "user1",
+  "totp_enabled": true,
+  "totp_configured_at": "2024-01-15T10:30:00Z",
+  "recovery_codes_remaining": 5
+}
+```
+
+### Admin Disable TOTP
+
+```
+POST /api/v1/admin/totp/disable
+```
+
+Forcibly disable TOTP for a user (e.g., if they lost their device). **Admin only.**
+
+**Request:**
+```json
+{
+  "username": "user1"
+}
+```
+
+**Response:**
+```json
+{
+  "message": "TOTP disabled for user user1"
+}
+```
+
+---
+
 ## Stats Endpoint
 
 ### Dashboard Statistics
@@ -275,8 +440,20 @@ POST /api/v1/users
   "username": "newuser",
   "email": "user@example.com",
   "password": "secure-password",
-  "role": "user"
+  "role": "user",
+  "totp_enabled": false,
+  "totp_secret": ""
 }
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `username` | string | Yes | Unique username |
+| `email` | string | No | User's email address |
+| `password` | string | Yes | Password (must meet complexity requirements) |
+| `role` | string | No | One of: `admin`, `user`, `viewer`. Default: `user` |
+| `totp_enabled` | boolean | No | Enable TOTP 2FA for this user. Default: `false` |
+| `totp_secret` | string | No | TOTP secret (required if `totp_enabled` is `true`) |
 ```
 
 ### Get User
@@ -636,7 +813,7 @@ GET|PUT|DELETE /api/v1/project-types/{id}
 ### List API Keys
 
 ```
-GET /api/v1/apikeys
+GET /api/v1/api-keys
 ```
 
 **Admin only.** Returns all API keys (tokens are masked).
@@ -644,7 +821,7 @@ GET /api/v1/apikeys
 ### Create API Key
 
 ```
-POST /api/v1/apikeys
+POST /api/v1/api-keys
 ```
 
 **Admin only.**
@@ -672,7 +849,7 @@ POST /api/v1/apikeys
 ### Delete API Key
 
 ```
-DELETE /api/v1/apikeys/{id}
+DELETE /api/v1/api-keys/{id}
 ```
 
 **Admin only.**
@@ -706,7 +883,7 @@ GET /api/v1/audit
 ### List Host Keys
 
 ```
-GET /api/v1/hostkeys
+GET /api/v1/host-keys
 ```
 
 Returns known SSH host keys.
@@ -714,7 +891,7 @@ Returns known SSH host keys.
 ### Create Host Key
 
 ```
-POST /api/v1/hostkeys
+POST /api/v1/host-keys
 ```
 
 **Admin only.**
@@ -734,7 +911,7 @@ POST /api/v1/hostkeys
 ### Update Host Key Trust
 
 ```
-PUT /api/v1/hostkeys/{id}
+PUT /api/v1/host-keys/{id}
 ```
 
 **Admin only.**
@@ -749,7 +926,7 @@ PUT /api/v1/hostkeys/{id}
 ### Delete Host Key
 
 ```
-DELETE /api/v1/hostkeys/{id}
+DELETE /api/v1/host-keys/{id}
 ```
 
 **Admin only.**
@@ -761,7 +938,7 @@ DELETE /api/v1/hostkeys/{id}
 ### List Jump Servers
 
 ```
-GET /api/v1/jumpservers
+GET /api/v1/jump-servers
 ```
 
 Returns configured SSH jump/bastion servers.
@@ -769,7 +946,7 @@ Returns configured SSH jump/bastion servers.
 ### Create Jump Server
 
 ```
-POST /api/v1/jumpservers
+POST /api/v1/jump-servers
 ```
 
 **Admin only.**
@@ -788,7 +965,7 @@ POST /api/v1/jumpservers
 ### Get/Update/Delete Jump Server
 
 ```
-GET|PUT|DELETE /api/v1/jumpservers/{id}
+GET|PUT|DELETE /api/v1/jump-servers/{id}
 ```
 
 ---
@@ -798,7 +975,7 @@ GET|PUT|DELETE /api/v1/jumpservers/{id}
 ### List Blocked IPs
 
 ```
-GET /api/v1/blocked
+GET /api/v1/blocked-ips
 ```
 
 **Admin only.**
@@ -806,7 +983,7 @@ GET /api/v1/blocked
 ### Block IP
 
 ```
-POST /api/v1/blocked
+POST /api/v1/blocked-ips
 ```
 
 **Admin only.**
@@ -823,7 +1000,7 @@ POST /api/v1/blocked
 ### Unblock IP
 
 ```
-DELETE /api/v1/blocked/{ip}
+DELETE /api/v1/blocked-ips/{ip}
 ```
 
 **Admin only.**
@@ -964,6 +1141,578 @@ POST /webhook/bitbucket/{project}
 |--------|-------------|
 | X-Hub-Signature | HMAC signature |
 | X-Event-Key | Event type (repo:push, etc.) |
+
+---
+
+## Recipe Endpoints
+
+The Recipe API manages deployment components, playbooks, and activations.
+
+### List Components
+
+```
+GET /api/v1/recipes/components
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| namespace | string | Filter by namespace (seed/user) |
+| type | string | Filter by component type |
+| search | string | Search by name or description |
+
+**Response:**
+```json
+{
+  "components": [
+    {
+      "id": 1,
+      "namespace": "seed",
+      "slug": "composer-install",
+      "version": "v1.0.0",
+      "name": "Composer Install",
+      "type": "shell",
+      "content": { "command": "composer install --no-dev" }
+    }
+  ],
+  "total": 1
+}
+```
+
+### Create Component
+
+```
+POST /api/v1/recipes/components
+```
+
+**Request Body:**
+```json
+{
+  "name": "NPM Install",
+  "slug": "npm-install",
+  "type": "shell",
+  "content": {
+    "command": "npm ci --production"
+  },
+  "variables": [
+    {
+      "name": "node_env",
+      "type": "string",
+      "default": "production"
+    }
+  ]
+}
+```
+
+### Get Component
+
+```
+GET /api/v1/recipes/components/{id}
+```
+
+### Update Component
+
+```
+PUT /api/v1/recipes/components/{id}
+```
+
+### Delete Component
+
+```
+DELETE /api/v1/recipes/components/{id}
+```
+
+### List Playbooks
+
+```
+GET /api/v1/recipes/playbooks
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| namespace | string | Filter by namespace |
+| framework_type | string | Filter by framework |
+
+### Create Playbook
+
+```
+POST /api/v1/recipes/playbooks
+```
+
+**Request Body:**
+```json
+{
+  "name": "Laravel Deployment",
+  "slug": "laravel-deploy",
+  "version": "v1.0.0",
+  "framework_type": "laravel",
+  "steps": [
+    {
+      "order": 1,
+      "phase": "pre_deploy",
+      "component_ref": "seed:composer-install:v1.0.0"
+    },
+    {
+      "order": 2,
+      "phase": "post_deploy",
+      "component_ref": "seed:artisan-migrate:v1.0.0"
+    }
+  ]
+}
+```
+
+### Get Playbook
+
+```
+GET /api/v1/recipes/playbooks/{id}
+```
+
+### Update Playbook
+
+```
+PUT /api/v1/recipes/playbooks/{id}
+```
+
+### Delete Playbook
+
+```
+DELETE /api/v1/recipes/playbooks/{id}
+```
+
+### Activate Playbook
+
+```
+POST /api/v1/recipes/activations
+```
+
+**Request Body:**
+```json
+{
+  "project_id": 123,
+  "playbook_id": 1,
+  "bindings": [
+    {
+      "variable_name": "deploy_user",
+      "source_type": "literal",
+      "literal_value": "www-data"
+    },
+    {
+      "variable_name": "db_password",
+      "source_type": "secret",
+      "source_ref": "db-password"
+    }
+  ]
+}
+```
+
+### Get Activation
+
+```
+GET /api/v1/recipes/activations/{project_id}
+```
+
+### Deactivate Playbook
+
+```
+DELETE /api/v1/recipes/activations/{project_id}
+```
+
+### RAW Approvals (Admin Only)
+
+#### List Pending Approvals
+
+```
+GET /api/v1/recipes/raw-approvals
+```
+
+#### Approve RAW Component
+
+```
+POST /api/v1/recipes/raw-approvals
+```
+
+**Request Body:**
+```json
+{
+  "component_id": 42,
+  "approval_note": "Reviewed and safe for production use"
+}
+```
+
+#### Revoke Approval
+
+```
+DELETE /api/v1/recipes/raw-approvals/{component_id}
+```
+
+### Export Recipes
+
+```
+GET /api/v1/recipes/export
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| include_versions | boolean | Include version history |
+| namespace | string | Filter by namespace |
+
+### Import Recipes
+
+```
+POST /api/v1/recipes/import
+```
+
+**Request Body:** multipart/form-data with recipe JSON file
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| dry_run | boolean | Preview import without changes |
+
+### Migration Preview
+
+```
+GET /api/v1/recipes/migration/preview/{project_id}
+```
+
+Returns estimated migration details for converting a project's YAML config to a playbook.
+
+### Migrate Project
+
+```
+POST /api/v1/recipes/migration/{project_id}
+```
+
+**Request Body:**
+```json
+{
+  "name": "My Playbook",
+  "version": "v1.0.0",
+  "createComponents": true,
+  "activate": true
+}
+```
+
+---
+
+## Certificate Management
+
+Manage TLS certificates for agent authentication.
+
+### List Certificates
+
+```
+GET /api/v1/certificates
+```
+
+Returns list of all agent certificates.
+
+**Response:**
+```json
+{
+  "items": [
+    {
+      "id": 1,
+      "agentId": "agent-001",
+      "serialNumber": "ABC123DEF456",
+      "issuedAt": "2026-01-01T00:00:00Z",
+      "expiresAt": "2027-01-01T00:00:00Z",
+      "status": "active"
+    }
+  ],
+  "totalCount": 1
+}
+```
+
+### Get Certificate
+
+```
+GET /api/v1/certificates/{id}
+```
+
+Returns details for a specific certificate.
+
+### Revoke Certificate
+
+```
+POST /api/v1/certificates/agents/{agent_id}/revoke
+```
+
+Revoke an agent's certificate, preventing it from authenticating.
+
+**Request Body:**
+```json
+{
+  "reason": "Agent decommissioned"
+}
+```
+
+### Certificate Audit Log
+
+```
+GET /api/v1/certificates/audit
+```
+
+Returns certificate issuance and revocation history.
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| limit | integer | Maximum entries to return (default: 50) |
+| offset | integer | Pagination offset |
+
+---
+
+## TLS Management
+
+Manage TLS configuration for the master server.
+
+### Get TLS Status and Settings
+
+```
+GET /api/v1/tls
+```
+
+Returns current TLS configuration, certificate status, and ACME settings.
+
+**Response:**
+```json
+{
+  "enabled": true,
+  "mode": "acme",
+  "acme_domain": "vcdeploy.example.com",
+  "certificate_expires": "2026-06-01T00:00:00Z",
+  "certificate_issuer": "Let's Encrypt"
+}
+```
+
+### Update TLS Settings
+
+```
+PUT /api/v1/tls
+```
+
+Update TLS configuration.
+
+**Request Body:**
+```json
+{
+  "enabled": true,
+  "mode": "acme",
+  "acme_domain": "vcdeploy.example.com",
+  "acme_email": "admin@example.com"
+}
+```
+
+### Force Certificate Renewal
+
+```
+POST /api/v1/tls/renew
+```
+
+Forces immediate ACME certificate renewal.
+
+---
+
+## Source Credentials
+
+Manage credentials for Git repository authentication.
+
+### List Credentials
+
+```
+GET /api/v1/credentials
+```
+
+Returns list of configured source credentials.
+
+**Response:**
+```json
+{
+  "items": [
+    {
+      "id": 1,
+      "name": "github-token",
+      "type": "token",
+      "urlPattern": "github.com/*",
+      "createdAt": "2026-01-01T00:00:00Z"
+    }
+  ],
+  "totalCount": 1
+}
+```
+
+### Create Credential
+
+```
+POST /api/v1/credentials
+```
+
+Create a new source credential.
+
+**Request Body (Token):**
+```json
+{
+  "name": "github-pat",
+  "type": "token",
+  "urlPattern": "github.com/myorg/*",
+  "token": "ghp_xxxxxxxxxxxxxxxxxxxx"
+}
+```
+
+**Request Body (Basic Auth):**
+```json
+{
+  "name": "gitlab-creds",
+  "type": "basic",
+  "urlPattern": "gitlab.com/myorg/*",
+  "username": "deploy-user",
+  "password": "secret"
+}
+```
+
+**Request Body (SSH Key Reference):**
+```json
+{
+  "name": "ssh-deploy",
+  "type": "ssh",
+  "urlPattern": "git@github.com:myorg/*",
+  "sshKeyId": 123
+}
+```
+
+### Get Credential
+
+```
+GET /api/v1/credentials/{id}
+```
+
+Returns credential details (secrets are redacted).
+
+### Delete Credential
+
+```
+DELETE /api/v1/credentials/{id}
+```
+
+Delete a source credential.
+
+### Test Credential
+
+```
+POST /api/v1/credentials/{id}/test
+```
+
+Test credential connectivity against a repository.
+
+**Request Body:**
+```json
+{
+  "repositoryUrl": "https://github.com/myorg/myrepo.git"
+}
+```
+
+---
+
+## SSH Keys
+
+Manage SSH keys for provisioning and Git authentication.
+
+### List SSH Keys
+
+```
+GET /api/v1/ssh-keys
+```
+
+Returns list of managed SSH keys.
+
+**Response:**
+```json
+{
+  "items": [
+    {
+      "id": 1,
+      "name": "deploy-key",
+      "type": "ed25519",
+      "fingerprint": "SHA256:xxxxx",
+      "createdAt": "2026-01-01T00:00:00Z"
+    }
+  ],
+  "totalCount": 1
+}
+```
+
+### Generate SSH Key
+
+```
+POST /api/v1/ssh-keys
+```
+
+Generate a new Ed25519 SSH key pair.
+
+**Request Body:**
+```json
+{
+  "name": "new-deploy-key",
+  "comment": "Deployment key for production"
+}
+```
+
+**Response:**
+```json
+{
+  "id": 2,
+  "name": "new-deploy-key",
+  "type": "ed25519",
+  "fingerprint": "SHA256:xxxxx",
+  "publicKey": "ssh-ed25519 AAAA... comment"
+}
+```
+
+### Import SSH Key
+
+```
+POST /api/v1/ssh-keys/import
+```
+
+Import an existing SSH private key.
+
+**Request Body:**
+```json
+{
+  "name": "existing-key",
+  "privateKey": "-----BEGIN OPENSSH PRIVATE KEY-----\n...",
+  "passphrase": "optional-passphrase"
+}
+```
+
+### Get Public Key
+
+```
+GET /api/v1/ssh-keys/{id}/public
+```
+
+Returns the public key in OpenSSH format.
+
+**Response:**
+```
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG... comment
+```
+
+### Delete SSH Key
+
+```
+DELETE /api/v1/ssh-keys/{id}
+```
+
+Delete an SSH key.
 
 ---
 

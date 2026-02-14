@@ -15,7 +15,14 @@
   * [Master Configuration](config/master.md)
   * [Agent Configuration](config/agent.md)
   * [Projects](config/projects.md)
+  * [Targets](config/targets.md)
   * [Secrets Management](config/secrets.md)
+
+* **Recipe System**
+  * [Overview](recipes.md)
+  * [Components](recipes.md#components)
+  * [Playbooks](recipes.md#playbooks)
+  * [Migration](recipes.md#migration-from-yaml)
 
 * **CLI Reference**
   * [Commands](cli/README.md)
@@ -25,6 +32,13 @@
   * [Metrics & Monitoring](operations/metrics.md)
   * [Logging](operations/logging.md)
   * [Troubleshooting](operations/troubleshooting.md)
+
+* **Security**
+  * [Security Guide](security.md)
+  * [mTLS](security.md#mtls-architecture)
+  * [2FA/TOTP](security.md#two-factor-authentication-totp)
+  * [Provisioning](provisioning.md)
+  * [Private Repos](private-repos.md)
 
 * **API Reference**
   * [REST API](api.md)

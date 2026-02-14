@@ -13,6 +13,8 @@ import (
 	"go.uber.org/zap"
 )
 
+func strPtr(s string) *string { return &s }
+
 // TestNew tests database creation and initialization.
 func TestNew(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -110,7 +112,7 @@ func TestCreateUser(t *testing.T) {
 		t.Fatalf("CreateUser() error = %v", err)
 	}
 
-	if user.ID == 0 {
+	if user.ID == "" {
 		t.Error("CreateUser() did not set user ID")
 	}
 }
@@ -749,7 +751,7 @@ func TestListSecrets(t *testing.T) {
 	_ = db.SetSecretEncrypted(ctx, "scope1", "scope1", "key1", []byte("val1"))
 	_ = db.SetSecretEncrypted(ctx, "scope1", "scope1", "key2", []byte("val2"))
 
-	list, err := db.ListSecrets("scope1")
+	list, err := db.ListSecrets(ctx, "scope1")
 	if err != nil {
 		t.Fatalf("ListSecrets() error = %v", err)
 	}
@@ -766,7 +768,7 @@ func TestDeleteSecret(t *testing.T) {
 	// Create and delete secret
 	ctx := context.Background()
 	_ = db.SetSecretEncrypted(ctx, "scope", "scope", "todelete", []byte("val"))
-	err := db.DeleteSecret("scope", "todelete")
+	err := db.DeleteSecret(ctx, "scope", "todelete")
 	if err != nil {
 		t.Fatalf("DeleteSecret() error = %v", err)
 	}
@@ -777,22 +779,23 @@ func TestDeleteSecret(t *testing.T) {
 func TestCreateProject(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
+	ctx := context.Background()
 
 	project := &Project{
 		Name:       "myapp",
 		Repository: "https://github.com/example/myapp",
 		Branch:     "main",
 		DeployPath: "/var/www/myapp",
-		Type:       "nodejs",
+		TypeID:     strPtr("nodejs"),
 		CreatedAt:  time.Now(),
 	}
 
-	err := db.CreateProject(project)
+	err := db.CreateProject(ctx, project)
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 
-	if project.ID == 0 {
+	if project.ID == "" {
 		t.Error("CreateProject() did not set project ID")
 	}
 }
@@ -800,6 +803,7 @@ func TestCreateProject(t *testing.T) {
 func TestGetProject(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
+	ctx := context.Background()
 
 	// Create project
 	project := &Project{
@@ -807,22 +811,22 @@ func TestGetProject(t *testing.T) {
 		Repository:       "https://github.com/example/findme",
 		Branch:           "develop",
 		DeployPath:       "/var/www/findme",
-		Type:             "php",
+		TypeID:           strPtr("php"),
 		CreatedAt:        time.Now(),
 		LastDeployStatus: "", // Must set to avoid NULL scan issue
 	}
 
-	err := db.CreateProject(project)
+	err := db.CreateProject(ctx, project)
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 
-	if project.ID == 0 {
+	if project.ID == "" {
 		t.Error("CreateProject() did not set project ID")
 	}
 
 	// Verify we can retrieve the project (NULL handling is fixed with sql.NullString)
-	retrieved, err := db.GetProjectByName(context.Background(), "findme")
+	retrieved, err := db.GetProjectByName(ctx, "findme")
 	if err != nil {
 		t.Fatalf("GetProjectByName() error = %v", err)
 	}
@@ -847,20 +851,21 @@ func TestGetProjectNotFound(t *testing.T) {
 func TestListProjects(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
+	ctx := context.Background()
 
 	// Create multiple projects
 	p1 := &Project{Name: "alpha", CreatedAt: time.Now()}
-	if err := db.CreateProject(p1); err != nil {
+	if err := db.CreateProject(ctx, p1); err != nil {
 		t.Fatalf("CreateProject(alpha) error = %v", err)
 	}
 
 	p2 := &Project{Name: "beta", CreatedAt: time.Now()}
-	if err := db.CreateProject(p2); err != nil {
+	if err := db.CreateProject(ctx, p2); err != nil {
 		t.Fatalf("CreateProject(beta) error = %v", err)
 	}
 
 	// ListProjects should work correctly (NULL handling fixed with sql.NullString)
-	projects, err := db.ListProjects()
+	projects, err := db.ListProjects(ctx)
 	if err != nil {
 		t.Fatalf("ListProjects() error = %v", err)
 	}
@@ -873,21 +878,22 @@ func TestListProjects(t *testing.T) {
 func TestDeleteProject(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
+	ctx := context.Background()
 
 	// Create project
 	project := &Project{Name: "todelete", CreatedAt: time.Now()}
-	if err := db.CreateProject(project); err != nil {
+	if err := db.CreateProject(ctx, project); err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 
 	// Delete project
-	err := db.DeleteProject("todelete")
+	err := db.DeleteProject(ctx, "todelete")
 	if err != nil {
 		t.Fatalf("DeleteProject() error = %v", err)
 	}
 
 	// Verify deleted
-	_, err = db.GetProjectByName(context.Background(), "todelete")
+	_, err = db.GetProjectByName(ctx, "todelete")
 	if err == nil {
 		t.Error("GetProjectByName() expected error after deletion, got nil")
 	}
@@ -898,6 +904,7 @@ func TestDeleteProject(t *testing.T) {
 func TestCreateProjectType(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
+	ctx := context.Background()
 
 	pt := &ProjectType{
 		Name:        "nodejs",
@@ -906,12 +913,12 @@ func TestCreateProjectType(t *testing.T) {
 		CreatedAt:   time.Now(),
 	}
 
-	err := db.CreateProjectType(pt)
+	err := db.CreateProjectType(ctx, pt)
 	if err != nil {
 		t.Fatalf("CreateProjectType() error = %v", err)
 	}
 
-	if pt.ID == 0 {
+	if pt.ID == "" {
 		t.Error("CreateProjectType() did not set ID")
 	}
 }
@@ -919,6 +926,7 @@ func TestCreateProjectType(t *testing.T) {
 func TestListProjectTypes(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
+	ctx := context.Background()
 
 	// Create project types
 	types := []*ProjectType{
@@ -927,90 +935,37 @@ func TestListProjectTypes(t *testing.T) {
 	}
 
 	for _, pt := range types {
-		if err := db.CreateProjectType(pt); err != nil {
+		if err := db.CreateProjectType(ctx, pt); err != nil {
 			t.Fatalf("CreateProjectType() error = %v", err)
 		}
 	}
 
 	// List project types
-	list, err := db.ListProjectTypes()
+	list, err := db.ListProjectTypes(ctx)
 	if err != nil {
 		t.Fatalf("ListProjectTypes() error = %v", err)
 	}
 
-	if len(list) != 2 {
-		t.Errorf("ListProjectTypes() returned %d types, want 2", len(list))
+	if len(list) != 3 {
+		t.Errorf("ListProjectTypes() returned %d types, want 3 (2 custom + 1 seeded generic)", len(list))
 	}
 }
 
 func TestDeleteProjectType(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
+	ctx := context.Background()
 
 	// Create project type
 	pt := &ProjectType{Name: "todelete", CreatedAt: time.Now()}
-	if err := db.CreateProjectType(pt); err != nil {
+	if err := db.CreateProjectType(ctx, pt); err != nil {
 		t.Fatalf("CreateProjectType() error = %v", err)
 	}
 
 	// Delete project type
-	err := db.DeleteProjectType("todelete")
+	err := db.DeleteProjectType(ctx, "todelete")
 	if err != nil {
 		t.Fatalf("DeleteProjectType() error = %v", err)
-	}
-}
-
-// --- Extended Deployment Tests ---
-
-func TestInsertDeployment(t *testing.T) {
-	db, cleanup := setupTestDB(t)
-	defer cleanup()
-
-	d := &DeploymentCLI{
-		ProjectName: "testproj",
-		Target:      "production",
-		Status:      "running",
-		TriggeredBy: "admin",
-		StartedAt:   time.Now(),
-	}
-
-	err := db.InsertDeployment(d)
-	if err != nil {
-		t.Fatalf("InsertDeployment() error = %v", err)
-	}
-
-	if d.ID == "" {
-		t.Error("InsertDeployment() did not set deployment ID")
-	}
-}
-
-func TestSaveDeployment(t *testing.T) {
-	db, cleanup := setupTestDB(t)
-	defer cleanup()
-
-	// Create deployment
-	d := &DeploymentCLI{
-		ID:          "test-deploy-1",
-		ProjectName: "testproj",
-		Target:      "production",
-		Status:      "running",
-		TriggeredBy: "admin",
-		StartedAt:   time.Now(),
-	}
-
-	err := db.InsertDeployment(d)
-	if err != nil {
-		t.Fatalf("InsertDeployment() error = %v", err)
-	}
-
-	// Update deployment
-	now := time.Now()
-	d.Status = "completed"
-	d.FinishedAt = &now
-
-	err = db.SaveDeployment(d)
-	if err != nil {
-		t.Fatalf("SaveDeployment() error = %v", err)
 	}
 }
 
@@ -1069,7 +1024,7 @@ func TestExportAllSecrets(t *testing.T) {
 	_ = db.SetSecretEncrypted(ctx, "project2", "project2", "key3", []byte("val3"))
 
 	// Export
-	exported, err := db.ExportAllSecrets()
+	exported, err := db.ExportAllSecrets(ctx)
 	if err != nil {
 		t.Fatalf("ExportAllSecrets() error = %v", err)
 	}
@@ -1479,7 +1434,7 @@ func TestCreateAPIKey(t *testing.T) {
 		t.Fatalf("CreateAPIKey() error = %v", err)
 	}
 
-	if key.ID == 0 {
+	if key.ID == "" {
 		t.Error("CreateAPIKey() did not set key ID")
 	}
 }
@@ -2086,6 +2041,7 @@ func TestConn(t *testing.T) {
 func TestGetProjectTypeByName(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
+	ctx := context.Background()
 
 	// Create a project type first
 	pt := &ProjectType{
@@ -2093,13 +2049,13 @@ func TestGetProjectTypeByName(t *testing.T) {
 		Description: "Node.js Application",
 		BuildCmd:    "npm install",
 	}
-	err := db.CreateProjectType(pt)
+	err := db.CreateProjectType(ctx, pt)
 	if err != nil {
 		t.Fatalf("CreateProjectType() error = %v", err)
 	}
 
 	// Get it by name
-	found, err := db.GetProjectTypeByName("nodejs")
+	found, err := db.GetProjectTypeByName(ctx, "nodejs")
 	if err != nil {
 		t.Fatalf("GetProjectTypeByName() error = %v", err)
 	}
@@ -2116,8 +2072,9 @@ func TestGetProjectTypeByName(t *testing.T) {
 func TestGetProjectTypeByNameNotFound(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
+	ctx := context.Background()
 
-	_, err := db.GetProjectTypeByName("nonexistent")
+	_, err := db.GetProjectTypeByName(ctx, "nonexistent")
 	// GetProjectTypeByName returns a formatted error, not ErrNotFound
 	if err == nil {
 		t.Fatal("GetProjectTypeByName() should return error for nonexistent type")
@@ -2127,6 +2084,7 @@ func TestGetProjectTypeByNameNotFound(t *testing.T) {
 func TestUpdateProjectTypeByName(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
+	ctx := context.Background()
 
 	// Create a project type
 	pt := &ProjectType{
@@ -2134,18 +2092,18 @@ func TestUpdateProjectTypeByName(t *testing.T) {
 		Description: "Original",
 		BuildCmd:    "original",
 	}
-	_ = db.CreateProjectType(pt)
+	_ = db.CreateProjectType(ctx, pt)
 
 	// Update it - UpdateProjectTypeByName takes only the project type struct
 	pt.Description = "Updated"
 	pt.BuildCmd = "updated"
-	err := db.UpdateProjectTypeByName(pt)
+	err := db.UpdateProjectTypeByName(ctx, pt)
 	if err != nil {
 		t.Fatalf("UpdateProjectTypeByName() error = %v", err)
 	}
 
 	// Verify update
-	found, _ := db.GetProjectTypeByName("update-test")
+	found, _ := db.GetProjectTypeByName(ctx, "update-test")
 	if found.Description != "Updated" {
 		t.Errorf("UpdateProjectTypeByName() description = %v, want %v", found.Description, "Updated")
 	}
@@ -2338,7 +2296,7 @@ func TestSetProjectWebhook(t *testing.T) {
 		Name:       "webhook-test-project",
 		Repository: "https://github.com/test/repo.git",
 	}
-	_ = db.CreateProject(project)
+	_ = db.CreateProject(ctx, project)
 
 	// Set webhook
 	err := db.SetProjectWebhook(ctx, project.ID, "github", []byte("secret"), true, true)
@@ -2358,7 +2316,7 @@ func TestGetProjectWebhook(t *testing.T) {
 		Name:       "get-webhook-project",
 		Repository: "https://github.com/test/repo.git",
 	}
-	_ = db.CreateProject(project)
+	_ = db.CreateProject(ctx, project)
 	_ = db.SetProjectWebhook(ctx, project.ID, "github", []byte("secret"), true, false)
 
 	// Get webhook
@@ -2381,7 +2339,7 @@ func TestGetProjectWebhookNotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	_, err := db.GetProjectWebhook(ctx, 9999, "github")
+	_, err := db.GetProjectWebhook(ctx, "nonexistent", "github")
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("GetProjectWebhook() error = %v, want ErrNotFound", err)
 	}
@@ -2398,7 +2356,7 @@ func TestListProjectWebhooks(t *testing.T) {
 		Name:       "list-webhooks-project",
 		Repository: "https://github.com/test/repo.git",
 	}
-	_ = db.CreateProject(project)
+	_ = db.CreateProject(ctx, project)
 	_ = db.SetProjectWebhook(ctx, project.ID, "github", []byte("secret1"), true, false)
 	_ = db.SetProjectWebhook(ctx, project.ID, "gitlab", []byte("secret2"), true, true)
 
@@ -2424,7 +2382,7 @@ func TestDeleteProjectWebhook(t *testing.T) {
 		Name:       "delete-webhook-project",
 		Repository: "https://github.com/test/repo.git",
 	}
-	_ = db.CreateProject(project)
+	_ = db.CreateProject(ctx, project)
 	_ = db.SetProjectWebhook(ctx, project.ID, "github", []byte("secret"), true, false)
 
 	// Delete webhook
@@ -2497,15 +2455,16 @@ func TestListDeploymentsRecent(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Create a deployment using InsertDeployment
-	deployment := &DeploymentCLI{
-		ID:          "deploy-recent",
-		ProjectName: "test-project",
-		Target:      "production",
-		Status:      "completed",
+	// Create a deployment using CreateDeployment
+	deployment := &DeploymentRecord{
+		ID:        "deploy-recent",
+		Project:   "test-project",
+		Target:    "production",
+		Status:    "completed",
+		StartedAt: time.Now(),
 	}
-	if err := db.InsertDeployment(deployment); err != nil {
-		t.Fatalf("InsertDeployment() error = %v", err)
+	if err := db.CreateDeployment(ctx, deployment); err != nil {
+		t.Fatalf("CreateDeployment() error = %v", err)
 	}
 
 	// List recent deployments
@@ -2530,7 +2489,7 @@ func TestUpdateProjectByName(t *testing.T) {
 		Repository: "https://github.com/test/repo",
 		Branch:     "main",
 	}
-	if err := db.CreateProject(project); err != nil {
+	if err := db.CreateProject(ctx, project); err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 
@@ -2627,8 +2586,8 @@ func TestCleanupOldAuditLogs(t *testing.T) {
 
 	// Create an old audit log entry using direct SQL with SQLite datetime function
 	_, err := db.conn.ExecContext(ctx, `
-		INSERT INTO audit_logs (timestamp, source, user, action, result) 
-		VALUES (datetime('now', '-48 hours'), 'test', 'admin', 'test_action', 'success')
+		INSERT INTO audit_logs (id, timestamp, source, user, action, result) 
+		VALUES ('test-audit-cleanup', datetime('now', '-48 hours'), 'test', 'admin', 'test_action', 'success')
 	`)
 	if err != nil {
 		t.Fatalf("Insert old audit log error = %v", err)
@@ -3342,7 +3301,7 @@ func TestListPendingProvisionJobs(t *testing.T) {
 			TargetHost: "10.0.0.100",
 			TargetPort: 22,
 			TargetUser: "deploy",
-			Status:     j.status,
+			Status:     ProvisionStatus(j.status),
 			StartedAt:  time.Now(),
 		}
 		_ = db.CreateProvisionJob(ctx, job)
@@ -3476,7 +3435,7 @@ func TestCountAgentsByStatus(t *testing.T) {
 		agent := &Agent{
 			ID:       a.id,
 			Hostname: a.id + ".example.com",
-			Status:   a.status,
+			Status:   AgentStatus(a.status),
 		}
 		_ = db.UpsertAgent(ctx, agent)
 	}
@@ -3548,7 +3507,7 @@ func TestCountDeploymentsByStatus(t *testing.T) {
 			Project: "testproject",
 			Target:  "production",
 			Branch:  "main",
-			Status:  d.status,
+			Status:  DeploymentStatus(d.status),
 		}
 		_ = db.CreateDeployment(ctx, deployment)
 	}
@@ -3580,8 +3539,8 @@ func TestRunInTransaction(t *testing.T) {
 
 	// Successful transaction
 	err := db.RunInTransaction(ctx, func(tx *sql.Tx) error {
-		_, err := tx.Exec(`INSERT INTO users (username, password_hash, email, role) VALUES (?, ?, ?, ?)`,
-			"txuser1", "hash", "tx@example.com", "viewer")
+		_, err := tx.Exec(`INSERT INTO users (id, username, password_hash, email, role) VALUES (?, ?, ?, ?, ?)`,
+			"txuser1-id", "txuser1", "hash", "tx@example.com", "viewer")
 		return err
 	})
 	if err != nil {
@@ -3606,8 +3565,8 @@ func TestRunInTransactionRollback(t *testing.T) {
 
 	// Transaction that should rollback
 	err := db.RunInTransaction(ctx, func(tx *sql.Tx) error {
-		_, err := tx.Exec(`INSERT INTO users (username, password_hash, email, role) VALUES (?, ?, ?, ?)`,
-			"txuser2", "hash", "tx2@example.com", "viewer")
+		_, err := tx.Exec(`INSERT INTO users (id, username, password_hash, email, role) VALUES (?, ?, ?, ?, ?)`,
+			"txuser2-id", "txuser2", "hash", "tx2@example.com", "viewer")
 		if err != nil {
 			return err
 		}
@@ -3633,7 +3592,7 @@ func TestGetUserByIDNotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	_, err := db.GetUserByID(ctx, 99999)
+	_, err := db.GetUserByID(ctx, "nonexistent")
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("GetUserByID() error = %v, want ErrNotFound", err)
 	}
@@ -3675,7 +3634,7 @@ func TestDeleteSSHHostKeyNotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	err := db.DeleteSSHHostKey(ctx, 99999)
+	err := db.DeleteSSHHostKey(ctx, "nonexistent")
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("DeleteSSHHostKey() error = %v, want ErrNotFound", err)
 	}
@@ -3916,9 +3875,9 @@ func TestCleanupExpiredAPIKeysWithData(t *testing.T) {
 
 	// Create an expired API key using direct SQL
 	_, err := db.conn.ExecContext(ctx, `
-		INSERT INTO api_keys (user_id, name, key_hash, expires_at, created_at)
-		VALUES (?, 'expired-key', 'expiredhash', datetime('now', '-2 hours'), datetime('now', '-24 hours'))
-	`, user.ID)
+		INSERT INTO api_keys (id, user_id, name, key_hash, expires_at, created_at)
+		VALUES (?, ?, 'expired-key', 'expiredhash', datetime('now', '-2 hours'), datetime('now', '-24 hours'))
+	`, "expired-key-id", user.ID)
 	if err != nil {
 		t.Fatalf("Insert expired API key error = %v", err)
 	}
@@ -3941,8 +3900,8 @@ func TestCleanupOrphanedWebhooksWithData(t *testing.T) {
 
 	// Create an orphaned webhook (project_id that doesn't exist)
 	_, err := db.conn.ExecContext(ctx, `
-		INSERT INTO project_webhooks (project_id, provider, secret_encrypted, enabled)
-		VALUES (99999, 'github', X'1234', 1)
+		INSERT INTO project_webhooks (id, project_id, provider, secret_encrypted, enabled)
+		VALUES ('orphaned-wh-id', 'nonexistent-project', 'github', X'1234', 1)
 	`)
 	if err != nil {
 		t.Fatalf("Insert orphaned webhook error = %v", err)
@@ -3997,6 +3956,7 @@ func TestDeleteExpiredSessionsWithData(t *testing.T) {
 func TestCreateProjectDuplicate(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
+	ctx := context.Background()
 
 	project := &Project{
 		Name:       "dupproject",
@@ -4005,7 +3965,7 @@ func TestCreateProjectDuplicate(t *testing.T) {
 	}
 
 	// First create should succeed
-	err := db.CreateProject(project)
+	err := db.CreateProject(ctx, project)
 	if err != nil {
 		t.Fatalf("CreateProject() first call error = %v", err)
 	}
@@ -4016,7 +3976,7 @@ func TestCreateProjectDuplicate(t *testing.T) {
 		Repository: "https://github.com/test/dup2",
 		Branch:     "develop",
 	}
-	err = db.CreateProject(project2)
+	err = db.CreateProject(ctx, project2)
 	if err == nil {
 		t.Error("CreateProject() should fail for duplicate project name")
 	}
@@ -4025,6 +3985,7 @@ func TestCreateProjectDuplicate(t *testing.T) {
 func TestCreateProjectTypeDuplicate(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
+	ctx := context.Background()
 
 	pt := &ProjectType{
 		Name:        "dupptype",
@@ -4033,7 +3994,7 @@ func TestCreateProjectTypeDuplicate(t *testing.T) {
 	}
 
 	// First create should succeed
-	err := db.CreateProjectType(pt)
+	err := db.CreateProjectType(ctx, pt)
 	if err != nil {
 		t.Fatalf("CreateProjectType() first call error = %v", err)
 	}
@@ -4044,7 +4005,7 @@ func TestCreateProjectTypeDuplicate(t *testing.T) {
 		Description: "Second",
 		BuildCmd:    "build2",
 	}
-	err = db.CreateProjectType(pt2)
+	err = db.CreateProjectType(ctx, pt2)
 	if err == nil {
 		t.Error("CreateProjectType() should fail for duplicate project type name")
 	}
@@ -4476,9 +4437,9 @@ func TestUpdateProjectByNameDetailed(t *testing.T) {
 		Repository: "https://github.com/test/update",
 		Branch:     "main",
 		DeployPath: "/var/www/app",
-		Type:       "nodejs",
+		TypeID:     strPtr("nodejs"),
 	}
-	_ = db.CreateProject(project)
+	_ = db.CreateProject(ctx, project)
 
 	// Update all fields
 	updated := &Project{
@@ -4486,7 +4447,7 @@ func TestUpdateProjectByNameDetailed(t *testing.T) {
 		Repository: "https://gitlab.com/test/updated",
 		Branch:     "develop",
 		DeployPath: "/opt/app",
-		Type:       "python",
+		TypeID:     strPtr("python"),
 	}
 	err := db.UpdateProjectByName(ctx, updated)
 	if err != nil {
@@ -4504,8 +4465,8 @@ func TestUpdateProjectByNameDetailed(t *testing.T) {
 	if retrieved.DeployPath != "/opt/app" {
 		t.Errorf("Project DeployPath = %v, want /opt/app", retrieved.DeployPath)
 	}
-	if retrieved.Type != "python" {
-		t.Errorf("Project Type = %v, want python", retrieved.Type)
+	if retrieved.TypeID == nil || *retrieved.TypeID != "python" {
+		t.Errorf("Project TypeID = %v, want python", retrieved.TypeID)
 	}
 }
 
@@ -4740,20 +4701,21 @@ func TestCountAgentsByStatusEmpty(t *testing.T) {
 func TestListProjectsWithData(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
+	ctx := context.Background()
 
 	// Create multiple projects
 	projects := []*Project{
-		{Name: "proj1", Repository: "https://github.com/test/1", Branch: "main", DeployPath: "/var/www/1", Type: "nodejs"},
-		{Name: "proj2", Repository: "https://github.com/test/2", Branch: "develop", DeployPath: "/var/www/2", Type: "python"},
+		{Name: "proj1", Repository: "https://github.com/test/1", Branch: "main", DeployPath: "/var/www/1", TypeID: strPtr("nodejs")},
+		{Name: "proj2", Repository: "https://github.com/test/2", Branch: "develop", DeployPath: "/var/www/2", TypeID: strPtr("python")},
 	}
 	for _, p := range projects {
-		if err := db.CreateProject(p); err != nil {
+		if err := db.CreateProject(ctx, p); err != nil {
 			t.Fatalf("CreateProject() error = %v", err)
 		}
 	}
 
 	// List projects
-	list, err := db.ListProjects()
+	list, err := db.ListProjects(ctx)
 	if err != nil {
 		t.Fatalf("ListProjects() error = %v", err)
 	}
@@ -4765,15 +4727,16 @@ func TestListProjectsWithData(t *testing.T) {
 func TestListProjectTypesWithData(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
+	ctx := context.Background()
 
 	// Create project types
 	pt := &ProjectType{Name: "custom", Description: "Custom type", BuildCmd: "make build"}
-	if err := db.CreateProjectType(pt); err != nil {
+	if err := db.CreateProjectType(ctx, pt); err != nil {
 		t.Fatalf("CreateProjectType() error = %v", err)
 	}
 
 	// List types
-	types, err := db.ListProjectTypes()
+	types, err := db.ListProjectTypes(ctx)
 	if err != nil {
 		t.Fatalf("ListProjectTypes() error = %v", err)
 	}
@@ -5082,7 +5045,7 @@ func TestExportAllSecretsWithData(t *testing.T) {
 	_ = db.SetSecretEncrypted(ctx, "export-proj", "staging", "key2", []byte("enc2"))
 
 	// Export - ExportAllSecrets takes no arguments
-	secrets, err := db.ExportAllSecrets()
+	secrets, err := db.ExportAllSecrets(ctx)
 	if err != nil {
 		t.Fatalf("ExportAllSecrets() error = %v", err)
 	}
@@ -5172,7 +5135,7 @@ func TestJumpServerCRUD(t *testing.T) {
 	if err := db.CreateJumpServer(ctx, js); err != nil {
 		t.Fatalf("CreateJumpServer() error = %v", err)
 	}
-	if js.ID == 0 {
+	if js.ID == "" {
 		t.Error("CreateJumpServer() did not set ID")
 	}
 
@@ -5275,7 +5238,7 @@ func TestJumpServerNotFound(t *testing.T) {
 	ctx := context.Background()
 
 	// Get by ID
-	_, err := db.GetJumpServer(ctx, 99999)
+	_, err := db.GetJumpServer(ctx, "nonexistent")
 	if err != ErrNotFound {
 		t.Errorf("GetJumpServer() error = %v, want ErrNotFound", err)
 	}
@@ -5287,13 +5250,13 @@ func TestJumpServerNotFound(t *testing.T) {
 	}
 
 	// Update nonexistent
-	err = db.UpdateJumpServer(ctx, &SSHJumpServer{ID: 99999, Name: "test"})
+	err = db.UpdateJumpServer(ctx, &SSHJumpServer{ID: "nonexistent", Name: "test"})
 	if err != ErrNotFound {
 		t.Errorf("UpdateJumpServer() error = %v, want ErrNotFound", err)
 	}
 
 	// Delete nonexistent
-	err = db.DeleteJumpServer(ctx, 99999)
+	err = db.DeleteJumpServer(ctx, "nonexistent")
 	if err != ErrNotFound {
 		t.Errorf("DeleteJumpServer() error = %v, want ErrNotFound", err)
 	}
@@ -5306,7 +5269,7 @@ func TestJumpServerWithSSHKeyID(t *testing.T) {
 	ctx := context.Background()
 
 	// Create jump server with SSH key reference
-	keyID := int64(42)
+	keyID := "key-42"
 	js := &SSHJumpServer{
 		Name:     "bastion-with-key",
 		Host:     "key.example.com",
@@ -5326,7 +5289,7 @@ func TestJumpServerWithSSHKeyID(t *testing.T) {
 	if got.SSHKeyID == nil {
 		t.Error("GetJumpServer() SSHKeyID = nil, want non-nil")
 	} else if *got.SSHKeyID != keyID {
-		t.Errorf("GetJumpServer() SSHKeyID = %d, want %d", *got.SSHKeyID, keyID)
+		t.Errorf("GetJumpServer() SSHKeyID = %s, want %s", *got.SSHKeyID, keyID)
 	}
 }
 
@@ -5374,7 +5337,7 @@ func TestAgentBinary_CRUD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateAgentBinary() error = %v", err)
 	}
-	if binary.ID == 0 {
+	if binary.ID == "" {
 		t.Error("CreateAgentBinary() did not set ID")
 	}
 
@@ -5436,7 +5399,7 @@ func TestAgentBinary_GetByVersion(t *testing.T) {
 		t.Fatalf("GetAgentBinaryByVersion() error = %v", err)
 	}
 	if got.ID != binary.ID {
-		t.Errorf("GetAgentBinaryByVersion() ID = %d, want %d", got.ID, binary.ID)
+		t.Errorf("GetAgentBinaryByVersion() ID = %s, want %s", got.ID, binary.ID)
 	}
 
 	// Non-existent version
@@ -5477,7 +5440,7 @@ func TestAgentBinary_SetCurrent(t *testing.T) {
 		t.Fatalf("GetCurrentAgentBinary() error = %v", err)
 	}
 	if current.ID != binary1.ID {
-		t.Errorf("GetCurrentAgentBinary() ID = %d, want %d", current.ID, binary1.ID)
+		t.Errorf("GetCurrentAgentBinary() ID = %s, want %s", current.ID, binary1.ID)
 	}
 
 	// Set binary2 as current
@@ -5491,7 +5454,7 @@ func TestAgentBinary_SetCurrent(t *testing.T) {
 		t.Fatalf("GetCurrentAgentBinary() after set error = %v", err)
 	}
 	if current.ID != binary2.ID {
-		t.Errorf("GetCurrentAgentBinary() after set ID = %d, want %d", current.ID, binary2.ID)
+		t.Errorf("GetCurrentAgentBinary() after set ID = %s, want %s", current.ID, binary2.ID)
 	}
 
 	// Verify binary1 is no longer current
@@ -5539,7 +5502,7 @@ func TestAgentBinary_DeleteNotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	err := db.DeleteAgentBinary(ctx, 999999)
+	err := db.DeleteAgentBinary(ctx, "nonexistent")
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("DeleteAgentBinary() non-existent should return ErrNotFound, got %v", err)
 	}
@@ -5577,7 +5540,7 @@ func TestAgentUpdateHistory_CRUD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateAgentUpdateHistory() error = %v", err)
 	}
-	if history.ID == 0 {
+	if history.ID == "" {
 		t.Error("CreateAgentUpdateHistory() did not set ID")
 	}
 
@@ -5728,7 +5691,7 @@ func TestAgentUpdateHistory_NotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	_, err := db.GetAgentUpdateHistory(ctx, 999999)
+	_, err := db.GetAgentUpdateHistory(ctx, "nonexistent")
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("GetAgentUpdateHistory() non-existent should return ErrNotFound, got %v", err)
 	}
@@ -5932,7 +5895,7 @@ func TestHealthCheckConfig_CRUD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateHealthCheckConfig() error = %v", err)
 	}
-	if config.ID == 0 {
+	if config.ID == "" {
 		t.Error("CreateHealthCheckConfig() did not set ID")
 	}
 
@@ -6011,10 +5974,10 @@ func TestHealthCheckConfig_ForProject(t *testing.T) {
 		Repository: "https://github.com/test/hc",
 		Branch:     "main",
 		DeployPath: "/app",
-		Type:       "web",
+		TypeID:     strPtr("web"),
 		CreatedAt:  time.Now(),
 	}
-	if err := db.CreateProject(project); err != nil {
+	if err := db.CreateProject(ctx, project); err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 
@@ -6065,7 +6028,7 @@ func TestHealthCheckConfig_ForProject(t *testing.T) {
 		t.Error("GetHealthCheckConfigForProject() should return project-specific config when it exists")
 	}
 	if got.ID != projectConfig.ID {
-		t.Errorf("GetHealthCheckConfigForProject() ID = %d, want %d", got.ID, projectConfig.ID)
+		t.Errorf("GetHealthCheckConfigForProject() ID = %s, want %s", got.ID, projectConfig.ID)
 	}
 }
 
@@ -6159,13 +6122,13 @@ func TestHealthCheckConfig_NotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	_, err := db.GetHealthCheckConfig(ctx, 999999)
+	_, err := db.GetHealthCheckConfig(ctx, "nonexistent")
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("GetHealthCheckConfig() non-existent should return ErrNotFound, got %v", err)
 	}
 
 	// Delete non-existent
-	err = db.DeleteHealthCheckConfig(ctx, 999999)
+	err = db.DeleteHealthCheckConfig(ctx, "nonexistent")
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("DeleteHealthCheckConfig() non-existent should return ErrNotFound, got %v", err)
 	}
@@ -6197,7 +6160,7 @@ func TestDeploymentRollback_CRUD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateDeploymentRollback() error = %v", err)
 	}
-	if rollback.ID == 0 {
+	if rollback.ID == "" {
 		t.Error("CreateDeploymentRollback() did not set ID")
 	}
 
@@ -6315,7 +6278,7 @@ func TestDeploymentRollback_GetLatest(t *testing.T) {
 	// Create rollbacks - the most recently inserted one should be returned
 	// Note: CreateDeploymentRollback doesn't save started_at from the struct,
 	// it uses CURRENT_TIMESTAMP as default. So we rely on insertion order.
-	var lastID int64
+	var lastID string
 	var lastFromRelease int
 	for i := 0; i < 3; i++ {
 		fromRelease := i + 2
@@ -6345,7 +6308,7 @@ func TestDeploymentRollback_GetLatest(t *testing.T) {
 
 	// Verify it's the last inserted one
 	if latest.ID != lastID {
-		t.Errorf("GetLatestRollbackForDeployment() ID = %d, want %d", latest.ID, lastID)
+		t.Errorf("GetLatestRollbackForDeployment() ID = %s, want %s", latest.ID, lastID)
 	}
 	if latest.FromRelease != lastFromRelease {
 		t.Errorf("GetLatestRollbackForDeployment() FromRelease = %d, want %d", latest.FromRelease, lastFromRelease)
@@ -6364,7 +6327,7 @@ func TestDeploymentRollback_NotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	_, err := db.GetDeploymentRollback(ctx, 999999)
+	_, err := db.GetDeploymentRollback(ctx, "nonexistent")
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("GetDeploymentRollback() non-existent should return ErrNotFound, got %v", err)
 	}
@@ -6384,10 +6347,10 @@ func TestUpdateProjectHealthCheck(t *testing.T) {
 		Repository: "https://github.com/test/hc-update",
 		Branch:     "main",
 		DeployPath: "/app",
-		Type:       "web",
+		TypeID:     strPtr("web"),
 		CreatedAt:  time.Now(),
 	}
-	if err := db.CreateProject(project); err != nil {
+	if err := db.CreateProject(ctx, project); err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 

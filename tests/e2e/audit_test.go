@@ -74,10 +74,10 @@ func TestAuditAPI(t *testing.T) {
 	t.Run("generate audit events", func(t *testing.T) {
 		// Create a project to generate an audit event
 		project := map[string]interface{}{
-			"name":        "audit-test-project",
-			"repository":  "https://github.com/test/repo.git",
-			"branch":      "main",
-			"deploy_path": "/deploy/audit-test",
+			"name":       "audit-test-project",
+			"repository": "https://github.com/test/repo.git",
+			"branch":     "main",
+			"deployPath": "/deploy/audit-test",
 		}
 
 		resp, _ := ctx.Client.Post("/api/v1/projects", project)

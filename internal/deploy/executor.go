@@ -303,7 +303,7 @@ func (s *SymlinkStrategy) Deploy(ctx context.Context, cmd *DeployCommand, logCh 
 func (s *SymlinkStrategy) getNextReleaseNumber(ctx context.Context, releasesPath string) (int, error) {
 	result, err := s.runner.Run(ctx, fmt.Sprintf("ls -1 %s 2>/dev/null | sort -n | tail -1", releasesPath), RunOptions{})
 	if err != nil {
-		return 1, nil // First release
+		return 1, nil //nolint:nilerr // No releases yet
 	}
 	var lastRelease int
 	_, _ = fmt.Sscanf(result.Stdout, "%d", &lastRelease)
@@ -325,7 +325,7 @@ func (s *SymlinkStrategy) setupDirectories(ctx context.Context, basePath, releas
 	return nil
 }
 
-func (s *SymlinkStrategy) updateRepo(ctx context.Context, repoPath, repository, branch, commit string, logCh chan<- LogEntry) error {
+func (s *SymlinkStrategy) updateRepo(ctx context.Context, repoPath, repository, _ /* branch */, _ /* commit */ string, _ /* logCh */ chan<- LogEntry) error {
 	// Check if repo exists
 	result, _ := s.runner.Run(ctx, fmt.Sprintf("test -d %s/.git", repoPath), RunOptions{})
 
@@ -614,6 +614,11 @@ func (s *SymlinkStrategy) Rollback(ctx context.Context, cmd *RollbackCommand) (*
 
 	// Reload services
 	for _, svc := range cmd.ReloadServices {
+		// Validate service name to prevent command injection
+		if !validation.IsValidServiceName(svc.Service) {
+			result.Error = fmt.Errorf("invalid service name: %q", svc.Service)
+			return result, result.Error
+		}
 		svcCmd := fmt.Sprintf("systemctl %s %s", svc.Action, svc.Service)
 		_, err := s.runner.Run(ctx, svcCmd, RunOptions{})
 		if err != nil {

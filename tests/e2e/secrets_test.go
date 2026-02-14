@@ -19,10 +19,10 @@ func TestSecretsAPI(t *testing.T) {
 
 	// Create a test project first for project-scoped secrets
 	project := map[string]interface{}{
-		"name":        "e2e-secrets-test-project",
-		"repository":  "https://github.com/test/repo.git",
-		"branch":      "main",
-		"deploy_path": "/deploy/secrets-test",
+		"name":       "e2e-secrets-test-project",
+		"repository": "https://github.com/test/repo.git",
+		"branch":     "main",
+		"deployPath": "/deploy/secrets-test",
 	}
 
 	resp, err := ctx.Client.Post("/api/v1/projects", project)
@@ -45,9 +45,10 @@ func TestSecretsAPI(t *testing.T) {
 
 	t.Run("create global secret", func(t *testing.T) {
 		secret := map[string]interface{}{
-			"key":   "E2E_TEST_SECRET",
-			"value": "super-secret-value",
-			"scope": "global",
+			"project": "_global",
+			"key":     "E2E_TEST_SECRET",
+			"value":   "super-secret-value",
+			"scope":   "default",
 		}
 
 		resp, err := ctx.Client.Post("/api/v1/secrets", secret)
@@ -56,7 +57,7 @@ func TestSecretsAPI(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		ctx.Assertions.StatusCreatedOrOK(resp)
+		ctx.Assertions.StatusCreated(resp)
 
 		var result map[string]interface{}
 		if err := testutil.DecodeJSON(resp, &result); err != nil {
@@ -81,7 +82,7 @@ func TestSecretsAPI(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		ctx.Assertions.StatusCreatedOrOK(resp)
+		ctx.Assertions.StatusCreated(resp)
 	})
 
 	t.Run("get secret metadata", func(t *testing.T) {
@@ -173,7 +174,7 @@ func TestSecretsAPI(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		ctx.Assertions.NoServerError(resp)
+		ctx.Assertions.StatusOK(resp)
 	})
 
 	t.Cleanup(func() {
@@ -193,10 +194,10 @@ func TestSecretsProjectScope(t *testing.T) {
 	// Create two projects
 	for i := 1; i <= 2; i++ {
 		project := map[string]interface{}{
-			"name":        fmt.Sprintf("e2e-scope-test-project-%d", i),
-			"repository":  "https://github.com/test/repo.git",
-			"branch":      "main",
-			"deploy_path": fmt.Sprintf("/deploy/scope-test-%d", i),
+			"name":       fmt.Sprintf("e2e-scope-test-project-%d", i),
+			"repository": "https://github.com/test/repo.git",
+			"branch":     "main",
+			"deployPath": fmt.Sprintf("/deploy/scope-test-%d", i),
 		}
 		resp, _ := ctx.Client.Post("/api/v1/projects", project)
 		resp.Body.Close()
@@ -225,7 +226,7 @@ func TestSecretsProjectScope(t *testing.T) {
 			t.Fatalf("request failed: %v", err)
 		}
 		resp1.Body.Close()
-		ctx.Assertions.StatusCreatedOrOK(resp1)
+		ctx.Assertions.StatusCreated(resp1)
 
 		// Create same key in project 2 - should succeed
 		secret2 := map[string]interface{}{
@@ -239,7 +240,7 @@ func TestSecretsProjectScope(t *testing.T) {
 			t.Fatalf("request failed: %v", err)
 		}
 		resp2.Body.Close()
-		ctx.Assertions.StatusCreatedOrOK(resp2)
+		ctx.Assertions.StatusCreated(resp2)
 	})
 
 	t.Cleanup(func() {

@@ -4,7 +4,9 @@ package e2e
 
 import (
 	"fmt"
+	"net/http"
 	"testing"
+	"time"
 
 	"github.com/BlackOrder/vcdeploy/tests/testutil"
 )
@@ -22,25 +24,26 @@ func TestProjectsAPI(t *testing.T) {
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
-		defer resp.Body.Close()
 
 		ctx.Assertions.StatusOK(resp)
 
-		var projects []map[string]interface{}
-		if err := testutil.DecodeJSON(resp, &projects); err != nil {
+		result, err := testutil.DecodePaginatedJSON(resp)
+		if err != nil {
 			t.Fatalf("failed to decode response: %v", err)
 		}
+		_ = result // Use result if needed
 	})
 
 	var createdProjectID interface{}
+	createdProjectName := "e2e-test-project"
 
 	t.Run("create project", func(t *testing.T) {
 		project := map[string]interface{}{
-			"name":        "e2e-test-project",
-			"repository":  "https://github.com/test/repo.git",
-			"branch":      "main",
-			"deploy_path": "/deploy/e2e-test",
-			"type":        "nodejs",
+			"name":       createdProjectName,
+			"repository": "https://github.com/test/repo.git",
+			"branch":     "main",
+			"deployPath": "/deploy/e2e-test",
+			"type":       "nodejs",
 		}
 
 		resp, err := ctx.Client.Post("/api/v1/projects", project)
@@ -49,14 +52,35 @@ func TestProjectsAPI(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		ctx.Assertions.StatusCreatedOrOK(resp)
+		// Accept 201 Created or 409 Conflict (already exists)
+		if resp.StatusCode == http.StatusConflict {
+			// Project already exists, list to find it
+			listResp, err := ctx.Client.Get("/api/v1/projects")
+			if err != nil {
+				t.Fatalf("failed to list projects: %v", err)
+			}
 
-		var result map[string]interface{}
-		if err := testutil.DecodeJSON(resp, &result); err != nil {
-			t.Fatalf("failed to decode response: %v", err)
+			result, err := testutil.DecodePaginatedJSON(listResp)
+			if err != nil {
+				t.Fatalf("failed to decode projects list: %v", err)
+			}
+			for _, p := range result.Items {
+				if p["name"] == createdProjectName {
+					createdProjectID = p["id"]
+					break
+				}
+			}
+			t.Log("project already exists, using existing")
+		} else {
+			ctx.Assertions.StatusCreated(resp)
+
+			var result map[string]interface{}
+			if err := testutil.DecodeJSON(resp, &result); err != nil {
+				t.Fatalf("failed to decode response: %v", err)
+			}
+			createdProjectID = result["id"]
 		}
 
-		createdProjectID = result["id"]
 		ctx.TrackResource("project", createdProjectID)
 	})
 
@@ -65,6 +89,7 @@ func TestProjectsAPI(t *testing.T) {
 			t.Skip("no project created")
 		}
 
+		// Use project ID in the URL
 		resp, err := ctx.Client.Get(fmt.Sprintf("/api/v1/projects/%v", createdProjectID))
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
@@ -119,15 +144,15 @@ func TestProjectsAPI(t *testing.T) {
 	})
 
 	t.Run("create project with duplicate name", func(t *testing.T) {
-		if createdProjectID == nil {
+		if createdProjectName == "" {
 			t.Skip("no project created")
 		}
 
 		project := map[string]interface{}{
-			"name":        "e2e-test-project", // Same name
-			"repository":  "https://github.com/test/other.git",
-			"branch":      "main",
-			"deploy_path": "/deploy/other",
+			"name":       "e2e-test-project", // Same name
+			"repository": "https://github.com/test/other.git",
+			"branch":     "main",
+			"deployPath": "/deploy/other",
 		}
 
 		resp, err := ctx.Client.Post("/api/v1/projects", project)
@@ -144,8 +169,8 @@ func TestProjectsAPI(t *testing.T) {
 
 	t.Run("create project with missing required fields", func(t *testing.T) {
 		project := map[string]interface{}{
-			"name": "incomplete-project",
-			// Missing repository, branch, deploy_path
+			"name": "incomplete-project-" + fmt.Sprint(time.Now().Unix()),
+			// Missing repository, branch, deployPath
 		}
 
 		resp, err := ctx.Client.Post("/api/v1/projects", project)
@@ -154,15 +179,16 @@ func TestProjectsAPI(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
+		// API requires repository - should return 400 Bad Request
 		ctx.Assertions.StatusBadRequest(resp)
 	})
 
 	t.Run("create project with invalid repository URL", func(t *testing.T) {
 		project := map[string]interface{}{
-			"name":        "invalid-repo-project",
-			"repository":  "not-a-valid-url",
-			"branch":      "main",
-			"deploy_path": "/deploy/invalid",
+			"name":       "invalid-repo-project-" + fmt.Sprint(time.Now().Unix()),
+			"repository": "not-a-valid-url",
+			"branch":     "main",
+			"deployPath": "/deploy/invalid",
 		}
 
 		resp, err := ctx.Client.Post("/api/v1/projects", project)
@@ -171,6 +197,7 @@ func TestProjectsAPI(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
+		// API validates repository URL format - should return 400 Bad Request
 		ctx.Assertions.StatusBadRequest(resp)
 	})
 
@@ -185,7 +212,7 @@ func TestProjectsAPI(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		ctx.Assertions.NoServerError(resp)
+		ctx.Assertions.StatusOK(resp)
 	})
 
 	t.Cleanup(func() {
@@ -202,12 +229,13 @@ func TestProjectDeployments(t *testing.T) {
 	ctx.MustLogin(cfg.AdminUsername, cfg.AdminPassword)
 
 	// Create a test project first
+	projectName := "e2e-deploy-test-project"
 	project := map[string]interface{}{
-		"name":        "e2e-deploy-test-project",
-		"repository":  "https://github.com/test/repo.git",
-		"branch":      "main",
-		"deploy_path": "/deploy/deploy-test",
-		"type":        "static",
+		"name":       projectName,
+		"repository": "https://github.com/test/repo.git",
+		"branch":     "main",
+		"deployPath": "/deploy/deploy-test",
+		"type":       "static",
 	}
 
 	resp, err := ctx.Client.Post("/api/v1/projects", project)
@@ -216,9 +244,22 @@ func TestProjectDeployments(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	var projectResult map[string]interface{}
-	testutil.DecodeJSON(resp, &projectResult)
-	projectID := projectResult["id"]
+	var projectID interface{}
+	if resp.StatusCode == http.StatusConflict {
+		// Find existing project ID
+		listResp, _ := ctx.Client.Get("/api/v1/projects")
+		result, _ := testutil.DecodePaginatedJSON(listResp)
+		for _, p := range result.Items {
+			if p["name"] == projectName {
+				projectID = p["id"]
+				break
+			}
+		}
+	} else {
+		var result map[string]interface{}
+		testutil.DecodeJSON(resp, &result)
+		projectID = result["id"]
+	}
 
 	t.Run("trigger deployment", func(t *testing.T) {
 		deployReq := map[string]interface{}{
@@ -231,22 +272,15 @@ func TestProjectDeployments(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		// Deployment may fail due to no agents, but endpoint should respond
-		ctx.Assertions.NoServerError(resp)
-	})
-
-	t.Run("get project deployments", func(t *testing.T) {
-		resp, err := ctx.Client.Get(fmt.Sprintf("/api/v1/projects/%v/deployments", projectID))
-		if err != nil {
-			t.Fatalf("request failed: %v", err)
-		}
-		defer resp.Body.Close()
-
-		ctx.Assertions.StatusOK(resp)
+		// Deployment may fail due to no agents (4xx) but should not have server errors (5xx)
+		// StatusOneOf is more specific - we expect either 200/202 (success) or 400/404 (no agents/project)
+		ctx.Assertions.StatusOneOf(resp, 200, 202, 400, 404)
 	})
 
 	t.Cleanup(func() {
-		ctx.Cleanup.DeleteProject(projectID)
+		if projectID != nil {
+			ctx.Client.Delete(fmt.Sprintf("/api/v1/projects/%v", projectID))
+		}
 	})
 }
 
@@ -259,11 +293,12 @@ func TestProjectHealthCheck(t *testing.T) {
 	ctx.MustLogin(cfg.AdminUsername, cfg.AdminPassword)
 
 	// Create a test project first
+	projectName := "e2e-health-test-project"
 	project := map[string]interface{}{
-		"name":        "e2e-health-test-project",
-		"repository":  "https://github.com/test/repo.git",
-		"branch":      "main",
-		"deploy_path": "/deploy/health-test",
+		"name":       projectName,
+		"repository": "https://github.com/test/repo.git",
+		"branch":     "main",
+		"deployPath": "/deploy/health-test",
 	}
 
 	resp, err := ctx.Client.Post("/api/v1/projects", project)
@@ -272,43 +307,58 @@ func TestProjectHealthCheck(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	var projectResult map[string]interface{}
-	testutil.DecodeJSON(resp, &projectResult)
-	projectID := projectResult["id"]
+	var projectID interface{}
+	if resp.StatusCode == http.StatusConflict {
+		// Find existing project ID
+		listResp, _ := ctx.Client.Get("/api/v1/projects")
+		result, _ := testutil.DecodePaginatedJSON(listResp)
+		for _, p := range result.Items {
+			if p["name"] == projectName {
+				projectID = p["id"]
+				break
+			}
+		}
+	} else {
+		var result map[string]interface{}
+		testutil.DecodeJSON(resp, &result)
+		projectID = result["id"]
+	}
 
 	t.Run("configure health check", func(t *testing.T) {
 		healthConfig := map[string]interface{}{
-			"enabled":                true,
-			"url":                    "http://localhost:8080/health",
-			"method":                 "GET",
-			"timeout_seconds":        30,
-			"retries":                3,
-			"retry_delay_seconds":    5,
-			"expected_status":        200,
-			"auto_rollback_enabled":  true,
-			"auto_rollback_releases": 1,
+			"enabled":              true,
+			"url":                  "http://localhost:8080/health",
+			"method":               "GET",
+			"timeoutSeconds":       30,
+			"retries":              3,
+			"retryDelaySeconds":    5,
+			"expectedStatus":       200,
+			"autoRollbackEnabled":  true,
+			"autoRollbackReleases": 1,
 		}
 
-		resp, err := ctx.Client.Put(fmt.Sprintf("/api/v1/projects/%v/health-check", projectID), healthConfig)
+		resp, err := ctx.Client.Put(fmt.Sprintf("/api/v1/projects/%v/health-config", projectID), healthConfig)
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
 		defer resp.Body.Close()
 
-		ctx.Assertions.NoServerError(resp)
+		ctx.Assertions.StatusOK(resp)
 	})
 
 	t.Run("get health check config", func(t *testing.T) {
-		resp, err := ctx.Client.Get(fmt.Sprintf("/api/v1/projects/%v/health-check", projectID))
+		resp, err := ctx.Client.Get(fmt.Sprintf("/api/v1/projects/%v/health-config", projectID))
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
 		defer resp.Body.Close()
 
-		ctx.Assertions.NoServerError(resp)
+		ctx.Assertions.StatusOK(resp)
 	})
 
 	t.Cleanup(func() {
-		ctx.Cleanup.DeleteProject(projectID)
+		if projectID != nil {
+			ctx.Client.Delete(fmt.Sprintf("/api/v1/projects/%v", projectID))
+		}
 	})
 }

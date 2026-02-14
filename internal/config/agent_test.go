@@ -18,8 +18,8 @@ func TestDefaultAgentConfig(t *testing.T) {
 	}
 
 	// Check default values
-	if config.Master.Cert != "/etc/vcdeploy/agent/cert.pem" {
-		t.Errorf("unexpected default cert path: %s", config.Master.Cert)
+	if config.Master.CACert != "/etc/vcdeploy/agent/ca.pem" {
+		t.Errorf("unexpected default CA cert path: %s", config.Master.CACert)
 	}
 	if config.Master.Reconnect.InitialDelay != 1*time.Second {
 		t.Errorf("unexpected default initial delay: %v", config.Master.Reconnect.InitialDelay)
@@ -48,7 +48,7 @@ func TestLoadAgentConfig(t *testing.T) {
 			name: "valid config",
 			content: `
 master:
-  address: "localhost:9090"
+  address: "localhost:9001"
   token: "test-token"
   reconnect:
     initial_delay: 2s
@@ -67,7 +67,7 @@ execution:
 `,
 			wantErr: false,
 			checkFunc: func(t *testing.T, c *AgentConfig) {
-				if c.Master.Address != "localhost:9090" {
+				if c.Master.Address != "localhost:9001" {
 					t.Errorf("unexpected address: %s", c.Master.Address)
 				}
 				if c.Agent.ID != "test-agent" {
@@ -87,7 +87,7 @@ execution:
 agent:
   id: "minimal-agent"
 master:
-  address: "localhost:9090"
+  address: "localhost:9001"
 `,
 			wantErr: false,
 			checkFunc: func(t *testing.T, c *AgentConfig) {
@@ -150,7 +150,7 @@ func TestSaveAgentConfig(t *testing.T) {
 
 	config := DefaultAgentConfig()
 	config.Agent.ID = "save-test-agent"
-	config.Master.Address = "localhost:9090"
+	config.Master.Address = "localhost:9001"
 
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "subdir", "agent.yaml")
@@ -194,7 +194,7 @@ func TestAgentConfigValidate(t *testing.T) {
 					ID: "test-agent",
 				},
 				Master: AgentMasterConfig{
-					Address: "localhost:9090",
+					Address: "localhost:9001",
 				},
 				Paths: AgentPathsConfig{
 					Repos:    "/tmp/repos",
@@ -213,7 +213,7 @@ func TestAgentConfigValidate(t *testing.T) {
 					ID: "",
 				},
 				Master: AgentMasterConfig{
-					Address: "localhost:9090",
+					Address: "localhost:9001",
 				},
 				Paths: AgentPathsConfig{
 					Repos:    "/tmp/repos",
@@ -268,7 +268,7 @@ func TestAgentConfigValidate(t *testing.T) {
 					ID: "test-agent",
 				},
 				Master: AgentMasterConfig{
-					Address: "localhost:9090",
+					Address: "localhost:9001",
 				},
 				Paths: AgentPathsConfig{
 					Repos:    "",
@@ -287,7 +287,7 @@ func TestAgentConfigValidate(t *testing.T) {
 					ID: "test-agent",
 				},
 				Master: AgentMasterConfig{
-					Address: "localhost:9090",
+					Address: "localhost:9001",
 				},
 				Paths: AgentPathsConfig{
 					Repos:    "/tmp/repos",
@@ -306,7 +306,7 @@ func TestAgentConfigValidate(t *testing.T) {
 					ID: "test-agent",
 				},
 				Master: AgentMasterConfig{
-					Address: "localhost:9090",
+					Address: "localhost:9001",
 				},
 				Paths: AgentPathsConfig{
 					Repos:    "/tmp/repos",
@@ -348,7 +348,7 @@ func TestSaveAgentConfig_MarshalAndWrite(t *testing.T) {
 
 	config := DefaultAgentConfig()
 	config.Agent.ID = "marshal-test-agent"
-	config.Master.Address = "localhost:9090"
+	config.Master.Address = "localhost:9001"
 	config.Agent.Labels = map[string]string{
 		"env":    "test",
 		"region": "us-east-1",
@@ -378,7 +378,7 @@ func TestSaveAgentConfig_DirectoryCreationError(t *testing.T) {
 
 	config := DefaultAgentConfig()
 	config.Agent.ID = "test"
-	config.Master.Address = "localhost:9090"
+	config.Master.Address = "localhost:9001"
 
 	// Try to save to a path where we can't create directory
 	// /dev/null is a device file, can't create subdirectories under it
@@ -417,7 +417,7 @@ func TestAgentConfigValidateErrorMessages(t *testing.T) {
 			name: "missing repos path message",
 			config: &AgentConfig{
 				Agent:  AgentIdentityConfig{ID: "test"},
-				Master: AgentMasterConfig{Address: "localhost:9090"},
+				Master: AgentMasterConfig{Address: "localhost:9001"},
 				Paths:  AgentPathsConfig{Repos: ""},
 			},
 			expectedSubstr: "paths.repos",
@@ -426,7 +426,7 @@ func TestAgentConfigValidateErrorMessages(t *testing.T) {
 			name: "missing releases path message",
 			config: &AgentConfig{
 				Agent:  AgentIdentityConfig{ID: "test"},
-				Master: AgentMasterConfig{Address: "localhost:9090"},
+				Master: AgentMasterConfig{Address: "localhost:9001"},
 				Paths:  AgentPathsConfig{Repos: "/tmp/repos", Releases: ""},
 			},
 			expectedSubstr: "paths.releases",
@@ -435,7 +435,7 @@ func TestAgentConfigValidateErrorMessages(t *testing.T) {
 			name: "timeout too short message",
 			config: &AgentConfig{
 				Agent:     AgentIdentityConfig{ID: "test"},
-				Master:    AgentMasterConfig{Address: "localhost:9090"},
+				Master:    AgentMasterConfig{Address: "localhost:9001"},
 				Paths:     AgentPathsConfig{Repos: "/tmp/repos", Releases: "/tmp/releases"},
 				Execution: ExecutionConfig{Timeout: 100 * time.Millisecond},
 			},
@@ -480,10 +480,9 @@ func TestLoadAgentConfigWithAllFields(t *testing.T) {
 
 	content := `
 master:
-  address: "master.example.com:9090"
+  address: "master.example.com:9001"
   token: "secret-token"
-  cert: "/custom/cert.pem"
-  allow_insecure: true
+  ca_cert: "/custom/ca.pem"
   reconnect:
     initial_delay: 5s
     max_delay: 30m
@@ -525,14 +524,14 @@ graceful_shutdown:
 	}
 
 	// Verify all fields
-	if config.Master.Address != "master.example.com:9090" {
+	if config.Master.Address != "master.example.com:9001" {
 		t.Errorf("unexpected Master.Address: %s", config.Master.Address)
 	}
 	if config.Master.Token != "secret-token" {
 		t.Errorf("unexpected Master.Token: %s", config.Master.Token)
 	}
-	if !config.Master.AllowInsecure {
-		t.Error("expected AllowInsecure to be true")
+	if config.Master.CACert != "/custom/ca.pem" {
+		t.Errorf("unexpected Master.CACert: %s", config.Master.CACert)
 	}
 	if config.Master.Reconnect.InitialDelay != 5*time.Second {
 		t.Errorf("unexpected InitialDelay: %v", config.Master.Reconnect.InitialDelay)

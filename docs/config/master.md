@@ -10,16 +10,35 @@ The master server is configured via a YAML file, typically located at `/etc/vcde
 # HTTP Server settings
 server:
   listen: ":9000"              # HTTP API and Web UI address
+  https_address: ":9443"       # Optional separate HTTPS port
+  socket_path: "/var/run/vcdeploy/vcdeploy.sock"  # Unix socket for local CLI
   tls:
-    enabled: true              # Enable HTTPS
-    cert: "/etc/vcdeploy/tls/cert.pem"
-    key: "/etc/vcdeploy/tls/key.pem"
+    mode: "static"             # disabled, static, or acme
+    cert_file: "/etc/vcdeploy/tls/cert.pem"
+    key_file: "/etc/vcdeploy/tls/key.pem"
+    force_https: true          # Redirect HTTP to HTTPS
+    min_version: "1.2"         # Minimum TLS version
+    
+    # ACME (Let's Encrypt) configuration
+    acme:
+      email: "admin@example.com"
+      domains:
+        - "vcdeploy.example.com"
+      staging: false
+      cache_dir: "/var/lib/vcdeploy/acme"
 
 # gRPC Server settings (agent connections)
 grpc:
   listen: ":9001"              # gRPC address for agents
 
-# SSH settings (for SSH-based deployments)
+# Archive settings (deployment archive management)
+archive:
+  storage_dir: /var/lib/vcdeploy/archives    # Archive storage directory
+  keep_count: 10                              # Max cached archives per project
+  max_total_size: 5GB                         # Max total archive cache size
+  signed_url_expiry: 10m                      # HMAC signed URL expiry
+
+# SSH settings (for provisioning and git repo access — not used for deployment)
 ssh:
   default_user: "deploy"                      # Default SSH username
   default_key: "/etc/vcdeploy/keys/default.pem"  # Default SSH private key
@@ -37,6 +56,7 @@ ssh:
 security:
   session_timeout: 24h                        # Web session timeout
   require_2fa_admin: true                     # Require TOTP for admin users
+  reauth_address: ":9002"                     # Dedicated port for re-authentication
   key_rotation:
     enabled: true                             # Enable automatic key rotation
     interval: 720h                            # Rotation interval (30 days)
@@ -90,13 +110,13 @@ alerting:
 webhooks:
   github:
     enabled: true
-    path: /webhooks/github
+    path: /webhook/github
   gitlab:
     enabled: true
-    path: /webhooks/gitlab
+    path: /webhook/gitlab
   bitbucket:
     enabled: true
-    path: /webhooks/bitbucket
+    path: /webhook/bitbucket
 
 # Outgoing notification settings
 notifications:
@@ -135,6 +155,14 @@ notifications:
 # API settings
 api:
   enabled: true
+  rate_limit:
+    enabled: false                            # Enable rate limiting
+    requests_per_second: 100                  # Requests per second limit
+    burst_size: 50                            # Burst allowance
+
+# Storage settings
+storage:
+  use_memory_cache: true                      # Enable in-memory cache layer
 
 # UI appearance
 appearance:
@@ -150,9 +178,17 @@ HTTP server configuration for the REST API and Web UI.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `listen` | string | `:9000` | Address to listen on |
-| `tls.enabled` | bool | `true` | Enable HTTPS |
-| `tls.cert` | string | `/etc/vcdeploy/tls/cert.pem` | TLS certificate path |
-| `tls.key` | string | `/etc/vcdeploy/tls/key.pem` | TLS private key path |
+| `https_address` | string | - | Optional separate HTTPS port |
+| `socket_path` | string | `/var/run/vcdeploy/vcdeploy.sock` | Unix socket for local CLI access |
+| `tls.mode` | string | `disabled` | TLS mode: disabled, static, or acme |
+| `tls.cert_file` | string | - | TLS certificate path (static mode) |
+| `tls.key_file` | string | - | TLS private key path (static mode) |
+| `tls.force_https` | bool | `false` | Redirect HTTP to HTTPS |
+| `tls.min_version` | string | `1.2` | Minimum TLS version (1.2 or 1.3) |
+| `tls.acme.email` | string | - | ACME contact email (acme mode) |
+| `tls.acme.domains` | list | `[]` | Domains for ACME certs |
+| `tls.acme.staging` | bool | `false` | Use Let's Encrypt staging |
+| `tls.acme.cache_dir` | string | - | Certificate cache directory |
 
 ### gRPC
 
@@ -164,7 +200,7 @@ gRPC server for agent connections.
 
 ### SSH
 
-SSH connection settings for SSH-based deployments (alternative to agents).
+SSH connection settings for provisioning and git repository access. Not used for deployment.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -184,6 +220,7 @@ Security and authentication settings.
 |-------|------|---------|-------------|
 | `session_timeout` | duration | `24h` | Web session timeout |
 | `require_2fa_admin` | bool | `true` | Require TOTP for admin users |
+| `reauth_address` | string | - | Dedicated port for re-authentication (optional) |
 | `key_rotation.enabled` | bool | `true` | Enable automatic key rotation |
 | `key_rotation.interval` | duration | `720h` | Key rotation interval |
 
@@ -246,11 +283,11 @@ Incoming webhook configuration for Git providers.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `github.enabled` | bool | `true` | Enable GitHub webhooks |
-| `github.path` | string | `/webhooks/github` | GitHub webhook path |
+| `github.path` | string | `/webhook/github` | GitHub webhook path |
 | `gitlab.enabled` | bool | `true` | Enable GitLab webhooks |
-| `gitlab.path` | string | `/webhooks/gitlab` | GitLab webhook path |
+| `gitlab.path` | string | `/webhook/gitlab` | GitLab webhook path |
 | `bitbucket.enabled` | bool | `true` | Enable Bitbucket webhooks |
-| `bitbucket.path` | string | `/webhooks/bitbucket` | Bitbucket webhook path |
+| `bitbucket.path` | string | `/webhook/bitbucket` | Bitbucket webhook path |
 
 ### Notifications
 
@@ -258,17 +295,24 @@ Outgoing notification configuration.
 
 See [Notifications Guide](../operations/logging.md#notifications) for detailed setup.
 
-## Environment Variables
+### API
 
-Configuration can be overridden via environment variables:
+API server configuration.
 
-| Variable | Config Path | Description |
-|----------|-------------|-------------|
-| `VCDEPLOY_SERVER_LISTEN` | `server.listen` | HTTP listen address |
-| `VCDEPLOY_GRPC_LISTEN` | `grpc.listen` | gRPC listen address |
-| `VCDEPLOY_ADMIN_USERNAME` | - | Initial admin username |
-| `VCDEPLOY_ADMIN_PASSWORD` | - | Initial admin password |
-| `VCDEPLOY_LOG_LEVEL` | `logs.application.level` | Log level |
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | bool | `true` | Enable REST API |
+| `rate_limit.enabled` | bool | `false` | Enable rate limiting |
+| `rate_limit.requests_per_second` | float | `100` | Max requests per second |
+| `rate_limit.burst_size` | int | `50` | Burst allowance above limit |
+
+### Storage
+
+Storage and caching configuration.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `use_memory_cache` | bool | `true` | Enable in-memory cache layer with batched SQLite persistence. Eliminates SQLITE_BUSY errors from concurrent access. |
 
 ## TLS Configuration
 
@@ -325,6 +369,52 @@ The database location is not configurable in the YAML file—it's determined by 
 | Key rotation interval | `30 days` |
 | Backup interval | `30 days` |
 | Backup retention | `365 days` |
+
+## Environment Variables
+
+The following environment variables can be used to configure vcdeploy. Environment variables take precedence over config file values for the fields they override.
+
+### Server Configuration
+
+| Variable | Config Path | Default | Description |
+|----------|-------------|---------|-------------|
+| `VCDEPLOY_SERVER_LISTEN` | `server.listen` | `:9000` | HTTP listen address |
+| `VCDEPLOY_GRPC_LISTEN` | `grpc.listen` | `:9001` | gRPC listen address |
+| `VCDEPLOY_LOG_LEVEL` | `logs.application.level` | `info` | Log level |
+
+### Directory Configuration
+
+| Variable | Config Path | Default | Description |
+|----------|-------------|---------|-------------|
+| `VCDEPLOY_CONFIG_DIR` | - | `/etc/vcdeploy` | Configuration directory |
+| `VCDEPLOY_DATA_DIR` | - | `/var/lib/vcdeploy` | Data directory |
+| `VCDEPLOY_LOG_DIR` | - | `/var/log/vcdeploy` | Log directory |
+| `VCDEPLOY_RUN_DIR` | - | `/var/run/vcdeploy` | Runtime directory |
+| `VCDEPLOY_SYSTEM_CONFIG` | - | - | Override system config path |
+
+### Security
+
+| Variable | Config Path | Default | Description |
+|----------|-------------|---------|-------------|
+| `VCDEPLOY_MASTER_KEY` | - | Auto-generated | Master encryption key (base64) |
+| `VCDEPLOY_ADMIN_USERNAME` | - | `admin` | Initial admin username |
+| `VCDEPLOY_ADMIN_PASSWORD` | - | - | Initial admin password |
+| `VCDEPLOY_ADMIN_EMAIL` | - | `admin@localhost` | Initial admin email |
+
+### CLI Configuration
+
+| Variable | Config Path | Default | Description |
+|----------|-------------|---------|-------------|
+| `VCDEPLOY_MASTER` | - | - | Master server address for remote CLI |
+| `VCDEPLOY_TOKEN` | - | - | API token for remote CLI authentication |
+
+### Testing (Development Only)
+
+| Variable | Config Path | Default | Description |
+|----------|-------------|---------|-------------|
+| `VCDEPLOY_TEST_MODE` | - | `false` | Enable test mode (disables some security checks) |
+
+> **Warning:** `VCDEPLOY_TEST_MODE` bypasses security guards. Never use in production.
 
 ## See Also
 

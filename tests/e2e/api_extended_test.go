@@ -22,7 +22,7 @@ func TestAPIHostKeys(t *testing.T) {
 	}
 
 	t.Run("list host keys", func(t *testing.T) {
-		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/hostkeys", nil, cfg.APIToken)
+		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/host-keys", nil, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to list host keys: %v", err)
 		}
@@ -38,20 +38,21 @@ func TestAPIHostKeys(t *testing.T) {
 
 	t.Run("create host key", func(t *testing.T) {
 		hostKey := map[string]interface{}{
-			"host":        "test-server.example.com",
+			"hostname":    "test-server.example.com",
 			"port":        22,
-			"key_type":    "ssh-ed25519",
+			"keyType":     "ssh-ed25519",
+			"publicKey":   "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestPublicKeyForE2ETests==",
 			"fingerprint": "SHA256:testfingerprint123456789",
-			"verified":    true,
+			"trusted":     true,
 		}
 
-		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/hostkeys", hostKey, cfg.APIToken)
+		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/host-keys", hostKey, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to create host key: %v", err)
 		}
 		defer resp.Body.Close()
 
-		expectStatusCreatedOrOK(t, resp)
+		expectStatusCreated(t, resp)
 	})
 
 	t.Run("verify host key", func(t *testing.T) {
@@ -60,7 +61,7 @@ func TestAPIHostKeys(t *testing.T) {
 			"port": 22,
 		}
 
-		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/hostkeys/verify", verifyReq, cfg.APIToken)
+		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/host-keys/verify", verifyReq, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to verify host key: %v", err)
 		}
@@ -82,7 +83,7 @@ func TestAPIJumpServers(t *testing.T) {
 	}
 
 	t.Run("list jump servers", func(t *testing.T) {
-		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/jumpservers", nil, cfg.APIToken)
+		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/jump-servers", nil, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to list jump servers: %v", err)
 		}
@@ -100,18 +101,18 @@ func TestAPIJumpServers(t *testing.T) {
 			"priority": 10,
 		}
 
-		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/jumpservers", jumpServer, cfg.APIToken)
+		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/jump-servers", jumpServer, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to create jump server: %v", err)
 		}
 		defer resp.Body.Close()
 
-		expectStatusCreatedOrOK(t, resp)
+		expectStatusCreated(t, resp)
 	})
 
 	t.Run("test jump server connection", func(t *testing.T) {
 		// Test connection to a jump server (will fail if not configured, but endpoint should exist)
-		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/jumpservers/e2e-jump-server/test", nil, cfg.APIToken)
+		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/jump-servers/e2e-jump-server/test", nil, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to test jump server: %v", err)
 		}
@@ -144,9 +145,9 @@ func TestAPIBlockedIPs(t *testing.T) {
 
 	t.Run("add blocked IP", func(t *testing.T) {
 		blockedIP := map[string]interface{}{
-			"ip":       "192.0.2.100",
-			"reason":   "E2E test block",
-			"duration": "24h",
+			"ip_address": "192.0.2.100",
+			"reason":     "E2E test block",
+			"duration":   "24h",
 		}
 
 		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/blocked", blockedIP, cfg.APIToken)
@@ -155,7 +156,7 @@ func TestAPIBlockedIPs(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		expectStatusCreatedOrOK(t, resp)
+		expectStatusCreated(t, resp)
 	})
 
 	t.Run("remove blocked IP", func(t *testing.T) {
@@ -181,7 +182,7 @@ func TestAPIProvisionJobs(t *testing.T) {
 	}
 
 	t.Run("list provision jobs", func(t *testing.T) {
-		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/provision", nil, cfg.APIToken)
+		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/provision-jobs", nil, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to list provision jobs: %v", err)
 		}
@@ -192,24 +193,23 @@ func TestAPIProvisionJobs(t *testing.T) {
 
 	t.Run("create provision job", func(t *testing.T) {
 		job := map[string]interface{}{
-			"type":     "agent",
-			"target":   "new-server.example.com",
-			"config":   map[string]interface{}{"port": 22, "user": "deploy"},
-			"priority": 5,
+			"target_host": "new-server.example.com",
+			"target_port": 22,
+			"target_user": "deploy",
 		}
 
-		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/provision", job, cfg.APIToken)
+		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/provision-jobs", job, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to create provision job: %v", err)
 		}
 		defer resp.Body.Close()
 
-		expectStatusCreatedOrOK(t, resp)
+		expectStatusCreated(t, resp)
 	})
 
 	t.Run("get provision job status", func(t *testing.T) {
 		// Try to get a job status (may not exist)
-		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/provision/test-job-id", nil, cfg.APIToken)
+		resp, err := doAuthRequest("GET", cfg.MasterHTTPURL+"/api/v1/provision-jobs/test-job-id", nil, cfg.APIToken)
 		if err != nil {
 			t.Fatalf("failed to get provision job: %v", err)
 		}
@@ -250,8 +250,8 @@ func TestAPISettings(t *testing.T) {
 	}
 
 	t.Run("update appearance settings", func(t *testing.T) {
-		settings := map[string]interface{}{
-			"dark_mode":    true,
+		settings := map[string]string{
+			"dark_mode":    "true",
 			"accent_color": "blue",
 		}
 
@@ -481,7 +481,7 @@ func TestAPIUsers(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		expectStatusCreatedOrOK(t, resp)
+		expectStatusCreated(t, resp)
 	})
 
 	t.Run("get user", func(t *testing.T) {
@@ -547,7 +547,7 @@ func TestAPIKeys(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		expectStatusCreatedOrOK(t, resp)
+		expectStatusCreated(t, resp)
 	})
 
 	t.Run("revoke API key", func(t *testing.T) {
@@ -623,9 +623,10 @@ func TestAPISecrets(t *testing.T) {
 
 	t.Run("create secret", func(t *testing.T) {
 		secret := map[string]interface{}{
-			"name":  "e2e-test-secret",
-			"value": "super-secret-value",
-			"scope": "global",
+			"project": "e2e-test-project",
+			"key":     "E2E_TEST_SECRET",
+			"value":   "super-secret-value",
+			"scope":   "default",
 		}
 
 		resp, err := doAuthRequest("POST", cfg.MasterHTTPURL+"/api/v1/secrets", secret, cfg.APIToken)
@@ -634,7 +635,7 @@ func TestAPISecrets(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		expectStatusCreatedOrOK(t, resp)
+		expectStatusCreated(t, resp)
 	})
 
 	t.Run("get secret metadata", func(t *testing.T) {
@@ -685,7 +686,7 @@ func TestAPIProjectTypes(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		expectStatusCreatedOrOK(t, resp)
+		expectStatusCreated(t, resp)
 	})
 }
 
@@ -721,11 +722,12 @@ func expectStatusOK(t *testing.T, resp *http.Response) {
 	}
 }
 
-func expectStatusCreatedOrOK(t *testing.T, resp *http.Response) {
+func expectStatusCreated(t *testing.T, resp *http.Response) {
 	t.Helper()
-	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+	// For create operations, expect 201 Created or 409 Conflict (if already exists)
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusConflict {
 		body, _ := io.ReadAll(resp.Body)
-		t.Errorf("expected status 200 or 201, got %d: %s", resp.StatusCode, string(body))
+		t.Errorf("expected status 201 or 409, got %d: %s", resp.StatusCode, string(body))
 	}
 }
 

@@ -15,7 +15,7 @@ test.describe('Setup Wizard', () => {
 
   test('should redirect to /setup when no users exist', async ({ page }) => {
     // Navigate to any protected page
-    await page.goto('/dashboard');
+    await page.goto('/stats');
     
     // Check if we're on setup page (server in setup mode) or login page (server configured)
     const url = page.url();

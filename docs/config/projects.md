@@ -7,7 +7,7 @@ Projects define what applications get deployed, where, and how.
 vcdeploy uses YAML files to configure projects. Each project defines:
 
 - **Repository**: Source code location
-- **Targets**: Where to deploy (agents or SSH hosts)
+- **Targets**: Where to deploy (agent-managed servers or master-local)
 - **Deployment**: Strategy and behavior
 - **Hooks**: Commands to run during deployment
 - **Health checks**: Verification after deployment
@@ -44,7 +44,7 @@ vcdeploy project show myapp
 ### Via API
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/projects \
+curl -X POST http://localhost:9000/api/v1/projects \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -101,17 +101,20 @@ env:
 # Deployment targets (named)
 targets:
   production:
-    agent: "prod-agent-01"       # Single agent
-    branch: "main"
+    agent: "prod-agent-01"       # Agent name (omit for master-local)
     path: "/var/www/myapp"
   
   staging:
-    agents:                      # Multiple agents
-      - "staging-01"
-      - "staging-02"
-    branch: "develop"
+    agent: "staging-01"
     path: "/var/www/myapp-staging"
-    deploy_strategy: "rolling"   # parallel | rolling
+  
+  local:
+    path: "/opt/deploy/myapp"    # No agent = master-local deployment
+
+# Deployment orchestration (for multi-target deployments)
+orchestration:
+  mode: "parallel"               # parallel | rolling
+  continue_on_error: false       # Continue to remaining targets on failure
 
 # Deployment hooks
 hooks:
@@ -131,7 +134,7 @@ hooks:
 
 # Health checks
 health:
-  url: "http://localhost:8080/health"
+  url: "http://localhost:8080/health"    # Your application's port, not vcdeploy's
   timeout: "30s"
   retries: 3
   rollback_on_fail: true         # Auto-rollback if health check fails
@@ -157,68 +160,32 @@ Deploy through vcdeploy agents installed on target servers:
 
 ```yaml
 targets:
-  # Single agent
+  # Single agent target
   production:
     agent: "prod-server-01"
-    branch: "main"
     path: "/var/www/myapp"
 
-  # Multiple agents (parallel deployment)
+  # Multiple targets with different agents
   staging:
-    agents:
-      - "staging-01"
-      - "staging-02"
-      - "staging-03"
-    branch: "develop"
-    path: "/var/www/myapp"
-    deploy_strategy: "parallel"  # Deploy to all simultaneously
+    agent: "staging-01"
+    path: "/var/www/myapp-staging"
 
-  # Rolling deployment
   canary:
-    agents:
-      - "canary-01"
-      - "canary-02"
-    branch: "main"
+    agent: "canary-01"
     path: "/var/www/myapp"
-    deploy_strategy: "rolling"   # Deploy one at a time
 ```
 
-### SSH-Based Targets
+### Master-Local Targets
 
-Deploy directly via SSH without requiring an agent:
+Deploy directly on the master server without an agent:
 
 ```yaml
 targets:
-  legacy-server:
-    ssh:
-      host: "server.example.com"
-      user: "deploy"             # Optional, defaults to current user
-      key: "deploy-key"          # Reference to stored SSH key
-    branch: "main"
-    path: "/var/www/myapp"
-
-  # With jump/bastion host
-  private-server:
-    ssh:
-      host: "10.0.1.50"
-      user: "deploy"
-      key: "internal-key"
-      jump: "bastion"            # Reference to jump_servers in master config
-    branch: "main"
-    path: "/var/www/myapp"
-
-  # Inline jump host configuration
-  another-server:
-    ssh:
-      host: "10.0.2.100"
-      user: "deploy"
-      key: "deploy-key"
-      jump_host: "bastion.example.com"
-      jump_user: "jump"
-      jump_key: "bastion-key"
-    branch: "main"
-    path: "/var/www/myapp"
+  local:
+    path: "/opt/deploy/myapp"     # No agent = master-local deployment
 ```
+
+> **Note:** Targets defined in YAML config are synced to the database on project load. They can also be managed via CLI (`vcdeploy target create`) or API.
 
 ## Deployment Strategies
 
@@ -347,7 +314,7 @@ Post-deployment health verification:
 
 ```yaml
 health:
-  url: "http://localhost:8080/health"
+  url: "http://localhost:8080/health"    # Your application's port, not vcdeploy's
   timeout: "30s"                 # Timeout per check attempt
   retries: 3                     # Number of retry attempts
   rollback_on_fail: true         # Auto-rollback on health check failure
@@ -440,10 +407,10 @@ vcdeploy project unarchive myapp
 
 ```bash
 # Deploy specific target
-vcdeploy deploy trigger myapp --target production --branch main
+vcdeploy deploy create --project myapp --target production --branch main
 
-# Deploy with custom reference
-vcdeploy deploy trigger myapp --ref v1.2.3
+# Deploy with specific commit
+vcdeploy deploy create --project myapp --target production --commit abc123
 ```
 
 ### Via Webhook
@@ -453,10 +420,11 @@ Configure webhooks from Git providers (GitHub, GitLab, Bitbucket) to automatical
 ### Via API
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/projects/myapp/deploy \
+# Create deployment via API
+curl -X POST http://localhost:9000/api/v1/deployments \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"target": "production", "branch": "main"}'
+  -d '{"project": "myapp", "target": "production", "branch": "main"}'
 ```
 
 ## Example Configurations
@@ -479,12 +447,14 @@ deployment:
 
 targets:
   production:
-    agents:
-      - "api-prod-01"
-      - "api-prod-02"
-    branch: "main"
+    agent: "api-prod-01"
     path: "/var/www/api"
-    deploy_strategy: "rolling"
+  production-2:
+    agent: "api-prod-02"
+    path: "/var/www/api"
+
+orchestration:
+  mode: "rolling"
 
 hooks:
   pre_deploy:
@@ -522,7 +492,6 @@ deployment:
 targets:
   production:
     agent: "web-prod-01"
-    branch: "main"
     path: "/var/www/laravel"
 
 env:
@@ -561,10 +530,7 @@ deployment:
 
 targets:
   production:
-    ssh:
-      host: "docs.example.com"
-      user: "www-data"
-    branch: "main"
+    agent: "docs-server"
     path: "/var/www/docs"
 
 hooks:

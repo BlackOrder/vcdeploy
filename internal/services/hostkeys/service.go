@@ -3,7 +3,6 @@ package hostkeys
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -63,7 +62,7 @@ func (s *Service) List(ctx context.Context) ([]*storage.SSHHostKey, error) {
 }
 
 // UpdateTrust updates the trust status of an SSH host key.
-func (s *Service) UpdateTrust(ctx context.Context, id int64, trusted bool, verifiedBy string) error {
+func (s *Service) UpdateTrust(ctx context.Context, id string, trusted bool, verifiedBy string) error {
 	if err := s.store.UpdateSSHHostKeyTrust(ctx, id, trusted, verifiedBy); err != nil {
 		return fmt.Errorf("updating host key trust: %w", err)
 	}
@@ -71,7 +70,7 @@ func (s *Service) UpdateTrust(ctx context.Context, id int64, trusted bool, verif
 }
 
 // Delete removes an SSH host key by ID.
-func (s *Service) Delete(ctx context.Context, id int64) error {
+func (s *Service) Delete(ctx context.Context, id string) error {
 	if err := s.store.DeleteSSHHostKey(ctx, id); err != nil {
 		return fmt.Errorf("deleting host key: %w", err)
 	}
@@ -91,7 +90,7 @@ func (s *Service) DeleteByHost(ctx context.Context, hostname string, port int) (
 func (s *Service) IsTrusted(ctx context.Context, hostname string, port int, keyType, fingerprint string) (bool, error) {
 	key, err := s.store.GetSSHHostKey(ctx, hostname, port, keyType)
 	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
+		if services.IsNotFound(err) {
 			return false, nil
 		}
 		return false, fmt.Errorf("getting host key: %w", err)

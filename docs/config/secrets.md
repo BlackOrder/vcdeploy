@@ -139,6 +139,9 @@ During deployment, vcdeploy:
 2. Looks up each `${SECRET_NAME}` in the project's scope
 3. Decrypts and substitutes the values
 4. Writes the final `.env` file to the deployment
+5. Captures an encrypted env snapshot for this deployment
+
+> **Env Snapshots:** Secrets resolved at deployment time are captured in an encrypted env snapshot. On rollback, the snapshot from the original deployment is restored, ensuring the correct environment is used regardless of current secret values.
 
 ### Secret Resolution
 
@@ -198,11 +201,11 @@ vcdeploy master key delete KEY_ID --confirm-destroy
 ### Secrets API
 
 ```bash
-# List secrets for a project
-GET /api/v1/projects/{project}/secrets
+# List secrets for a project (use project ID)
+GET /api/v1/projects/{id}/secrets
 
 # Set a secret
-POST /api/v1/projects/{project}/secrets
+POST /api/v1/projects/{id}/secrets
 Content-Type: application/json
 {
   "scope": "production",
@@ -211,7 +214,7 @@ Content-Type: application/json
 }
 
 # Delete a secret
-DELETE /api/v1/projects/{project}/secrets/{scope}/{key}
+DELETE /api/v1/projects/{id}/secrets/{scope}/{key}
 ```
 
 ### Key Management API

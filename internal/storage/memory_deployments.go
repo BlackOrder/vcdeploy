@@ -3,6 +3,8 @@ package storage
 import (
 	"context"
 	"time"
+
+	"github.com/rs/xid"
 )
 
 // --- DeploymentRecord methods ---
@@ -102,63 +104,51 @@ func (s *MemoryStore) CountDeploymentsByStatus(ctx context.Context) (map[string]
 
 	counts := make(map[string]int64)
 	for _, d := range s.deployments {
-		counts[d.Status]++
+		counts[d.Status.String()]++
 	}
 	return counts, nil
 }
 
-// InsertDeployment inserts a deployment from CLI (legacy).
-func (s *MemoryStore) InsertDeployment(d *DeploymentCLI) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+// ListDeploymentsPaginated returns deployments with pagination support.
+func (s *MemoryStore) ListDeploymentsPaginated(ctx context.Context, limit, offset int) ([]*DeploymentRecord, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
-	if _, exists := s.deployments[d.ID]; exists {
-		return ErrDuplicate
+	// Collect all deployments
+	all := make([]*DeploymentRecord, 0, len(s.deployments))
+	for _, d := range s.deployments {
+		cp := *d
+		all = append(all, &cp)
 	}
 
-	record := &DeploymentRecord{
-		ID:          d.ID,
-		Project:     d.ProjectName,
-		ProjectID:   &d.ProjectID,
-		Target:      d.Target,
-		Status:      d.Status,
-		StartedAt:   d.StartedAt,
-		CompletedAt: d.FinishedAt,
-		TriggeredBy: d.TriggeredBy,
+	// Sort by StartedAt descending (newest first)
+	for i := 0; i < len(all)-1; i++ {
+		for j := i + 1; j < len(all); j++ {
+			if all[j].StartedAt.After(all[i].StartedAt) {
+				all[i], all[j] = all[j], all[i]
+			}
+		}
 	}
 
-	s.deployments[d.ID] = record
-	s.queueWrite(s.deploymentsWrites, NewWriteOp(WriteOpInsert, "deployments", record))
-	return nil
+	// Apply offset
+	if offset >= len(all) {
+		return []*DeploymentRecord{}, nil
+	}
+	all = all[offset:]
+
+	// Apply limit
+	if limit > 0 && limit < len(all) {
+		all = all[:limit]
+	}
+
+	return all, nil
 }
 
-// SaveDeployment updates or creates a deployment from CLI (legacy).
-func (s *MemoryStore) SaveDeployment(d *DeploymentCLI) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	existing, exists := s.deployments[d.ID]
-	if exists {
-		existing.Status = d.Status
-		existing.CompletedAt = d.FinishedAt
-		s.queueWrite(s.deploymentsWrites, NewWriteOp(WriteOpUpdate, "deployments", existing))
-		return nil
-	}
-
-	record := &DeploymentRecord{
-		ID:          d.ID,
-		Project:     d.ProjectName,
-		ProjectID:   &d.ProjectID,
-		Target:      d.Target,
-		Status:      d.Status,
-		StartedAt:   d.StartedAt,
-		CompletedAt: d.FinishedAt,
-		TriggeredBy: d.TriggeredBy,
-	}
-
-	s.deployments[d.ID] = record
-	s.queueWrite(s.deploymentsWrites, NewWriteOp(WriteOpInsert, "deployments", record))
-	return nil
+// CountDeployments returns the total number of deployments.
+func (s *MemoryStore) CountDeployments(ctx context.Context) (int64, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return int64(len(s.deployments)), nil
 }
 
 // --- DeploymentLog methods ---
@@ -168,7 +158,9 @@ func (s *MemoryStore) CreateDeploymentLog(ctx context.Context, log *DeploymentLo
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	log.ID = nextID(&s.nextDeploymentLogID)
+	if log.ID == "" {
+		log.ID = xid.New().String()
+	}
 	if log.CreatedAt.IsZero() {
 		log.CreatedAt = time.Now()
 	}
@@ -197,7 +189,7 @@ func (s *MemoryStore) ListDeploymentLogs(ctx context.Context, deploymentID strin
 }
 
 // ListDeploymentLogsAfter returns log entries after a given ID.
-func (s *MemoryStore) ListDeploymentLogsAfter(ctx context.Context, deploymentID string, afterID int64) ([]*DeploymentLog, error) {
+func (s *MemoryStore) ListDeploymentLogsAfter(ctx context.Context, deploymentID string, afterID string) ([]*DeploymentLog, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -213,6 +205,43 @@ func (s *MemoryStore) ListDeploymentLogsAfter(ctx context.Context, deploymentID 
 	return result, nil
 }
 
+// ListDeploymentLogsPaginated returns deployment logs with pagination support.
+func (s *MemoryStore) ListDeploymentLogsPaginated(ctx context.Context, deploymentID string, limit, offset int) ([]*DeploymentLog, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	logs := s.deploymentLogs[deploymentID]
+	if logs == nil {
+		return []*DeploymentLog{}, nil
+	}
+
+	// Apply offset
+	if offset >= len(logs) {
+		return []*DeploymentLog{}, nil
+	}
+	logs = logs[offset:]
+
+	// Apply limit
+	if limit > 0 && limit < len(logs) {
+		logs = logs[:limit]
+	}
+
+	// Copy results
+	result := make([]*DeploymentLog, len(logs))
+	for i, l := range logs {
+		cp := *l
+		result[i] = &cp
+	}
+	return result, nil
+}
+
+// CountDeploymentLogs returns the total number of logs for a deployment.
+func (s *MemoryStore) CountDeploymentLogs(ctx context.Context, deploymentID string) (int64, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return int64(len(s.deploymentLogs[deploymentID])), nil
+}
+
 // --- DeploymentRollback methods ---
 
 // CreateDeploymentRollback creates a new rollback record.
@@ -220,7 +249,9 @@ func (s *MemoryStore) CreateDeploymentRollback(ctx context.Context, rollback *De
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	rollback.ID = nextID(&s.nextRollbackID)
+	if rollback.ID == "" {
+		rollback.ID = xid.New().String()
+	}
 	if rollback.StartedAt.IsZero() {
 		rollback.StartedAt = time.Now()
 	}
@@ -237,7 +268,7 @@ func (s *MemoryStore) CreateDeploymentRollback(ctx context.Context, rollback *De
 }
 
 // GetDeploymentRollback retrieves a rollback by ID.
-func (s *MemoryStore) GetDeploymentRollback(ctx context.Context, id int64) (*DeploymentRollback, error) {
+func (s *MemoryStore) GetDeploymentRollback(ctx context.Context, id string) (*DeploymentRollback, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 

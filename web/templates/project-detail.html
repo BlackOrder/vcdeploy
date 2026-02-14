@@ -1,0 +1,604 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="space-y-6">
+    <!-- Header with breadcrumb -->
+    <div class="flex items-center space-x-4">
+        <a href="/projects" class="text-dark-muted hover:text-white">
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+            </svg>
+        </a>
+        <div>
+            <h1 class="text-2xl font-bold">{{.Project.Name}}</h1>
+            <p class="text-sm text-dark-muted">{{if .Project.TypeID}}{{.Project.TypeID}}{{else}}None{{end}} project</p>
+        </div>
+        <div class="ml-auto flex items-center space-x-3">
+            <button onclick="deployProject({{.Project.ID}})" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-accent-600 hover:bg-accent-700">
+                <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+                </svg>
+                Deploy
+            </button>
+            <button onclick="editProject({{.Project.ID}})" class="inline-flex items-center px-4 py-2 border border-dark-border text-sm font-medium rounded-md text-dark-text hover:bg-dark-bg">
+                <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                </svg>
+                Edit
+            </button>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-6">
+        <!-- Left Column: Project Info -->
+        <div class="col-span-2 space-y-6">
+            <!-- Repository Info -->
+            <div class="bg-dark-card border border-dark-border rounded-lg">
+                <div class="px-4 py-3 border-b border-dark-border">
+                    <h3 class="text-sm font-medium">Repository</h3>
+                </div>
+                <div class="p-4 space-y-3">
+                    <div class="flex justify-between">
+                        <span class="text-sm text-dark-muted">URL</span>
+                        <span class="text-sm text-dark-text font-mono">{{.Project.Repository}}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-sm text-dark-muted">Branch</span>
+                        <span class="text-sm text-dark-text">{{.Project.Branch}}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-sm text-dark-muted">Deploy Path</span>
+                        <span class="text-sm text-dark-text font-mono">{{.Project.DeployPath}}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Playbook Configuration -->
+            <div class="bg-dark-card border border-dark-border rounded-lg">
+                <div class="px-4 py-3 border-b border-dark-border flex items-center justify-between">
+                    <h3 class="text-sm font-medium">Deployment Playbook</h3>
+                    {{if .Activation}}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-500/20 text-green-400">
+                        Active
+                    </span>
+                    {{else}}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-500/20 text-yellow-400">
+                        YAML Fallback
+                    </span>
+                    {{end}}
+                </div>
+                <div class="p-4">
+                    {{if .Activation}}
+                    <!-- Active playbook -->
+                    <div class="space-y-4">
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <h4 class="text-sm font-medium text-dark-text">{{.Activation.PlaybookName}}</h4>
+                                <p class="text-xs text-dark-muted mt-1">{{.Activation.PlaybookSlug}} (v{{.Activation.PlaybookVersion}})</p>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <button onclick="showActivationDetail()" class="text-sm text-accent-400 hover:text-accent-300">View Details</button>
+                                <button onclick="openActivationModal()" class="text-sm text-dark-muted hover:text-white">Change</button>
+                            </div>
+                        </div>
+
+                        {{if .Activation.VariableBindings}}
+                        <div>
+                            <h5 class="text-xs font-medium text-dark-muted mb-2">Variable Bindings</h5>
+                            <div class="space-y-1">
+                                {{range $key, $value := .Activation.VariableBindings}}
+                                <div class="flex justify-between text-xs">
+                                    <span class="text-dark-muted font-mono">{{$key}}</span>
+                                    <span class="text-dark-text font-mono">{{$value}}</span>
+                                </div>
+                                {{end}}
+                            </div>
+                        </div>
+                        {{end}}
+
+                        {{if .DependencyWarnings}}
+                        <div class="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+                            <div class="flex items-start">
+                                <svg class="h-5 w-5 text-yellow-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                                </svg>
+                                <div>
+                                    <h5 class="text-sm font-medium text-yellow-400">Missing Dependencies</h5>
+                                    <ul class="mt-1 text-xs text-yellow-300">
+                                        {{range .DependencyWarnings}}
+                                        <li>• {{.}}</li>
+                                        {{end}}
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        {{end}}
+                    </div>
+                    {{else}}
+                    <!-- No playbook configured -->
+                    <div class="text-center py-6">
+                        <svg class="mx-auto h-10 w-10 text-dark-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        <h4 class="mt-2 text-sm font-medium text-dark-text">No playbook configured</h4>
+                        <p class="mt-1 text-xs text-dark-muted">Using YAML configuration for deployments. Activate a playbook for step-based deployment.</p>
+                        <button onclick="openActivationModal()" class="mt-4 inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-accent-600 hover:bg-accent-700 rounded-md">
+                            <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                            </svg>
+                            Activate Playbook
+                        </button>
+                    </div>
+                    {{end}}
+                </div>
+            </div>
+
+            <!-- Deployment Preview -->
+            {{if .Activation}}
+            <div class="bg-dark-card border border-dark-border rounded-lg">
+                <div class="px-4 py-3 border-b border-dark-border">
+                    <h3 class="text-sm font-medium">Deployment Preview</h3>
+                </div>
+                <div class="p-4 space-y-3">
+                    {{if .ResolvedSteps}}
+                    {{range .ResolvedSteps}}
+                    <div class="flex items-center space-x-3 p-2 bg-dark-bg rounded-lg">
+                        <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-accent-500/20 text-accent-400 text-xs font-medium">
+                            {{.Order}}
+                        </span>
+                        <div class="flex-1">
+                            <span class="text-sm text-dark-text">{{.ComponentName}}</span>
+                            <span class="text-xs text-dark-muted ml-2">({{.Phase}})</span>
+                        </div>
+                        {{if .IsRaw}}
+                        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-500/20 text-red-400">RAW</span>
+                        {{end}}
+                    </div>
+                    {{end}}
+                    {{else}}
+                    <p class="text-sm text-dark-muted text-center py-4">No deployment steps resolved</p>
+                    {{end}}
+                </div>
+            </div>
+            {{end}}
+        </div>
+
+        <!-- Right Column: Quick Actions & Recent Deployments -->
+        <div class="col-span-1 space-y-6">
+            <!-- Quick Actions -->
+            <div class="bg-dark-card border border-dark-border rounded-lg">
+                <div class="px-4 py-3 border-b border-dark-border">
+                    <h3 class="text-sm font-medium">Quick Actions</h3>
+                </div>
+                <div class="p-4 space-y-2">
+                    <button onclick="deployProject({{.Project.ID}})" class="w-full flex items-center px-3 py-2 text-sm text-left text-dark-text hover:bg-dark-bg rounded-md">
+                        <svg class="mr-3 h-4 w-4 text-dark-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+                        </svg>
+                        Deploy Now
+                    </button>
+                    <button onclick="viewDeployments({{.Project.ID}})" class="w-full flex items-center px-3 py-2 text-sm text-left text-dark-text hover:bg-dark-bg rounded-md">
+                        <svg class="mr-3 h-4 w-4 text-dark-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                        </svg>
+                        View Deployments
+                    </button>
+                    <button onclick="viewWebhooks({{.Project.ID}})" class="w-full flex items-center px-3 py-2 text-sm text-left text-dark-text hover:bg-dark-bg rounded-md">
+                        <svg class="mr-3 h-4 w-4 text-dark-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+                        </svg>
+                        Webhooks
+                    </button>
+                    <button onclick="viewSecrets({{.Project.ID}})" class="w-full flex items-center px-3 py-2 text-sm text-left text-dark-text hover:bg-dark-bg rounded-md">
+                        <svg class="mr-3 h-4 w-4 text-dark-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
+                        </svg>
+                        Secrets
+                    </button>
+                    {{if not .Activation}}
+                    <hr class="border-dark-border my-2">
+                    <button onclick="openMigrationModal()" class="w-full flex items-center px-3 py-2 text-sm text-left text-dark-text hover:bg-dark-bg rounded-md">
+                        <svg class="mr-3 h-4 w-4 text-dark-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                        Migrate YAML to Playbook
+                    </button>
+                    {{end}}
+                </div>
+            </div>
+
+            <!-- Recent Deployments -->
+            <div class="bg-dark-card border border-dark-border rounded-lg">
+                <div class="px-4 py-3 border-b border-dark-border flex items-center justify-between">
+                    <h3 class="text-sm font-medium">Recent Deployments</h3>
+                    <a href="/deployments?project={{.Project.ID}}" class="text-xs text-accent-400 hover:text-accent-300">View All</a>
+                </div>
+                <div class="p-4">
+                    {{if .RecentDeployments}}
+                    <div class="space-y-3">
+                        {{range .RecentDeployments}}
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <span class="text-sm text-dark-text">{{.Version}}</span>
+                                <span class="text-xs text-dark-muted block">{{.CreatedAt}}</span>
+                            </div>
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
+                                {{if eq .Status "success"}}bg-green-500/20 text-green-400{{end}}
+                                {{if eq .Status "failed"}}bg-red-500/20 text-red-400{{end}}
+                                {{if eq .Status "running"}}bg-blue-500/20 text-blue-400{{end}}
+                                {{if eq .Status "pending"}}bg-yellow-500/20 text-yellow-400{{end}}
+                            ">
+                                {{.Status}}
+                            </span>
+                        </div>
+                        {{end}}
+                    </div>
+                    {{else}}
+                    <p class="text-sm text-dark-muted text-center py-4">No deployments yet</p>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Playbook Activation Modal -->
+<div id="activation-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-dark-card border border-dark-border rounded-lg max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="px-6 py-4 border-b border-dark-border flex items-center justify-between">
+            <h3 class="text-lg font-medium">Activate Playbook</h3>
+            <button onclick="document.getElementById('activation-modal').classList.add('hidden')" class="text-dark-muted hover:text-white">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        <form id="activation-form" onsubmit="submitActivation(event)">
+            <div class="p-6 space-y-4">
+                <!-- Playbook Selection -->
+                <div>
+                    <label class="block text-sm font-medium text-dark-muted mb-1">Select Playbook</label>
+                    <select id="playbook-select" name="playbook_id" onchange="loadPlaybookVariables(this.value)"
+                        class="block w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text focus:outline-none focus:ring-2 focus:ring-accent-500">
+                        <option value="">Choose a playbook...</option>
+                        {{range .AvailablePlaybooks}}
+                        <option value="{{.ID}}" data-slug="{{.Slug}}" data-version="{{.Version}}" {{if eq .ID $.SelectedPlaybookID}}selected{{end}}>
+                            {{.Name}} ({{.Namespace}}) - v{{.Version}}
+                        </option>
+                        {{end}}
+                    </select>
+                </div>
+
+                <!-- Variable Bindings (loaded dynamically) -->
+                <div id="variable-bindings-section" class="hidden">
+                    <label class="block text-sm font-medium text-dark-muted mb-2">Variable Bindings</label>
+                    <div id="variable-bindings-list" class="space-y-3">
+                        <!-- Populated via JS -->
+                    </div>
+                </div>
+
+                <!-- Dependency Check -->
+                <div id="dependency-check" class="hidden">
+                    <!-- Populated via JS when checking dependencies -->
+                </div>
+            </div>
+            <div class="px-6 py-4 border-t border-dark-border flex justify-end space-x-3">
+                <button type="button" onclick="document.getElementById('activation-modal').classList.add('hidden')"
+                    class="px-4 py-2 text-sm font-medium text-dark-muted hover:text-white border border-dark-border rounded-md">
+                    Cancel
+                </button>
+                {{if .Activation}}
+                <button type="button" onclick="deactivatePlaybook()"
+                    class="px-4 py-2 text-sm font-medium text-red-400 hover:text-red-300 border border-red-500/50 rounded-md">
+                    Deactivate
+                </button>
+                {{end}}
+                <button type="submit"
+                    class="px-4 py-2 text-sm font-medium text-white bg-accent-600 hover:bg-accent-700 rounded-md">
+                    Activate Playbook
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Activation Detail Modal -->
+<div id="activation-detail-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-dark-card border border-dark-border rounded-lg max-w-lg w-full mx-4">
+        <div class="px-6 py-4 border-b border-dark-border flex items-center justify-between">
+            <h3 class="text-lg font-medium">Activation Details</h3>
+            <button onclick="document.getElementById('activation-detail-modal').classList.add('hidden')" class="text-dark-muted hover:text-white">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        <div class="p-6" id="activation-detail-content">
+            <!-- Loaded via HTMX -->
+        </div>
+    </div>
+</div>
+
+<script{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}>
+    const projectId = {{.Project.ID}};
+
+    function openActivationModal() {
+        document.getElementById('activation-modal').classList.remove('hidden');
+    }
+
+    function loadPlaybookVariables(playbookId) {
+        if (!playbookId) {
+            document.getElementById('variable-bindings-section').classList.add('hidden');
+            return;
+        }
+
+        fetch('/api/v1/recipes/playbooks/' + playbookId + '/variables')
+            .then(response => response.json())
+            .then(data => {
+                const section = document.getElementById('variable-bindings-section');
+                const list = document.getElementById('variable-bindings-list');
+                
+                if (data.variables && data.variables.length > 0) {
+                    list.innerHTML = data.variables.map(v => `
+                        <div class="flex items-center space-x-3 p-3 bg-dark-bg border border-dark-border rounded-lg">
+                            <div class="flex-1">
+                                <label class="block text-sm font-medium text-dark-text">${escapeHtml(v.name)}</label>
+                                <p class="text-xs text-dark-muted">${escapeHtml(v.description || '')}</p>
+                            </div>
+                            <select name="binding_${v.name}" class="px-3 py-1 bg-dark-card border border-dark-border rounded text-sm text-dark-text">
+                                <option value="">Select source...</option>
+                                <option value="secret:">Secret</option>
+                                <option value="env:">Environment Variable</option>
+                                <option value="literal:">Literal Value</option>
+                            </select>
+                            <input type="text" name="value_${v.name}" placeholder="Value" 
+                                class="px-3 py-1 bg-dark-bg border border-dark-border rounded text-sm text-dark-text w-40">
+                        </div>
+                    `).join('');
+                    section.classList.remove('hidden');
+                } else {
+                    section.classList.add('hidden');
+                }
+            })
+            .catch(err => {
+                console.error('Failed to load playbook variables:', err);
+            });
+    }
+
+    function submitActivation(event) {
+        event.preventDefault();
+        
+        const form = event.target;
+        const playbookId = form.querySelector('#playbook-select').value;
+        
+        if (!playbookId) {
+            alert('Please select a playbook');
+            return;
+        }
+
+        // Collect variable bindings
+        const bindings = {};
+        form.querySelectorAll('[name^="binding_"]').forEach((select, index) => {
+            const varName = select.name.replace('binding_', '');
+            const valueInput = form.querySelector(`[name="value_${varName}"]`);
+            if (select.value && valueInput.value) {
+                bindings[varName] = select.value + valueInput.value;
+            }
+        });
+
+        fetch('/api/v1/recipes/activations', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                project_id: projectId,
+                playbook_id: parseInt(playbookId),
+                bindings: bindings
+            })
+        })
+        .then(response => {
+            if (response.ok) {
+                window.location.reload();
+            } else {
+                return response.json().then(data => {
+                    alert('Failed to activate playbook: ' + (data.error || 'Unknown error'));
+                });
+            }
+        })
+        .catch(err => {
+            alert('Error activating playbook: ' + err.message);
+        });
+    }
+
+    function deactivatePlaybook() {
+        if (!confirm('Are you sure you want to deactivate the playbook? The project will fall back to YAML configuration.')) {
+            return;
+        }
+
+        fetch('/api/v1/recipes/activations/' + projectId, {
+            method: 'DELETE'
+        })
+        .then(response => {
+            if (response.ok) {
+                window.location.reload();
+            } else {
+                alert('Failed to deactivate playbook');
+            }
+        })
+        .catch(err => {
+            alert('Error deactivating playbook: ' + err.message);
+        });
+    }
+
+    function showActivationDetail() {
+        document.getElementById('activation-detail-modal').classList.remove('hidden');
+        htmx.ajax('GET', '/api/v1/recipes/activations/' + projectId + '/detail', {
+            target: '#activation-detail-content',
+            swap: 'innerHTML'
+        });
+    }
+
+    function deployProject(id) {
+        // Navigate to deploy page or trigger deployment
+        window.location.href = '/deployments/new?project=' + id;
+    }
+
+    function editProject(id) {
+        window.location.href = '/projects/' + id + '/edit';
+    }
+
+    function viewDeployments(id) {
+        window.location.href = '/deployments?project=' + id;
+    }
+
+    function viewWebhooks(id) {
+        window.location.href = '/projects/' + id + '/webhooks';
+    }
+
+    function viewSecrets(id) {
+        window.location.href = '/secrets?project=' + id;
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // Migration functions
+    function openMigrationModal() {
+        document.getElementById('migration-modal').classList.remove('hidden');
+        // Load migration preview
+        loadMigrationPreview();
+    }
+
+    function loadMigrationPreview() {
+        document.getElementById('migration-preview').innerHTML = '<p class="text-sm text-dark-muted text-center py-4">Loading preview...</p>';
+        
+        fetch('/api/v1/recipes/migration/preview/' + projectId)
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                document.getElementById('migration-preview').innerHTML = '<p class="text-sm text-red-400 text-center py-4">Error: ' + data.error + '</p>';
+                return;
+            }
+            
+            let html = '<div class="space-y-4">';
+            html += '<div class="grid grid-cols-2 gap-4">';
+            html += '<div class="text-center p-3 bg-dark-bg rounded-lg"><div class="text-2xl font-bold text-accent-400">' + data.totalComponents + '</div><div class="text-xs text-dark-muted">Components</div></div>';
+            html += '<div class="text-center p-3 bg-dark-bg rounded-lg"><div class="text-2xl font-bold text-accent-400">' + (data.preDeployHooks + data.postDeployHooks) + '</div><div class="text-xs text-dark-muted">Hooks</div></div>';
+            html += '</div>';
+            
+            if (data.warnings && data.warnings.length > 0) {
+                html += '<div class="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">';
+                html += '<h5 class="text-sm font-medium text-yellow-400 mb-2">Warnings</h5>';
+                html += '<ul class="text-xs text-yellow-300 space-y-1">';
+                data.warnings.forEach(w => {
+                    html += '<li>• ' + escapeHtml(w) + '</li>';
+                });
+                html += '</ul></div>';
+            }
+            
+            html += '</div>';
+            document.getElementById('migration-preview').innerHTML = html;
+        })
+        .catch(err => {
+            document.getElementById('migration-preview').innerHTML = '<p class="text-sm text-red-400 text-center py-4">Error loading preview: ' + err.message + '</p>';
+        });
+    }
+
+    function submitMigration(event) {
+        event.preventDefault();
+        
+        const form = event.target;
+        const data = {
+            projectId: projectId,
+            name: form.querySelector('[name="playbook_name"]').value,
+            version: form.querySelector('[name="playbook_version"]').value,
+            createComponents: form.querySelector('[name="create_components"]').checked,
+            activate: form.querySelector('[name="activate"]').checked
+        };
+        
+        const submitBtn = form.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<svg class="animate-spin h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Migrating...';
+        
+        fetch('/api/v1/recipes/migration/' + projectId, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        })
+        .then(response => {
+            if (response.ok) {
+                window.location.reload();
+            } else {
+                return response.json().then(data => {
+                    alert('Migration failed: ' + (data.error || 'Unknown error'));
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = 'Start Migration';
+                });
+            }
+        })
+        .catch(err => {
+            alert('Error during migration: ' + err.message);
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = 'Start Migration';
+        });
+    }
+</script>
+
+<!-- Migration Modal -->
+<div id="migration-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-dark-card border border-dark-border rounded-lg max-w-lg w-full mx-4">
+        <div class="px-6 py-4 border-b border-dark-border flex items-center justify-between">
+            <h3 class="text-lg font-medium">Migrate YAML to Playbook</h3>
+            <button onclick="document.getElementById('migration-modal').classList.add('hidden')" class="text-dark-muted hover:text-white">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        <form onsubmit="submitMigration(event)">
+            <div class="p-6 space-y-4">
+                <p class="text-sm text-dark-muted">
+                    This will analyze the project's YAML configuration and create a playbook with equivalent components.
+                </p>
+                
+                <!-- Migration Preview -->
+                <div id="migration-preview" class="bg-dark-bg rounded-lg p-4">
+                    <p class="text-sm text-dark-muted text-center">Loading preview...</p>
+                </div>
+                
+                <!-- Options -->
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-sm font-medium text-dark-text mb-1">Playbook Name</label>
+                        <input type="text" name="playbook_name" value="{{.Project.Name}}-playbook" class="w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-sm text-dark-text focus:ring-1 focus:ring-accent-500 focus:border-accent-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-dark-text mb-1">Version</label>
+                        <input type="text" name="playbook_version" value="v1.0.0" class="w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-sm text-dark-text focus:ring-1 focus:ring-accent-500 focus:border-accent-500">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="flex items-center">
+                            <input type="checkbox" name="create_components" checked class="rounded border-dark-border bg-dark-bg text-accent-500 focus:ring-accent-500">
+                            <span class="ml-2 text-sm text-dark-text">Create reusable components</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" name="activate" checked class="rounded border-dark-border bg-dark-bg text-accent-500 focus:ring-accent-500">
+                            <span class="ml-2 text-sm text-dark-text">Activate playbook immediately</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="px-6 py-4 border-t border-dark-border flex items-center justify-end space-x-3">
+                <button type="button" onclick="document.getElementById('migration-modal').classList.add('hidden')" class="px-4 py-2 text-sm font-medium text-dark-text hover:text-white">
+                    Cancel
+                </button>
+                <button type="submit" class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-accent-600 hover:bg-accent-700 rounded-md">
+                    Start Migration
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{{end}}

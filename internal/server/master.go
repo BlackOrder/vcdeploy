@@ -3,7 +3,6 @@ package server
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -12,10 +11,12 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/BlackOrder/vcdeploy/internal/alerting"
@@ -34,17 +35,21 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/services/projects"
 	"github.com/BlackOrder/vcdeploy/internal/services/projecttypes"
 	"github.com/BlackOrder/vcdeploy/internal/services/provision"
+	"github.com/BlackOrder/vcdeploy/internal/services/recipes"
 	"github.com/BlackOrder/vcdeploy/internal/services/secrets"
 	"github.com/BlackOrder/vcdeploy/internal/services/sessions"
 	"github.com/BlackOrder/vcdeploy/internal/services/settings"
 	"github.com/BlackOrder/vcdeploy/internal/services/users"
 	"github.com/BlackOrder/vcdeploy/internal/services/webhooks"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
+	"github.com/BlackOrder/vcdeploy/internal/storage/seeds"
 	webhookshandler "github.com/BlackOrder/vcdeploy/internal/webhooks"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/rs/xid"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
+	"golang.org/x/crypto/acme/autocert"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -132,18 +137,25 @@ func createNotifyManager(cfg config.NotificationsConfig, logger *zap.Logger) *no
 
 // MasterServer is the main daemon server.
 type MasterServer struct {
-	config     *config.MasterConfig
-	store      storage.Store
-	logger     *zap.Logger
-	httpServer *http.Server
-	grpcServer *grpc.Server
+	config      *config.MasterConfig
+	store       storage.Store
+	logger      *zap.Logger
+	httpServer  *http.Server
+	httpsServer *http.Server // HTTPS server when TLS enabled
+	grpcServer  *grpc.Server
+
+	// TLS configuration
+	tlsConfig    *tls.Config
+	acmeClient   *ACMEClient
+	acmeFallback bool // True if ACME failed and using self-signed fallback
 
 	// gRPC agent service
 	agentServer *AgentServer
 	caManager   *security.CAManager
 
 	// KMS for secret encryption/decryption
-	kms *security.KMS
+	kms       *security.KMS
+	masterKey *security.MasterKey
 
 	// Service layer - new architecture
 	secretService      services.SecretServicer
@@ -159,6 +171,12 @@ type MasterServer struct {
 	auditService       services.AuditServicer
 	hostKeyService     services.HostKeyServicer
 	provisionService   services.ProvisionServicer
+
+	// Recipe services
+	componentService   *recipes.ComponentService
+	playbookService    *recipes.PlaybookService
+	activationService  *recipes.ActivationService
+	rawApprovalService *recipes.RawApprovalService
 
 	// Webhook handling
 	webhookHandler *webhookHandlerAdapter
@@ -189,8 +207,14 @@ type MasterServer struct {
 	// Scheduled jobs
 	scheduler *scheduler.Scheduler
 
+	// SSE event streaming
+	sseBroker *SSEBroker
+
 	// Setup state - true when no users exist and env credentials not provided
 	requiresSetup bool
+
+	// Maintenance mode - blocks mutations, allows reads and admin endpoints
+	maintenanceMode atomic.Bool
 }
 
 // AgentConnection tracks a connected agent.
@@ -222,7 +246,7 @@ func (a *webhookSecretStoreAdapter) GetWebhookSecret(projectID string) (string, 
 
 	// Look up project by name (projectID in URL is the project name/slug)
 	project, err := a.store.GetProjectByName(ctx, projectID)
-	if errors.Is(err, storage.ErrNotFound) {
+	if services.IsNotFound(err) {
 		return "", fmt.Errorf("project not found: %s", projectID)
 	}
 	if err != nil {
@@ -233,7 +257,7 @@ func (a *webhookSecretStoreAdapter) GetWebhookSecret(projectID string) (string, 
 	providers := []string{"github", "gitlab", "bitbucket"}
 	for _, provider := range providers {
 		webhook, err := a.store.GetProjectWebhook(ctx, project.ID, provider)
-		if errors.Is(err, storage.ErrNotFound) {
+		if services.IsNotFound(err) {
 			continue
 		}
 		if err != nil {
@@ -286,7 +310,10 @@ func (a *webhookSecretStoreAdapter) IsSecretRequired(projectID string) bool {
 
 // NewMasterServer creates a new master server instance.
 func NewMasterServer(cfg *config.MasterConfig, store storage.Store, logger *zap.Logger) (*MasterServer, error) {
-	sysCfg := config.MustGetSystemConfig()
+	sysCfg, err := config.GetSystemConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load system config: %w", err)
+	}
 	s := &MasterServer{
 		config:       cfg,
 		store:        store,
@@ -294,24 +321,50 @@ func NewMasterServer(cfg *config.MasterConfig, store storage.Store, logger *zap.
 		agents:       make(map[string]*AgentConnection),
 		shutdown:     make(chan struct{}),
 		templatesDir: sysCfg.TemplatesDir(),
+		sseBroker:    NewSSEBroker(),
 	}
 
-	// Initialize KMS for encryption services (requires database connection)
-	conn := store.Conn()
-	if conn != nil {
-		kms, kmsErr := security.NewKMS(conn, logger)
-		if kmsErr != nil {
-			logger.Warn("Failed to create KMS, some features will be unavailable", zap.Error(kmsErr))
-		} else {
-			// Initialize KMS with a key if none exists
-			if initErr := kms.Initialize(context.Background()); initErr != nil {
-				logger.Warn("Failed to initialize KMS", zap.Error(initErr))
-			} else {
-				s.kms = kms
-			}
+	// Load or generate master key for envelope encryption
+	masterKeyPath := filepath.Join(sysCfg.Paths.DataDir, "master.key")
+	masterKey, mkErr := security.LoadMasterKey(masterKeyPath)
+	if mkErr != nil {
+		// First boot — auto-generate
+		logger.Info("No master key found, generating new one", zap.String("path", masterKeyPath))
+		masterKey, mkErr = security.GenerateMasterKey()
+		if mkErr != nil {
+			return nil, fmt.Errorf("generate master key: %w", mkErr)
 		}
+		// Ensure data directory exists (first boot)
+		if err := os.MkdirAll(filepath.Dir(masterKeyPath), 0o700); err != nil {
+			return nil, fmt.Errorf("create data directory: %w", err)
+		}
+		if err := masterKey.SaveToFile(masterKeyPath); err != nil {
+			return nil, fmt.Errorf("save master key: %w", err)
+		}
+		logger.Info("Master key generated and saved", zap.String("path", masterKeyPath))
+	}
+	s.masterKey = masterKey
+
+	// Record master key metadata (singleton row)
+	if dbConn := store.Conn(); dbConn != nil {
+		_, _ = dbConn.ExecContext(context.Background(), `
+			INSERT INTO master_key_meta (id, key_id, created_at)
+			VALUES (1, ?, CURRENT_TIMESTAMP)
+			ON CONFLICT(id) DO UPDATE SET key_id = excluded.key_id, rotated_at = CURRENT_TIMESTAMP
+		`, masterKey.KeyID())
+	}
+
+	// Initialize KMS for encryption services (using the store for persistence)
+	kms, kmsErr := security.NewKMS(context.Background(), store, logger, masterKey)
+	if kmsErr != nil {
+		logger.Warn("Failed to create KMS, some features will be unavailable", zap.Error(kmsErr))
 	} else {
-		logger.Info("No database connection available, KMS disabled")
+		// Initialize KMS with a key if none exists
+		if initErr := kms.Initialize(context.Background()); initErr != nil {
+			logger.Warn("Failed to initialize KMS", zap.Error(initErr))
+		} else {
+			s.kms = kms
+		}
 	}
 
 	// Initialize service layer (services that don't need KMS)
@@ -326,11 +379,48 @@ func NewMasterServer(cfg *config.MasterConfig, store storage.Store, logger *zap.
 	s.hostKeyService = hostkeys.New(s.store)
 	s.provisionService = provision.New(s.store)
 
+	// Initialize recipe services
+	s.componentService = recipes.NewComponentService(s.store)
+	s.playbookService = recipes.NewPlaybookService(s.store)
+	s.activationService = recipes.NewActivationService(s.store)
+	s.rawApprovalService = recipes.NewRawApprovalService(s.store)
+
 	// Initialize KMS-dependent services
 	if s.kms != nil {
 		s.secretService = secrets.New(s.store, s.kms)
 		s.settingsSvc = settings.New(s.store, s.kms)
 		s.webhookService = webhooks.New(s.store, s.kms)
+
+		// Initialize CA manager for agent certificate operations (now uses store)
+		ca, caErr := security.NewCAManager(store, s.kms, logger)
+		if caErr != nil {
+			logger.Warn("Failed to create CA manager, agent gRPC will be unavailable", zap.Error(caErr))
+		} else {
+			// Initialize CA if none exists
+			caConfig := security.DefaultCAConfig()
+			if initErr := ca.Initialize(context.Background(), caConfig); initErr != nil {
+				logger.Warn("Failed to initialize CA", zap.Error(initErr))
+			} else {
+				s.caManager = ca
+				// Create the gRPC agent server with the CA manager
+				s.agentServer = NewAgentServer(s.store, ca, s.logger)
+				s.agentServer.SetServices(s.agentService, s.deploymentService)
+				s.agentServer.SetMaintenanceCheck(s.maintenanceMode.Load)
+
+				// Set SSE event callback for agent events
+				s.agentServer.SetAgentEventCallback(s.publishAgentEvent)
+
+				// Enable auto-registration in test mode
+				// WARNING: This allows any agent to register without authentication
+				if os.Getenv("VCDEPLOY_TEST_MODE") == "true" {
+					logger.Warn("⚠️  TEST MODE ENABLED - Agent auto-registration is active",
+						zap.String("warning", "DO NOT USE IN PRODUCTION - agents can register without authentication"))
+					s.agentServer.SetAllowAutoRegister(true)
+				}
+
+				logger.Info("Agent gRPC server initialized")
+			}
+		}
 	}
 
 	// Sync admin credentials from env or mark system as requiring setup
@@ -383,6 +473,18 @@ func (s *MasterServer) SetCAManager(ca *security.CAManager) {
 	s.caManager = ca
 	// Create the gRPC agent server with the CA manager
 	s.agentServer = NewAgentServer(s.store, ca, s.logger)
+	s.agentServer.SetMaintenanceCheck(s.maintenanceMode.Load)
+
+	// Set SSE event callback for agent events
+	s.agentServer.SetAgentEventCallback(s.publishAgentEvent)
+
+	// Enable auto-registration in test mode
+	// WARNING: This allows any agent to register without authentication
+	if os.Getenv("VCDEPLOY_TEST_MODE") == "true" {
+		s.logger.Warn("⚠️  TEST MODE ENABLED - Agent auto-registration is active",
+			zap.String("warning", "DO NOT USE IN PRODUCTION - agents can register without authentication"))
+		s.agentServer.SetAllowAutoRegister(true)
+	}
 }
 
 // SetKMS configures the KMS for secret encryption/decryption.
@@ -578,6 +680,12 @@ func (s *MasterServer) templateFuncs() template.FuncMap {
 		"formatTime": func(t time.Time) string {
 			return t.Format("2006-01-02 15:04:05")
 		},
+		"truncate": func(s string, n int) string {
+			if len(s) <= n {
+				return s
+			}
+			return s[:n] + "..."
+		},
 		"json": func(v interface{}) string {
 			b, err := json.Marshal(v)
 			if err != nil {
@@ -585,24 +693,85 @@ func (s *MasterServer) templateFuncs() template.FuncMap {
 			}
 			return string(b)
 		},
+		"hasPrefix": strings.HasPrefix,
+		"formatBytes": func(bytes int64) string {
+			const unit = 1024
+			if bytes < unit {
+				return fmt.Sprintf("%d B", bytes)
+			}
+			div, exp := int64(unit), 0
+			for n := bytes / unit; n >= unit; n /= unit {
+				div *= unit
+				exp++
+			}
+			return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+		},
+		"slice": func(s string, start, end int) string {
+			if start < 0 {
+				start = 0
+			}
+			if end > len(s) {
+				end = len(s)
+			}
+			if start > end {
+				return ""
+			}
+			return s[start:end]
+		},
 	}
 }
 
 // Start starts the master server.
 func (s *MasterServer) Start(ctx context.Context) error {
-	errCh := make(chan error, 2)
+	// Load seed data (non-fatal if it fails)
+	seedLoader := seeds.NewLoader(s.store)
+	if err := seedLoader.LoadSeeds(ctx, s.logger); err != nil {
+		s.logger.Warn("failed to load seed data, continuing without seeds", zap.Error(err))
+	}
+
+	// Setup TLS first
+	if err := s.setupServerTLS(ctx); err != nil {
+		return fmt.Errorf("setup TLS: %w", err)
+	}
+
+	errCh := make(chan error, 4)
 
 	s.wg.Go(func() {
-		if err := s.startHTTP(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := s.startHTTP(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			s.logger.Error("HTTP server error", zap.Error(err))
 			errCh <- err
 		}
 	})
 
+	// Start HTTPS server if TLS is enabled
+	if s.config.Server.TLS.Mode != config.TLSModeDisabled && s.tlsConfig != nil {
+		s.wg.Go(func() {
+			if err := s.startHTTPS(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				s.logger.Error("HTTPS server error", zap.Error(err))
+				errCh <- err
+			}
+		})
+	}
+
 	s.wg.Go(func() {
 		if err := s.startGRPC(); err != nil {
 			s.logger.Error("gRPC server error", zap.Error(err))
 			errCh <- err
+		}
+	})
+
+	s.wg.Go(func() {
+		if err := s.startReauthServer(ctx); err != nil {
+			s.logger.Error("Re-auth gRPC server error", zap.Error(err))
+			errCh <- err
+		}
+	})
+
+	// Start Unix socket listener for local CLI access
+	s.wg.Go(func() {
+		if err := s.startUnixSocket(ctx); err != nil {
+			// Unix socket failure is non-fatal - log warning and continue
+			s.logger.Warn("Unix socket server error (CLI will use TCP)", zap.Error(err))
 		}
 	})
 
@@ -618,10 +787,14 @@ func (s *MasterServer) Start(ctx context.Context) error {
 	}
 }
 
-func (s *MasterServer) startHTTP() error {
+// buildMainHandler builds the main HTTP handler with all routes and middleware.
+func (s *MasterServer) buildMainHandler() (http.Handler, error) {
 	mux := http.NewServeMux()
 
-	sysCfg := config.MustGetSystemConfig()
+	sysCfg, err := config.GetSystemConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load system config: %w", err)
+	}
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir(sysCfg.StaticDir()))))
 
 	// Health check
@@ -637,6 +810,7 @@ func (s *MasterServer) startHTTP() error {
 
 	// Auth API (for programmatic login)
 	mux.HandleFunc("/api/v1/auth/login", s.handleAPILogin)
+	mux.HandleFunc("/api/v1/auth/me", s.withAuth(s.handleAPICurrentUser))
 
 	// Stats endpoint
 	mux.HandleFunc("/api/v1/stats", s.withAuth(s.handleStats))
@@ -649,48 +823,124 @@ func (s *MasterServer) startHTTP() error {
 	mux.HandleFunc("/api/v1/settings/export", s.withAuth(s.handleSettingsExport))
 	mux.HandleFunc("/api/v1/settings/import", s.withAuth(s.handleSettingsImport))
 	mux.HandleFunc("/api/v1/settings/", s.withAuth(s.handleSettingsCategory))
+	mux.HandleFunc("/api/v1/settings", s.withAuth(s.handleSettingsAll))
+
+	// Admin API
+	mux.HandleFunc("/api/v1/admin/maintenance", s.withAuth(s.handleMaintenanceToggle))
+	mux.HandleFunc("/api/v1/admin/backup/export", s.withAuth(s.handleBackupExport))
+	mux.HandleFunc("/api/v1/admin/backup/download/", s.withAuth(s.handleBackupDownload))
+	mux.HandleFunc("/api/v1/admin/backup/import/upload", s.withAuth(s.handleBackupImportUpload))
+	mux.HandleFunc("/api/v1/admin/backup/import/execute", s.withAuth(s.handleBackupImportExecute))
+
+	// Stats API
+	mux.HandleFunc("/api/v1/stats/deployments", s.withAuth(s.handleDeploymentStats))
+	mux.HandleFunc("/api/v1/stats/agents", s.withAuth(s.handleAgentStats))
 
 	// Projects API
 	mux.HandleFunc("/api/v1/projects", s.withAuth(s.handleProjectsAPI))
 	mux.HandleFunc("/api/v1/projects/", s.withAuth(s.handleProjectAPI))
 
 	// Deployments API
+	mux.HandleFunc("/api/v1/deployments/bulk", s.withAuth(s.handleBulkDeploy))
 	mux.HandleFunc("/api/v1/deployments", s.withAuth(s.handleDeploymentsAPI))
 	mux.HandleFunc("/api/v1/deployments/", s.withAuth(s.handleDeploymentAPI))
 
 	// Agents API
+	mux.HandleFunc("/api/v1/agents/bulk", s.withAuth(s.handleBulkAgents))
 	mux.HandleFunc("/api/v1/agents", s.withAuth(s.handleAgentsAPI))
 	mux.HandleFunc("/api/v1/agents/", s.withAuth(s.handleAgentAPI))
 
 	// Secrets API
+	mux.HandleFunc("/api/v1/secrets/bulk", s.withAuth(s.handleBulkSecrets))
 	mux.HandleFunc("/api/v1/secrets", s.withAuth(s.handleSecrets))
+	mux.HandleFunc("/api/v1/secrets/", s.withAuth(s.handleSecret))
+
+	// Recipes API - Components
+	mux.HandleFunc("/api/v1/recipes/components", s.withAuth(s.handleRecipeComponents))
+	mux.HandleFunc("/api/v1/recipes/components/", s.withAuth(s.handleRecipeComponent))
+
+	// Recipes API - Playbooks
+	mux.HandleFunc("/api/v1/recipes/playbooks", s.withAuth(s.handleRecipePlaybooks))
+	mux.HandleFunc("/api/v1/recipes/playbooks/", s.withAuth(s.handleRecipePlaybook))
+
+	// Recipes API - Activations
+	mux.HandleFunc("/api/v1/recipes/activations", s.withAuth(s.handleActivations))
+	mux.HandleFunc("/api/v1/recipes/activations/", s.withAuth(s.handleActivation))
+
+	// Recipes API - RAW Approvals (Admin only)
+	mux.HandleFunc("/api/v1/recipes/raw-approvals", s.withAuth(s.handleRawApprovals))
+	mux.HandleFunc("/api/v1/recipes/raw-approvals/", s.withAuth(s.handleRawApproval))
+
+	// Recipes API - Export/Import
+	mux.HandleFunc("/api/v1/recipes/export", s.withAuth(s.handleRecipeExport))
+	mux.HandleFunc("/api/v1/recipes/import", s.withAuth(s.handleRecipeImport))
+
+	// Recipes API - Migration
+	mux.HandleFunc("/api/v1/recipes/migration/preview/", s.withAuth(s.handleMigrationPreview))
+	mux.HandleFunc("/api/v1/recipes/migration/", s.withAuth(s.handleMigration))
 
 	// Project Types API
 	mux.HandleFunc("/api/v1/project-types", s.withAuth(s.handleProjectTypes))
 	mux.HandleFunc("/api/v1/project-types/", s.withAuth(s.handleProjectType))
 
-	// API Keys API
-	mux.HandleFunc("/api/v1/apikeys", s.withAuth(s.handleAPIKeys))
-	mux.HandleFunc("/api/v1/apikeys/", s.withAuth(s.handleAPIKey))
+	// API Keys API (canonical kebab-case only)
+	mux.HandleFunc("/api/v1/api-keys", s.withAuth(s.handleAPIKeys))
+	mux.HandleFunc("/api/v1/api-keys/", s.withAuth(s.handleAPIKey))
 
 	// Audit API
 	mux.HandleFunc("/api/v1/audit", s.withAuth(s.handleAuditLogs))
 
-	// Host Keys API
-	mux.HandleFunc("/api/v1/hostkeys", s.withAuth(s.handleHostKeys))
-	mux.HandleFunc("/api/v1/hostkeys/", s.withAuth(s.handleHostKey))
+	// Events API - Server-Sent Events streaming
+	mux.HandleFunc("/api/v1/events/stream", s.withAuth(s.handleEventStream))
 
-	// Jump Servers API
-	mux.HandleFunc("/api/v1/jumpservers", s.withAuth(s.handleJumpServers))
-	mux.HandleFunc("/api/v1/jumpservers/", s.withAuth(s.handleJumpServer))
+	// Host Keys API (canonical kebab-case only)
+	mux.HandleFunc("/api/v1/host-keys", s.withAuth(s.handleHostKeys))
+	mux.HandleFunc("/api/v1/host-keys/", s.withAuth(s.handleHostKey))
 
-	// Blocked IPs API
-	mux.HandleFunc("/api/v1/blocked", s.withAuth(s.handleBlockedIPs))
-	mux.HandleFunc("/api/v1/blocked/", s.withAuth(s.handleBlockedIP))
+	// Jump Servers API (canonical kebab-case only)
+	mux.HandleFunc("/api/v1/jump-servers", s.withAuth(s.handleJumpServers))
+	mux.HandleFunc("/api/v1/jump-servers/", s.withAuth(s.handleJumpServer))
+
+	// Blocked IPs API (canonical kebab-case)
+	mux.HandleFunc("/api/v1/blocked-ips", s.withAuth(s.handleBlockedIPs))
+	mux.HandleFunc("/api/v1/blocked-ips/", s.withAuth(s.handleBlockedIP))
+
+	// TOTP API - consolidated under /users
+	// User self-service: /users/me/totp/*
+	// Admin management: /users/{id}/totp
+	// NOTE: Old /totp/* and /admin/totp/* routes removed
 
 	// Provision API
-	mux.HandleFunc("/api/v1/provision", s.withAuth(s.handleProvisionJobs))
-	mux.HandleFunc("/api/v1/provision/", s.withAuth(s.handleProvisionJob))
+	mux.HandleFunc("/api/v1/provision-jobs", s.withAuth(s.handleProvisionJobs))
+	mux.HandleFunc("/api/v1/provision-jobs/", s.withAuth(s.handleProvisionJob))
+
+	// Security - Certificates API
+	mux.HandleFunc("/api/v1/certificates/agents", s.withAuth(s.handleCertificates))
+	mux.HandleFunc("/api/v1/certificates/agents/", s.withAuth(s.handleCertificates))
+	mux.HandleFunc("/api/v1/certificates/cas", s.withAuth(s.handleCAs))
+	mux.HandleFunc("/api/v1/certificates/cas/", s.withAuth(s.handleCAs))
+	mux.HandleFunc("/api/v1/certificates/server", s.withAuth(s.handleServerCertificate))
+	mux.HandleFunc("/api/v1/certificates/server/", s.withAuth(s.handleServerCertificate))
+	mux.HandleFunc("/api/v1/certificates/audit", s.withAuth(s.handleCertAudit))
+
+	// Security - TLS API (consolidated)
+	// GET /tls - status, PUT /tls - settings
+	mux.HandleFunc("/api/v1/tls", s.withAuth(s.handleTLS))
+	mux.HandleFunc("/api/v1/tls/renew", s.withAuth(s.handleForceACMERenewal))
+	// NOTE: /tls/status and /tls/settings removed - use GET/PUT /tls instead
+
+	// TLS Partials (for HTMX)
+	mux.HandleFunc("/partials/tls/status", s.withAuth(s.handleTLSStatusPartial))
+
+	// Security - Credentials API
+	mux.HandleFunc("/api/v1/credentials", s.withAuth(s.handleCredentials))
+	mux.HandleFunc("/api/v1/credentials/", s.withAuth(s.handleCredentials))
+
+	// Security - SSH Keys API
+	mux.HandleFunc("/api/v1/ssh-keys", s.withAuth(s.handleSSHKeys))
+	mux.HandleFunc("/api/v1/ssh-keys/", s.withAuth(s.handleSSHKeys))
+
+	// NOTE: /agents/provision shortcuts removed - use /provision-jobs instead
 
 	// Agent Binaries API
 	mux.HandleFunc("/api/v1/binaries", s.withAuth(s.handleAgentBinaries))
@@ -699,12 +949,10 @@ func (s *MasterServer) startHTTP() error {
 
 	// Health Check Configuration API
 	mux.HandleFunc("/api/v1/health-checks", s.withAuth(s.handleHealthCheckConfigs))
-	mux.HandleFunc("/api/v1/health-checks/global", s.withAuth(s.handleGlobalHealthCheck))
+	// NOTE: /health-checks/global removed - use GET /health-checks?scope=global instead
 	mux.HandleFunc("/api/v1/health-checks/", s.withAuth(s.handleHealthCheckConfig))
 
-	// Rollback Records API
-	mux.HandleFunc("/api/v1/rollbacks", s.withAuth(s.handleRollbackRecords))
-	mux.HandleFunc("/api/v1/rollbacks/", s.withAuth(s.handleRollbackRecord))
+	// NOTE: /rollbacks resource removed - use GET /deployments?type=rollback instead
 
 	// Webhooks
 	mux.HandleFunc("/webhook/github/", s.handleGitHubWebhook)
@@ -717,21 +965,38 @@ func (s *MasterServer) startHTTP() error {
 	mux.HandleFunc("/logout", s.handleLogout)
 	mux.HandleFunc("/setup", s.handleSetup)
 	mux.HandleFunc("/change-password", s.withUIAuth(s.handleChangePassword))
-	mux.HandleFunc("/dashboard", s.withUIAuth(s.handleDashboard))
+	mux.HandleFunc("/stats", s.withUIAuth(s.handleStatsUI))
 	mux.HandleFunc("/projects", s.withUIAuth(s.handleProjectsUI))
+	mux.HandleFunc("/projects/", s.withUIAuth(s.handleProjectDetailUI))
 	mux.HandleFunc("/deployments", s.withUIAuth(s.handleDeploymentsUI))
 	mux.HandleFunc("/agents", s.withUIAuth(s.handleAgentsUI))
 	mux.HandleFunc("/secrets", s.withUIAuth(s.handleSecretsUI))
 	mux.HandleFunc("/project-types", s.withUIAuth(s.handleProjectTypesUI))
 	mux.HandleFunc("/audit", s.withUIAuth(s.handleAuditUI))
-	mux.HandleFunc("/apikeys", s.withUIAuth(s.handleAPIKeysUI))
+	mux.HandleFunc("/api-keys", s.withUIAuth(s.handleAPIKeysUI))
 	mux.HandleFunc("/settings", s.withUIAuth(s.handleSettingsUI))
+	mux.HandleFunc("/profile", s.withUIAuth(s.handleProfileUI))
 
-	addr := s.config.Server.Listen
-	if addr == "" {
-		addr = ":8080"
-	}
-	s.logger.Info("Starting HTTP server", zap.String("addr", addr))
+	// Security management UI
+	mux.HandleFunc("/security/certificates", s.withUIAuth(s.handleCertificatesUI))
+	mux.HandleFunc("/security/credentials", s.withUIAuth(s.handleCredentialsUI))
+	mux.HandleFunc("/security/ssh-keys", s.withUIAuth(s.handleSSHKeysUI))
+	mux.HandleFunc("/security/provision", s.withUIAuth(s.handleProvisionUI))
+	mux.HandleFunc("/security/audit", s.withUIAuth(s.handleSecurityAuditUI))
+	mux.HandleFunc("/settings/tls", s.withUIAuth(s.handleTLSSettingsUI))
+	mux.HandleFunc("/partials/certificates/cas", s.withUIAuth(s.handleCAsPartial))
+	mux.HandleFunc("/partials/certificates/agents", s.withUIAuth(s.handleAgentCertsPartial))
+
+	// Recipe management UI
+	mux.HandleFunc("/recipes", s.withUIAuth(s.handleRecipesUI))
+	mux.HandleFunc("/recipes/components", s.withUIAuth(s.handleRecipesUI))
+	mux.HandleFunc("/playbooks", s.withUIAuth(s.handlePlaybooksUI))
+	mux.HandleFunc("/playbooks/composer", s.withUIAuth(s.handlePlaybookComposerUI))
+	mux.HandleFunc("/recipes/raw-approvals", s.withUIAuth(s.handleRawApprovalsUI))
+
+	// Recipe partials (for HTMX)
+	mux.HandleFunc("/partials/recipes/components/", s.withUIAuth(s.handleComponentDetailPartial))
+	mux.HandleFunc("/partials/recipes/playbooks/", s.withUIAuth(s.handlePlaybookDetailPartial))
 
 	// Build middleware chain: otel -> request ID -> logging -> CSP -> security headers -> rate limiting -> handler
 	var handler http.Handler = mux
@@ -758,8 +1023,54 @@ func (s *MasterServer) startHTTP() error {
 		handler = s.rateLimiter.Middleware(handler)
 	}
 
+	// Add maintenance mode middleware (blocks mutations during maintenance)
+	handler = s.maintenanceMiddleware(handler)
+
 	// Add setup required middleware (redirects to /setup when system needs initial configuration)
 	handler = s.setupRequiredMiddleware(handler)
+
+	return handler, nil
+}
+
+func (s *MasterServer) startHTTP(_ context.Context) error {
+	tlsMode := s.config.Server.TLS.Mode
+
+	// Determine HTTP server behavior based on TLS mode
+	switch tlsMode {
+	case config.TLSModeDisabled:
+		// Serve the full application on HTTP
+		return s.startHTTPApplication()
+
+	case config.TLSModeStatic:
+		// HTTP only serves redirects to HTTPS (if ForceHTTPS enabled)
+		if s.config.Server.TLS.ForceHTTPS {
+			return s.startHTTPRedirect()
+		}
+		// Otherwise serve application on HTTP too
+		return s.startHTTPApplication()
+
+	case config.TLSModeACME:
+		// HTTP serves ACME challenges and redirects
+		return s.startHTTPWithACME()
+
+	default:
+		// Fallback to serving application on HTTP
+		return s.startHTTPApplication()
+	}
+}
+
+// startHTTPApplication starts HTTP server serving the full application.
+func (s *MasterServer) startHTTPApplication() error {
+	handler, err := s.buildMainHandler()
+	if err != nil {
+		return fmt.Errorf("build handler: %w", err)
+	}
+
+	addr := s.config.Server.Listen
+	if addr == "" {
+		addr = config.DefaultHTTPAddr
+	}
+	s.logger.Info("Starting HTTP server (application mode)", zap.String("addr", addr))
 
 	s.httpServer = &http.Server{
 		Addr:         addr,
@@ -769,18 +1080,185 @@ func (s *MasterServer) startHTTP() error {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	if s.config.Server.TLS.Enabled {
-		return s.httpServer.ListenAndServeTLS(s.config.Server.TLS.Cert, s.config.Server.TLS.Key)
-	}
 	return s.httpServer.ListenAndServe()
+}
+
+// startHTTPRedirect starts HTTP server that only redirects to HTTPS.
+func (s *MasterServer) startHTTPRedirect() error {
+	redirectHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		target := "https://" + r.Host + r.URL.Path
+		if r.URL.RawQuery != "" {
+			target += "?" + r.URL.RawQuery
+		}
+		http.Redirect(w, r, target, http.StatusMovedPermanently)
+	})
+
+	addr := s.config.Server.Listen
+	if addr == "" {
+		addr = ":80"
+	}
+	s.logger.Info("Starting HTTP server (redirect mode)", zap.String("addr", addr))
+
+	s.httpServer = &http.Server{
+		Addr:         addr,
+		Handler:      redirectHandler,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 5 * time.Second,
+		IdleTimeout:  30 * time.Second,
+	}
+
+	return s.httpServer.ListenAndServe()
+}
+
+// startHTTPWithACME starts HTTP server for ACME challenges and redirects.
+func (s *MasterServer) startHTTPWithACME() error {
+	mux := http.NewServeMux()
+
+	// ACME HTTP-01 challenge handler
+	if s.acmeClient != nil {
+		acmeHandler := s.acmeClient.HTTPHandler(nil)
+		if acmeHandler != nil {
+			mux.Handle("/.well-known/acme-challenge/", acmeHandler)
+		}
+	}
+
+	// Redirect all other requests to HTTPS
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		target := "https://" + r.Host + r.URL.Path
+		if r.URL.RawQuery != "" {
+			target += "?" + r.URL.RawQuery
+		}
+		http.Redirect(w, r, target, http.StatusMovedPermanently)
+	})
+
+	addr := s.config.Server.Listen
+	if addr == "" {
+		addr = ":80"
+	}
+	s.logger.Info("Starting HTTP server (ACME + redirect mode)", zap.String("addr", addr))
+
+	s.httpServer = &http.Server{
+		Addr:         addr,
+		Handler:      mux,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 5 * time.Second,
+		IdleTimeout:  30 * time.Second,
+	}
+
+	return s.httpServer.ListenAndServe()
+}
+
+// startHTTPS starts the HTTPS server with TLS.
+func (s *MasterServer) startHTTPS(_ context.Context) error {
+	handler, err := s.buildMainHandler()
+	if err != nil {
+		return fmt.Errorf("build handler: %w", err)
+	}
+
+	addr := s.config.Server.HTTPSAddress
+	if addr == "" {
+		addr = ":443"
+	}
+	s.logger.Info("Starting HTTPS server", zap.String("addr", addr))
+
+	s.httpsServer = &http.Server{
+		Addr:         addr,
+		Handler:      handler,
+		TLSConfig:    s.tlsConfig,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	// Empty cert/key paths because TLSConfig provides GetCertificate
+	return s.httpsServer.ListenAndServeTLS("", "")
+}
+
+// startUnixSocket starts a Unix socket listener for local CLI access.
+// This provides secure local access via filesystem permissions.
+func (s *MasterServer) startUnixSocket(ctx context.Context) error {
+	socketPath := s.config.Server.SocketPath
+	if socketPath == "" {
+		socketPath = "/var/run/vcdeploy/vcdeploy.sock"
+	}
+
+	// Ensure socket directory exists
+	socketDir := filepath.Dir(socketPath)
+	// #nosec G301 - Socket directory needs world-execute for socket access
+	if err := os.MkdirAll(socketDir, 0o755); err != nil {
+		return fmt.Errorf("create socket directory: %w", err)
+	}
+
+	// Remove stale socket if it exists
+	if err := os.Remove(socketPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove stale socket: %w", err)
+	}
+
+	listener, err := net.Listen("unix", socketPath)
+	if err != nil {
+		return fmt.Errorf("listen on unix socket: %w", err)
+	}
+
+	// Set socket permissions: owner (root) + group (vcdeploy) can access
+	// This allows: root users, and users in vcdeploy group
+	// #nosec G302 - Unix socket intentionally allows group access (0660)
+	if err := os.Chmod(socketPath, 0o660); err != nil {
+		_ = listener.Close() // #nosec G104 - best effort cleanup
+		return fmt.Errorf("set socket permissions: %w", err)
+	}
+
+	// Optionally set group ownership to vcdeploy group
+	if gid := getVCDeployGID(); gid >= 0 {
+		if err := os.Chown(socketPath, -1, gid); err != nil {
+			s.logger.Warn("could not set socket group ownership", zap.Error(err))
+		}
+	}
+
+	s.logger.Info("Starting Unix socket server for local CLI", zap.String("path", socketPath))
+
+	handler, err := s.buildMainHandler()
+	if err != nil {
+		_ = listener.Close() // #nosec G104 - best effort cleanup
+		return fmt.Errorf("build handler: %w", err)
+	}
+
+	unixServer := &http.Server{
+		Handler:      handler,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	// Start serving in a goroutine
+	go func() {
+		if err := unixServer.Serve(listener); err != nil && err != http.ErrServerClosed {
+			s.logger.Error("Unix socket server error", zap.Error(err))
+		}
+	}()
+
+	// Wait for context cancellation, then shutdown
+	<-ctx.Done()
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return unixServer.Shutdown(shutdownCtx)
+}
+
+// getVCDeployGID returns the GID of the vcdeploy group, or -1 if not found.
+func getVCDeployGID() int {
+	group, err := user.LookupGroup("vcdeploy")
+	if err != nil {
+		return -1
+	}
+	gid, _ := strconv.Atoi(group.Gid)
+	return gid
 }
 
 func (s *MasterServer) startGRPC() error {
 	addr := s.config.GRPC.Listen
 	if addr == "" {
-		addr = ":9090"
+		addr = config.DefaultGRPCAddr
 	}
-	s.logger.Info("Starting gRPC server", zap.String("addr", addr))
+	s.logger.Info("Starting gRPC server with mandatory mTLS", zap.String("addr", addr))
 
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -792,17 +1270,13 @@ func (s *MasterServer) startGRPC() error {
 	// Add OpenTelemetry gRPC instrumentation
 	opts = append(opts, grpc.StatsHandler(otelgrpc.NewServerHandler()))
 
-	if s.config.Server.TLS.Enabled {
-		cert, err := tls.LoadX509KeyPair(s.config.Server.TLS.Cert, s.config.Server.TLS.Key)
-		if err != nil {
-			return fmt.Errorf("loading TLS cert: %w", err)
-		}
-		creds := credentials.NewTLS(&tls.Config{
-			Certificates: []tls.Certificate{cert},
-			MinVersion:   tls.VersionTLS12,
-		})
-		opts = append(opts, grpc.Creds(creds))
+	// Mandatory mTLS - no condition
+	tlsConfig, err := s.setupMTLS()
+	if err != nil {
+		return fmt.Errorf("setup mTLS: %w", err)
 	}
+	creds := credentials.NewTLS(tlsConfig)
+	opts = append(opts, grpc.Creds(creds))
 
 	s.grpcServer = grpc.NewServer(opts...)
 
@@ -813,6 +1287,71 @@ func (s *MasterServer) startGRPC() error {
 	}
 
 	return s.grpcServer.Serve(lis)
+}
+
+// setupMTLS configures TLS with mandatory client certificate verification.
+func (s *MasterServer) setupMTLS() (*tls.Config, error) {
+	// Load server certificate
+	serverCert, err := tls.LoadX509KeyPair(s.config.Server.TLS.Cert, s.config.Server.TLS.Key)
+	if err != nil {
+		return nil, fmt.Errorf("load server certificate: %w", err)
+	}
+
+	// Get CA trust pool for client verification
+	trustPool := s.caManager.GetTrustPool()
+
+	return &tls.Config{
+		Certificates: []tls.Certificate{serverCert},
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		ClientCAs:    trustPool,
+		MinVersion:   tls.VersionTLS12,
+	}, nil
+}
+
+// startReauthServer starts the dedicated re-authentication gRPC server.
+// This server does not require client certificates, allowing agents with
+// expired certificates to re-authenticate using HMAC.
+func (s *MasterServer) startReauthServer(_ context.Context) error {
+	// ctx reserved for future graceful shutdown support
+	addr := s.config.GRPC.ReauthAddress
+	if addr == "" {
+		addr = ":9444"
+	}
+	s.logger.Info("Starting re-auth gRPC server", zap.String("addr", addr))
+
+	lis, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("listen reauth port: %w", err)
+	}
+
+	// Server TLS (verify server to client) but NO client cert required
+	serverCert, err := tls.LoadX509KeyPair(s.config.Server.TLS.Cert, s.config.Server.TLS.Key)
+	if err != nil {
+		return fmt.Errorf("load server certificate: %w", err)
+	}
+
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{serverCert},
+		ClientAuth:   tls.NoClientCert, // Key difference: no client cert required
+		MinVersion:   tls.VersionTLS12,
+	}
+
+	// Create server with only Reauthenticate RPC allowed
+	var certAuditor *security.CertAuditor
+	if s.caManager != nil {
+		certAuditor = security.NewCertAuditor(s.store)
+	}
+
+	reauthServer := NewReauthOnlyServer(s.store, s.caManager, certAuditor, s.logger)
+
+	grpcServer := grpc.NewServer(
+		grpc.Creds(credentials.NewTLS(tlsConfig)),
+		grpc.UnaryInterceptor(reauthOnlyInterceptor),
+	)
+
+	proto.RegisterAgentServiceServer(grpcServer, reauthServer)
+
+	return grpcServer.Serve(lis)
 }
 
 func (s *MasterServer) runBackgroundTasks(ctx context.Context) {
@@ -1035,6 +1574,167 @@ func (s *MasterServer) triggerDeploymentOnAgent(ctx context.Context, deployment 
 	return nil
 }
 
+// setupServerTLS configures TLS based on the configured mode.
+func (s *MasterServer) setupServerTLS(ctx context.Context) error {
+	tlsMode := s.config.Server.TLS.Mode
+
+	// Handle legacy config (when Mode is empty but Enabled is set)
+	if tlsMode == "" {
+		if s.config.Server.TLS.Enabled {
+			tlsMode = config.TLSModeStatic
+			// Migrate legacy cert/key paths
+			if s.config.Server.TLS.CertFile == "" && s.config.Server.TLS.Cert != "" {
+				s.config.Server.TLS.CertFile = s.config.Server.TLS.Cert
+			}
+			if s.config.Server.TLS.KeyFile == "" && s.config.Server.TLS.Key != "" {
+				s.config.Server.TLS.KeyFile = s.config.Server.TLS.Key
+			}
+		} else {
+			tlsMode = config.TLSModeDisabled
+		}
+		s.config.Server.TLS.Mode = tlsMode
+	}
+
+	switch tlsMode {
+	case config.TLSModeDisabled:
+		s.logger.Info("TLS disabled, serving HTTP only")
+		return nil
+
+	case config.TLSModeStatic:
+		return s.setupStaticTLS(ctx)
+
+	case config.TLSModeACME:
+		return s.setupACMETLS(ctx)
+
+	default:
+		return fmt.Errorf("unknown TLS mode: %s", tlsMode)
+	}
+}
+
+// setupStaticTLS configures TLS with static certificate files.
+func (s *MasterServer) setupStaticTLS(_ context.Context) error {
+	certFile := s.config.Server.TLS.CertFile
+	keyFile := s.config.Server.TLS.KeyFile
+
+	if certFile == "" || keyFile == "" {
+		return fmt.Errorf("static TLS mode requires cert_file and key_file")
+	}
+
+	// Validate cert files exist
+	if _, err := os.Stat(certFile); err != nil {
+		return fmt.Errorf("certificate file not found: %w", err)
+	}
+	if _, err := os.Stat(keyFile); err != nil {
+		return fmt.Errorf("key file not found: %w", err)
+	}
+
+	// #nosec G402 - MinVersion is dynamically set to TLS 1.2 or 1.3 by getTLSMinVersion()
+	s.tlsConfig = &tls.Config{
+		MinVersion: s.getTLSMinVersion(),
+		GetCertificate: func(_ *tls.ClientHelloInfo) (*tls.Certificate, error) {
+			cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+			if err != nil {
+				return nil, err
+			}
+			return &cert, nil
+		},
+	}
+
+	s.logger.Info("Static TLS configured",
+		zap.String("cert", certFile),
+		zap.String("key", keyFile))
+	return nil
+}
+
+// setupACMETLS configures TLS with automatic certificate management (ACME/Let's Encrypt).
+func (s *MasterServer) setupACMETLS(ctx context.Context) error {
+	acmeCfg := s.config.Server.TLS.ACME
+
+	if len(acmeCfg.Domains) == 0 {
+		return fmt.Errorf("ACME mode requires at least one domain")
+	}
+	if acmeCfg.Email == "" {
+		return fmt.Errorf("ACME mode requires contact email")
+	}
+
+	directoryURL := LetsEncryptProduction
+	if acmeCfg.Staging {
+		directoryURL = LetsEncryptStaging
+	}
+
+	// Use database-backed certificate cache when storage is available
+	var cache autocert.Cache
+	if s.store != nil {
+		cache = NewDBCertCache(s.store)
+	}
+
+	acmeClient, err := NewACMEClient(ACMEClientConfig{
+		Logger:       s.logger,
+		DirectoryURL: directoryURL,
+		Email:        acmeCfg.Email,
+		Domains:      acmeCfg.Domains,
+		CacheDir:     acmeCfg.CacheDir,
+		TestMode:     false,
+		Cache:        cache,
+	})
+	if err != nil {
+		// Fallback to self-signed with warning
+		s.logger.Error("ACME client initialization failed, falling back to self-signed",
+			zap.Error(err))
+		s.acmeFallback = true
+		return s.setupSelfSignedFallback(ctx)
+	}
+
+	s.acmeClient = acmeClient
+	s.tlsConfig = acmeClient.GetTLSConfig()
+
+	// Start renewal loop
+	go acmeClient.StartRenewalLoop(ctx)
+
+	s.logger.Info("ACME TLS configured",
+		zap.Strings("domains", acmeCfg.Domains),
+		zap.Bool("staging", acmeCfg.Staging))
+
+	return nil
+}
+
+// setupSelfSignedFallback generates a self-signed certificate when ACME fails.
+func (s *MasterServer) setupSelfSignedFallback(ctx context.Context) error {
+	domains := s.config.Server.TLS.ACME.Domains
+	if len(domains) == 0 {
+		domains = []string{"localhost"}
+	}
+
+	// Create a temporary ACME client in test mode for self-signed cert generation
+	acmeClient, err := NewACMEClient(ACMEClientConfig{
+		Logger:   s.logger,
+		Domains:  domains,
+		TestMode: true,
+	})
+	if err != nil {
+		return fmt.Errorf("create fallback cert generator: %w", err)
+	}
+
+	s.acmeClient = acmeClient
+	s.tlsConfig = acmeClient.GetTLSConfig()
+
+	s.logger.Warn("Using self-signed certificate fallback",
+		zap.Strings("domains", domains))
+
+	_ = ctx // Reserved for future audit logging
+	return nil
+}
+
+// getTLSMinVersion returns the minimum TLS version based on config.
+func (s *MasterServer) getTLSMinVersion() uint16 {
+	switch s.config.Server.TLS.MinVersion {
+	case "1.3":
+		return tls.VersionTLS13
+	default:
+		return tls.VersionTLS12
+	}
+}
+
 // Shutdown gracefully stops the server.
 // Shutdown is idempotent and can be called multiple times safely.
 func (s *MasterServer) Shutdown(ctx context.Context) error {
@@ -1052,6 +1752,9 @@ func (s *MasterServer) Shutdown(ctx context.Context) error {
 
 		if s.httpServer != nil {
 			_ = s.httpServer.Shutdown(ctx)
+		}
+		if s.httpsServer != nil {
+			_ = s.httpsServer.Shutdown(ctx)
 		}
 		if s.grpcServer != nil {
 			s.grpcServer.GracefulStop()
@@ -1112,14 +1815,9 @@ func (s *MasterServer) requestIDMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// generateRequestID creates a unique request ID using timestamp and random suffix.
+// generateRequestID creates a unique request ID using XID.
 func generateRequestID() string {
-	// Use timestamp in microseconds + random suffix for uniqueness
-	// Format: timestamp_random (e.g., "1706529600123456_a1b2c3d4")
-	timestamp := time.Now().UnixMicro()
-	random := make([]byte, 4)
-	_, _ = rand.Read(random)
-	return fmt.Sprintf("%d_%x", timestamp, random)
+	return xid.New().String()
 }
 
 func (s *MasterServer) loggingMiddleware(next http.Handler) http.Handler {
@@ -1162,7 +1860,7 @@ func (s *MasterServer) loggingMiddleware(next http.Handler) http.Handler {
 // normalizePath normalizes URL paths for metrics by replacing IDs with placeholders.
 // This reduces metric cardinality while preserving useful grouping.
 func normalizePath(path string) string {
-	// Simple normalization: replace numeric segments and UUIDs with :id
+	// Simple normalization: replace numeric segments, UUIDs, and XIDs with :id
 	parts := strings.Split(path, "/")
 	for i, part := range parts {
 		// Replace numeric IDs
@@ -1173,9 +1871,24 @@ func normalizePath(path string) string {
 		// Replace UUIDs (simple check for 36-char strings with dashes)
 		if len(part) == 36 && strings.Count(part, "-") == 4 {
 			parts[i] = ":id"
+			continue
+		}
+		// Replace XIDs (20-char base32hex lowercase strings)
+		if len(part) == 20 && isXID(part) {
+			parts[i] = ":id"
 		}
 	}
 	return strings.Join(parts, "/")
+}
+
+// isXID checks if a string looks like an XID (20 chars, lowercase alphanumeric base32).
+func isXID(s string) bool {
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'v')) {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *MasterServer) withAuth(handler http.HandlerFunc) http.HandlerFunc {
@@ -1205,7 +1918,7 @@ func (s *MasterServer) withAuth(handler http.HandlerFunc) http.HandlerFunc {
 			}
 			s.logger.Debug("Session token validation failed", zap.Error(err))
 
-			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			s.jsonError(w, http.StatusUnauthorized, "invalid token")
 			return
 		}
 
@@ -1221,7 +1934,7 @@ func (s *MasterServer) withAuth(handler http.HandlerFunc) http.HandlerFunc {
 			s.logger.Debug("Session validation failed", zap.Error(err))
 		}
 
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		s.jsonError(w, http.StatusUnauthorized, "unauthorized")
 	}
 }
 
@@ -1262,39 +1975,39 @@ type contextKey string
 const contextKeyUserID contextKey = "userID"
 
 // GetUserIDFromContext extracts the user ID from the request context.
-func GetUserIDFromContext(ctx context.Context) (int64, bool) {
-	userID, ok := ctx.Value(contextKeyUserID).(int64)
+func GetUserIDFromContext(ctx context.Context) (string, bool) {
+	userID, ok := ctx.Value(contextKeyUserID).(string)
 	return userID, ok
 }
 
 // validateAPIKey validates an API key and returns the API key object and user ID if valid.
-func (s *MasterServer) validateAPIKey(ctx context.Context, key string) (*storage.APIKey, int64, error) {
+func (s *MasterServer) validateAPIKey(ctx context.Context, key string) (*storage.APIKey, string, error) {
 	if key == "" {
-		return nil, 0, fmt.Errorf("empty API key")
+		return nil, "", fmt.Errorf("empty API key")
 	}
 
 	// Look up using API key service
 	apiKey, err := s.apiKeyService.GetByRawKey(ctx, key)
-	if errors.Is(err, storage.ErrNotFound) {
-		return nil, 0, fmt.Errorf("API key not found")
+	if services.IsNotFound(err) {
+		return nil, "", fmt.Errorf("API key not found")
 	}
 	if err != nil {
-		return nil, 0, fmt.Errorf("database error: %w", err)
+		return nil, "", fmt.Errorf("database error: %w", err)
 	}
 
 	// Check if valid
 	if !apiKey.IsValid() {
-		return nil, 0, fmt.Errorf("API key expired or revoked")
+		return nil, "", fmt.Errorf("API key expired or revoked")
 	}
 
-	// Update last used timestamp (async to not slow down request)
+	// Update last used timestamp asynchronously
+	// With MemoryStore, this is non-blocking as updates go to memory immediately
+	// and are batched to SQLite in the background
 	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				s.logger.Error("panic in API key usage update", zap.Any("panic", r))
-			}
-		}()
-		if err := s.apiKeyService.UpdateUsage(context.Background(), apiKey.ID); err != nil {
+		updateCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := s.apiKeyService.UpdateUsage(updateCtx, apiKey.ID); err != nil {
+			// Don't fail the request if usage update fails - it's not critical
 			s.logger.Debug("Failed to update API key usage", zap.Error(err))
 		}
 	}()
@@ -1303,18 +2016,18 @@ func (s *MasterServer) validateAPIKey(ctx context.Context, key string) (*storage
 }
 
 // validateSession validates a session token and returns the user ID if valid.
-func (s *MasterServer) validateSession(ctx context.Context, token string) (int64, error) {
+func (s *MasterServer) validateSession(ctx context.Context, token string) (string, error) {
 	if token == "" {
-		return 0, fmt.Errorf("empty session token")
+		return "", fmt.Errorf("empty session token")
 	}
 
 	// Look up using session service
 	session, err := s.sessionService.GetByToken(ctx, token)
-	if errors.Is(err, storage.ErrNotFound) {
-		return 0, fmt.Errorf("session not found or expired")
+	if services.IsNotFound(err) {
+		return "", fmt.Errorf("session not found or expired")
 	}
 	if err != nil {
-		return 0, fmt.Errorf("database error: %w", err)
+		return "", fmt.Errorf("database error: %w", err)
 	}
 
 	return session.UserID, nil
@@ -1330,7 +2043,7 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.ResponseWriter.WriteHeader(code)
 }
 
-func (s *MasterServer) handleAgents(w http.ResponseWriter, r *http.Request) {
+func (s *MasterServer) handleAgents(w http.ResponseWriter, _ *http.Request) {
 	s.agentsMu.RLock()
 	agents := make([]map[string]interface{}, 0, len(s.agents))
 	for _, a := range s.agents {
@@ -1347,7 +2060,19 @@ func (s *MasterServer) handleAgents(w http.ResponseWriter, r *http.Request) {
 	s.jsonResponse(w, agents)
 }
 
-func (s *MasterServer) jsonResponse(w http.ResponseWriter, data interface{}) {
+// writeJSON encodes data as JSON and writes to the response.
+// H12 FIX: Properly handles encoder errors instead of ignoring them.
+func (s *MasterServer) writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(data)
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		s.logger.Error("Failed to encode JSON response",
+			zap.Error(err),
+			zap.Any("data", data),
+		)
+	}
+}
+
+func (s *MasterServer) jsonResponse(w http.ResponseWriter, data interface{}) {
+	s.writeJSON(w, http.StatusOK, data)
 }

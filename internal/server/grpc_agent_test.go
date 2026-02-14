@@ -88,17 +88,17 @@ func TestAgentServer_Register_MissingFields(t *testing.T) {
 		{
 			name:    "missing agent_id",
 			req:     &proto.RegisterRequest{Token: "token"},
-			wantErr: "agent_id and token are required",
+			wantErr: "agent_id is required",
 		},
 		{
 			name:    "missing token",
 			req:     &proto.RegisterRequest{AgentId: "agent-1"},
-			wantErr: "agent_id and token are required",
+			wantErr: "invalid registration token",
 		},
 		{
 			name:    "both missing",
 			req:     &proto.RegisterRequest{},
-			wantErr: "agent_id and token are required",
+			wantErr: "agent_id is required",
 		},
 	}
 

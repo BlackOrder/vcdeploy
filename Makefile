@@ -1,10 +1,11 @@
 # VCDeploy Makefile
 # ==================
 # Development-only targets. GoReleaser handles all release artifacts.
+# CI uses its own commands - these targets mirror CI for local debugging.
 
 .PHONY: help
 help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 # ============================================================================
 # Configuration
@@ -22,9 +23,19 @@ PROTO_OUT  := internal/proto
 # Detect docker compose command
 COMPOSE := $(shell command -v docker-compose 2>/dev/null || echo "docker compose")
 
-# Test flags
-TEST_FLAGS   := -v -race
-TEST_TIMEOUT := 10m
+# Test configuration (mirrors CI)
+TEST_TIMEOUT      := 15m
+TEST_ADMIN_PASS   := Admin@Password123!
+TEST_HTTP_PORT    := 9000
+TEST_HTTP_URL     := http://localhost:$(TEST_HTTP_PORT)
+TEST_GRPC_PORT    := 9001
+TEST_GRPC_URL     := localhost:$(TEST_GRPC_PORT)
+TEST_SSH_PORT     := 2223
+TEST_LOG_FILE     := test-server.log
+TEST_COMPOSE_FILE := docker/docker-compose.test.yml
+
+# Build tags used in codebase (for linting/vetting tagged files)
+BUILD_TAGS := integration,e2e,cli,systemd
 
 # ============================================================================
 # Development Build
@@ -52,16 +63,37 @@ install-local: build ## Install binaries to GOPATH/bin
 	go install ./cmd/vcdeploy-agent
 
 .PHONY: clean
-clean: ## Remove build artifacts
-	rm -rf $(OUT_DIR) dist/ coverage.out coverage.html
+clean: ## Remove build artifacts and stop any running servers
+	rm -rf $(OUT_DIR) dist/ coverage.out coverage.html data/
 	go clean -testcache
+	-@pkill -f "vcdeploy master" 2>/dev/null || true
+	-@$(COMPOSE) -f $(TEST_COMPOSE_FILE) down -v 2>/dev/null || true
+
+.PHONY: test-cleanup
+test-cleanup: ## Clean up test Docker environment (use after interrupted tests)
+	@echo "Cleaning up test environment..."
+	-@pkill -f "vcdeploy master" 2>/dev/null || true
+	-@pkill -f "docker.*logs" 2>/dev/null || true
+	-@$(COMPOSE) -f $(TEST_COMPOSE_FILE) down -v 2>/dev/null || true
+	-@docker volume rm docker_test-data docker_test-logs docker_agent-test-data docker_agent-test-logs docker_ssh-target-data 2>/dev/null || true
+	-@rm -rf data/
+	@echo "Test environment cleaned up."
 
 # ============================================================================
-# Development
+# Development Server (for manual testing)
 # ============================================================================
+
+.PHONY: vendor-ui
+vendor-ui: ## Update vendored UI dependencies (htmx, tailwind)
+	@mkdir -p web/static/js/vendor
+	curl -sL https://unpkg.com/htmx.org@1.9.10/dist/htmx.min.js -o web/static/js/vendor/htmx.min.js
+	curl -sL https://unpkg.com/htmx.org@1.9.10/dist/ext/json-enc.js -o web/static/js/vendor/htmx-json-enc.min.js
+	curl -sL https://cdn.tailwindcss.com -o web/static/js/vendor/tailwind.min.js
+	@echo "UI dependencies vendored successfully"
+	@ls -la web/static/js/vendor/
 
 .PHONY: dev
-dev: build ## Run master in development mode
+dev: build ## Run master in development mode (for manual testing)
 	@mkdir -p data
 	@[ -L data/templates ] || ln -sf ../web/templates data/templates
 	@[ -L data/static ] || ln -sf ../web/static data/static
@@ -73,75 +105,259 @@ dev-agent: build ## Run agent in development mode
 	./$(OUT_DIR)/vcdeploy-agent start --config=configs/agent.yaml.example
 
 # ============================================================================
-# Testing
+# Testing - Unit Tests (No Server Required)
 # ============================================================================
 
 .PHONY: test
-test: ## Run unit tests
-	go test -short -race ./...
+test: ## Run unit tests (mirrors CI 'test' job)
+	go test -race -short -coverprofile=coverage.out -covermode=atomic ./...
 
 .PHONY: test-coverage
-test-coverage: ## Run tests with coverage report
-	go test -race -coverprofile=coverage.out ./...
+test-coverage: test ## Run tests with coverage report
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report: coverage.html"
 
-.PHONY: test-integration
-test-integration: ## Run integration tests (requires Docker)
-	go test -race -tags=integration -timeout $(TEST_TIMEOUT) ./...
-
 .PHONY: test-systemd
-test-systemd: ## Run systemd unit validation tests
+test-systemd: ## Run systemd tests (mirrors CI 'systemd-tests' job)
 	go test -v -tags=systemd ./init/...
 
+.PHONY: test-bench
+test-bench: ## Run benchmarks (mirrors CI 'benchmarks' job)
+	go test -bench=. -benchmem -run=^$$ ./...
+
+# ============================================================================
+# Fuzzing - Security Testing (Manual)
+# ============================================================================
+
+.PHONY: fuzz
+fuzz: ## Run fuzz tests for security validators (manual, not in CI)
+	@echo "Running fuzz tests for 60 seconds each..."
+	go test -fuzz=FuzzCommandValidator -fuzztime=60s ./internal/security/...
+	go test -fuzz=FuzzValidateAgentID -fuzztime=60s ./internal/security/...
+	go test -fuzz=FuzzValidateHostname -fuzztime=60s ./internal/security/...
+
+.PHONY: fuzz-quick
+fuzz-quick: ## Run quick fuzz tests (10 seconds each)
+	go test -fuzz=FuzzCommandValidator -fuzztime=10s ./internal/security/...
+	go test -fuzz=FuzzValidateAgentID -fuzztime=10s ./internal/security/...
+	go test -fuzz=FuzzValidateHostname -fuzztime=10s ./internal/security/...
+
+# ============================================================================
+# Testing - Integration Tests (Starts own SSH container for provisioning tests)
+# ============================================================================
+
+.PHONY: test-integration
+test-integration: ## Run integration tests (mirrors CI 'integration' job)
+	@echo "=== Integration Tests (mirrors CI 'integration' job) ==="
+	@echo "Cleaning up any existing SSH test container..."
+	@docker stop vcdeploy-test-ssh 2>/dev/null || true
+	@docker rm vcdeploy-test-ssh 2>/dev/null || true
+	@echo "Starting SSH test container..."
+	@docker run -d --name vcdeploy-test-ssh \
+		-p 2222:2222 \
+		-e PUID=1000 -e PGID=1000 -e TZ=UTC \
+		-e PASSWORD_ACCESS=true -e USER_NAME=testuser -e USER_PASSWORD=testpass \
+		linuxserver/openssh-server >/dev/null 2>&1
+	@$(MAKE) -s _wait-for-port PORT=2222 SERVICE="SSH server" || \
+		(docker stop vcdeploy-test-ssh 2>/dev/null || true; docker rm vcdeploy-test-ssh 2>/dev/null || true; exit 1)
+	@echo "Running integration tests..."
+	@TEST_SSH_HOST=localhost TEST_SSH_PORT=2222 TEST_SSH_USER=testuser TEST_SSH_PASS=testpass \
+		go test -tags=integration -race -v ./tests/integration/... ; \
+	TEST_EXIT=$$?; \
+	docker stop vcdeploy-test-ssh 2>/dev/null || true; \
+	docker rm vcdeploy-test-ssh 2>/dev/null || true; \
+	exit $$TEST_EXIT
+
+# ============================================================================
+# Testing - E2E API Tests
+# ============================================================================
+
 .PHONY: test-e2e
-test-e2e: docker-test-up ## Run E2E tests
-	go test -race -tags=e2e -timeout $(TEST_TIMEOUT) ./tests/e2e/...
+test-e2e: build ## Run E2E tests with agent (provisioning tests use SSH target)
+	@echo "=== E2E API Tests (full mode with agent + SSH target) ==="
+	@echo "Server logs: $(TEST_LOG_FILE)"
+	@$(MAKE) -s _test-env-start SERVICES="master agent ssh-target"
+	@$(MAKE) -s _wait-for-port PORT=$(TEST_SSH_PORT) SERVICE="SSH target" || ($(MAKE) -s test-cleanup; exit 1)
+	@$(MAKE) -s _wait-for-agent || ($(MAKE) -s test-cleanup; exit 1)
+	@API_TOKEN=$$($(MAKE) -s _create-api-token) && \
+	echo "Running E2E tests..." && \
+	E2E_MASTER_HTTP_URL=$(TEST_HTTP_URL) E2E_MASTER_GRPC_URL=$(TEST_GRPC_URL) \
+		E2E_API_TOKEN=$$API_TOKEN \
+		E2E_ADMIN_USER=admin E2E_ADMIN_PASS=$(TEST_ADMIN_PASS) \
+		E2E_TARGET_SSH_HOST=localhost E2E_TARGET_SSH_PORT=$(TEST_SSH_PORT) \
+		go test -v -tags=e2e -timeout $(TEST_TIMEOUT) ./tests/e2e/... ; \
+	TEST_EXIT=$$?; \
+	$(MAKE) -s test-cleanup; \
+	exit $$TEST_EXIT
+
+.PHONY: test-e2e-short
+test-e2e-short: build ## Run E2E API tests (fast mode, skips agent/SSH-dependent tests)
+	@echo "=== E2E API Tests (fast mode) ==="
+	@echo "Note: Agent/SSH/deploy tests will be skipped. Use 'make test-e2e' for complete tests."
+	@echo "Server logs: $(TEST_LOG_FILE)"
+	@$(MAKE) -s _test-env-start SERVICES="master"
+	@API_TOKEN=$$($(MAKE) -s _create-api-token) && \
+	echo "Running E2E tests (fast mode)..." && \
+	E2E_MASTER_HTTP_URL=$(TEST_HTTP_URL) E2E_API_TOKEN=$$API_TOKEN \
+		E2E_ADMIN_USER=admin E2E_ADMIN_PASS=$(TEST_ADMIN_PASS) \
+		E2E_SKIP_SSH_TESTS=1 SKIP_AGENT_TESTS=1 \
+		go test -v -tags=e2e -timeout $(TEST_TIMEOUT) ./tests/e2e/... ; \
+	TEST_EXIT=$$?; \
+	$(MAKE) -s test-cleanup; \
+	exit $$TEST_EXIT
+
+# ============================================================================
+# Testing - CLI Tests
+# ============================================================================
 
 .PHONY: test-cli
-test-cli: ## Run CLI tests (requires running infrastructure)
-	go test -v -tags=cli -timeout $(TEST_TIMEOUT) ./tests/cli/...
+test-cli: build ## Run CLI tests with agent and SSH target (provisioning)
+	@echo "=== CLI Tests (full mode with agent + SSH target) ==="
+	@echo "Server logs: $(TEST_LOG_FILE)"
+	@$(MAKE) -s _test-env-start SERVICES="master agent ssh-target"
+	@$(MAKE) -s _wait-for-port PORT=$(TEST_SSH_PORT) SERVICE="SSH target" || ($(MAKE) -s test-cleanup; exit 1)
+	@$(MAKE) -s _wait-for-agent || ($(MAKE) -s test-cleanup; exit 1)
+	@API_TOKEN=$$($(MAKE) -s _create-api-token) && \
+	echo "Running CLI tests..." && \
+	VCDEPLOY_BINARY=./$(OUT_DIR)/vcdeploy \
+		E2E_MASTER_HTTP_URL=$(TEST_HTTP_URL) E2E_MASTER_GRPC_URL=$(TEST_GRPC_URL) \
+		E2E_API_TOKEN=$$API_TOKEN \
+		E2E_ADMIN_PASS=$(TEST_ADMIN_PASS) \
+		E2E_TARGET_SSH_HOST=localhost E2E_TARGET_SSH_PORT=$(TEST_SSH_PORT) \
+		go test -v -tags=cli -timeout $(TEST_TIMEOUT) -p=1 ./tests/cli/... ; \
+	TEST_EXIT=$$?; \
+	$(MAKE) -s test-cleanup; \
+	exit $$TEST_EXIT
+
+.PHONY: test-cli-short
+test-cli-short: build ## Run CLI tests (fast mode, skips agent/SSH-dependent tests)
+	@echo "=== CLI Tests (fast mode) ==="
+	@echo "Note: Agent/SSH/deploy tests will be skipped. Use 'make test-cli' for complete tests."
+	@echo "Server logs: $(TEST_LOG_FILE)"
+	@$(MAKE) -s _test-env-start SERVICES="master"
+	@API_TOKEN=$$($(MAKE) -s _create-api-token) && \
+	echo "Running CLI tests (fast mode)..." && \
+	VCDEPLOY_BINARY=./$(OUT_DIR)/vcdeploy \
+		E2E_MASTER_HTTP_URL=$(TEST_HTTP_URL) E2E_API_TOKEN=$$API_TOKEN \
+		E2E_ADMIN_PASS=$(TEST_ADMIN_PASS) SKIP_AGENT_TESTS=1 E2E_SKIP_SSH_TESTS=1 \
+		go test -v -tags=cli -timeout $(TEST_TIMEOUT) -p=1 ./tests/cli/... ; \
+	TEST_EXIT=$$?; \
+	$(MAKE) -s test-cleanup; \
+	exit $$TEST_EXIT
+
+# ============================================================================
+# Testing - UI Tests (Playwright)
+# ============================================================================
 
 .PHONY: test-ui
-test-ui: ## Run Playwright UI tests
-	cd tests/ui && npm ci && npx playwright test --workers=1
+test-ui: build ## Run Playwright UI tests with agent and SSH target (provisioning)
+	@echo "=== UI Tests (full mode with agent + SSH target) ==="
+	@echo "Server logs: $(TEST_LOG_FILE)"
+	@cd tests/ui && npm ci && npx playwright install --with-deps chromium
+	@$(MAKE) -s _test-env-start SERVICES="master agent ssh-target"
+	@$(MAKE) -s _wait-for-port PORT=$(TEST_SSH_PORT) SERVICE="SSH target" || ($(MAKE) -s test-cleanup; exit 1)
+	@$(MAKE) -s _wait-for-agent || ($(MAKE) -s test-cleanup; exit 1)
+	@cd tests/ui && \
+	VCDEPLOY_WEB_URL=$(TEST_HTTP_URL) \
+		VCDEPLOY_API_URL=$(TEST_HTTP_URL)/api \
+		TEST_ADMIN_USERNAME=admin \
+		TEST_ADMIN_PASSWORD=$(TEST_ADMIN_PASS) \
+		E2E_TARGET_SSH_HOST=localhost E2E_TARGET_SSH_PORT=$(TEST_SSH_PORT) \
+		npx playwright test --workers=1; \
+	TEST_EXIT=$$?; \
+	$(MAKE) -s test-cleanup; \
+	exit $$TEST_EXIT
+
+.PHONY: test-ui-short
+test-ui-short: build ## Run Playwright UI tests (fast mode, skips agent/SSH-dependent tests)
+	@echo "=== UI Tests (fast mode) ==="
+	@echo "Note: Agent/SSH/deploy tests will be skipped. Use 'make test-ui' for complete tests."
+	@echo "Server logs: $(TEST_LOG_FILE)"
+	@cd tests/ui && npm ci && npx playwright install --with-deps chromium
+	@$(MAKE) -s _test-env-start SERVICES="master"
+	@cd tests/ui && \
+	VCDEPLOY_WEB_URL=$(TEST_HTTP_URL) \
+		VCDEPLOY_API_URL=$(TEST_HTTP_URL)/api \
+		TEST_ADMIN_USERNAME=admin \
+		TEST_ADMIN_PASSWORD=$(TEST_ADMIN_PASS) \
+		SKIP_AGENT_TESTS=1 SKIP_TARGET_TESTS=1 \
+		npx playwright test --workers=1; \
+	TEST_EXIT=$$?; \
+	$(MAKE) -s test-cleanup; \
+	exit $$TEST_EXIT
+
+# ============================================================================
+# Testing - Run All (mirrors CI pipeline)
+# ============================================================================
 
 .PHONY: test-all
-test-all: test test-integration test-systemd ## Run all tests except E2E
+test-all: test test-systemd test-integration test-e2e test-cli ## Run all tests (mirrors full CI)
+	@echo "=== All tests passed! ==="
 
-.PHONY: test-bench
-test-bench: ## Run benchmarks
-	go test -bench=. -benchmem -run=^$$ ./...
+.PHONY: test-all-short
+test-all-short: test test-systemd test-integration test-e2e-short test-cli-short ## Run all tests (fast mode)
+	@echo "=== All tests passed (fast mode)! ==="
+
+# ============================================================================
+# Testing - Manual Infrastructure (for debugging)
+# ============================================================================
+
+.PHONY: test-infra-up
+test-infra-up: ## Start full test infrastructure (for debugging)
+	@echo "Cleaning up previous Docker test environment..."
+	@$(COMPOSE) -f $(TEST_COMPOSE_FILE) down -v 2>/dev/null || true
+	@docker volume rm docker_test-data docker_test-logs docker_agent-test-data docker_agent-test-logs 2>/dev/null || true
+	TEST_ADMIN_PASSWORD=$(TEST_ADMIN_PASS) $(COMPOSE) -f $(TEST_COMPOSE_FILE) up -d --build --wait
+	@echo "Test infrastructure ready!"
+	@echo "  Master HTTP: $(TEST_HTTP_URL)"
+	@echo "  Master gRPC: localhost:$(TEST_GRPC_PORT)"
+	@echo "  SSH Target:  localhost:$(TEST_SSH_PORT)"
+
+.PHONY: test-infra-down
+test-infra-down: ## Stop test infrastructure
+	$(COMPOSE) -f $(TEST_COMPOSE_FILE) down -v
+
+.PHONY: test-infra-clean
+test-infra-clean: test-cleanup ## Clean all test data (alias for test-cleanup)
+
+.PHONY: test-infra-logs
+test-infra-logs: ## Show test infrastructure logs
+	$(COMPOSE) -f $(TEST_COMPOSE_FILE) logs -f
 
 # ============================================================================
 # Code Quality
 # ============================================================================
 
 .PHONY: lint
-lint: ## Run linter
-	golangci-lint run ./...
+lint: ## Run linter (mirrors CI 'lint' job)
+	golangci-lint run --timeout=5m --build-tags=$(BUILD_TAGS) ./...
 
 .PHONY: fmt
 fmt: ## Format code
 	go fmt ./...
+	@command -v goimports >/dev/null 2>&1 && goimports -w . || true
 	@command -v gofumpt >/dev/null 2>&1 && gofumpt -l -w . || true
 
 .PHONY: fmt-check
-fmt-check: ## Check formatting
+fmt-check: ## Check formatting (gofmt + goimports)
 	@test -z "$$(gofmt -l . 2>/dev/null | grep -v vendor)" || \
 		(echo "Run 'make fmt'" && gofmt -l . | grep -v vendor && exit 1)
+	@if command -v goimports >/dev/null 2>&1; then \
+		test -z "$$(goimports -l . 2>/dev/null | grep -v vendor)" || \
+		(echo "Imports out of order. Run 'make fmt'" && goimports -l . | grep -v vendor && exit 1); \
+	fi
 
 .PHONY: vet
 vet: ## Run go vet
-	go vet ./...
+	go vet -tags=$(BUILD_TAGS) ./...
 
 .PHONY: vuln
 vuln: ## Run vulnerability check
-	govulncheck ./...
+	govulncheck -tags=$(BUILD_TAGS) ./...
 
 .PHONY: gosec
 gosec: ## Run security scanner
-	gosec -exclude=G104,G115,G204,G301,G302,G304,G306 -quiet ./...
+	gosec -exclude=G104 -exclude-generated -tags=$(BUILD_TAGS) -quiet ./...
 
 .PHONY: verify
 verify: lint vet vuln test ## Run all verification checks
@@ -153,13 +369,26 @@ verify: lint vet vuln test ## Run all verification checks
 .PHONY: proto
 proto: ## Generate protobuf code
 	@mkdir -p $(PROTO_OUT)
-	protoc --go_out=$(PROTO_OUT) --go_opt=paths=source_relative \
+	protoc -I=$(PROTO_DIR) \
+		--go_out=$(PROTO_OUT) --go_opt=paths=source_relative \
 		--go-grpc_out=$(PROTO_OUT) --go-grpc_opt=paths=source_relative \
 		$(PROTO_DIR)/*.proto
+	@# Clean up any nested directories created by protoc
+	@rm -rf $(PROTO_OUT)/api 2>/dev/null || true
+	@command -v goimports >/dev/null 2>&1 && goimports -w $(PROTO_OUT) || true
+
+.PHONY: proto-check
+proto-check: proto ## Verify proto stubs are up to date (mirrors CI)
+	@if ! git diff --exit-code internal/proto/; then \
+		echo "Proto stubs are out of date. Run 'make proto' and commit."; \
+		exit 1; \
+	fi
+	@echo "Proto stubs are up to date"
 
 .PHONY: generate
 generate: ## Run go generate
 	go generate ./...
+	@command -v goimports >/dev/null 2>&1 && goimports -w . || true
 
 # ============================================================================
 # Docker (Development)
@@ -173,20 +402,94 @@ docker-up: ## Start development containers
 docker-down: ## Stop development containers
 	$(COMPOSE) -f docker/docker-compose.yml down
 
-.PHONY: docker-test-up
-docker-test-up: ## Start test infrastructure
-	$(COMPOSE) -f docker/docker-compose.test.yml up -d --build --wait
-	@echo "Test infrastructure ready!"
-	@echo "  Master HTTP: http://localhost:9000"
-	@echo "  Master gRPC: localhost:9001"
-
-.PHONY: docker-test-down
-docker-test-down: ## Stop test infrastructure
-	$(COMPOSE) -f docker/docker-compose.test.yml down -v
-
 .PHONY: docker-logs
 docker-logs: ## Show container logs
 	$(COMPOSE) -f docker/docker-compose.yml logs -f
+
+# ============================================================================
+# Internal Helpers (not shown in help)
+# ============================================================================
+
+# Initialize test environment: cleanup, reset log file, start services
+# Usage: $(MAKE) _test-env-start SERVICES="master" or SERVICES="master ssh-target"
+_test-env-start:
+	@$(MAKE) -s test-cleanup 2>/dev/null || true
+	@> $(TEST_LOG_FILE)
+	@echo "Building and starting services: $(SERVICES)..."
+	@TEST_ADMIN_PASSWORD=$(TEST_ADMIN_PASS) $(COMPOSE) -f $(TEST_COMPOSE_FILE) up -d $(SERVICES) --build
+	@$(MAKE) -s _wait-for-master || ($(MAKE) -s _dump-logs-and-cleanup; exit 1)
+	@$(COMPOSE) -f $(TEST_COMPOSE_FILE) logs -f $(SERVICES) >> $(TEST_LOG_FILE) 2>&1 &
+
+# Wait for master to be ready (health check)
+_wait-for-master:
+	@echo "Waiting for master to be ready..."
+	@for i in $$(seq 1 30); do \
+		if curl -sf $(TEST_HTTP_URL)/api/v1/health >/dev/null 2>&1; then \
+			echo "Master is ready!"; \
+			exit 0; \
+		fi; \
+		echo "Attempt $$i/30: Waiting..."; \
+		sleep 2; \
+	done; \
+	echo "Master failed to start within timeout"; \
+	exit 1
+
+# Wait for a TCP port to be available
+# Usage: $(MAKE) _wait-for-port PORT=2223 SERVICE="SSH target"
+_wait-for-port:
+	@echo "Waiting for $(SERVICE) on port $(PORT)..."
+	@for i in $$(seq 1 30); do \
+		if nc -z localhost $(PORT) 2>/dev/null; then \
+			echo "$(SERVICE) is ready!"; \
+			exit 0; \
+		fi; \
+		echo "Attempt $$i/30: Waiting for $(SERVICE)..."; \
+		sleep 2; \
+	done; \
+	echo "$(SERVICE) failed to start within timeout"; \
+	exit 1
+
+# Wait for agent to be registered with master
+# Uses API token for authentication since agent list requires auth
+_wait-for-agent:
+	@echo "Waiting for agent to register with master..."
+	@SESSION=$$(curl -sf -X POST $(TEST_HTTP_URL)/api/v1/auth/login \
+		-H "Content-Type: application/json" \
+		-d '{"username":"admin","password":"$(TEST_ADMIN_PASS)"}' | jq -r '.token'); \
+	for i in $$(seq 1 30); do \
+		AGENT_COUNT=$$(curl -sf $(TEST_HTTP_URL)/api/v1/agents \
+			-H "Authorization: Bearer $$SESSION" 2>/dev/null | jq -r '.items | length // 0' 2>/dev/null || echo "0"); \
+		if [ "$$AGENT_COUNT" -gt 0 ]; then \
+			echo "Agent registered! ($$AGENT_COUNT agents connected)"; \
+			exit 0; \
+		fi; \
+		echo "Attempt $$i/30: Waiting for agent to register..."; \
+		sleep 2; \
+	done; \
+	echo "Agent failed to register within timeout"; \
+	exit 1
+
+# Dump logs to file and cleanup (used on startup failure)
+_dump-logs-and-cleanup:
+	@$(COMPOSE) -f $(TEST_COMPOSE_FILE) logs >> $(TEST_LOG_FILE) 2>&1
+	@$(MAKE) -s test-cleanup
+
+# Create API token and output just the token value
+_create-api-token:
+	@SESSION=$$(curl -sf -X POST $(TEST_HTTP_URL)/api/v1/auth/login \
+		-H "Content-Type: application/json" \
+		-d '{"username":"admin","password":"$(TEST_ADMIN_PASS)"}' | jq -r '.token'); \
+	if [ -z "$$SESSION" ] || [ "$$SESSION" = "null" ]; then \
+		echo "Failed to login" >&2; exit 1; \
+	fi; \
+	TOKEN=$$(curl -sf -X POST $(TEST_HTTP_URL)/api/v1/api-keys \
+		-H "Content-Type: application/json" \
+		-H "Authorization: Bearer $$SESSION" \
+		-d '{"name":"test-key-'$$RANDOM'","description":"Test API key","scopes":["*"]}' | jq -r '.key'); \
+	if [ -z "$$TOKEN" ] || [ "$$TOKEN" = "null" ]; then \
+		echo "Failed to create API token" >&2; exit 1; \
+	fi; \
+	echo $$TOKEN
 
 # ============================================================================
 # Release (GoReleaser)
@@ -197,5 +500,5 @@ release-snapshot: ## Build snapshot release (for testing)
 	goreleaser release --snapshot --clean
 
 .PHONY: release-check
-release-check: ## Validate GoReleaser config
+release-check: ## Validate GoReleaser config (mirrors CI)
 	goreleaser check

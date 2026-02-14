@@ -111,7 +111,7 @@ document.addEventListener('DOMContentLoaded', () => loadTypes());
 function loadTypes() {
     fetch('/api/v1/project-types')
         .then(response => response.json())
-        .then(types => renderTypes(types))
+        .then(response => renderTypes(response.items || response))
         .catch(err => {
             console.error('Failed to load project types:', err);
             document.getElementById('types-list').innerHTML = 

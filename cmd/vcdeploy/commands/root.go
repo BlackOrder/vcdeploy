@@ -62,10 +62,21 @@ func Execute() error {
 }
 
 func init() {
+	// Customize help footer to use "help" subcommand pattern
+	cobra.AddTemplateFunc("helpFooter", func(cmd *cobra.Command) string {
+		return fmt.Sprintf("Use \"%s [command] help\" for more information about a command.", cmd.CommandPath())
+	})
+	usageTmpl := rootCmd.UsageTemplate()
+	// Replace default Cobra footer with our custom one
+	const defaultFooter = `Use "{{.CommandPath}} [command] --help" for more information about a command.`
+	const customFooter = `{{helpFooter .}}`
+	rootCmd.SetUsageTemplate(strings.Replace(usageTmpl, defaultFooter, customFooter, 1))
+
 	// Global flags
 	rootCmd.PersistentFlags().String("config", "", "config file (default: /etc/vcdeploy/master.yaml)")
 	rootCmd.PersistentFlags().String("master", "", "master address for remote CLI (e.g., localhost:9000)")
 	rootCmd.PersistentFlags().String("token", "", "API token for remote CLI")
+	rootCmd.PersistentFlags().Bool("offline", false, "force offline/direct mode even if server is running")
 
 	// Add subcommands
 	rootCmd.AddCommand(masterCmd)
@@ -73,6 +84,7 @@ func init() {
 	rootCmd.AddCommand(typeCmd)
 	rootCmd.AddCommand(secretCmd)
 	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(recipeCmd)
 }
 
 var versionCmd = &cobra.Command{
@@ -159,19 +171,33 @@ func init() {
 	projectCmd.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List all projects",
-		RunE:  runProjectList,
+		Long:  "Display all configured deployment projects with their status.",
+		Example: `  vcdeploy project list
+  vcdeploy project list --master localhost:9000 --token <token>`,
+		RunE: runProjectList,
 	})
 	projectCmd.AddCommand(&cobra.Command{
-		Use:   "add [name]",
-		Short: "Add a new project",
-		Args:  cobra.ExactArgs(1),
-		RunE:  runProjectAdd,
+		Use:   "create [name]",
+		Short: "Create a new project",
+		Long: `Create a new deployment project configuration.
+
+The project name must be unique and will be used as the identifier
+for all deployment operations.`,
+		Example: `  vcdeploy project create myapp
+  vcdeploy project create myapp --repo https://github.com/org/repo`,
+		Args: cobra.ExactArgs(1),
+		RunE: runProjectAdd,
 	})
 	editProjectCmd := &cobra.Command{
-		Use:   "edit [name]",
-		Short: "Edit a project",
-		Args:  cobra.ExactArgs(1),
-		RunE:  runProjectEdit,
+		Use:   "update [name]",
+		Short: "Update a project",
+		Long: `Update an existing project's configuration.
+
+Use flags to specify which fields to update.`,
+		Example: `  vcdeploy project update myapp --branch main
+  vcdeploy project update myapp --repo https://github.com/org/new-repo --path /var/www`,
+		Args: cobra.ExactArgs(1),
+		RunE: runProjectEdit,
 	}
 	editProjectCmd.Flags().String("repo", "", "Set repository URL")
 	editProjectCmd.Flags().String("branch", "", "Set default branch")
@@ -181,36 +207,24 @@ func init() {
 	projectCmd.AddCommand(&cobra.Command{
 		Use:   "delete [name]",
 		Short: "Delete a project",
-		Args:  cobra.ExactArgs(1),
-		RunE:  runProjectDelete,
+		Long: `Delete a deployment project configuration.
+
+This removes the project from vcdeploy but does not affect
+deployed files on target servers.`,
+		Example: `  vcdeploy project delete myapp`,
+		Args:    cobra.ExactArgs(1),
+		RunE:    runProjectDelete,
 	})
 	projectCmd.AddCommand(&cobra.Command{
 		Use:   "validate [name]",
 		Short: "Validate a project configuration",
-		Args:  cobra.ExactArgs(1),
-		RunE:  runProjectValidate,
+		Long: `Validate a project's configuration without deploying.
+
+Checks repository access, target connectivity, and configuration syntax.`,
+		Example: `  vcdeploy project validate myapp`,
+		Args:    cobra.ExactArgs(1),
+		RunE:    runProjectValidate,
 	})
-
-	deployCmd := &cobra.Command{
-		Use:   "deploy [name]",
-		Short: "Deploy a project",
-		Args:  cobra.ExactArgs(1),
-		RunE:  runProjectDeploy,
-	}
-	deployCmd.Flags().String("target", "", "Target to deploy to")
-	deployCmd.Flags().Bool("dry-run", false, "Validate without deploying")
-	deployCmd.Flags().Bool("force", false, "Force deploy (bypass lock)")
-	projectCmd.AddCommand(deployCmd)
-
-	rollbackCmd := &cobra.Command{
-		Use:   "rollback [name]",
-		Short: "Rollback a project to previous release",
-		Args:  cobra.ExactArgs(1),
-		RunE:  runProjectRollback,
-	}
-	rollbackCmd.Flags().String("target", "", "Target to rollback")
-	rollbackCmd.Flags().Int("release", 0, "Specific release number to rollback to")
-	projectCmd.AddCommand(rollbackCmd)
 
 	// Type subcommands
 	typeCmd.AddCommand(&cobra.Command{
@@ -296,37 +310,6 @@ func init() {
 	healthCheckCmd.Flags().String("url", "", "Override health check URL")
 	healthCheckCmd.Flags().Int("timeout", 30, "Health check timeout in seconds")
 	projectCmd.AddCommand(healthCheckCmd)
-
-	// Settings subcommands
-	settingsCmd := &cobra.Command{
-		Use:   "settings",
-		Short: "Settings management",
-		Long:  "Commands for managing vcdeploy settings (appearance, security, notifications, etc.).",
-	}
-	rootCmd.AddCommand(settingsCmd)
-
-	settingsCmd.AddCommand(&cobra.Command{
-		Use:   "list [category]",
-		Short: "List settings in a category",
-		Long:  "List all settings in a category (e.g., appearance, security, notifications, server, logs).",
-		Args:  cobra.ExactArgs(1),
-		RunE:  runSettingsList,
-	})
-
-	settingsCmd.AddCommand(&cobra.Command{
-		Use:   "get [category] [key]",
-		Short: "Get a setting value",
-		Args:  cobra.ExactArgs(2),
-		RunE:  runSettingsGet,
-	})
-
-	settingsSetCmd := &cobra.Command{
-		Use:   "set [category] [key] [value]",
-		Short: "Set a setting value",
-		Args:  cobra.ExactArgs(3),
-		RunE:  runSettingsSet,
-	}
-	settingsCmd.AddCommand(settingsSetCmd)
 }
 
 var masterBackupCmd = &cobra.Command{
@@ -341,16 +324,32 @@ var (
 )
 
 // getDBPath returns the database path from system config.
-func getDBPath() string {
-	sysCfg := config.MustGetSystemConfig()
-	return sysCfg.DatabasePath()
+func getDBPath() (string, error) {
+	sysCfg, err := config.GetSystemConfig()
+	if err != nil {
+		return "", fmt.Errorf("load system config: %w", err)
+	}
+	return sysCfg.DatabasePath(), nil
+}
+
+// initServices initializes CLI services with proper error handling.
+// This is a convenience wrapper around InitCLIServices that handles the config loading.
+func initServices() (*CLIServices, func(), error) {
+	dbPath, err := getDBPath()
+	if err != nil {
+		return nil, nil, err
+	}
+	return InitCLIServices(dbPath)
 }
 
 // initConfig loads configuration from file
 func initConfig(cmd *cobra.Command) error {
 	cfgPath, _ := cmd.Flags().GetString("config")
 	if cfgPath == "" {
-		sysCfg := config.MustGetSystemConfig()
+		sysCfg, err := config.GetSystemConfig()
+		if err != nil {
+			return fmt.Errorf("load system config: %w", err)
+		}
 		cfgPath = sysCfg.MasterConfigPath()
 	}
 
@@ -442,17 +441,32 @@ func runMasterStart(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Initialize database
-	sysCfg := config.MustGetSystemConfig()
-	dbPath := sysCfg.DatabasePath()
-	db, err := storage.Open(dbPath)
+	// Initialize storage - use memory-cached store if enabled (default)
+	sysCfg, err := config.GetSystemConfig()
 	if err != nil {
-		return fmt.Errorf("open database: %w", err)
+		return fmt.Errorf("load system config: %w", err)
 	}
-	defer db.Close()
+	dbPath := sysCfg.DatabasePath()
+
+	var store storage.Store
+	if globalConfig.Storage.UseMemoryCache {
+		cachedStore, err := storage.NewCachedStore(dbPath, globalLogger)
+		if err != nil {
+			return fmt.Errorf("open cached storage: %w", err)
+		}
+		store = cachedStore
+		defer cachedStore.Close()
+	} else {
+		db, err := storage.Open(dbPath)
+		if err != nil {
+			return fmt.Errorf("open database: %w", err)
+		}
+		store = db
+		defer db.Close()
+	}
 
 	// Create and start master server
-	srv, err := server.NewMasterServer(globalConfig, db, globalLogger)
+	srv, err := server.NewMasterServer(globalConfig, store, globalLogger)
 	if err != nil {
 		return fmt.Errorf("create server: %w", err)
 	}
@@ -544,14 +558,19 @@ func runMasterStop(cmd *cobra.Command, args []string) error {
 
 // tryPidFileStop attempts to stop the master using its PID file.
 func tryPidFileStop() error {
-	sysCfg := config.MustGetSystemConfig()
+	sysCfg, err := config.GetSystemConfig()
+	if err != nil {
+		return fmt.Errorf("load system config: %w", err)
+	}
 	pidFile := sysCfg.MasterPIDPath()
 
-	data, err := os.ReadFile(pidFile)
+	data, err := os.ReadFile(pidFile) // #nosec G304 - pidFile is system-configured PID path
 	if err != nil {
 		fmt.Println("Could not find running master process.")
 		fmt.Println("If using systemd, use: systemctl stop vcdeploy-master")
-		return nil
+		// Not finding a PID file is not an error - the process may not be running
+		// or may be managed by systemd. Return nil to indicate graceful handling.
+		return nil //nolint:nilerr // Intentional: missing PID file is not an error condition
 	}
 
 	var pid int
@@ -660,9 +679,12 @@ func runMasterStatus(cmd *cobra.Command, args []string) error {
 
 // checkMasterPid reads the PID file and checks if process exists.
 func checkMasterPid() int {
-	sysCfg := config.MustGetSystemConfig()
+	sysCfg, err := config.GetSystemConfig()
+	if err != nil {
+		return 0
+	}
 	pidFile := sysCfg.MasterPIDPath()
-	data, err := os.ReadFile(pidFile)
+	data, err := os.ReadFile(pidFile) // #nosec G304 - pidFile is system-configured PID path
 	if err != nil {
 		return 0
 	}
@@ -725,7 +747,10 @@ func runMasterRotateKey(cmd *cobra.Command, args []string) error {
 	fmt.Println("\nRotating master key...")
 
 	// Open database
-	sysCfg := config.MustGetSystemConfig()
+	sysCfg, err := config.GetSystemConfig()
+	if err != nil {
+		return fmt.Errorf("load system config: %w", err)
+	}
 	dbPath := sysCfg.DatabasePath()
 	db, err := storage.Open(dbPath)
 	if err != nil {
@@ -733,14 +758,21 @@ func runMasterRotateKey(cmd *cobra.Command, args []string) error {
 	}
 	defer db.Close()
 
-	// Initialize KMS
-	kms, err := security.NewKMS(db.Conn(), globalLogger)
+	ctx := context.Background()
+
+	// Load master key for envelope encryption
+	masterKey, err := security.LoadOrGenerateMasterKey(sysCfg.Paths.DataDir)
+	if err != nil {
+		return fmt.Errorf("load master key: %w", err)
+	}
+
+	// Initialize KMS (db implements storage.Store interface)
+	kms, err := security.NewKMS(ctx, db, globalLogger, masterKey)
 	if err != nil {
 		return fmt.Errorf("initialize KMS: %w", err)
 	}
 
 	// Rotate the encryption key
-	ctx := context.Background()
 	newKey, err := kms.RotateKey(ctx)
 	if err != nil {
 		return fmt.Errorf("rotate key: %w", err)
@@ -766,7 +798,10 @@ func runBackupCreate(cmd *cobra.Command, args []string) error {
 
 	backupPath := globalConfig.Backup.Database.Path
 	if backupPath == "" {
-		sysCfg := config.MustGetSystemConfig()
+		sysCfg, err := config.GetSystemConfig()
+		if err != nil {
+			return fmt.Errorf("load system config: %w", err)
+		}
 		backupPath = sysCfg.BackupsDir()
 	}
 
@@ -781,8 +816,11 @@ func runBackupCreate(cmd *cobra.Command, args []string) error {
 	}
 
 	// Open database and create backup
-	sysCfg := config.MustGetSystemConfig()
-	dbPath := sysCfg.DatabasePath()
+	sysCfgDB, err := config.GetSystemConfig()
+	if err != nil {
+		return fmt.Errorf("load system config: %w", err)
+	}
+	dbPath := sysCfgDB.DatabasePath()
 	db, err := storage.Open(dbPath)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
@@ -804,7 +842,10 @@ func runBackupList(cmd *cobra.Command, args []string) error {
 
 	backupPath := globalConfig.Backup.Database.Path
 	if backupPath == "" {
-		sysCfg := config.MustGetSystemConfig()
+		sysCfg, err := config.GetSystemConfig()
+		if err != nil {
+			return fmt.Errorf("load system config: %w", err)
+		}
 		backupPath = sysCfg.BackupsDir()
 	}
 
@@ -834,7 +875,7 @@ func runBackupList(cmd *cobra.Command, args []string) error {
 			info.ModTime().Format("2006-01-02 15:04:05"),
 		)
 	}
-	w.Flush()
+	_ = w.Flush() // #nosec G104 - best effort output flush
 
 	return nil
 }
@@ -848,7 +889,10 @@ func runBackupRestore(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get the database path
-	dbPath := getDBPath()
+	dbPath, err := getDBPath()
+	if err != nil {
+		return err
+	}
 
 	fmt.Printf("WARNING: This will replace the current database with %s\n", backupFile)
 	fmt.Printf("Database location: %s\n", dbPath)
@@ -869,7 +913,7 @@ func runBackupRestore(cmd *cobra.Command, args []string) error {
 	fmt.Println("\nRestoring from backup...")
 
 	// Read the backup file
-	backupData, err := os.ReadFile(backupFile)
+	backupData, err := os.ReadFile(backupFile) // #nosec G304 - backupFile is CLI arg, user-intended restore source
 	if err != nil {
 		return fmt.Errorf("read backup file: %w", err)
 	}
@@ -877,6 +921,7 @@ func runBackupRestore(cmd *cobra.Command, args []string) error {
 	// Create a backup of the current database before replacing
 	if _, err := os.Stat(dbPath); err == nil {
 		backupCurrent := dbPath + ".pre-restore." + time.Now().Format("20060102-150405")
+		// #nosec G304 - dbPath is system-configured database path
 		if currentData, err := os.ReadFile(dbPath); err == nil {
 			if err := os.WriteFile(backupCurrent, currentData, 0o600); err != nil {
 				fmt.Printf("Warning: could not backup current database: %v\n", err)
@@ -901,7 +946,7 @@ func runProjectList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	svc, cleanup, err := InitCLIServices(getDBPath())
+	svc, cleanup, err := initServices()
 	if err != nil {
 		return err
 	}
@@ -931,13 +976,13 @@ func runProjectList(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
 			p.Name,
-			p.Type,
+			derefTypeID(p.TypeID),
 			p.Repository,
 			lastDeploy,
 			status,
 		)
 	}
-	w.Flush()
+	_ = w.Flush() // #nosec G104 - best effort output flush
 
 	return nil
 }
@@ -949,7 +994,7 @@ func runProjectAdd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	svc, cleanup, err := InitCLIServices(getDBPath())
+	svc, cleanup, err := initServices()
 	if err != nil {
 		return err
 	}
@@ -996,7 +1041,7 @@ func runProjectEdit(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	svc, cleanup, err := InitCLIServices(getDBPath())
+	svc, cleanup, err := initServices()
 	if err != nil {
 		return err
 	}
@@ -1031,7 +1076,7 @@ func runProjectEdit(cmd *cobra.Command, args []string) error {
 			project.DeployPath = pathFlag
 		}
 		if typeFlag != "" {
-			project.Type = typeFlag
+			project.TypeID = &typeFlag
 		}
 	} else {
 		// Interactive mode
@@ -1079,7 +1124,7 @@ func runProjectEdit(cmd *cobra.Command, args []string) error {
 		}
 
 		// Type
-		fmt.Printf("Type [%s]: ", project.Type)
+		fmt.Printf("Type [%s]: ", derefTypeID(project.TypeID))
 		input, err = reader.ReadString('\n')
 		if err != nil {
 			fmt.Println()
@@ -1087,7 +1132,7 @@ func runProjectEdit(cmd *cobra.Command, args []string) error {
 		}
 		input = strings.TrimSpace(input)
 		if input != "" {
-			project.Type = input
+			project.TypeID = &input
 		}
 	}
 
@@ -1118,7 +1163,7 @@ func runProjectDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	svc, cleanup, err := InitCLIServices(getDBPath())
+	svc, cleanup, err := initServices()
 	if err != nil {
 		return err
 	}
@@ -1139,7 +1184,7 @@ func runProjectValidate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	svc, cleanup, err := InitCLIServices(getDBPath())
+	svc, cleanup, err := initServices()
 	if err != nil {
 		return err
 	}
@@ -1186,286 +1231,12 @@ func runProjectValidate(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runProjectDeploy(cmd *cobra.Command, args []string) error {
-	projectName := args[0]
-	target, _ := cmd.Flags().GetString("target")
-	dryRun, _ := cmd.Flags().GetBool("dry-run")
-	force, _ := cmd.Flags().GetBool("force")
-
-	// Get master address
-	masterAddr, _ := cmd.Flags().GetString("master")
-	if masterAddr == "" {
-		masterAddr = os.Getenv("VCDEPLOY_MASTER")
-	}
-	if masterAddr == "" {
-		masterAddr = "localhost:9000"
-	}
-
-	// Get API token
-	apiToken, _ := cmd.Flags().GetString("token")
-	if apiToken == "" {
-		apiToken = os.Getenv("VCDEPLOY_TOKEN")
-	}
-
-	fmt.Printf("🚀 Deploying project: %s\n", projectName)
-	if target != "" {
-		fmt.Printf("   Target: %s\n", target)
-	}
-	if dryRun {
-		fmt.Printf("   Mode: dry-run (no changes will be made)\n")
-	}
-	if force {
-		fmt.Printf("   Mode: force (bypassing locks)\n")
-	}
-	fmt.Println()
-
-	if dryRun {
-		fmt.Println("📋 Dry run - checking deployment configuration...")
-		// Just validate locally for dry run
-		if err := initConfig(cmd); err != nil {
-			return err
-		}
-		svc, cleanup, err := InitCLIServices(getDBPath())
-		if err != nil {
-			return err
-		}
-		defer cleanup()
-
-		_, err = svc.Projects.GetByName(cmd.Context(), projectName)
-		if err != nil {
-			return fmt.Errorf("get project: %w", err)
-		}
-		fmt.Println("\n✅ Dry run completed successfully.")
-		fmt.Println("   Configuration is valid, no changes were made.")
-		return nil
-	}
-
-	// Call master API to trigger deployment
-	client := &http.Client{Timeout: 30 * time.Second}
-	baseURL := "http://" + masterAddr
-
-	// Create deployment request
-	reqBody := map[string]interface{}{
-		"project": projectName,
-		"force":   force,
-	}
-	if target != "" {
-		reqBody["target"] = target
-	}
-
-	reqJSON, _ := json.Marshal(reqBody)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/v1/deployments", strings.NewReader(string(reqJSON)))
-	if err != nil {
-		return fmt.Errorf("create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if apiToken != "" {
-		req.Header.Set("Authorization", "Bearer "+apiToken)
-	}
-
-	fmt.Println("📡 Triggering deployment via master...")
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("master not reachable at %s: %w\nStart the master with: vcdeploy master start", masterAddr, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusUnauthorized {
-		return fmt.Errorf("authentication required. Provide --token or set VCDEPLOY_TOKEN")
-	}
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("deployment failed: %s", string(body))
-	}
-
-	// Parse response to get deployment ID
-	var deployResp struct {
-		ID     string `json:"id"`
-		Status string `json:"status"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&deployResp); err != nil {
-		fmt.Println("✅ Deployment triggered successfully!")
-		return nil
-	}
-
-	fmt.Printf("   Deployment ID: %s\n", deployResp.ID)
-	fmt.Println()
-
-	// Poll for deployment status (interruptible with Ctrl+C)
-	fmt.Println("⏳ Waiting for deployment to complete...")
-	for i := 0; i < 120; i++ { // Max 10 minutes
-		select {
-		case <-cmd.Context().Done():
-			fmt.Println("\n⚠️  Interrupted. Deployment continues in background.")
-			fmt.Printf("   Check status with: vcdeploy deployment status %s\n", deployResp.ID)
-			return nil
-		case <-time.After(5 * time.Second):
-		}
-
-		statusCtx, statusCancel := context.WithTimeout(context.Background(), 10*time.Second)
-		statusReq, _ := http.NewRequestWithContext(statusCtx, "GET", baseURL+"/api/v1/deployments/"+deployResp.ID, http.NoBody)
-		if apiToken != "" {
-			statusReq.Header.Set("Authorization", "Bearer "+apiToken)
-		}
-
-		statusResp, err := client.Do(statusReq)
-		statusCancel()
-		if err != nil {
-			continue
-		}
-
-		var status struct {
-			Status string `json:"status"`
-		}
-		_ = json.NewDecoder(statusResp.Body).Decode(&status)
-		statusResp.Body.Close()
-
-		switch status.Status {
-		case "success", "completed":
-			fmt.Println("\n✅ Deployment completed successfully!")
-			return nil
-		case "failed", "error":
-			return fmt.Errorf("deployment failed. Check logs with: vcdeploy deployment logs %s", deployResp.ID)
-		case "cancelled":
-			return fmt.Errorf("deployment was cancelled")
-		}
-		fmt.Print(".")
-	}
-
-	fmt.Println("\n⚠️  Deployment still in progress. Check status with:")
-	fmt.Printf("   vcdeploy deployment status %s\n", deployResp.ID)
-	return nil
-}
-
-func runProjectRollback(cmd *cobra.Command, args []string) error {
-	projectName := args[0]
-	target, _ := cmd.Flags().GetString("target")
-	release, _ := cmd.Flags().GetInt("release")
-
-	// Get master address
-	masterAddr, _ := cmd.Flags().GetString("master")
-	if masterAddr == "" {
-		masterAddr = os.Getenv("VCDEPLOY_MASTER")
-	}
-	if masterAddr == "" {
-		masterAddr = "localhost:9000"
-	}
-
-	// Get API token
-	apiToken, _ := cmd.Flags().GetString("token")
-	if apiToken == "" {
-		apiToken = os.Getenv("VCDEPLOY_TOKEN")
-	}
-
-	fmt.Printf("🔙 Rolling back project: %s\n", projectName)
-	if target != "" {
-		fmt.Printf("   Target: %s\n", target)
-	}
-	if release > 0 {
-		fmt.Printf("   To release: %d\n", release)
-	} else {
-		fmt.Printf("   To: previous release\n")
-	}
-	fmt.Println()
-
-	fmt.Print("Continue? [y/N]: ")
-	reader := bufio.NewReader(os.Stdin)
-	response, _ := reader.ReadString('\n')
-	response = strings.TrimSpace(strings.ToLower(response))
-
-	if response != "y" && response != "yes" {
-		fmt.Println("Aborted.")
-		return nil
-	}
-
-	// First, get the latest deployment for this project to rollback
-	client := &http.Client{Timeout: 30 * time.Second}
-	baseURL := "http://" + masterAddr
-
-	// Get latest deployment for this project
-	listCtx, listCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer listCancel()
-	listReq, _ := http.NewRequestWithContext(listCtx, "GET", baseURL+"/api/v1/deployments?project="+projectName+"&limit=1", http.NoBody)
-	if apiToken != "" {
-		listReq.Header.Set("Authorization", "Bearer "+apiToken)
-	}
-
-	listResp, err := client.Do(listReq)
-	if err != nil {
-		return fmt.Errorf("master not reachable at %s: %w\nStart the master with: vcdeploy master start", masterAddr, err)
-	}
-	defer listResp.Body.Close()
-
-	if listResp.StatusCode == http.StatusUnauthorized {
-		return fmt.Errorf("authentication required. Provide --token or set VCDEPLOY_TOKEN")
-	}
-
-	var deployments []struct {
-		ID     string `json:"id"`
-		Status string `json:"status"`
-	}
-	if err := json.NewDecoder(listResp.Body).Decode(&deployments); err != nil || len(deployments) == 0 {
-		return fmt.Errorf("no deployments found for project %s", projectName)
-	}
-
-	deploymentID := deployments[0].ID
-
-	// Call rollback API
-	reqBody := map[string]interface{}{}
-	if release > 0 {
-		reqBody["release"] = release
-	}
-	if target != "" {
-		reqBody["target"] = target
-	}
-
-	reqJSON, _ := json.Marshal(reqBody)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/v1/deployments/"+deploymentID+"/rollback", strings.NewReader(string(reqJSON)))
-	if err != nil {
-		return fmt.Errorf("create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if apiToken != "" {
-		req.Header.Set("Authorization", "Bearer "+apiToken)
-	}
-
-	fmt.Println("\n🔄 Triggering rollback via master...")
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("rollback request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("rollback failed: %s", string(body))
-	}
-
-	fmt.Println("✅ Rollback triggered successfully!")
-
-	// Parse response
-	var rollbackResp struct {
-		Message string `json:"message"`
-		ID      string `json:"rollback_id"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&rollbackResp); err == nil && rollbackResp.ID != "" {
-		fmt.Printf("   Rollback ID: %s\n", rollbackResp.ID)
-	}
-
-	return nil
-}
-
 func runTypeList(cmd *cobra.Command, args []string) error {
 	if err := initConfig(cmd); err != nil {
 		return err
 	}
 
-	svc, cleanup, err := InitCLIServices(getDBPath())
+	svc, cleanup, err := initServices()
 	if err != nil {
 		return err
 	}
@@ -1488,7 +1259,7 @@ func runTypeList(cmd *cobra.Command, args []string) error {
 	for _, t := range types {
 		fmt.Fprintf(w, "%s\t%s\t%d\n", t.Name, t.Description, t.ProjectCount)
 	}
-	w.Flush()
+	_ = w.Flush() // #nosec G104 - best effort output flush
 
 	return nil
 }
@@ -1500,7 +1271,7 @@ func runTypeCreate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	svc, cleanup, err := InitCLIServices(getDBPath())
+	svc, cleanup, err := initServices()
 	if err != nil {
 		return err
 	}
@@ -1533,7 +1304,7 @@ func runTypeEdit(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	svc, cleanup, err := InitCLIServices(getDBPath())
+	svc, cleanup, err := initServices()
 	if err != nil {
 		return err
 	}
@@ -1625,7 +1396,7 @@ func runTypeDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	svc, cleanup, err := InitCLIServices(getDBPath())
+	svc, cleanup, err := initServices()
 	if err != nil {
 		return err
 	}
@@ -1648,7 +1419,7 @@ func runSecretSet(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	svc, cleanup, err := InitCLIServices(getDBPath())
+	svc, cleanup, err := initServices()
 	if err != nil {
 		return err
 	}
@@ -1702,7 +1473,7 @@ func runSecretList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	svc, cleanup, err := InitCLIServices(getDBPath())
+	svc, cleanup, err := initServices()
 	if err != nil {
 		return err
 	}
@@ -1726,7 +1497,7 @@ func runSecretList(cmd *cobra.Command, args []string) error {
 	for _, s := range secretsMetadata {
 		fmt.Fprintf(w, "%s\t%s\t%s\n", s.Key, s.UpdatedAt.Format("2006-01-02 15:04"), s.Scope)
 	}
-	w.Flush()
+	_ = w.Flush() // #nosec G104 - best effort output flush
 
 	return nil
 }
@@ -1749,7 +1520,7 @@ func runSecretDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	svc, cleanup, err := InitCLIServices(getDBPath())
+	svc, cleanup, err := initServices()
 	if err != nil {
 		return err
 	}
@@ -1778,7 +1549,7 @@ func runSecretImport(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	svc, cleanup, err := InitCLIServices(getDBPath())
+	svc, cleanup, err := initServices()
 	if err != nil {
 		return err
 	}
@@ -1869,7 +1640,10 @@ func runSecretBackup(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dbPath := getDBPath()
+	dbPath, err := getDBPath()
+	if err != nil {
+		return err
+	}
 	db, err := storage.Open(dbPath)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
@@ -1879,7 +1653,7 @@ func runSecretBackup(cmd *cobra.Command, args []string) error {
 	fmt.Printf("\nBacking up secrets to %s...\n", output)
 
 	// Export all secrets
-	secrets, err := db.ExportAllSecrets()
+	secrets, err := db.ExportAllSecrets(context.Background())
 	if err != nil {
 		return fmt.Errorf("export secrets: %w", err)
 	}
@@ -1914,7 +1688,7 @@ func runSecretRestore(cmd *cobra.Command, args []string) error {
 	backupFile := args[0]
 
 	// Read backup file
-	data, err := os.ReadFile(backupFile)
+	data, err := os.ReadFile(backupFile) // #nosec G304 - backupFile is CLI arg, user-intended restore source
 	if err != nil {
 		return fmt.Errorf("read backup file: %w", err)
 	}
@@ -1976,7 +1750,10 @@ func runSecretRestore(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dbPath := getDBPath()
+	dbPath, err := getDBPath()
+	if err != nil {
+		return err
+	}
 	db, err := storage.Open(dbPath)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
@@ -1985,13 +1762,24 @@ func runSecretRestore(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("\nRestoring secrets from %s...\n", backupFile)
 
-	// Initialize KMS for encryption
-	kms, err := security.NewKMS(db.Conn(), globalLogger)
+	ctx := context.Background()
+
+	// Load master key for envelope encryption
+	restoreSysCfg, err := config.GetSystemConfig()
+	if err != nil {
+		return fmt.Errorf("load system config: %w", err)
+	}
+	masterKey, err := security.LoadOrGenerateMasterKey(restoreSysCfg.Paths.DataDir)
+	if err != nil {
+		return fmt.Errorf("load master key: %w", err)
+	}
+
+	// Initialize KMS for encryption (db implements storage.Store interface)
+	kms, err := security.NewKMS(ctx, db, globalLogger, masterKey)
 	if err != nil {
 		return fmt.Errorf("initialize KMS: %w", err)
 	}
 	secretsService := security.NewSecretService(db, kms)
-	ctx := context.Background()
 
 	// Import each secret
 	restored := 0
@@ -2091,8 +1879,8 @@ func runProjectHealthCheck(cmd *cobra.Command, args []string) error {
 
 	var config struct {
 		URL            string `json:"url"`
-		ExpectedStatus int    `json:"expected_status"`
-		TimeoutSeconds int    `json:"timeout_seconds"`
+		ExpectedStatus int    `json:"expectedStatus"`
+		TimeoutSeconds int    `json:"timeoutSeconds"`
 		Enabled        bool   `json:"enabled"`
 	}
 	if err := json.NewDecoder(configResp.Body).Decode(&config); err != nil {
@@ -2136,171 +1924,6 @@ func runProjectHealthCheck(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("❌ Health check FAILED (expected: %d, got: %d)\n", expectedStatus, resp.StatusCode)
 	return fmt.Errorf("health check failed: expected status %d, got %d", expectedStatus, resp.StatusCode)
-}
-
-// runSettingsList lists settings in a category
-func runSettingsList(cmd *cobra.Command, args []string) error {
-	category := args[0]
-
-	// Get master address
-	masterAddr, _ := cmd.Flags().GetString("master")
-	if masterAddr == "" {
-		masterAddr = os.Getenv("VCDEPLOY_MASTER")
-	}
-	if masterAddr == "" {
-		masterAddr = "localhost:9000"
-	}
-
-	// Get API token
-	apiToken, _ := cmd.Flags().GetString("token")
-	if apiToken == "" {
-		apiToken = os.Getenv("VCDEPLOY_TOKEN")
-	}
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	baseURL := "http://" + masterAddr
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	req, _ := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/v1/settings/"+category, http.NoBody)
-	if apiToken != "" {
-		req.Header.Set("Authorization", "Bearer "+apiToken)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("master not reachable at %s: %w", masterAddr, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusUnauthorized {
-		return fmt.Errorf("authentication required. Provide --token or set VCDEPLOY_TOKEN")
-	}
-
-	var settings map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&settings); err != nil {
-		return fmt.Errorf("failed to parse settings: %w", err)
-	}
-
-	fmt.Printf("Settings for category '%s':\n\n", category)
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "KEY\tVALUE")
-	fmt.Fprintln(w, "---\t-----")
-	for key, value := range settings {
-		fmt.Fprintf(w, "%s\t%v\n", key, value)
-	}
-	w.Flush()
-
-	return nil
-}
-
-// runSettingsGet gets a single setting value
-func runSettingsGet(cmd *cobra.Command, args []string) error {
-	category := args[0]
-	key := args[1]
-
-	// Get master address
-	masterAddr, _ := cmd.Flags().GetString("master")
-	if masterAddr == "" {
-		masterAddr = os.Getenv("VCDEPLOY_MASTER")
-	}
-	if masterAddr == "" {
-		masterAddr = "localhost:9000"
-	}
-
-	// Get API token
-	apiToken, _ := cmd.Flags().GetString("token")
-	if apiToken == "" {
-		apiToken = os.Getenv("VCDEPLOY_TOKEN")
-	}
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	baseURL := "http://" + masterAddr
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	req, _ := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/v1/settings/"+category, http.NoBody)
-	if apiToken != "" {
-		req.Header.Set("Authorization", "Bearer "+apiToken)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("master not reachable at %s: %w", masterAddr, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusUnauthorized {
-		return fmt.Errorf("authentication required. Provide --token or set VCDEPLOY_TOKEN")
-	}
-
-	var settings map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&settings); err != nil {
-		return fmt.Errorf("failed to parse settings: %w", err)
-	}
-
-	if value, ok := settings[key]; ok {
-		fmt.Printf("%v\n", value)
-	} else {
-		return fmt.Errorf("setting '%s.%s' not found", category, key)
-	}
-
-	return nil
-}
-
-// runSettingsSet sets a single setting value
-func runSettingsSet(cmd *cobra.Command, args []string) error {
-	category := args[0]
-	key := args[1]
-	value := args[2]
-
-	// Get master address
-	masterAddr, _ := cmd.Flags().GetString("master")
-	if masterAddr == "" {
-		masterAddr = os.Getenv("VCDEPLOY_MASTER")
-	}
-	if masterAddr == "" {
-		masterAddr = "localhost:9000"
-	}
-
-	// Get API token
-	apiToken, _ := cmd.Flags().GetString("token")
-	if apiToken == "" {
-		apiToken = os.Getenv("VCDEPLOY_TOKEN")
-	}
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	baseURL := "http://" + masterAddr
-
-	// Build request body
-	body := map[string]string{key: value}
-	bodyBytes, _ := json.Marshal(body)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	req, _ := http.NewRequestWithContext(ctx, "PUT", baseURL+"/api/v1/settings/"+category, strings.NewReader(string(bodyBytes)))
-	req.Header.Set("Content-Type", "application/json")
-	if apiToken != "" {
-		req.Header.Set("Authorization", "Bearer "+apiToken)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("master not reachable at %s: %w", masterAddr, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusUnauthorized {
-		return fmt.Errorf("authentication required. Provide --token or set VCDEPLOY_TOKEN")
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("failed to set setting: %s", string(body))
-	}
-
-	fmt.Printf("✅ Setting '%s.%s' updated to '%s'\n", category, key, value)
-	return nil
 }
 
 // runAgentUpdate updates an agent to the latest version

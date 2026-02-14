@@ -10,6 +10,7 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+	protolib "google.golang.org/protobuf/proto"
 )
 
 // MockAgentServiceClient implements proto.AgentServiceClient for testing.
@@ -215,7 +216,8 @@ func (m *MockAgentConnectStream) RecvMsg(msg interface{}) error {
 		return err
 	}
 	if dest, ok := msg.(*proto.MasterMessage); ok {
-		*dest = *masterMsg
+		// Use proto.Merge to avoid copying embedded sync.Mutex in protobuf state
+		protolib.Merge(dest, masterMsg)
 	}
 	return nil
 }
@@ -433,7 +435,8 @@ func (m *MockAgentConnectServerStream) RecvMsg(msg interface{}) error {
 		return err
 	}
 	if dest, ok := msg.(*proto.AgentMessage); ok {
-		*dest = *agentMsg
+		// Use proto.Merge to avoid copying embedded sync.Mutex in protobuf state
+		protolib.Merge(dest, agentMsg)
 	}
 	return nil
 }

@@ -20,7 +20,7 @@ func NewTestMemoryStore(t *testing.T) *TestMemoryStore {
 	store := NewMemoryStore(nil)
 
 	t.Cleanup(func() {
-		store.Close()
+		_ = store.Close() // #nosec G104 - best effort cleanup in test
 	})
 
 	return &TestMemoryStore{
@@ -50,9 +50,10 @@ func (s *TestMemoryStore) MustCreateUser(username, email, passwordHash string) *
 func (s *TestMemoryStore) MustCreateProject(name string) *Project {
 	s.t.Helper()
 
+	ctx := context.Background()
 	project := &Project{Name: name}
 
-	if err := s.CreateProject(project); err != nil {
+	if err := s.CreateProject(ctx, project); err != nil {
 		s.t.Fatalf("MustCreateProject() error = %v", err)
 	}
 
@@ -60,7 +61,7 @@ func (s *TestMemoryStore) MustCreateProject(name string) *Project {
 }
 
 // MustCreateSession creates a session and fails the test if it errors.
-func (s *TestMemoryStore) MustCreateSession(userID int64, token string, expiresAt time.Time) *Session {
+func (s *TestMemoryStore) MustCreateSession(userID string, token string, expiresAt time.Time) *Session {
 	s.t.Helper()
 
 	session := &Session{
@@ -77,7 +78,7 @@ func (s *TestMemoryStore) MustCreateSession(userID int64, token string, expiresA
 }
 
 // MustCreateAPIKey creates an API key and fails the test if it errors.
-func (s *TestMemoryStore) MustCreateAPIKey(userID int64, name, keyHash string) *APIKey {
+func (s *TestMemoryStore) MustCreateAPIKey(userID string, name, keyHash string) *APIKey {
 	s.t.Helper()
 
 	key := &APIKey{
@@ -100,7 +101,7 @@ func (s *TestMemoryStore) MustUpsertAgent(id, hostname, status string) *Agent {
 	agent := &Agent{
 		ID:       id,
 		Hostname: hostname,
-		Status:   status,
+		Status:   AgentStatus(status),
 	}
 
 	if err := s.UpsertAgent(context.Background(), agent); err != nil {
@@ -117,7 +118,7 @@ func (s *TestMemoryStore) MustCreateDeployment(id, project, status string) *Depl
 	deployment := &DeploymentRecord{
 		ID:        id,
 		Project:   project,
-		Status:    status,
+		Status:    DeploymentStatus(status),
 		StartedAt: time.Now(),
 	}
 

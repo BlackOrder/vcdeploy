@@ -55,7 +55,7 @@ services:
       - ./test-deploy:/deploy
     environment:
       - TZ=UTC
-      - VCDEPLOY_MASTER_ADDR=master:9090
+      - VCDEPLOY_MASTER_ADDR=master:9001
       - VCDEPLOY_AGENT_LABELS=env=test,region=local
     networks:
       - vcdeploy-test
@@ -91,7 +91,7 @@ services:
       retries: 5
       start_period: 30s
 
-  # SSH target server for deployment tests
+  # SSH target for provisioning tests only — not used for deployment testing
   ssh-target:
     image: lscr.io/linuxserver/openssh-server:latest
     container_name: vcdeploy-ssh-target-test

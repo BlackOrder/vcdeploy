@@ -257,22 +257,24 @@ func TestCleanupTask_CleanOldDeployments(t *testing.T) {
 		Repository: "https://github.com/test/test",
 		CreatedAt:  time.Now(),
 	}
-	if err := db.CreateProject(project); err != nil {
+	if err := db.CreateProject(context.Background(), project); err != nil {
 		t.Fatalf("create project: %v", err)
 	}
 
 	// Create an old deployment (10 days ago)
-	oldDeployment := &storage.DeploymentCLI{
-		ProjectID:   project.ID,
-		ProjectName: project.Name,
+	startedAt := time.Now().Add(-10 * 24 * time.Hour)
+	finishedAt := startedAt.Add(5 * time.Minute)
+	oldDeployment := &storage.DeploymentRecord{
+		ID:          "test-old-deployment",
+		Project:     project.Name,
+		ProjectID:   &project.ID,
 		Status:      "completed",
-		StartedAt:   time.Now().Add(-10 * 24 * time.Hour),
+		StartedAt:   startedAt,
+		CompletedAt: &finishedAt,
 		TriggeredBy: "test",
 	}
-	finishedAt := time.Now().Add(-10 * 24 * time.Hour)
-	oldDeployment.FinishedAt = &finishedAt
-	if err := db.InsertDeployment(oldDeployment); err != nil {
-		t.Fatalf("insert old deployment: %v", err)
+	if err := db.CreateDeployment(ctx, oldDeployment); err != nil {
+		t.Fatalf("create old deployment: %v", err)
 	}
 
 	// Run cleanup - verify no errors

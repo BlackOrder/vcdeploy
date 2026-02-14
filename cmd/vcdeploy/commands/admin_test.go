@@ -300,7 +300,13 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 				{"id": 1.0, "username": "admin", "email": "admin@test.com", "role": "admin", "createdAt": "2024-01-01T00:00:00Z"},
 				{"id": 2.0, "username": "deployer", "email": "deployer@test.com", "role": "deployer", "createdAt": "2024-01-02T00:00:00Z"},
 			}
-			_ = json.NewEncoder(w).Encode(users)
+			// Return paginated response (H6)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"items":      users,
+				"totalCount": len(users),
+				"limit":      100,
+				"offset":     0,
+			})
 		case http.MethodPost:
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": 3.0, "username": "newuser"})
@@ -313,8 +319,7 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 	mux.HandleFunc("/api/v1/users/", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodDelete:
-			w.WriteHeader(http.StatusOK)
-			_ = json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
+			w.WriteHeader(http.StatusNoContent)
 		case http.MethodPatch:
 			w.WriteHeader(http.StatusOK)
 			_ = json.NewEncoder(w).Encode(map[string]string{"status": "updated"})
@@ -327,7 +332,13 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 			{"id": "agent-1", "hostname": "server1.example.com", "status": "online", "lastSeenAt": "2024-01-01T12:00:00Z"},
 			{"id": "agent-2", "hostname": "server2.example.com", "status": "offline", "lastSeenAt": "2024-01-01T00:00:00Z"},
 		}
-		_ = json.NewEncoder(w).Encode(agents)
+		// Return paginated response (H6)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"items":      agents,
+			"totalCount": len(agents),
+			"limit":      100,
+			"offset":     0,
+		})
 	})
 
 	// Agent by ID endpoint
@@ -364,7 +375,12 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 			{"id": "deploy-1", "project": "webapp", "branch": "main", "status": "success", "startedAt": "2024-01-01T10:00:00Z"},
 			{"id": "deploy-2", "project": "api", "branch": "develop", "status": "running", "startedAt": "2024-01-01T11:00:00Z"},
 		}
-		_ = json.NewEncoder(w).Encode(deployments)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"items":      deployments,
+			"totalCount": len(deployments),
+			"limit":      50,
+			"offset":     0,
+		})
 	})
 
 	// Deployment by ID endpoint
@@ -381,7 +397,12 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 				{"createdAt": "2024-01-01T10:01:00Z", "level": "INFO", "message": "Dependencies installed"},
 				{"createdAt": "2024-01-01T10:02:00Z", "level": "INFO", "message": "Build complete"},
 			}
-			_ = json.NewEncoder(w).Encode(logs)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"items":      logs,
+				"totalCount": len(logs),
+				"limit":      50,
+				"offset":     0,
+			})
 			return
 		}
 		deployment := map[string]interface{}{
@@ -408,15 +429,15 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 		} else {
 			// Project info
 			project := map[string]interface{}{
-				"id":          1,
-				"name":        "webapp",
-				"repository":  "https://github.com/example/webapp",
-				"branch":      "main",
-				"deploy_path": "/var/www/app",
-				"type":        "nodejs",
-				"enabled":     true,
-				"created_at":  "2024-01-01T00:00:00Z",
-				"updated_at":  "2024-01-01T00:00:00Z",
+				"id":         1,
+				"name":       "webapp",
+				"repository": "https://github.com/example/webapp",
+				"branch":     "main",
+				"deployPath": "/var/www/app",
+				"type":       "nodejs",
+				"enabled":    true,
+				"createdAt":  "2024-01-01T00:00:00Z",
+				"updatedAt":  "2024-01-01T00:00:00Z",
 			}
 			_ = json.NewEncoder(w).Encode(project)
 		}
@@ -426,7 +447,7 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 	mux.HandleFunc("/api/v1/settings/export", func(w http.ResponseWriter, r *http.Request) {
 		settings := map[string]map[string]interface{}{
 			"server": {
-				"port": 8080,
+				"port": 9000,
 				"host": "0.0.0.0",
 			},
 			"security": {
@@ -450,14 +471,19 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 	})
 
 	// API keys endpoint
-	mux.HandleFunc("/api/v1/apikeys", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/api-keys", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			keys := []map[string]interface{}{
 				{"id": 1.0, "name": "ci-deploy", "createdAt": "2024-01-01T00:00:00Z", "expiresAt": nil, "lastUsedAt": "2024-01-15T10:00:00Z"},
 				{"id": 2.0, "name": "backup-key", "createdAt": "2024-01-05T00:00:00Z", "expiresAt": "2025-01-05T00:00:00Z", "lastUsedAt": nil},
 			}
-			_ = json.NewEncoder(w).Encode(keys)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"items":      keys,
+				"totalCount": len(keys),
+				"limit":      50,
+				"offset":     0,
+			})
 		case http.MethodPost:
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
@@ -469,7 +495,7 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 	})
 
 	// API key by ID
-	mux.HandleFunc("/api/v1/apikeys/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/api-keys/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodDelete {
 			w.WriteHeader(http.StatusOK)
 		}
@@ -481,7 +507,12 @@ func newMockAPIServer(t *testing.T) *httptest.Server {
 			{"timestamp": "2024-01-01T10:00:00Z", "user": "admin", "action": "deploy", "resource": "webapp", "result": "success"},
 			{"timestamp": "2024-01-01T09:00:00Z", "user": "admin", "action": "login", "resource": "system", "result": "success"},
 		}
-		_ = json.NewEncoder(w).Encode(entries)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"items":      entries,
+			"totalCount": len(entries),
+			"limit":      50,
+			"offset":     0,
+		})
 	})
 
 	// Health endpoint
@@ -589,7 +620,13 @@ func TestRunAgentList(t *testing.T) {
 // TestRunAgentListEmpty tests runAgentList when no agents exist.
 func TestRunAgentListEmpty(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode([]map[string]interface{}{})
+		// Return empty paginated response (H6)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"items":      []map[string]interface{}{},
+			"totalCount": 0,
+			"limit":      100,
+			"offset":     0,
+		})
 	}))
 	defer server.Close()
 
@@ -938,7 +975,12 @@ func TestRunDeploymentLogs(t *testing.T) {
 // TestRunDeploymentLogsEmpty tests runDeploymentLogs when no logs exist.
 func TestRunDeploymentLogsEmpty(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode([]map[string]interface{}{})
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"items":      []map[string]interface{}{},
+			"totalCount": 0,
+			"limit":      50,
+			"offset":     0,
+		})
 	}))
 	defer server.Close()
 
@@ -1158,7 +1200,12 @@ func TestRunAPIKeyList(t *testing.T) {
 // TestRunAPIKeyListEmpty tests runAPIKeyList when no keys exist.
 func TestRunAPIKeyListEmpty(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode([]map[string]interface{}{})
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"items":      []map[string]interface{}{},
+			"totalCount": 0,
+			"limit":      50,
+			"offset":     0,
+		})
 	}))
 	defer server.Close()
 
@@ -1217,75 +1264,6 @@ func TestRunAPIKeyCreate(t *testing.T) {
 	}
 }
 
-// TestRunDeploymentTrigger tests the runDeploymentTrigger function.
-func TestRunDeploymentTrigger(t *testing.T) {
-	server := newMockAPIServer(t)
-	defer server.Close()
-
-	cmd := createTestCommand(server.URL)
-	cmd.Flags().String("branch", "main", "")
-	cmd.Flags().String("target", "production", "")
-	cmd.Flags().String("schedule", "", "")
-
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := runDeploymentTrigger(cmd, []string{"webapp"})
-
-	w.Close()
-	var stdout bytes.Buffer
-	_, _ = io.Copy(&stdout, r)
-	os.Stdout = oldStdout
-
-	if err != nil {
-		t.Fatalf("runDeploymentTrigger() error = %v", err)
-	}
-
-	output := stdout.String()
-	if !strings.Contains(output, "triggered") {
-		t.Errorf("output should confirm trigger, got: %s", output)
-	}
-}
-
-// TestRunDeploymentTriggerScheduled tests scheduled deployment.
-func TestRunDeploymentTriggerScheduled(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusAccepted)
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"id":           "deploy-scheduled-1",
-			"status":       "scheduled",
-			"scheduled_at": "2025-01-01T00:00:00Z",
-		})
-	}))
-	defer server.Close()
-
-	cmd := createTestCommand(server.URL)
-	cmd.Flags().String("branch", "", "")
-	cmd.Flags().String("target", "", "")
-	cmd.Flags().String("schedule", "2025-01-01T00:00:00Z", "")
-
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := runDeploymentTrigger(cmd, []string{"webapp"})
-
-	w.Close()
-	var stdout bytes.Buffer
-	_, _ = io.Copy(&stdout, r)
-	os.Stdout = oldStdout
-
-	if err != nil {
-		t.Fatalf("runDeploymentTrigger() error = %v", err)
-	}
-
-	output := stdout.String()
-	if !strings.Contains(output, "scheduled") {
-		t.Errorf("output should mention scheduled, got: %s", output)
-	}
-}
-
 // TestNewAPIClientEnvVars tests that newAPIClient falls back to environment variables.
 func TestNewAPIClientEnvVars(t *testing.T) {
 	// Save and restore env vars
@@ -1296,7 +1274,7 @@ func TestNewAPIClientEnvVars(t *testing.T) {
 		os.Setenv("VCDEPLOY_TOKEN", origToken)
 	}()
 
-	os.Setenv("VCDEPLOY_MASTER", "http://env-master:8080")
+	os.Setenv("VCDEPLOY_MASTER", "http://env-master:9000")
 	os.Setenv("VCDEPLOY_TOKEN", "env-token")
 
 	cmd := &cobra.Command{}
@@ -1308,8 +1286,8 @@ func TestNewAPIClientEnvVars(t *testing.T) {
 		t.Fatalf("newAPIClient() with env vars error = %v", err)
 	}
 
-	if client.baseURL != "http://env-master:8080" {
-		t.Errorf("baseURL = %q, want %q", client.baseURL, "http://env-master:8080")
+	if client.baseURL != "http://env-master:9000" {
+		t.Errorf("baseURL = %q, want %q", client.baseURL, "http://env-master:9000")
 	}
 	if client.token != "env-token" {
 		t.Errorf("token = %q, want %q", client.token, "env-token")
@@ -1370,7 +1348,7 @@ func TestUserCmdStructure(t *testing.T) {
 		t.Fatal("userCmd is nil")
 	}
 
-	expectedSubcmds := []string{"list", "create", "delete", "passwd"}
+	expectedSubcmds := []string{"list", "create", "delete", "password", "recovery", "totp"}
 	subcommands := make(map[string]bool)
 	for _, cmd := range userCmd.Commands() {
 		subcommands[cmd.Name()] = true
@@ -1412,7 +1390,7 @@ func TestDeploymentCmdStructure(t *testing.T) {
 		t.Fatal("deploymentCmd is nil")
 	}
 
-	expectedSubcmds := []string{"trigger", "list", "status", "cancel", "logs"}
+	expectedSubcmds := []string{"list", "show", "cancel", "logs", "create", "rollback"}
 	subcommands := make(map[string]bool)
 	for _, cmd := range deploymentCmd.Commands() {
 		subcommands[cmd.Name()] = true
@@ -1450,13 +1428,13 @@ func TestConfigCmdStructure(t *testing.T) {
 func TestAPIKeyCmdStructure(t *testing.T) {
 	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
-	if apikeyCmd == nil {
-		t.Fatal("apikeyCmd is nil")
+	if apiKeyCmd == nil {
+		t.Fatal("apiKeyCmd is nil")
 	}
 
 	expectedSubcmds := []string{"list", "create", "revoke"}
 	subcommands := make(map[string]bool)
-	for _, cmd := range apikeyCmd.Commands() {
+	for _, cmd := range apiKeyCmd.Commands() {
 		subcommands[cmd.Name()] = true
 	}
 
@@ -1467,30 +1445,38 @@ func TestAPIKeyCmdStructure(t *testing.T) {
 	}
 }
 
-// --- Admin Command Tests ---
+// --- Recovery Command Tests (formerly Admin) ---
 
-// TestAdminCmdStructure tests the admin command structure and flags.
-func TestAdminCmdStructure(t *testing.T) {
+// TestRecoveryCmdStructure tests the recovery command structure and flags.
+func TestRecoveryCmdStructure(t *testing.T) {
 	// NOTE: Cannot use t.Parallel() - accesses shared global cobra commands
 
-	if adminCmd == nil {
-		t.Fatal("adminCmd is nil")
+	// Find recovery subcommand under userCmd
+	var cmd *cobra.Command
+	for _, c := range userCmd.Commands() {
+		if c.Name() == "recovery" {
+			cmd = c
+			break
+		}
+	}
+	if cmd == nil {
+		t.Fatal("recovery subcommand not found under userCmd")
 	}
 
 	// Test flags exist
-	usernameFlag := adminCmd.Flags().Lookup("username")
+	usernameFlag := cmd.Flags().Lookup("username")
 	if usernameFlag == nil {
 		t.Error("expected --username flag not found")
 	} else if usernameFlag.DefValue != "admin" {
 		t.Errorf("username default = %q, want %q", usernameFlag.DefValue, "admin")
 	}
 
-	passwordFlag := adminCmd.Flags().Lookup("password")
+	passwordFlag := cmd.Flags().Lookup("password")
 	if passwordFlag == nil {
 		t.Error("expected --password flag not found")
 	}
 
-	emailFlag := adminCmd.Flags().Lookup("email")
+	emailFlag := cmd.Flags().Lookup("email")
 	if emailFlag == nil {
 		t.Error("expected --email flag not found")
 	} else if emailFlag.DefValue != "admin@localhost" {
@@ -1512,12 +1498,18 @@ func TestRunAdminRemote_WithMockedAPI(t *testing.T) {
 
 		switch r.URL.Path {
 		case "/api/v1/users":
-			if r.Method == http.MethodGet {
+			switch r.Method {
+			case http.MethodGet:
 				getUsersCalled = true
-				// Return empty list - admin doesn't exist
+				// Return empty list - admin doesn't exist (paginated response)
 				w.WriteHeader(http.StatusOK)
-				_ = json.NewEncoder(w).Encode([]map[string]interface{}{})
-			} else if r.Method == http.MethodPost {
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
+					"items":      []map[string]interface{}{},
+					"totalCount": 0,
+					"limit":      100,
+					"offset":     0,
+				})
+			case http.MethodPost:
 				createUserCalled = true
 				w.WriteHeader(http.StatusCreated)
 				_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": 1})
@@ -1554,10 +1546,15 @@ func TestRunAdminRemote_UpdateExistingUser(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/v1/users":
-			// Return existing user
+			// Return existing user (paginated response)
 			w.WriteHeader(http.StatusOK)
-			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
-				{"id": float64(42), "username": "existingadmin", "email": "old@example.com"},
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"items": []map[string]interface{}{
+					{"id": float64(42), "username": "existingadmin", "email": "old@example.com"},
+				},
+				"totalCount": 1,
+				"limit":      100,
+				"offset":     0,
 			})
 		default:
 			if r.Method == "PATCH" && strings.HasPrefix(r.URL.Path, "/api/v1/users/") {
@@ -1697,7 +1694,6 @@ func TestIsServerRunning(t *testing.T) {
 }
 
 // TestRunAdminRemote_APIError tests error handling when API returns an error.
-// The API returns a JSON object instead of array, causing decode to fail.
 func TestRunAdminRemote_APIError(t *testing.T) {
 	t.Parallel()
 
@@ -1718,9 +1714,9 @@ func TestRunAdminRemote_APIError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for API failure")
 	}
-	// The API returns a JSON object instead of array, causing unmarshal to fail
-	if !strings.Contains(err.Error(), "decode") && !strings.Contains(err.Error(), "unmarshal") {
-		t.Errorf("expected decode/unmarshal error message, got: %v", err)
+	// The API returns 500 status, which causes an API error
+	if !strings.Contains(err.Error(), "API error") && !strings.Contains(err.Error(), "decode") && !strings.Contains(err.Error(), "unmarshal") {
+		t.Errorf("expected API error or decode/unmarshal error message, got: %v", err)
 	}
 }
 
@@ -1777,10 +1773,10 @@ func TestAPIClientURLNormalization(t *testing.T) {
 		input   string
 		wantURL string
 	}{
-		{"with http", "http://localhost:8080", "http://localhost:8080"},
-		{"with https", "https://localhost:8080", "https://localhost:8080"},
-		{"without scheme", "localhost:8080", "http://localhost:8080"},
-		{"with trailing slash", "http://localhost:8080/", "http://localhost:8080"},
+		{"with http", "http://localhost:9000", "http://localhost:9000"},
+		{"with https", "https://localhost:9000", "https://localhost:9000"},
+		{"without scheme", "localhost:9000", "http://localhost:9000"},
+		{"with trailing slash", "http://localhost:9000/", "http://localhost:9000"},
 	}
 
 	for _, tt := range tests {
@@ -1842,7 +1838,7 @@ func TestAdminCmdFlagPrecedence(t *testing.T) {
 
 	cmd := &cobra.Command{}
 	// Explicit flag values should take precedence
-	cmd.Flags().String("master", "http://flag-server:8080", "")
+	cmd.Flags().String("master", "http://flag-server:9000", "")
 	cmd.Flags().String("token", "flag-token", "")
 
 	master, _ := cmd.Flags().GetString("master")
@@ -1856,8 +1852,8 @@ func TestAdminCmdFlagPrecedence(t *testing.T) {
 		token = os.Getenv("VCDEPLOY_TOKEN")
 	}
 
-	if master != "http://flag-server:8080" {
-		t.Errorf("master = %q, want %q", master, "http://flag-server:8080")
+	if master != "http://flag-server:9000" {
+		t.Errorf("master = %q, want %q", master, "http://flag-server:9000")
 	}
 	if token != "flag-token" {
 		t.Errorf("token = %q, want %q", token, "flag-token")

@@ -46,7 +46,7 @@ func Execute() error {
 
 func init() {
 	// Global flags
-	sysCfg := config.MustGetSystemConfig()
+	sysCfg := config.GetSystemConfigOrDefaults()
 	rootCmd.PersistentFlags().String("config", sysCfg.AgentConfigPath(), "config file")
 
 	// Add subcommands
@@ -148,16 +148,21 @@ func runStart(cmd *cobra.Command, args []string) error {
 	}
 
 	// Write PID file for status checks and process management
-	sysCfg := config.MustGetSystemConfig()
+	sysCfg, err := config.GetSystemConfig()
+	if err != nil {
+		return fmt.Errorf("loading system config: %w", err)
+	}
 	pidFile := sysCfg.AgentPIDPath()
 
 	// Ensure PID directory exists
 	pidDir := filepath.Dir(pidFile)
+	// #nosec G301 - PID directory needs world-execute for process status checks
 	if err := os.MkdirAll(pidDir, 0o755); err != nil {
 		logger.Warn("Failed to create PID directory", zap.String("dir", pidDir), zap.Error(err))
 	}
 
 	// Write current PID
+	// #nosec G306 - PID file needs to be readable by status checking tools
 	if err := os.WriteFile(pidFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0o644); err != nil {
 		logger.Warn("Failed to write PID file", zap.String("path", pidFile), zap.Error(err))
 	}
@@ -214,7 +219,10 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check if agent process is running via PID file
-	sysCfg := config.MustGetSystemConfig()
+	sysCfg, err := config.GetSystemConfig()
+	if err != nil {
+		return fmt.Errorf("loading system config: %w", err)
+	}
 	pidFile := sysCfg.AgentPIDPath()
 	isRunning, pid := checkAgentProcess(pidFile)
 
@@ -244,7 +252,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 // checkAgentProcess checks if the agent process is running by reading its PID file.
 func checkAgentProcess(pidFile string) (bool, int) {
-	data, err := os.ReadFile(pidFile)
+	data, err := os.ReadFile(pidFile) // #nosec G304 - pidFile is system-configured PID path
 	if err != nil {
 		return false, 0
 	}
@@ -288,9 +296,6 @@ func runRegister(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			cfg = config.DefaultAgentConfig()
-			// Clear the default cert path for initial registration
-			// The agent will use insecure credentials until it receives its certificate
-			cfg.Master.Cert = ""
 		} else {
 			return fmt.Errorf("loading config: %w", err)
 		}
@@ -320,11 +325,15 @@ func runRegister(cmd *cobra.Command, args []string) error {
 	}
 
 	// Save certificates
-	sysCfg := config.MustGetSystemConfig()
+	sysCfg, err := config.GetSystemConfig()
+	if err != nil {
+		return fmt.Errorf("loading system config: %w", err)
+	}
 	agentCertsDir := sysCfg.CertsDir() + "/agent"
 	certPath := agentCertsDir + "/cert.pem"
 	caPath := agentCertsDir + "/ca.pem"
 
+	// #nosec G301 - Certs directory needs access for service operations
 	if err := os.MkdirAll(agentCertsDir, 0o755); err != nil {
 		return fmt.Errorf("creating agent directory: %w", err)
 	}
@@ -333,13 +342,13 @@ func runRegister(cmd *cobra.Command, args []string) error {
 		if err := os.WriteFile(certPath, cert, 0o600); err != nil {
 			return fmt.Errorf("saving certificate: %w", err)
 		}
-		cfg.Master.Cert = certPath
 	}
 
 	if len(caCert) > 0 {
 		if err := os.WriteFile(caPath, caCert, 0o600); err != nil {
 			return fmt.Errorf("saving CA certificate: %w", err)
 		}
+		cfg.Master.CACert = caPath
 	}
 
 	// Clear the token from config (used only for initial registration)

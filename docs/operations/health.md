@@ -80,7 +80,7 @@ Configure health checks for deployed applications:
 # Project configuration
 health_check:
   enabled: true
-  url: "http://localhost:8080/health"
+  url: "http://localhost:8080/health"    # Your application's port, not vcdeploy's
   method: GET
   timeout: 30s
   interval: 10s
@@ -96,7 +96,7 @@ health_check:
 ```yaml
 health_check:
   type: http
-  url: "http://localhost:8080/health"
+  url: "http://localhost:8080/health"    # Your application's port, not vcdeploy's
   method: GET
   timeout: 10s
   headers:
@@ -196,7 +196,7 @@ post_deploy:
 deployment:
   rollback_on_health_failure: true
   health_check:
-    url: "http://localhost:8080/health"
+    url: "http://localhost:8080/health"    # Your application's port, not vcdeploy's
     timeout: 30s
 ```
 

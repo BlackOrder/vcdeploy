@@ -20,6 +20,7 @@ All commands support the following global flags:
 | `--config` | Path to master config file | `/etc/vcdeploy/master.yaml` |
 | `--master` | Master server address for remote CLI | - |
 | `--token` | API token for remote CLI authentication | - |
+| `--offline` | Force offline/direct mode even if server is running | `false` |
 
 ### vcdeploy-agent
 
@@ -47,6 +48,14 @@ vcdeploy
 ├── audit           # Audit log commands
 │   ├── list        # List audit log entries
 │   └── export      # Export audit logs
+├── certs           # Certificate management
+│   ├── list        # List agent certificates
+│   ├── show        # Show certificate details
+│   ├── revoke      # Revoke a certificate
+│   ├── audit       # Certificate audit log
+│   └── ca          # CA management
+│       ├── list    # List CA certificates
+│       └── rotate  # Rotate CA certificate
 ├── completion      # Generate shell completions
 │   ├── bash        # Bash completion
 │   ├── zsh         # Zsh completion
@@ -57,6 +66,11 @@ vcdeploy
 │   ├── export      # Export config to stdout
 │   ├── import      # Import config from file
 │   └── set         # Set a config value
+├── creds           # Source credential management
+│   ├── list        # List credentials
+│   ├── add         # Add a credential
+│   ├── delete      # Delete a credential
+│   └── test        # Test credential connectivity
 ├── deploy          # Deployment management
 │   ├── list        # List deployments
 │   ├── status      # Show deployment status
@@ -81,6 +95,12 @@ vcdeploy
 │   ├── deploy      # Deploy a project
 │   ├── rollback    # Rollback to previous release
 │   └── health-check # Run health check
+├── provision       # Agent provisioning via SSH
+│   ├── list        # List provisioning jobs
+│   ├── status      # Check job status
+│   └── logs        # View provisioning logs
+├── recipes         # Recipe and playbook management
+│   └── import-yaml # Import YAML config as playbook
 ├── secret          # Secrets management
 │   ├── set         # Set a secret
 │   ├── list        # List secrets
@@ -96,16 +116,32 @@ vcdeploy
 │   ├── project     # Show project details
 │   ├── agent       # Show agent details
 │   └── deployment  # Show deployment details
+├── ssh-keys        # SSH key management
+│   ├── list        # List SSH keys
+│   ├── generate    # Generate new key
+│   ├── import      # Import existing key
+│   ├── public      # Show public key
+│   └── delete      # Delete a key
 ├── type            # Project type management
 │   ├── list        # List project types
 │   ├── create      # Create a project type
 │   ├── edit        # Edit a project type
 │   └── delete      # Delete a project type
+├── totp            # Two-factor authentication management
+│   ├── list        # List users with TOTP enabled
+│   ├── status      # Show TOTP status for a user
+│   └── disable     # Disable TOTP for a user (admin)
 ├── user            # User management
 │   ├── list        # List all users
 │   ├── create      # Create a new user
 │   ├── delete      # Delete a user
 │   └── passwd      # Change user password
+├── webhook         # Webhook configuration management
+│   ├── add         # Add webhook to a project
+│   ├── list        # List webhooks for a project
+│   ├── delete      # Delete a webhook
+│   ├── test        # Test a webhook (requires server)
+│   └── rotate-secret # Rotate webhook secret
 └── version         # Print version info
 ```
 
@@ -125,7 +161,7 @@ vcdeploy-agent
 
 ### admin
 
-Reset or create the administrator account. Useful for lockout recovery when you can't access the web UI.
+Reset or create the administrator account. Useful for lockout reset when you can't access the web UI.
 
 ```bash
 # Local mode (direct database access)
@@ -310,6 +346,90 @@ vcdeploy completion powershell > vcdeploy.ps1
 
 ---
 
+### certs
+
+Certificate management for agent TLS authentication.
+
+#### certs list
+
+List all agent certificates.
+
+```bash
+vcdeploy certs list [flags]
+```
+
+**Example:**
+```bash
+vcdeploy certs list --master localhost:9000 --token <token>
+```
+
+#### certs show
+
+Show certificate details for an agent.
+
+```bash
+vcdeploy certs show <agent-id> [flags]
+```
+
+**Example:**
+```bash
+vcdeploy certs show agent-001 --master localhost:9000 --token <token>
+```
+
+#### certs revoke
+
+Revoke an agent's certificate.
+
+```bash
+vcdeploy certs revoke <agent-id> [flags]
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `-r, --reason` | Reason for revocation |
+
+**Example:**
+```bash
+vcdeploy certs revoke agent-001 --reason "Agent compromised" --master localhost:9000 --token <token>
+```
+
+#### certs audit
+
+View certificate audit log.
+
+```bash
+vcdeploy certs audit [flags]
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `--limit` | Maximum entries to return (default: 100) |
+
+#### certs ca list
+
+List CA certificates.
+
+```bash
+vcdeploy certs ca list [flags]
+```
+
+#### certs ca rotate
+
+Rotate the CA certificate.
+
+```bash
+vcdeploy certs ca rotate [flags]
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `-d, --validity-days` | CA validity period in days (default: 365) |
+
+---
+
 ### config
 
 Configuration management commands.
@@ -372,12 +492,12 @@ vcdeploy deploy list [flags]
 | `--status` | Filter by status (pending, running, success, failed) |
 | `--limit` | Maximum entries (default: 20) |
 
-#### deploy status
+#### deploy show
 
 Show detailed status of a deployment.
 
 ```bash
-vcdeploy deploy status <deployment-id>
+vcdeploy deploy show <deployment-id>
 ```
 
 #### deploy cancel
@@ -402,20 +522,108 @@ vcdeploy deploy logs <deployment-id> [flags]
 | `-f, --follow` | Follow log output |
 | `--tail` | Number of lines to show from end |
 
-#### deploy trigger
+#### deploy create
 
-Manually trigger a deployment.
+Create a new deployment.
 
 ```bash
-vcdeploy deploy trigger <project-name> [flags]
+vcdeploy deploy create --project <name> [flags]
 ```
 
 **Flags:**
 | Flag | Description |
 |------|-------------|
 | `--target` | Specific target to deploy |
-| `--branch` | Branch to deploy (overrides project default) |
+| `--all` | Deploy to all targets |
+| `--ref` | Git ref to deploy (branch, tag, commit) |
+| `--wait` | Wait for completion (timeout in seconds, default 30) |
+| `--dry-run` | Validate without deploying |
 | `--scheduled` | Schedule deployment for later (RFC3339 format) |
+
+---
+
+### creds
+
+Source credential management for Git repository authentication.
+
+#### creds list
+
+List all configured source credentials.
+
+```bash
+vcdeploy creds list [flags]
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `-t, --type` | Filter by credential type (basic, ssh, token, deploy-key) |
+
+**Example:**
+```bash
+vcdeploy creds list --master localhost:9000 --token <token>
+```
+
+#### creds add
+
+Add a new source credential.
+
+```bash
+vcdeploy creds add [flags]
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `-n, --name` | Credential name (required) |
+| `-t, --type` | Credential type: basic, ssh, token, deploy-key (required) |
+| `-u, --url-pattern` | URL pattern to match (e.g., github.com/*) |
+| `--username` | Username for basic auth |
+| `--password` | Password for basic auth (prompts if not provided) |
+| `--ssh-key-id` | SSH key ID for ssh type |
+| `--stdin` | Read secret value from stdin |
+
+**Examples:**
+```bash
+# Add a GitHub personal access token
+vcdeploy creds add --name github-token --type token --url-pattern "github.com/*" \
+  --master localhost:9000 --token <token>
+
+# Add basic auth credentials
+vcdeploy creds add --name gitlab-creds --type basic --url-pattern "gitlab.com/myorg/*" \
+  --username myuser --master localhost:9000 --token <token>
+
+# Add SSH key reference
+vcdeploy creds add --name ssh-deploy --type ssh --url-pattern "git@github.com:myorg/*" \
+  --ssh-key-id 123 --master localhost:9000 --token <token>
+```
+
+#### creds delete
+
+Delete a source credential.
+
+```bash
+vcdeploy creds delete <credential-id> [flags]
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `-f, --force` | Skip confirmation |
+
+#### creds test
+
+Test credential connectivity against a repository.
+
+```bash
+vcdeploy creds test <credential-id> <repo-url> [flags]
+```
+
+**Example:**
+```bash
+vcdeploy creds test 123 https://github.com/myorg/myrepo.git \
+  --master localhost:9000 --token <token>
+```
 
 ---
 
@@ -498,12 +706,12 @@ List all configured projects.
 vcdeploy project list
 ```
 
-#### project add
+#### project create
 
-Add a new project interactively.
+Create a new project interactively.
 
 ```bash
-vcdeploy project add <name>
+vcdeploy project create <name>
 ```
 
 You'll be prompted for:
@@ -546,18 +754,21 @@ vcdeploy project validate <name>
 
 #### project deploy
 
+> **Deprecated:** Use `vcdeploy deploy create --project <name>` instead.
+
 Deploy a project.
 
 ```bash
-vcdeploy project deploy <name> [flags]
+vcdeploy deploy create --project <name> [flags]
 ```
 
 **Flags:**
 | Flag | Description |
 |------|-------------|
-| `--target` | Target to deploy to (deploys to all if not specified) |
+| `--target` | Target to deploy to |
+| `--all` | Deploy to all targets |
 | `--dry-run` | Validate without actually deploying |
-| `--force` | Force deploy (bypass deployment lock) |
+| `--wait` | Wait for completion (timeout in seconds, default 30) |
 
 #### project rollback
 
@@ -586,6 +797,108 @@ vcdeploy project health-check <name> [flags]
 |------|-------------|---------|
 | `--url` | Override health check URL | from config |
 | `--timeout` | Health check timeout (seconds) | `30` |
+
+---
+
+### provision
+
+Agent provisioning via SSH. Install and configure agents on remote servers.
+
+```bash
+vcdeploy provision --host <hostname> [flags]
+```
+
+**Flags:**
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--host` | Target host to provision (required) | - |
+| `-p, --port` | SSH port | `22` |
+| `-u, --user` | SSH user | `root` |
+| `--ssh-key` | SSH key ID for authentication | - |
+| `--agent-id` | Agent ID to assign | auto-generated |
+| `--agent-name` | Agent display name | - |
+| `--groups` | Comma-separated groups to assign | - |
+| `--no-start` | Don't start agent after installation | - |
+
+**Example:**
+```bash
+vcdeploy provision --host 192.168.1.100 --user root --ssh-key deploy-key \
+  --agent-name "Production Server 1" --groups production,web \
+  --master localhost:9000 --token <token>
+```
+
+#### provision list
+
+List provisioning jobs.
+
+```bash
+vcdeploy provision list [flags]
+```
+
+**Flags:**
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-n, --limit` | Maximum jobs to show | `20` |
+| `--status` | Filter by status (pending, running, completed, failed) | - |
+
+#### provision status
+
+Check provisioning job status.
+
+```bash
+vcdeploy provision status <job-id> [flags]
+```
+
+#### provision logs
+
+View provisioning job logs.
+
+```bash
+vcdeploy provision logs <job-id> [flags]
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `-f, --follow` | Follow log output |
+
+---
+
+### recipes
+
+Recipe and playbook management for deployment workflows.
+
+#### recipes import-yaml
+
+Import a project YAML configuration as a recipe playbook.
+
+```bash
+vcdeploy recipes import-yaml <yaml-file> [flags]
+```
+
+**Flags:**
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--project-id` | Project ID to associate playbook with | - |
+| `--name` | Playbook name | `<project>-playbook` |
+| `--version` | Playbook version | `v1.0.0` |
+| `--create-components` | Create components from hooks | `true` |
+| `--activate` | Activate playbook after creation | `false` |
+| `--preview` | Preview migration without making changes | `false` |
+| `--json` | Output results as JSON | `false` |
+
+**Examples:**
+```bash
+# Preview migration
+vcdeploy recipes import-yaml configs/myproject.yaml --preview
+
+# Import and activate
+vcdeploy recipes import-yaml configs/myproject.yaml --project-id 123 --activate
+
+# Import with custom name and version
+vcdeploy recipes import-yaml configs/myproject.yaml --name "production-playbook" \
+  --version "v2.0.0" --project-id 123
+```
 
 ---
 
@@ -703,6 +1016,98 @@ vcdeploy settings set <category> <key> <value>
 
 ---
 
+### ssh-keys
+
+SSH key management for provisioning and Git authentication.
+
+#### ssh-keys list
+
+List all managed SSH keys.
+
+```bash
+vcdeploy ssh-keys list [flags]
+```
+
+**Example:**
+```bash
+vcdeploy ssh-keys list --master localhost:9000 --token <token>
+```
+
+#### ssh-keys generate
+
+Generate a new Ed25519 SSH key pair.
+
+```bash
+vcdeploy ssh-keys generate [flags]
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `-n, --name` | Key name (required) |
+| `-c, --comment` | Key comment (appears in public key) |
+
+**Example:**
+```bash
+vcdeploy ssh-keys generate --name deploy-key --comment "Deployment key" \
+  --master localhost:9000 --token <token>
+```
+
+#### ssh-keys import
+
+Import an existing SSH private key.
+
+```bash
+vcdeploy ssh-keys import [flags]
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `-n, --name` | Key name (required) |
+| `-f, --file` | Path to private key file |
+| `--stdin` | Read private key from stdin |
+| `-p, --passphrase` | Passphrase for encrypted key |
+
+**Examples:**
+```bash
+# Import from file
+vcdeploy ssh-keys import --name my-key --file ~/.ssh/id_ed25519 \
+  --master localhost:9000 --token <token>
+
+# Import from stdin
+cat ~/.ssh/id_ed25519 | vcdeploy ssh-keys import --name my-key --stdin \
+  --master localhost:9000 --token <token>
+```
+
+#### ssh-keys public
+
+Output the public key in OpenSSH format.
+
+```bash
+vcdeploy ssh-keys public <key-id> [flags]
+```
+
+**Example:**
+```bash
+vcdeploy ssh-keys public 123 --master localhost:9000 --token <token> > deploy.pub
+```
+
+#### ssh-keys delete
+
+Delete an SSH key.
+
+```bash
+vcdeploy ssh-keys delete <key-id> [flags]
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `-f, --force` | Skip confirmation |
+
+---
+
 ### show
 
 Show detailed information about resources.
@@ -777,6 +1182,69 @@ vcdeploy type delete <name>
 
 ---
 
+### totp
+
+Administrative commands for managing user TOTP two-factor authentication. These commands are for account recovery when users lose access to their authenticator and recovery codes.
+
+#### totp list
+
+List all users who have TOTP enabled.
+
+```bash
+vcdeploy totp list
+```
+
+**Output:**
+```
+ID    USERNAME    EMAIL                TOTP ENABLED
+1     admin       admin@example.com    true
+3     john        john@example.com     true
+
+Total: 2 users with TOTP enabled
+```
+
+#### totp status
+
+Show TOTP status for a specific user.
+
+```bash
+vcdeploy totp status <username>
+```
+
+**Output:**
+```
+User: john
+TOTP Enabled: true
+Recovery Codes Remaining: 6
+```
+
+#### totp disable
+
+Disable TOTP for a user who has lost access to their authenticator and recovery codes.
+
+```bash
+vcdeploy totp disable --user <username> --reason <reason> --confirm
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `--user` | Username or user ID (required) |
+| `--reason` | Reason for disabling TOTP, for audit (required, min 10 chars) |
+| `--confirm` | Confirm this destructive action (required) |
+
+**Example:**
+```bash
+vcdeploy totp disable --user john --reason "Lost phone, identity verified via video call" --confirm
+```
+
+**Security Notes:**
+- Always verify user identity through out-of-band means before disabling 2FA
+- All actions are logged for audit compliance
+- Users will need to re-enable TOTP after logging in
+
+---
+
 ### user
 
 User management commands.
@@ -835,6 +1303,110 @@ vcdeploy version
 vcdeploy v1.0.0
   commit:     abc1234
   build time: 2024-01-01T00:00:00Z
+```
+
+---
+
+### webhook
+
+Manage webhook configurations for projects. Webhooks allow Git providers (GitHub, GitLab, Bitbucket) to trigger deployments automatically.
+
+#### webhook add
+
+Add a webhook configuration to a project.
+
+```bash
+vcdeploy webhook add <project> <provider> [flags]
+```
+
+**Arguments:**
+| Argument | Description |
+|----------|-------------|
+| `project` | Project name |
+| `provider` | Git provider: `github`, `gitlab`, or `bitbucket` |
+
+**Flags:**
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--secret` | Webhook secret | Auto-generated |
+| `--require-secret` | Require secret validation | `true` |
+
+**Example:**
+```bash
+# Add GitHub webhook with auto-generated secret
+vcdeploy webhook add myproject github
+
+# Add GitLab webhook with custom secret
+vcdeploy webhook add myproject gitlab --secret "my-webhook-secret"
+```
+
+#### webhook list
+
+List all webhooks configured for a project.
+
+```bash
+vcdeploy webhook list <project>
+```
+
+**Example:**
+```bash
+vcdeploy webhook list myproject
+```
+
+**Output:**
+```
+PROVIDER    ENABLED  REQUIRE SECRET
+github      true     true
+gitlab      true     true
+```
+
+#### webhook delete
+
+Remove a webhook configuration from a project.
+
+```bash
+vcdeploy webhook delete <project> <provider>
+```
+
+**Example:**
+```bash
+vcdeploy webhook delete myproject github
+```
+
+#### webhook test
+
+Send a test payload to verify webhook configuration. This command requires the server to be running.
+
+```bash
+vcdeploy webhook test <project> <provider>
+```
+
+**Example:**
+```bash
+vcdeploy webhook test myproject github
+```
+
+> **Note:** This command requires a running server and cannot be used in offline mode.
+
+#### webhook rotate-secret
+
+Generate a new secret for a webhook. You must update the secret in your Git provider's settings after running this command.
+
+```bash
+vcdeploy webhook rotate-secret <project> <provider>
+```
+
+**Example:**
+```bash
+vcdeploy webhook rotate-secret myproject github
+```
+
+**Output:**
+```
+✓ Webhook secret rotated for myproject/github
+New secret: <new-secret>
+
+⚠️  Update this secret in your Git provider's webhook settings.
 ```
 
 ---
@@ -922,7 +1494,7 @@ vcdeploy master start
 vcdeploy admin --username admin --email admin@example.com
 
 # Add a project
-vcdeploy project add myapp
+vcdeploy project create myapp
 
 # Set secrets
 vcdeploy secret set myapp DB_PASSWORD
@@ -939,13 +1511,13 @@ vcdeploy project list
 vcdeploy project validate myapp
 
 # Deploy to production
-vcdeploy project deploy myapp --target production
+vcdeploy deploy create --project myapp --target production
 
 # If something goes wrong, rollback
-vcdeploy project rollback myapp --target production
+vcdeploy deploy rollback <deployment-id> --target production
 
 # Check deployment status
-vcdeploy deploy status 12345
+vcdeploy deploy show 12345
 
 # View deployment logs
 vcdeploy deploy logs 12345 --follow
@@ -993,6 +1565,65 @@ vcdeploy agent token new-agent
 vcdeploy-agent register --master master.example.com:9001 --token <token>
 vcdeploy-agent start
 ```
+
+---
+
+## API-Only Features
+
+Some features are intentionally available only via the REST API or Web UI, not the CLI. This is by design.
+
+| API Endpoint | Feature | Reason |
+|--------------|---------|--------|
+| `/api/v1/blocked-ips` | IP blocking/unblocking | Security feature best managed via UI for audit visibility |
+| `/api/v1/host-keys` | SSH host key management | Low-frequency admin operation |
+| `/api/v1/jump-servers` | Jump server configuration | Low-frequency admin operation |
+| `/api/v1/binaries` | Agent binary management | Internal system feature |
+| `/api/v1/tls` | TLS certificate management | Server configuration via UI |
+| `/api/v1/recipes/*` | Full recipe CRUD | Use `recipes import-yaml` for CLI workflow |
+
+If you need CLI access to these features, use `curl` or similar tools with an API key:
+
+```bash
+# Example: List blocked IPs
+curl -H "Authorization: Bearer $VCDEPLOY_TOKEN" \
+     https://vcdeploy.example.com/api/v1/blocked-ips
+
+# Example: Block an IP
+curl -X POST -H "Authorization: Bearer $VCDEPLOY_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"ip":"192.168.1.100","reason":"suspicious activity"}' \
+     https://vcdeploy.example.com/api/v1/blocked-ips
+```
+
+---
+
+## Command Conventions
+
+### Resource Lifecycle Verbs
+
+| Verb | Usage | Example |
+|------|-------|---------|
+| `create` | Create a new resource | `vcdeploy user create` |
+| `list` | List all resources | `vcdeploy project list` |
+| `show` | Show resource details | `vcdeploy agent show` |
+| `edit` | Modify an existing resource | `vcdeploy project edit` |
+| `delete` | Permanently remove a resource | `vcdeploy project delete` |
+
+### Special Verbs
+
+| Verb | Usage | When to Use |
+|------|-------|-------------|
+| `revoke` | Invalidate without deleting | `apikey revoke`, `certs revoke` - preserves audit trail |
+| `create` | Create a new resource or operation | `deploy create`, `project create` |
+| `cancel` | Cancel a running operation | `deploy cancel` |
+| `rotate` | Regenerate/replace credentials | `webhook rotate-secret`, `certs ca rotate` |
+
+**Why `revoke` instead of `delete`?**
+
+For credentials like API keys and certificates, we use `revoke` because:
+1. The resource's existence must be remembered for audit purposes
+2. The credential should no longer grant access
+3. Deletion would lose the audit trail of what was revoked and when
 
 ---
 

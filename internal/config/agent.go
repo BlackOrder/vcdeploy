@@ -22,11 +22,10 @@ type AgentConfig struct {
 
 // AgentMasterConfig defines master connection settings.
 type AgentMasterConfig struct {
-	Address       string          `yaml:"address"`
-	Token         string          `yaml:"token"`
-	Cert          string          `yaml:"cert"`
-	AllowInsecure bool            `yaml:"allow_insecure"` // Allow unencrypted connection (NOT recommended)
-	Reconnect     ReconnectConfig `yaml:"reconnect"`
+	Address   string          `yaml:"address"`
+	Token     string          `yaml:"token"`
+	CACert    string          `yaml:"ca_cert"` // CA certificate for TLS verification
+	Reconnect ReconnectConfig `yaml:"reconnect"`
 }
 
 // ReconnectConfig defines reconnection behavior.
@@ -49,6 +48,7 @@ type AgentIdentityConfig struct {
 
 // AgentPathsConfig defines local paths.
 type AgentPathsConfig struct {
+	Data     string `yaml:"data"` // Data directory for agent database
 	Repos    string `yaml:"repos"`
 	Releases string `yaml:"releases"`
 }
@@ -77,7 +77,7 @@ type GracefulShutdownConfig struct {
 func DefaultAgentConfig() *AgentConfig {
 	return &AgentConfig{
 		Master: AgentMasterConfig{
-			Cert: "/etc/vcdeploy/agent/cert.pem",
+			CACert: "/etc/vcdeploy/agent/ca.pem",
 			Reconnect: ReconnectConfig{
 				InitialDelay:      1 * time.Second,
 				MaxDelay:          5 * time.Minute,
@@ -88,6 +88,7 @@ func DefaultAgentConfig() *AgentConfig {
 			Labels: make(map[string]string),
 		},
 		Paths: AgentPathsConfig{
+			Data:     "/var/lib/vcdeploy/agent/",
 			Repos:    "/var/lib/vcdeploy/repos/",
 			Releases: "/var/www/",
 		},
@@ -112,7 +113,7 @@ func DefaultAgentConfig() *AgentConfig {
 func LoadAgentConfig(path string) (*AgentConfig, error) {
 	config := DefaultAgentConfig()
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 - path is admin-controlled config file location
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("config file not found: %s", path)
@@ -130,6 +131,7 @@ func LoadAgentConfig(path string) (*AgentConfig, error) {
 // SaveAgentConfig saves the agent configuration to a file.
 func SaveAgentConfig(config *AgentConfig, path string) error {
 	dir := filepath.Dir(path)
+	// #nosec G301 - Config directory needs group access for service user
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("creating config directory: %w", err)
 	}

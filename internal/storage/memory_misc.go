@@ -3,6 +3,8 @@ package storage
 import (
 	"context"
 	"time"
+
+	"github.com/rs/xid"
 )
 
 // --- SSHHostKey methods ---
@@ -19,7 +21,9 @@ func (s *MemoryStore) CreateSSHHostKey(ctx context.Context, key *SSHHostKey) err
 		}
 	}
 
-	key.ID = nextID(&s.nextSSHHostKeyID)
+	if key.ID == "" {
+		key.ID = xid.New().String()
+	}
 	now := time.Now()
 	key.CreatedAt = now
 	key.UpdatedAt = now
@@ -75,7 +79,7 @@ func (s *MemoryStore) ListSSHHostKeys(ctx context.Context) ([]*SSHHostKey, error
 }
 
 // UpdateSSHHostKeyTrust updates the trust status of an SSH host key.
-func (s *MemoryStore) UpdateSSHHostKeyTrust(ctx context.Context, id int64, trusted bool, verifiedBy string) error {
+func (s *MemoryStore) UpdateSSHHostKeyTrust(ctx context.Context, id string, trusted bool, verifiedBy string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -95,7 +99,7 @@ func (s *MemoryStore) UpdateSSHHostKeyTrust(ctx context.Context, id int64, trust
 }
 
 // DeleteSSHHostKey removes an SSH host key by ID.
-func (s *MemoryStore) DeleteSSHHostKey(ctx context.Context, id int64) error {
+func (s *MemoryStore) DeleteSSHHostKey(ctx context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -138,7 +142,9 @@ func (s *MemoryStore) CreateJumpServer(ctx context.Context, js *SSHJumpServer) e
 		}
 	}
 
-	js.ID = nextID(&s.nextJumpServerID)
+	if js.ID == "" {
+		js.ID = xid.New().String()
+	}
 	js.CreatedAt = time.Now()
 
 	// Copy-on-store
@@ -150,7 +156,7 @@ func (s *MemoryStore) CreateJumpServer(ctx context.Context, js *SSHJumpServer) e
 }
 
 // GetJumpServer retrieves a jump server by ID.
-func (s *MemoryStore) GetJumpServer(ctx context.Context, id int64) (*SSHJumpServer, error) {
+func (s *MemoryStore) GetJumpServer(ctx context.Context, id string) (*SSHJumpServer, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -211,7 +217,7 @@ func (s *MemoryStore) UpdateJumpServer(ctx context.Context, js *SSHJumpServer) e
 }
 
 // DeleteJumpServer removes a jump server by ID.
-func (s *MemoryStore) DeleteJumpServer(ctx context.Context, id int64) error {
+func (s *MemoryStore) DeleteJumpServer(ctx context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -274,12 +280,13 @@ func (s *MemoryStore) UpdateProvisionJobStatus(ctx context.Context, id, status, 
 		return ErrNotFound
 	}
 
-	job.Status = status
+	typedStatus := ProvisionStatus(status)
+	job.Status = typedStatus
 	job.Stage = stage
 	job.ErrorMessage = errorMessage
 	job.Progress = progress
 
-	if status == "completed" || status == "failed" {
+	if typedStatus.IsTerminal() {
 		now := time.Now()
 		job.CompletedAt = &now
 	}
@@ -340,6 +347,67 @@ func (s *MemoryStore) ListProvisionJobsByHost(ctx context.Context, host string, 
 	return all[offset:end], total, nil
 }
 
+// --- ProvisionLog methods ---
+
+// SaveProvisionLog saves a log entry for a provisioning job.
+func (s *MemoryStore) SaveProvisionLog(ctx context.Context, jobID, level, message string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	log := &ProvisionLog{
+		ID:        xid.New().String(),
+		JobID:     jobID,
+		Timestamp: time.Now(),
+		Level:     level,
+		Message:   message,
+	}
+
+	s.provisionLogs[jobID] = append(s.provisionLogs[jobID], log)
+	return nil
+}
+
+// ListProvisionLogs retrieves all logs for a provisioning job.
+func (s *MemoryStore) ListProvisionLogs(ctx context.Context, jobID string) ([]*ProvisionLog, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	logs := s.provisionLogs[jobID]
+	if logs == nil {
+		return []*ProvisionLog{}, nil
+	}
+
+	// Copy-on-read
+	result := make([]*ProvisionLog, len(logs))
+	for i, log := range logs {
+		cp := *log
+		result[i] = &cp
+	}
+	return result, nil
+}
+
+// ListProvisionLogsAfter retrieves logs for a provisioning job with ID greater than afterID.
+func (s *MemoryStore) ListProvisionLogsAfter(ctx context.Context, jobID string, afterID string) ([]*ProvisionLog, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	logs := s.provisionLogs[jobID]
+	if logs == nil {
+		return []*ProvisionLog{}, nil
+	}
+
+	var result []*ProvisionLog
+	for _, log := range logs {
+		if log.ID > afterID {
+			cp := *log
+			result = append(result, &cp)
+		}
+	}
+	if result == nil {
+		result = []*ProvisionLog{}
+	}
+	return result, nil
+}
+
 // --- HealthCheckConfig methods ---
 
 // CreateHealthCheckConfig creates a new health check configuration.
@@ -347,7 +415,9 @@ func (s *MemoryStore) CreateHealthCheckConfig(ctx context.Context, config *Healt
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	config.ID = nextID(&s.nextHealthCheckID)
+	if config.ID == "" {
+		config.ID = xid.New().String()
+	}
 	now := time.Now()
 	config.CreatedAt = now
 	config.UpdatedAt = now
@@ -361,7 +431,7 @@ func (s *MemoryStore) CreateHealthCheckConfig(ctx context.Context, config *Healt
 }
 
 // GetHealthCheckConfig retrieves a health check configuration by ID.
-func (s *MemoryStore) GetHealthCheckConfig(ctx context.Context, id int64) (*HealthCheckConfig, error) {
+func (s *MemoryStore) GetHealthCheckConfig(ctx context.Context, id string) (*HealthCheckConfig, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -389,7 +459,7 @@ func (s *MemoryStore) GetGlobalHealthCheckConfig(ctx context.Context) (*HealthCh
 }
 
 // GetHealthCheckConfigForProject retrieves the health check configuration for a project.
-func (s *MemoryStore) GetHealthCheckConfigForProject(ctx context.Context, projectID int64) (*HealthCheckConfig, error) {
+func (s *MemoryStore) GetHealthCheckConfigForProject(ctx context.Context, projectID string) (*HealthCheckConfig, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -443,7 +513,7 @@ func (s *MemoryStore) ListHealthCheckConfigs(ctx context.Context) ([]*HealthChec
 }
 
 // DeleteHealthCheckConfig removes a health check configuration by ID.
-func (s *MemoryStore) DeleteHealthCheckConfig(ctx context.Context, id int64) error {
+func (s *MemoryStore) DeleteHealthCheckConfig(ctx context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

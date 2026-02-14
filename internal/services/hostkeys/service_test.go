@@ -57,7 +57,7 @@ func TestService_Create(t *testing.T) {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	if key.ID == 0 {
+	if key.ID == "" {
 		t.Error("Create() did not set key ID")
 	}
 	if key.CreatedAt.IsZero() {
@@ -378,7 +378,7 @@ func TestService_UpdateTrust_NonexistentKey(t *testing.T) {
 	ctx := context.Background()
 
 	// This should not return an error (SQLite update affects 0 rows)
-	err := svc.UpdateTrust(ctx, 99999, true, "admin")
+	err := svc.UpdateTrust(ctx, "nonexistent", true, "admin")
 	if err != nil {
 		t.Fatalf("UpdateTrust() error = %v (update on non-existent ID should not error)", err)
 	}
@@ -416,7 +416,7 @@ func TestService_Delete_NotFound(t *testing.T) {
 	svc, _ := newTestService(t)
 	ctx := context.Background()
 
-	err := svc.Delete(ctx, 99999)
+	err := svc.Delete(ctx, "nonexistent")
 	if err == nil {
 		t.Error("Delete() expected error for nonexistent key")
 	}

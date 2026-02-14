@@ -76,23 +76,9 @@ func TestDeployCommand(t *testing.T) {
 	t.Parallel()
 	cmd := &DeployCommand{
 		DeploymentID: "deploy-001",
-		Project:      "test-project",
-		Target:       "production",
-		Repository:   "https://github.com/test/repo.git",
-		Branch:       "main",
-		Commit:       "abc123",
-		Path:         "/var/www/test",
 		Settings: DeploySettings{
-			Strategy:     "symlink",
-			KeepReleases: 5,
-			SharedDirs:   []string{"storage", "logs"},
-			SharedFiles:  []string{".env"},
+			SharedDirs: []string{"storage", "logs"},
 		},
-		EnvVars: map[string]string{
-			"APP_ENV": "production",
-		},
-		PreDeployHooks:  []string{"composer install"},
-		PostDeployHooks: []string{"php artisan migrate"},
 	}
 
 	if cmd.DeploymentID != "deploy-001" {
@@ -108,13 +94,8 @@ func TestDeploySettings(t *testing.T) {
 	t.Parallel()
 
 	settings := DeploySettings{
-		Strategy:       "symlink",
-		KeepReleases:   3,
-		SharedDirs:     []string{"storage"},
-		WritableDirs:   []string{"cache"},
-		ExecutionUser:  "www-data",
-		ExecutionGroup: "www-data",
-		Timeout:        5 * time.Minute,
+		Strategy: "symlink",
+		Timeout:  5 * time.Minute,
 	}
 
 	if settings.Strategy != "symlink" {
@@ -132,10 +113,6 @@ func TestDeployResult(t *testing.T) {
 	result := &DeployResult{
 		Success:       true,
 		ReleaseNumber: 42,
-		ReleasePath:   "/var/www/app/releases/42",
-		StartedAt:     time.Now(),
-		CompletedAt:   time.Now().Add(30 * time.Second),
-		Error:         nil,
 	}
 
 	if !result.Success {
@@ -191,10 +168,8 @@ func TestLogEntry(t *testing.T) {
 	t.Parallel()
 
 	entry := LogEntry{
-		Timestamp: time.Now(),
-		Level:     LogInfo,
-		Message:   "Test message",
-		Source:    "deploy",
+		Level:  LogInfo,
+		Source: "deploy",
 	}
 
 	if entry.Level != LogInfo {
@@ -352,12 +327,7 @@ func TestRollbackCommand(t *testing.T) {
 	t.Parallel()
 
 	cmd := &RollbackCommand{
-		DeploymentID:  "rollback-001",
-		Project:       "test-project",
-		Target:        "production",
-		Path:          "/var/www/test",
 		ReleaseNumber: 0, // Previous release
-		RollbackHooks: []string{"php artisan down"},
 		ReloadServices: []ServiceReload{
 			{Service: "php-fpm", Action: "reload"},
 		},
@@ -403,8 +373,6 @@ func TestCommandResult(t *testing.T) {
 
 	result := &CommandResult{
 		ExitCode: 0,
-		Stdout:   "Success output",
-		Stderr:   "",
 		Duration: 150 * time.Millisecond,
 	}
 
@@ -422,9 +390,7 @@ func TestCommandResultWithError(t *testing.T) {
 
 	result := &CommandResult{
 		ExitCode: 1,
-		Stdout:   "",
 		Stderr:   "Command not found",
-		Duration: 50 * time.Millisecond,
 	}
 
 	if result.ExitCode != 1 {
@@ -445,8 +411,6 @@ func TestRunOptions(t *testing.T) {
 			"APP_ENV": "production",
 			"DEBUG":   "false",
 		},
-		User:    "www-data",
-		Group:   "www-data",
 		Timeout: 30 * time.Second,
 	}
 
@@ -2213,9 +2177,6 @@ func TestDeployCommandWithEnvVars(t *testing.T) {
 	t.Parallel()
 
 	cmd := &DeployCommand{
-		DeploymentID: "test",
-		Project:      "test",
-		Repository:   "repo",
 		EnvVars: map[string]string{
 			"KEY1": "value1",
 			"KEY2": "value2",
@@ -2282,7 +2243,6 @@ func TestDeployResultDuration(t *testing.T) {
 	end := time.Now()
 
 	result := &DeployResult{
-		Success:     true,
 		StartedAt:   start,
 		CompletedAt: end,
 	}
@@ -2640,7 +2600,6 @@ func TestLogEntryFields(t *testing.T) {
 	entry := LogEntry{
 		Timestamp: now,
 		Level:     LogWarn,
-		Message:   "Warning message",
 		Source:    "deploy",
 	}
 
@@ -2662,8 +2621,6 @@ func TestDeployResultLogs(t *testing.T) {
 	t.Parallel()
 
 	result := &DeployResult{
-		Success:       true,
-		ReleaseNumber: 10,
 		Logs: []LogEntry{
 			{Message: "Starting deployment", Level: LogInfo},
 			{Message: "Creating release", Level: LogInfo},
@@ -2701,30 +2658,12 @@ func TestDeployCommandAllFields(t *testing.T) {
 
 	cmd := &DeployCommand{
 		DeploymentID: "deploy-full",
-		Project:      "my-project",
-		Target:       "production",
-		Repository:   "git@github.com:org/repo.git",
-		Branch:       "release/v2.0",
-		Commit:       "abc123def456",
-		Path:         "/var/www/my-project",
-		Settings: DeploySettings{
-			Strategy:       "symlink",
-			KeepReleases:   10,
-			SharedDirs:     []string{"storage", "logs", "cache"},
-			SharedFiles:    []string{".env", "config/database.yml"},
-			WritableDirs:   []string{"uploads", "temp"},
-			ExecutionUser:  "www-data",
-			ExecutionGroup: "www-data",
-			Timeout:        15 * time.Minute,
-		},
 		EnvVars: map[string]string{
 			"APP_ENV":   "production",
 			"APP_DEBUG": "false",
 			"DB_HOST":   "db.example.com",
 		},
-		EnvFileContent:  []byte("SECRET_KEY=xyz"),
-		PreDeployHooks:  []string{"composer install --no-dev", "npm ci"},
-		PostDeployHooks: []string{"php artisan migrate", "php artisan cache:clear"},
+		PreDeployHooks: []string{"composer install --no-dev", "npm ci"},
 		ReloadServices: []ServiceReload{
 			{Service: "php-fpm", Action: "reload"},
 			{Service: "nginx", Action: "reload"},
@@ -2750,14 +2689,8 @@ func TestRollbackCommandAllFields(t *testing.T) {
 
 	cmd := &RollbackCommand{
 		DeploymentID:  "rollback-full",
-		Project:       "my-project",
-		Target:        "production",
-		Path:          "/var/www/my-project",
 		ReleaseNumber: 42,
 		RollbackHooks: []string{"php artisan down", "php artisan up"},
-		ReloadServices: []ServiceReload{
-			{Service: "php-fpm", Action: "reload"},
-		},
 	}
 
 	if cmd.DeploymentID != "rollback-full" {

@@ -3,12 +3,14 @@ package storage
 import (
 	"context"
 	"time"
+
+	"github.com/rs/xid"
 )
 
 // --- Project operations ---
 
 // CreateProject creates a new project in memory and queues persistence.
-func (s *MemoryStore) CreateProject(project *Project) error {
+func (s *MemoryStore) CreateProject(ctx context.Context, project *Project) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -17,7 +19,9 @@ func (s *MemoryStore) CreateProject(project *Project) error {
 		return ErrDuplicate
 	}
 
-	project.ID = nextID(&s.nextProjectID)
+	if project.ID == "" {
+		project.ID = xid.New().String()
+	}
 	now := time.Now()
 	project.CreatedAt = now
 	project.UpdatedAt = now
@@ -31,6 +35,21 @@ func (s *MemoryStore) CreateProject(project *Project) error {
 	s.queueWrite(s.projectsWrites, NewWriteOp(WriteOpInsert, "projects", &stored))
 
 	return nil
+}
+
+// GetProjectByID retrieves a project by ID from memory.
+func (s *MemoryStore) GetProjectByID(ctx context.Context, id string) (*Project, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	project, ok := s.projects[id]
+	if !ok {
+		return nil, ErrNotFound
+	}
+
+	// Return a copy
+	copied := *project
+	return &copied, nil
 }
 
 // GetProjectByName retrieves a project by name from memory.
@@ -49,7 +68,7 @@ func (s *MemoryStore) GetProjectByName(ctx context.Context, name string) (*Proje
 }
 
 // ListProjects returns all projects from memory.
-func (s *MemoryStore) ListProjects() ([]*Project, error) {
+func (s *MemoryStore) ListProjects(ctx context.Context) ([]*Project, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -60,6 +79,68 @@ func (s *MemoryStore) ListProjects() ([]*Project, error) {
 	}
 
 	return projects, nil
+}
+
+// ListProjectsPaginated returns projects with pagination support.
+func (s *MemoryStore) ListProjectsPaginated(ctx context.Context, limit, offset int) ([]*Project, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Convert map to slice
+	all := make([]*Project, 0, len(s.projects))
+	for _, project := range s.projects {
+		copied := *project
+		all = append(all, &copied)
+	}
+
+	// Apply pagination
+	if offset >= len(all) {
+		return []*Project{}, nil
+	}
+	end := offset + limit
+	if end > len(all) {
+		end = len(all)
+	}
+
+	return all[offset:end], nil
+}
+
+// CountProjects returns the total number of projects.
+func (s *MemoryStore) CountProjects(ctx context.Context) (int64, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return int64(len(s.projects)), nil
+}
+
+// UpdateProjectByID updates a project by ID in memory and queues persistence.
+func (s *MemoryStore) UpdateProjectByID(ctx context.Context, p *Project) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	existing, ok := s.projects[p.ID]
+	if !ok {
+		return ErrNotFound
+	}
+
+	// Preserve immutable fields
+	p.CreatedAt = existing.CreatedAt
+	p.UpdatedAt = time.Now()
+
+	// Handle name change - update projectsByName map
+	if existing.Name != p.Name {
+		delete(s.projectsByName, existing.Name)
+	}
+
+	// Store a copy
+	stored := *p
+	s.projects[p.ID] = &stored
+	s.projectsByName[p.Name] = &stored
+
+	// Queue persistence
+	s.queueWrite(s.projectsWrites, NewWriteOp(WriteOpUpdate, "projects", &stored))
+
+	return nil
 }
 
 // UpdateProjectByName updates a project in memory and queues persistence.
@@ -88,7 +169,7 @@ func (s *MemoryStore) UpdateProjectByName(ctx context.Context, p *Project) error
 }
 
 // UpdateProjectHealthCheck updates health check settings for a project.
-func (s *MemoryStore) UpdateProjectHealthCheck(ctx context.Context, projectID int64, healthCheckID *int64, autoRollback, rollbackOnHealthFail bool) error {
+func (s *MemoryStore) UpdateProjectHealthCheck(ctx context.Context, projectID string, healthCheckID *string, autoRollback, rollbackOnHealthFail bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -113,8 +194,57 @@ func (s *MemoryStore) UpdateProjectHealthCheck(ctx context.Context, projectID in
 	return nil
 }
 
+// DeleteProjectByID removes a project by ID from memory and queues persistence.
+func (s *MemoryStore) DeleteProjectByID(ctx context.Context, id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	project, ok := s.projects[id]
+	if !ok {
+		return nil // Not an error to delete non-existent
+	}
+
+	delete(s.projects, id)
+	delete(s.projectsByName, project.Name)
+
+	// Cascade delete webhooks for this project
+	for webhookID, webhook := range s.webhooks {
+		if webhook.ProjectID == id {
+			delete(s.webhooks, webhookID)
+		}
+	}
+
+	// Cascade delete deployments for this project
+	for depID, dep := range s.deployments {
+		if dep.Project == project.Name || (dep.ProjectID != nil && *dep.ProjectID == id) {
+			delete(s.deployments, depID)
+			// Also delete associated logs
+			delete(s.deploymentLogs, depID)
+		}
+	}
+
+	// Cascade delete scheduled deployments for this project
+	for schedID, sched := range s.scheduledDeploys {
+		if sched.Project == project.Name {
+			delete(s.scheduledDeploys, schedID)
+		}
+	}
+
+	// Cascade delete secrets for this project
+	for key, secret := range s.secrets {
+		if secret.Project == project.Name {
+			delete(s.secrets, key)
+		}
+	}
+
+	// Queue persistence
+	s.queueWrite(s.projectsWrites, NewWriteOp(WriteOpDelete, "projects", id))
+
+	return nil
+}
+
 // DeleteProject removes a project from memory and queues persistence.
-func (s *MemoryStore) DeleteProject(name string) error {
+func (s *MemoryStore) DeleteProject(ctx context.Context, name string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -140,6 +270,22 @@ func (s *MemoryStore) DeleteProject(name string) error {
 		}
 	}
 
+	// Cascade delete deployments for this project
+	for depID, dep := range s.deployments {
+		if dep.Project == name || (dep.ProjectID != nil && *dep.ProjectID == project.ID) {
+			delete(s.deployments, depID)
+			// Also delete associated logs
+			delete(s.deploymentLogs, depID)
+		}
+	}
+
+	// Cascade delete scheduled deployments for this project
+	for schedID, sched := range s.scheduledDeploys {
+		if sched.Project == name {
+			delete(s.scheduledDeploys, schedID)
+		}
+	}
+
 	// Queue persistence
 	s.queueWrite(s.projectsWrites, NewWriteOp(WriteOpDelete, "projects", map[string]string{"name": name}))
 
@@ -149,7 +295,7 @@ func (s *MemoryStore) DeleteProject(name string) error {
 // --- Project Type operations ---
 
 // CreateProjectType creates a new project type in memory and queues persistence.
-func (s *MemoryStore) CreateProjectType(pt *ProjectType) error {
+func (s *MemoryStore) CreateProjectType(ctx context.Context, pt *ProjectType) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -160,7 +306,9 @@ func (s *MemoryStore) CreateProjectType(pt *ProjectType) error {
 		}
 	}
 
-	pt.ID = nextID(&s.nextProjectTypeID)
+	if pt.ID == "" {
+		pt.ID = xid.New().String()
+	}
 	pt.CreatedAt = time.Now()
 
 	// Store a copy
@@ -174,7 +322,7 @@ func (s *MemoryStore) CreateProjectType(pt *ProjectType) error {
 }
 
 // ListProjectTypes returns all project types from memory.
-func (s *MemoryStore) ListProjectTypes() ([]*ProjectType, error) {
+func (s *MemoryStore) ListProjectTypes(ctx context.Context) ([]*ProjectType, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -188,7 +336,7 @@ func (s *MemoryStore) ListProjectTypes() ([]*ProjectType, error) {
 }
 
 // GetProjectTypeByName retrieves a project type by name from memory.
-func (s *MemoryStore) GetProjectTypeByName(name string) (*ProjectType, error) {
+func (s *MemoryStore) GetProjectTypeByName(ctx context.Context, name string) (*ProjectType, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -203,7 +351,7 @@ func (s *MemoryStore) GetProjectTypeByName(name string) (*ProjectType, error) {
 }
 
 // UpdateProjectTypeByName updates a project type in memory and queues persistence.
-func (s *MemoryStore) UpdateProjectTypeByName(pt *ProjectType) error {
+func (s *MemoryStore) UpdateProjectTypeByName(ctx context.Context, pt *ProjectType) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -227,7 +375,7 @@ func (s *MemoryStore) UpdateProjectTypeByName(pt *ProjectType) error {
 }
 
 // DeleteProjectType removes a project type from memory and queues persistence.
-func (s *MemoryStore) DeleteProjectType(name string) error {
+func (s *MemoryStore) DeleteProjectType(ctx context.Context, name string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -248,7 +396,7 @@ func (s *MemoryStore) DeleteProjectType(name string) error {
 // --- Project Webhook operations ---
 
 // GetProjectWebhook retrieves a webhook for a project and provider from memory.
-func (s *MemoryStore) GetProjectWebhook(ctx context.Context, projectID int64, provider string) (*ProjectWebhook, error) {
+func (s *MemoryStore) GetProjectWebhook(ctx context.Context, projectID string, provider string) (*ProjectWebhook, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -263,7 +411,7 @@ func (s *MemoryStore) GetProjectWebhook(ctx context.Context, projectID int64, pr
 }
 
 // SetProjectWebhook creates or updates a webhook in memory and queues persistence.
-func (s *MemoryStore) SetProjectWebhook(ctx context.Context, projectID int64, provider string, secretEncrypted []byte, enabled, requireSecret bool) error {
+func (s *MemoryStore) SetProjectWebhook(ctx context.Context, projectID string, provider string, secretEncrypted []byte, enabled, requireSecret bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -288,7 +436,7 @@ func (s *MemoryStore) SetProjectWebhook(ctx context.Context, projectID int64, pr
 
 	// Create new
 	webhook := &ProjectWebhook{
-		ID:              nextID(&s.nextWebhookID),
+		ID:              xid.New().String(),
 		ProjectID:       projectID,
 		Provider:        provider,
 		SecretEncrypted: secretEncrypted,
@@ -307,7 +455,7 @@ func (s *MemoryStore) SetProjectWebhook(ctx context.Context, projectID int64, pr
 }
 
 // ListProjectWebhooks returns all webhooks for a project from memory.
-func (s *MemoryStore) ListProjectWebhooks(ctx context.Context, projectID int64) ([]*ProjectWebhook, error) {
+func (s *MemoryStore) ListProjectWebhooks(ctx context.Context, projectID string) ([]*ProjectWebhook, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -323,7 +471,7 @@ func (s *MemoryStore) ListProjectWebhooks(ctx context.Context, projectID int64) 
 }
 
 // DeleteProjectWebhook removes a webhook from memory and queues persistence.
-func (s *MemoryStore) DeleteProjectWebhook(ctx context.Context, projectID int64, provider string) error {
+func (s *MemoryStore) DeleteProjectWebhook(ctx context.Context, projectID string, provider string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -368,7 +516,7 @@ func (s *MemoryStore) SetSecretEncrypted(ctx context.Context, project, scope, ke
 
 	// Create new
 	secret := &Secret{
-		ID:             nextID(&s.nextSecretID),
+		ID:             xid.New().String(),
 		Project:        project,
 		Scope:          scope,
 		Key:            key,
@@ -402,7 +550,7 @@ func (s *MemoryStore) GetSecret(ctx context.Context, project, scope, key string)
 }
 
 // ListSecrets returns secret metadata for a scope (legacy method without context).
-func (s *MemoryStore) ListSecrets(scope string) ([]*SecretInfo, error) {
+func (s *MemoryStore) ListSecrets(ctx context.Context, scope string) ([]*SecretInfo, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -467,7 +615,7 @@ func (s *MemoryStore) ListAllSecretsCtx(ctx context.Context) ([]*Secret, error) 
 }
 
 // DeleteSecret removes a secret from memory (legacy method without project).
-func (s *MemoryStore) DeleteSecret(scope, key string) error {
+func (s *MemoryStore) DeleteSecret(ctx context.Context, scope, key string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -509,7 +657,7 @@ func (s *MemoryStore) DeleteSecretCtx(ctx context.Context, project, scope, key s
 
 // ExportAllSecrets exports all secrets grouped by project/scope.
 // Returns map[project]map[key]scope
-func (s *MemoryStore) ExportAllSecrets() (map[string]map[string]string, error) {
+func (s *MemoryStore) ExportAllSecrets(ctx context.Context) (map[string]map[string]string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 

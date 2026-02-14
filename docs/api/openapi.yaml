@@ -39,18 +39,26 @@ tags:
     description: Authentication endpoints
   - name: Users
     description: User management
+  - name: TOTP
+    description: Two-factor authentication management
   - name: Projects
     description: Project management
   - name: Deployments
     description: Deployment operations
   - name: Agents
     description: Agent management
+  - name: Targets
+    description: Deployment target management
   - name: Secrets
     description: Secret management
   - name: Settings
     description: System settings
   - name: Webhooks
     description: Webhook endpoints
+  - name: Security
+    description: SSH keys, credentials, and certificates management
+  - name: Certificates
+    description: Certificate management for mTLS
 
 paths:
   /healthz:
@@ -59,6 +67,22 @@ paths:
       summary: Liveness probe
       description: Returns 200 if the process is alive. Used for Kubernetes liveness probes.
       operationId: getLiveness
+      security: []
+      responses:
+        '200':
+          description: Process is alive
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: ok
+
+  /livez:
+    get:
+      tags: [Health]
+      summary: Liveness probe (alias)
+      description: Alias for /healthz. Returns 200 if the process is alive. Used for Kubernetes liveness probes.
+      operationId: getLivenessAlias
       security: []
       responses:
         '200':
@@ -170,27 +194,282 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  # TOTP (Two-Factor Authentication) Endpoints
+  /api/v1/totp/setup:
+    post:
+      tags: [TOTP]
+      summary: Start TOTP setup
+      description: Generate a new TOTP secret for the authenticated user to set up 2FA.
+      operationId: totpSetup
+      responses:
+        '200':
+          description: TOTP secret generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  secret:
+                    type: string
+                    description: Base32-encoded TOTP secret
+                    example: JBSWY3DPEHPK3PXP
+                  uri:
+                    type: string
+                    description: otpauth URI for QR code generation
+                    example: otpauth://totp/vcdeploy:admin?secret=JBSWY3DPEHPK3PXP&issuer=vcdeploy
+        '400':
+          description: TOTP is already enabled
+        '401':
+          description: Unauthorized
+
+  /api/v1/totp/enable:
+    post:
+      tags: [TOTP]
+      summary: Enable TOTP
+      description: Verify and enable TOTP for the authenticated user. Returns recovery codes.
+      operationId: totpEnable
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [secret, totp_code]
+              properties:
+                secret:
+                  type: string
+                  description: The TOTP secret from setup
+                totp_code:
+                  type: string
+                  pattern: '^[0-9]{6}$'
+                  description: 6-digit TOTP code to verify setup
+      responses:
+        '200':
+          description: TOTP enabled successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  recovery_codes:
+                    type: array
+                    items:
+                      type: string
+                    description: One-time recovery codes (XXXX-XXXX format)
+        '400':
+          description: TOTP already enabled or invalid request
+        '401':
+          description: Invalid TOTP code
+
+  /api/v1/totp/disable:
+    post:
+      tags: [TOTP]
+      summary: Disable TOTP (self-service)
+      description: Disable TOTP for the authenticated user. Requires current TOTP verification.
+      operationId: totpDisable
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [totp_code]
+              properties:
+                totp_code:
+                  type: string
+                  pattern: '^[0-9]{6}$'
+                  description: Current 6-digit TOTP code
+      responses:
+        '200':
+          description: TOTP disabled successfully
+        '400':
+          description: TOTP not enabled
+        '401':
+          description: Invalid TOTP code
+
+  /api/v1/totp/recovery/regenerate:
+    post:
+      tags: [TOTP]
+      summary: Regenerate recovery codes
+      description: Generate new recovery codes, invalidating all previous codes.
+      operationId: regenerateRecoveryCodes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [totp_code]
+              properties:
+                totp_code:
+                  type: string
+                  pattern: '^[0-9]{6}$'
+                  description: Current 6-digit TOTP code for verification
+      responses:
+        '200':
+          description: Recovery codes regenerated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  recovery_codes:
+                    type: array
+                    items:
+                      type: string
+                  warning:
+                    type: string
+        '400':
+          description: TOTP not enabled
+        '401':
+          description: Invalid TOTP code
+
+  /api/v1/admin/totp/users:
+    get:
+      tags: [TOTP]
+      summary: List users with TOTP enabled
+      description: Returns all users who have TOTP enabled (admin only).
+      operationId: listTotpUsers
+      responses:
+        '200':
+          description: List of TOTP-enabled users
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        username:
+                          type: string
+                        email:
+                          type: string
+                        role:
+                          type: string
+                        totpEnabled:
+                          type: boolean
+        '403':
+          description: Admin access required
+
+  /api/v1/admin/totp/status/{username}:
+    get:
+      tags: [TOTP]
+      summary: Get user TOTP status
+      description: Returns TOTP status for a specific user including recovery code count (admin only).
+      operationId: getTotpStatus
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User TOTP status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_id:
+                    type: string
+                  username:
+                    type: string
+                  email:
+                    type: string
+                  role:
+                    type: string
+                  totp_enabled:
+                    type: boolean
+                  recovery_codes_remaining:
+                    type: integer
+        '403':
+          description: Admin access required
+        '404':
+          description: User not found
+
+  /api/v1/admin/totp/disable:
+    post:
+      tags: [TOTP]
+      summary: Disable TOTP for user (admin)
+      description: Admin action to disable TOTP for a user who has lost access. Logged for audit.
+      operationId: adminDisableTotp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, reason]
+              properties:
+                username:
+                  type: string
+                  description: Username to disable TOTP for
+                reason:
+                  type: string
+                  minLength: 10
+                  description: Reason for disabling (for audit)
+                totp_code:
+                  type: string
+                  pattern: '^[0-9]{6}$'
+                  description: Admin's TOTP code (required if admin has TOTP enabled)
+      responses:
+        '200':
+          description: TOTP disabled successfully
+        '400':
+          description: Invalid request or user doesn't have TOTP
+        '401':
+          description: Invalid admin TOTP code
+        '403':
+          description: Admin access required or cannot disable own TOTP
+        '404':
+          description: User not found
+
   /api/v1/users:
     get:
       tags: [Users]
       summary: List users
-      description: Returns a list of all users (admin only).
+      description: Returns a paginated list of all users (admin only).
       operationId: listUsers
+      parameters:
+        - $ref: '#/components/parameters/OffsetParam'
+        - $ref: '#/components/parameters/LimitParam'
       responses:
         '200':
-          description: List of users
+          description: Paginated list of users
           content:
             application/json:
               schema:
-                type: array
+                $ref: '#/components/schemas/UserListResponse'
+              example:
                 items:
-                  $ref: '#/components/schemas/User'
+                  - id: 1
+                    username: "admin"
+                    email: "admin@example.com"
+                    role: "admin"
+                    createdAt: "2024-01-15T10:30:00Z"
+                total: 1
+                page: 1
+                pageSize: 20
+                hasMore: false
         '403':
           description: Forbidden - admin access required
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+              example:
+                error: true
+                message: "admin access required"
     post:
       tags: [Users]
       summary: Create user
@@ -221,22 +500,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict - user already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /api/v1/projects:
     get:
       tags: [Projects]
       summary: List projects
-      description: Returns a list of all projects.
+      description: Returns a paginated list of all projects.
       operationId: listProjects
+      parameters:
+        - $ref: '#/components/parameters/OffsetParam'
+        - $ref: '#/components/parameters/LimitParam'
       responses:
         '200':
-          description: List of projects
+          description: Paginated list of projects
           content:
             application/json:
               schema:
-                type: array
+                $ref: '#/components/schemas/ProjectListResponse'
+              example:
                 items:
-                  $ref: '#/components/schemas/Project'
+                  - id: "proj-123"
+                    name: "my-app"
+                    repository: "https://github.com/user/app"
+                    branch: "main"
+                    deployPath: "/var/www/app"
+                    createdAt: "2024-01-15T10:30:00Z"
+                totalCount: 1
+                offset: 0
+                limit: 20
+                hasMore: false
     post:
       tags: [Projects]
       summary: Create project
@@ -257,6 +555,12 @@ paths:
                 $ref: '#/components/schemas/Project'
         '400':
           description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict - project already exists
           content:
             application/json:
               schema:
@@ -470,7 +774,7 @@ paths:
         - name: after_id
           in: query
           schema:
-            type: integer
+            type: string
           description: Return logs after this ID (for polling)
       responses:
         '200':
@@ -492,17 +796,28 @@ paths:
     get:
       tags: [Agents]
       summary: List agents
-      description: Returns a list of all registered agents.
+      description: Returns a paginated list of all registered agents.
       operationId: listAgents
+      parameters:
+        - $ref: '#/components/parameters/OffsetParam'
+        - $ref: '#/components/parameters/LimitParam'
       responses:
         '200':
-          description: List of agents
+          description: Paginated list of agents
           content:
             application/json:
               schema:
-                type: array
+                $ref: '#/components/schemas/AgentListResponse'
+              example:
                 items:
-                  $ref: '#/components/schemas/Agent'
+                  - id: "agent-001"
+                    name: "prod-agent-1"
+                    host: "192.168.1.100"
+                    status: "connected"
+                    lastSeen: "2024-01-15T10:30:00Z"
+                totalCount: 1
+                offset: 0
+                limit: 20
 
   /api/v1/agents/{agentId}:
     parameters:
@@ -543,6 +858,183 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+
+  # Target endpoints
+  /api/v1/targets:
+    get:
+      tags: [Targets]
+      summary: List targets
+      description: Returns a list of all deployment targets, optionally filtered by project or agent.
+      operationId: listTargets
+      parameters:
+        - name: project
+          in: query
+          schema:
+            type: string
+          description: Filter by project name
+        - name: agent
+          in: query
+          schema:
+            type: string
+          description: Filter by agent name
+        - $ref: '#/components/parameters/OffsetParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: List of targets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Target'
+
+  /api/v1/projects/{projectName}/targets:
+    parameters:
+      - name: projectName
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Targets]
+      summary: List project targets
+      description: Returns targets for a specific project.
+      operationId: listProjectTargets
+      responses:
+        '200':
+          description: List of project targets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Target'
+    post:
+      tags: [Targets]
+      summary: Create target
+      description: Create a new deployment target for a project.
+      operationId: createTarget
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TargetCreate'
+      responses:
+        '201':
+          description: Target created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Target'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/targets/{targetId}:
+    parameters:
+      - name: targetId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Targets]
+      summary: Get target
+      description: Get target details by ID.
+      operationId: getTarget
+      responses:
+        '200':
+          description: Target details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Target'
+        '404':
+          description: Target not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags: [Targets]
+      summary: Update target
+      description: Update an existing deployment target.
+      operationId: updateTarget
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TargetUpdate'
+      responses:
+        '200':
+          description: Target updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Target'
+        '404':
+          description: Target not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Targets]
+      summary: Delete target
+      description: Delete a deployment target.
+      operationId: deleteTarget
+      responses:
+        '204':
+          description: Target deleted
+        '404':
+          description: Target not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/deployments/{deploymentId}/archive:
+    parameters:
+      - name: deploymentId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Deployments]
+      summary: Download deployment archive
+      description: Download deployment archive via HMAC-signed URL. Used by agents as fallback when gRPC streaming fails.
+      operationId: getDeploymentArchive
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+          description: HMAC signature token
+        - name: expires
+          in: query
+          required: true
+          schema:
+            type: string
+          description: URL expiration timestamp
+      security: []
+      responses:
+        '200':
+          description: Archive binary stream
+          content:
+            application/gzip:
+              schema:
+                type: string
+                format: binary
+        '403':
+          description: Invalid or expired signature
 
   /api/v1/secrets:
     get:
@@ -630,14 +1122,20 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /api/v1/webhooks/github:
+  /webhook/github/{project}:
     post:
       tags: [Webhooks]
       summary: GitHub webhook
-      description: Receive webhook events from GitHub.
+      description: Receive webhook events from GitHub for a specific project.
       operationId: handleGitHubWebhook
       security: []
       parameters:
+        - name: project
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project name
         - name: X-Hub-Signature-256
           in: header
           required: true
@@ -666,6 +1164,1679 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /webhook/gitlab/{project}:
+    post:
+      tags: [Webhooks]
+      summary: GitLab webhook
+      description: Receive webhook events from GitLab for a specific project.
+      operationId: handleGitLabWebhook
+      security: []
+      parameters:
+        - name: project
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project name
+        - name: X-Gitlab-Token
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Secret token for verification
+        - name: X-Gitlab-Event
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Event type (Push Hook, Merge Request Hook, etc.)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Webhook processed
+        '400':
+          description: Invalid webhook
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /webhook/bitbucket/{project}:
+    post:
+      tags: [Webhooks]
+      summary: Bitbucket webhook
+      description: Receive webhook events from Bitbucket for a specific project.
+      operationId: handleBitbucketWebhook
+      security: []
+      parameters:
+        - name: project
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project name
+        - name: X-Event-Key
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Event type (repo:push, pullrequest:created, etc.)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Webhook processed
+        '400':
+          description: Invalid webhook
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/api-keys:
+    get:
+      tags: [Auth]
+      summary: List API keys
+      description: Returns a list of API keys for the authenticated user.
+      operationId: listAPIKeys
+      responses:
+        '200':
+          description: List of API keys
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/APIKey'
+    post:
+      tags: [Auth]
+      summary: Create API key
+      description: Create a new API key.
+      operationId: createAPIKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/APIKeyCreate'
+      responses:
+        '201':
+          description: API key created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIKeyWithSecret'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/api-keys/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: API key ID
+    get:
+      tags: [Auth]
+      summary: Get API key
+      description: Get details of a specific API key.
+      operationId: getAPIKey
+      responses:
+        '200':
+          description: API key details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIKey'
+        '404':
+          description: API key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Auth]
+      summary: Revoke API key
+      description: Revoke (delete) an API key.
+      operationId: revokeAPIKey
+      responses:
+        '204':
+          description: API key revoked
+        '404':
+          description: API key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/project-types:
+    get:
+      tags: [Projects]
+      summary: List project types
+      description: Returns a list of available project types.
+      operationId: listProjectTypes
+      responses:
+        '200':
+          description: List of project types
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProjectType'
+    post:
+      tags: [Projects]
+      summary: Create project type
+      description: Create a new project type (admin only).
+      operationId: createProjectType
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectTypeCreate'
+      responses:
+        '201':
+          description: Project type created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectType'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/project-types/{name}:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Project type name
+    get:
+      tags: [Projects]
+      summary: Get project type
+      description: Get details of a specific project type.
+      operationId: getProjectType
+      responses:
+        '200':
+          description: Project type details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectType'
+        '404':
+          description: Project type not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags: [Projects]
+      summary: Update project type
+      description: Update an existing project type (admin only).
+      operationId: updateProjectType
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectTypeCreate'
+      responses:
+        '200':
+          description: Project type updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectType'
+        '404':
+          description: Project type not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Projects]
+      summary: Delete project type
+      description: Delete a project type (admin only).
+      operationId: deleteProjectType
+      responses:
+        '204':
+          description: Project type deleted
+        '404':
+          description: Project type not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current user
+      description: Returns the currently authenticated user's information.
+      operationId: getCurrentUser
+      responses:
+        '200':
+          description: Current user information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/audit:
+    get:
+      tags: [Settings]
+      summary: List audit log entries
+      description: Returns audit log entries with optional filtering.
+      operationId: listAuditLogs
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+          description: Maximum number of entries to return
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+          description: Number of entries to skip
+        - name: action
+          in: query
+          schema:
+            type: string
+          description: Filter by action type
+        - name: user
+          in: query
+          schema:
+            type: string
+          description: Filter by username
+      responses:
+        '200':
+          description: List of audit log entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuditEntry'
+        '403':
+          description: Forbidden - admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/settings/export:
+    get:
+      tags: [Settings]
+      summary: Export settings
+      description: Export all system settings as JSON (admin only).
+      operationId: exportSettings
+      responses:
+        '200':
+          description: Settings exported
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '403':
+          description: Forbidden - admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/settings/import:
+    post:
+      tags: [Settings]
+      summary: Import settings
+      description: Import system settings from JSON (admin only).
+      operationId: importSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Settings imported
+        '400':
+          description: Invalid settings format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/settings/{category}:
+    parameters:
+      - name: category
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Settings category (server, security, notifications, etc.)
+    get:
+      tags: [Settings]
+      summary: Get settings by category
+      description: Get settings for a specific category.
+      operationId: getSettingsByCategory
+      responses:
+        '200':
+          description: Category settings
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '404':
+          description: Category not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags: [Settings]
+      summary: Update settings by category
+      description: Update settings for a specific category (admin only).
+      operationId: updateSettingsByCategory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Settings updated
+        '400':
+          description: Invalid settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/stats:
+    get:
+      tags: [Health]
+      summary: Get system statistics
+      description: Returns system-wide statistics including deployment counts, agent status, etc.
+      operationId: getStats
+      responses:
+        '200':
+          description: System statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Stats'
+
+  /api/v1/host-keys:
+    get:
+      tags: [Agents]
+      summary: List SSH host keys
+      description: Returns all known SSH host keys.
+      operationId: listHostKeys
+      responses:
+        '200':
+          description: List of host keys
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HostKey'
+    post:
+      tags: [Agents]
+      summary: Add SSH host key
+      description: Add a new SSH host key to the known hosts.
+      operationId: createHostKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HostKeyCreate'
+      responses:
+        '201':
+          description: Host key added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HostKey'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/host-keys/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Host key ID
+    get:
+      tags: [Agents]
+      summary: Get host key
+      description: Get details of a specific host key.
+      operationId: getHostKey
+      responses:
+        '200':
+          description: Host key details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HostKey'
+        '404':
+          description: Host key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags: [Agents]
+      summary: Update host key trust
+      description: Update the trust status of a host key.
+      operationId: updateHostKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                trusted:
+                  type: boolean
+      responses:
+        '200':
+          description: Host key updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HostKey'
+        '404':
+          description: Host key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Agents]
+      summary: Delete host key
+      description: Remove a host key from known hosts.
+      operationId: deleteHostKey
+      responses:
+        '204':
+          description: Host key deleted
+        '404':
+          description: Host key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/host-keys/verify:
+    post:
+      tags: [Agents]
+      summary: Verify host key
+      description: Verify a host's SSH key by connecting to it.
+      operationId: verifyHostKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [host, port]
+              properties:
+                host:
+                  type: string
+                port:
+                  type: integer
+                  default: 22
+      responses:
+        '200':
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  verified:
+                    type: boolean
+                  fingerprint:
+                    type: string
+                  keyType:
+                    type: string
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/jump-servers:
+    get:
+      tags: [Agents]
+      summary: List jump servers
+      description: Returns all configured jump servers (bastion hosts).
+      operationId: listJumpServers
+      responses:
+        '200':
+          description: List of jump servers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/JumpServer'
+    post:
+      tags: [Agents]
+      summary: Add jump server
+      description: Add a new jump server configuration.
+      operationId: createJumpServer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JumpServerCreate'
+      responses:
+        '201':
+          description: Jump server added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JumpServer'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/jump-servers/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Jump server ID
+    get:
+      tags: [Agents]
+      summary: Get jump server
+      description: Get details of a specific jump server.
+      operationId: getJumpServer
+      responses:
+        '200':
+          description: Jump server details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JumpServer'
+        '404':
+          description: Jump server not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags: [Agents]
+      summary: Update jump server
+      description: Update a jump server configuration.
+      operationId: updateJumpServer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JumpServerCreate'
+      responses:
+        '200':
+          description: Jump server updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JumpServer'
+        '404':
+          description: Jump server not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Agents]
+      summary: Delete jump server
+      description: Remove a jump server configuration.
+      operationId: deleteJumpServer
+      responses:
+        '204':
+          description: Jump server deleted
+        '404':
+          description: Jump server not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # --- SSH Keys ---
+  /api/v1/ssh-keys:
+    get:
+      tags: [Security]
+      summary: List SSH keys
+      description: Returns all managed SSH keys.
+      operationId: listSSHKeys
+      responses:
+        '200':
+          description: List of SSH keys
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SSHKey'
+                  count:
+                    type: integer
+    post:
+      tags: [Security]
+      summary: Generate SSH key
+      description: Generate a new SSH key pair.
+      operationId: generateSSHKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, type]
+              properties:
+                name:
+                  type: string
+                  description: Display name for the key
+                type:
+                  type: string
+                  enum: [ed25519, rsa]
+                  description: Key type (ed25519 recommended)
+                bits:
+                  type: integer
+                  default: 4096
+                  description: Key size for RSA (ignored for ed25519)
+      responses:
+        '201':
+          description: SSH key generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SSHKey'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/ssh-keys/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: SSH key ID
+    get:
+      tags: [Security]
+      summary: Get SSH key
+      description: Get details of a specific SSH key.
+      operationId: getSSHKey
+      responses:
+        '200':
+          description: SSH key details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SSHKey'
+        '404':
+          description: SSH key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Security]
+      summary: Delete SSH key
+      description: Delete an SSH key.
+      operationId: deleteSSHKey
+      responses:
+        '204':
+          description: SSH key deleted
+        '404':
+          description: SSH key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/ssh-keys/{id}/public:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: SSH key ID
+    get:
+      tags: [Security]
+      summary: Get SSH public key
+      description: Returns the public key in OpenSSH format.
+      operationId: getSSHKeyPublic
+      responses:
+        '200':
+          description: Public key in OpenSSH format
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: SSH key not found
+
+  # --- Source Credentials ---
+  /api/v1/credentials:
+    get:
+      tags: [Security]
+      summary: List source credentials
+      description: Returns all source credentials (for private repositories).
+      operationId: listCredentials
+      responses:
+        '200':
+          description: List of credentials
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Credential'
+                  count:
+                    type: integer
+    post:
+      tags: [Security]
+      summary: Create credential
+      description: Create a new source credential.
+      operationId: createCredential
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, type]
+              properties:
+                name:
+                  type: string
+                  description: Display name for the credential
+                type:
+                  type: string
+                  enum: [ssh_key, token, basic]
+                  description: Credential type
+                urlPattern:
+                  type: string
+                  description: URL pattern to match (e.g., github.com/*)
+                sshKeyId:
+                  type: string
+                  description: Reference to SSH key (for ssh_key type)
+                token:
+                  type: string
+                  description: Access token (for token type)
+                username:
+                  type: string
+                  description: Username (for basic type)
+                password:
+                  type: string
+                  description: Password (for basic type)
+      responses:
+        '201':
+          description: Credential created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Credential'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/credentials/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Credential ID
+    get:
+      tags: [Security]
+      summary: Get credential
+      description: Get details of a specific credential.
+      operationId: getCredential
+      responses:
+        '200':
+          description: Credential details (secrets not included)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Credential'
+        '404':
+          description: Credential not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags: [Security]
+      summary: Update credential
+      description: Update a source credential.
+      operationId: updateCredential
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                urlPattern:
+                  type: string
+                token:
+                  type: string
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Credential updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Credential'
+        '404':
+          description: Credential not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Security]
+      summary: Delete credential
+      description: Delete a source credential.
+      operationId: deleteCredential
+      responses:
+        '204':
+          description: Credential deleted
+        '404':
+          description: Credential not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/credentials/{id}/test:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Credential ID
+    post:
+      tags: [Security]
+      summary: Test credential
+      description: Test if a credential is working correctly.
+      operationId: testCredential
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url:
+                  type: string
+                  description: URL to test against (optional)
+      responses:
+        '200':
+          description: Test result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        '404':
+          description: Credential not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # --- Certificates ---
+  /api/v1/certificates/agents:
+    get:
+      tags: [Certificates]
+      summary: List agent certificates
+      description: Returns all agent mTLS certificates.
+      operationId: listAgentCertificates
+      responses:
+        '200':
+          description: List of agent certificates
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AgentCertificate'
+                  count:
+                    type: integer
+
+  /api/v1/certificates/agents/{agentId}:
+    parameters:
+      - name: agentId
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Agent ID
+    get:
+      tags: [Certificates]
+      summary: Get agent certificate
+      description: Get certificate details for a specific agent.
+      operationId: getAgentCertificate
+      responses:
+        '200':
+          description: Agent certificate details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentCertificate'
+        '404':
+          description: Certificate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/certificates/agents/{agentId}/revoke:
+    parameters:
+      - name: agentId
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Agent ID
+    post:
+      tags: [Certificates]
+      summary: Revoke agent certificate
+      description: Revoke an agent's mTLS certificate.
+      operationId: revokeAgentCertificate
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: Revocation reason
+      responses:
+        '200':
+          description: Certificate revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+        '404':
+          description: Certificate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/certificates/ca:
+    get:
+      tags: [Certificates]
+      summary: List certificate authorities
+      description: Returns all certificate authorities.
+      operationId: listCAs
+      responses:
+        '200':
+          description: List of CAs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CertificateAuthority'
+                  count:
+                    type: integer
+
+  /api/v1/certificates/ca/rotate:
+    post:
+      tags: [Certificates]
+      summary: Rotate certificate authority
+      description: Initiate CA rotation (admin only).
+      operationId: rotateCA
+      responses:
+        '200':
+          description: CA rotation initiated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+        '403':
+          description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/certificates/server:
+    get:
+      tags: [Certificates]
+      summary: Get server certificate
+      description: Get the current server TLS certificate.
+      operationId: getServerCertificate
+      responses:
+        '200':
+          description: Server certificate details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ServerCertificate'
+                  count:
+                    type: integer
+
+  /api/v1/certificates/audit:
+    get:
+      tags: [Certificates]
+      summary: List certificate audit events
+      description: Returns certificate lifecycle audit events.
+      operationId: listCertAuditEvents
+      parameters:
+        - name: agent_id
+          in: query
+          schema:
+            type: string
+          description: Filter by agent ID
+        - name: event_type
+          in: query
+          schema:
+            type: string
+          description: Filter by event type
+        - name: since
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Events since timestamp
+        - name: until
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Events until timestamp
+        - $ref: '#/components/parameters/OffsetParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: List of certificate audit events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CertAuditEvent'
+                  count:
+                    type: integer
+
+  /api/v1/blocked-ips:
+    get:
+      tags: [Settings]
+      summary: List blocked IPs
+      description: Returns all currently blocked IP addresses.
+      operationId: listBlockedIPs
+      responses:
+        '200':
+          description: List of blocked IPs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BlockedIP'
+    post:
+      tags: [Settings]
+      summary: Block IP address
+      description: Manually block an IP address.
+      operationId: blockIP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BlockIPRequest'
+      responses:
+        '201':
+          description: IP blocked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockedIP'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/blocked-ips/{ip}:
+    parameters:
+      - name: ip
+        in: path
+        required: true
+        schema:
+          type: string
+        description: IP address to manage
+    get:
+      tags: [Settings]
+      summary: Get blocked IP details
+      description: Get details of a specific blocked IP.
+      operationId: getBlockedIP
+      responses:
+        '200':
+          description: Blocked IP details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockedIP'
+        '404':
+          description: IP not found in block list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Settings]
+      summary: Unblock IP address
+      description: Remove an IP address from the block list.
+      operationId: unblockIP
+      responses:
+        '204':
+          description: IP unblocked
+        '404':
+          description: IP not found in block list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/provision:
+    get:
+      tags: [Agents]
+      summary: List provision jobs
+      description: Returns all server provisioning jobs.
+      operationId: listProvisionJobs
+      responses:
+        '200':
+          description: List of provision jobs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProvisionJob'
+    post:
+      tags: [Agents]
+      summary: Create provision job
+      description: Create a new server provisioning job.
+      operationId: createProvisionJob
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProvisionJobCreate'
+      responses:
+        '201':
+          description: Provision job created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProvisionJob'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/provision/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Provision job ID
+    get:
+      tags: [Agents]
+      summary: Get provision job
+      description: Get details of a specific provision job.
+      operationId: getProvisionJob
+      responses:
+        '200':
+          description: Provision job details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProvisionJob'
+        '404':
+          description: Provision job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Agents]
+      summary: Cancel provision job
+      description: Cancel a pending or running provision job.
+      operationId: cancelProvisionJob
+      responses:
+        '204':
+          description: Provision job cancelled
+        '404':
+          description: Provision job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/rollbacks:
+    get:
+      tags: [Deployments]
+      summary: List rollbacks
+      description: Returns all deployment rollbacks.
+      operationId: listRollbacks
+      parameters:
+        - name: projectId
+          in: query
+          schema:
+            type: string
+          description: Filter by project ID
+      responses:
+        '200':
+          description: List of rollbacks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Rollback'
+
+  /api/v1/rollbacks/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Rollback ID
+    get:
+      tags: [Deployments]
+      summary: Get rollback
+      description: Get details of a specific rollback.
+      operationId: getRollback
+      responses:
+        '200':
+          description: Rollback details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Rollback'
+        '404':
+          description: Rollback not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/binaries:
+    get:
+      tags: [Agents]
+      summary: List agent binaries
+      description: Returns all available agent binaries.
+      operationId: listBinaries
+      responses:
+        '200':
+          description: List of agent binaries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AgentBinary'
+    post:
+      tags: [Agents]
+      summary: Upload agent binary
+      description: Upload a new agent binary (admin only).
+      operationId: uploadBinary
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, version, os, arch]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                version:
+                  type: string
+                os:
+                  type: string
+                arch:
+                  type: string
+      responses:
+        '201':
+          description: Binary uploaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentBinary'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/binaries/latest:
+    get:
+      tags: [Agents]
+      summary: Get latest binary
+      description: Get the latest agent binary for the specified OS and architecture.
+      operationId: getLatestBinary
+      parameters:
+        - name: os
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Operating system (linux, darwin, windows)
+        - name: arch
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Architecture (amd64, arm64)
+      responses:
+        '200':
+          description: Binary download
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Binary not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/binaries/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Binary ID
+    get:
+      tags: [Agents]
+      summary: Download binary
+      description: Download a specific agent binary.
+      operationId: downloadBinary
+      responses:
+        '200':
+          description: Binary download
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Binary not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Agents]
+      summary: Delete binary
+      description: Delete an agent binary (admin only).
+      operationId: deleteBinary
+      responses:
+        '204':
+          description: Binary deleted
+        '404':
+          description: Binary not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/health-checks:
+    get:
+      tags: [Deployments]
+      summary: List health check configs
+      description: Returns all project health check configurations.
+      operationId: listHealthChecks
+      responses:
+        '200':
+          description: List of health check configurations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HealthCheckConfig'
+
+  /api/v1/health-checks/{projectId}:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Project ID
+    get:
+      tags: [Deployments]
+      summary: Get project health check config
+      description: Get the health check configuration for a specific project.
+      operationId: getHealthCheckConfig
+      responses:
+        '200':
+          description: Health check configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthCheckConfig'
+        '404':
+          description: Configuration not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags: [Deployments]
+      summary: Update health check config
+      description: Update the health check configuration for a project.
+      operationId: updateHealthCheckConfig
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HealthCheckConfig'
+      responses:
+        '200':
+          description: Configuration updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthCheckConfig'
+        '400':
+          description: Invalid configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Deployments]
+      summary: Delete health check config
+      description: Remove the health check configuration for a project.
+      operationId: deleteHealthCheckConfig
+      responses:
+        '204':
+          description: Configuration deleted
+        '404':
+          description: Configuration not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/health-checks/global:
+    get:
+      tags: [Deployments]
+      summary: Get global health check settings
+      description: Get the global health check settings.
+      operationId: getGlobalHealthCheckSettings
+      responses:
+        '200':
+          description: Global health check settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthCheckConfig'
+    put:
+      tags: [Deployments]
+      summary: Update global health check settings
+      description: Update the global health check settings (admin only).
+      operationId: updateGlobalHealthCheckSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HealthCheckConfig'
+      responses:
+        '200':
+          description: Settings updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthCheckConfig'
+        '403':
+          description: Forbidden - admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -677,16 +2848,171 @@ components:
       in: header
       name: X-API-Key
 
+  # Pagination parameters - standardized on offset/limit
+  parameters:
+    OffsetParam:
+      name: offset
+      in: query
+      description: Number of items to skip for pagination
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+      example: 0
+    LimitParam:
+      name: limit
+      in: query
+      description: Maximum number of items to return
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+      example: 20
+    # Deprecated aliases for backward compatibility during transition
+    PageParam:
+      name: page
+      in: query
+      deprecated: true
+      description: "(Deprecated, use offset) Page number (1-indexed)"
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+      example: 1
+    PageSizeParam:
+      name: pageSize
+      in: query
+      deprecated: true
+      description: "(Deprecated, use limit) Number of items per page"
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+      example: 20
+
   schemas:
+    # H7 FIX: Error schema now matches actual ErrorResponse type in responses.go
     Error:
       type: object
+      description: Standard error response for all API endpoints
+      required:
+        - error
+        - message
       properties:
         error:
-          type: string
+          type: boolean
+          description: Always true for error responses
+          example: true
         message:
           type: string
-        request_id:
-          type: string
+          description: Human-readable error message
+          example: "Invalid request parameters"
+
+    # Standardized pagination response schema using offset/limit
+    PaginatedResponse:
+      type: object
+      description: Standard pagination response format
+      properties:
+        items:
+          type: array
+          description: List of items for current page
+          items: {}
+        totalCount:
+          type: integer
+          format: int64
+          description: Total number of items across all results
+          example: 100
+        offset:
+          type: integer
+          description: Number of items skipped
+          example: 0
+        limit:
+          type: integer
+          description: Maximum items returned per request
+          example: 20
+
+    # Deprecated - kept for documentation reference
+    PaginationMeta:
+      type: object
+      deprecated: true
+      description: "(Deprecated) Use PaginatedResponse instead"
+      properties:
+        total:
+          type: integer
+          format: int64
+          description: Total number of items across all pages
+          example: 100
+        page:
+          type: integer
+          description: Current page number (1-indexed)
+          example: 1
+        pageSize:
+          type: integer
+          description: Number of items per page
+          example: 20
+        hasMore:
+          type: boolean
+          description: Whether there are more pages available
+          example: true
+
+    # H8 FIX: Paginated user list response
+    UserListResponse:
+      type: object
+      description: Paginated list of users
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        hasMore:
+          type: boolean
+
+    # H8 FIX: Paginated project list response
+    ProjectListResponse:
+      type: object
+      description: Paginated list of projects
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Project'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        hasMore:
+          type: boolean
+
+    # H8 FIX: Paginated agent list response
+    AgentListResponse:
+      type: object
+      description: Paginated list of agents
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Agent'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        hasMore:
+          type: boolean
 
     HealthStatus:
       type: object
@@ -717,15 +3043,15 @@ components:
       type: object
       properties:
         id:
-          type: integer
+          type: string
         username:
           type: string
         email:
           type: string
         role:
           type: string
-          enum: [admin, user, readonly]
-        created_at:
+          enum: [admin, user, viewer]
+        createdAt:
           type: string
           format: date-time
 
@@ -743,8 +3069,15 @@ components:
           format: email
         role:
           type: string
-          enum: [admin, user, readonly]
+          enum: [admin, user, viewer]
           default: user
+        totpEnabled:
+          type: boolean
+          default: false
+          description: Enable TOTP 2FA for this user
+        totp_secret:
+          type: string
+          description: TOTP secret (required if totp_enabled is true)
 
     Project:
       type: object
@@ -755,46 +3088,41 @@ components:
           type: string
         description:
           type: string
-        repo_url:
+        repository:
           type: string
         branch:
           type: string
-        deploy_path:
+        deployPath:
           type: string
-        project_type_id:
+        projectTypeId:
           type: string
-        agents:
-          type: array
-          items:
-            type: string
-        created_at:
+        archived:
+          type: boolean
+          default: false
+        createdAt:
           type: string
           format: date-time
-        updated_at:
+        updatedAt:
           type: string
           format: date-time
 
     ProjectCreate:
       type: object
-      required: [name, repo_url]
+      required: [name, repository]
       properties:
         name:
           type: string
         description:
           type: string
-        repo_url:
+        repository:
           type: string
         branch:
           type: string
           default: main
-        deploy_path:
+        deployPath:
           type: string
-        project_type_id:
+        projectTypeId:
           type: string
-        agents:
-          type: array
-          items:
-            type: string
 
     ProjectUpdate:
       type: object
@@ -803,27 +3131,23 @@ components:
           type: string
         description:
           type: string
-        repo_url:
+        repository:
           type: string
         branch:
           type: string
-        deploy_path:
+        deployPath:
           type: string
-        project_type_id:
+        projectTypeId:
           type: string
-        agents:
-          type: array
-          items:
-            type: string
 
     Deployment:
       type: object
       properties:
         id:
           type: string
-        project_id:
+        projectId:
           type: string
-        project_name:
+        projectName:
           type: string
         status:
           type: string
@@ -832,37 +3156,106 @@ components:
           type: string
         commit:
           type: string
-        triggered_by:
+        triggeredBy:
           type: string
-        started_at:
-          type: string
-          format: date-time
-        finished_at:
+        startedAt:
           type: string
           format: date-time
-        error_message:
+        finishedAt:
+          type: string
+          format: date-time
+        errorMessage:
           type: string
 
     DeploymentCreate:
       type: object
-      required: [project_id]
+      required: [projectId]
       properties:
-        project_id:
+        projectId:
           type: string
         version:
           type: string
         commit:
           type: string
-        force:
+        target:
+          type: string
+          description: Single target name (shorthand for targets array)
+        targets:
+          type: array
+          items:
+            type: string
+          description: Multiple target names
+        all_targets:
           type: boolean
           default: false
+          description: Deploy to all targets in the project (mutually exclusive with target/targets)
+        wait:
+          type: integer
+          default: 30
+          description: Wait for deployment to complete in seconds
+        dry_run:
+          type: boolean
+          default: false
+
+    Target:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        project_id:
+          type: string
+        project_name:
+          type: string
+        agent_id:
+          type: string
+          nullable: true
+          description: Agent ID (null for master-local targets)
+        agent_name:
+          type: string
+          nullable: true
+          description: Agent name (null for master-local targets)
+        path:
+          type: string
+          description: Deployment path on target server
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    TargetCreate:
+      type: object
+      required: [name, path]
+      properties:
+        name:
+          type: string
+        path:
+          type: string
+        agent_id:
+          type: string
+          nullable: true
+          description: Agent ID (omit for master-local deployment)
+
+    TargetUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        path:
+          type: string
+        agent_id:
+          type: string
+          nullable: true
 
     DeploymentLog:
       type: object
       properties:
         id:
-          type: integer
-        deployment_id:
+          type: string
+        deploymentId:
           type: string
         timestamp:
           type: string
@@ -891,10 +3284,10 @@ components:
           type: string
         arch:
           type: string
-        last_seen_at:
+        lastSeenAt:
           type: string
           format: date-time
-        registered_at:
+        registeredAt:
           type: string
           format: date-time
         labels:
@@ -904,11 +3297,11 @@ components:
         stats:
           type: object
           properties:
-            cpu_percent:
+            cpuPercent:
               type: number
-            memory_percent:
+            memoryPercent:
               type: number
-            disk_percent:
+            diskPercent:
               type: number
 
     Secret:
@@ -921,10 +3314,10 @@ components:
         scope:
           type: string
           enum: [global, project, environment]
-        created_at:
+        createdAt:
           type: string
           format: date-time
-        updated_at:
+        updatedAt:
           type: string
           format: date-time
 
@@ -943,6 +3336,601 @@ components:
           type: string
           enum: [global, project, environment]
           default: global
+
+    APIKey:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        prefix:
+          type: string
+          description: First characters of the key for identification
+        scopes:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: string
+          format: date-time
+
+    APIKeyCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+          default: ["*"]
+        expiresInDays:
+          type: integer
+          description: Number of days until expiry (0 = never)
+          default: 0
+
+    APIKeyWithSecret:
+      allOf:
+        - $ref: '#/components/schemas/APIKey'
+        - type: object
+          properties:
+            key:
+              type: string
+              description: The full API key (only shown once at creation)
+
+    ProjectType:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        buildCommand:
+          type: string
+        deployCommand:
+          type: string
+        healthCheckPath:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    ProjectTypeCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        buildCommand:
+          type: string
+        deployCommand:
+          type: string
+        healthCheckPath:
+          type: string
+
+    AuditEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        user:
+          type: string
+        action:
+          type: string
+        resource:
+          type: string
+        resourceId:
+          type: string
+        details:
+          type: string
+        ipAddress:
+          type: string
+        result:
+          type: string
+          enum: [success, failure]
+
+    Stats:
+      type: object
+      properties:
+        totalProjects:
+          type: integer
+        totalDeployments:
+          type: integer
+        successfulDeployments:
+          type: integer
+        failedDeployments:
+          type: integer
+        activeAgents:
+          type: integer
+        totalAgents:
+          type: integer
+        deploymentsToday:
+          type: integer
+        deploymentsThisWeek:
+          type: integer
+
+    HostKey:
+      type: object
+      properties:
+        id:
+          type: string
+        hostname:
+          type: string
+        port:
+          type: integer
+        keyType:
+          type: string
+        publicKey:
+          type: string
+        fingerprint:
+          type: string
+        trusted:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        lastVerifiedAt:
+          type: string
+          format: date-time
+
+    HostKeyCreate:
+      type: object
+      required: [hostname, keyType, publicKey]
+      properties:
+        hostname:
+          type: string
+        port:
+          type: integer
+          default: 22
+        keyType:
+          type: string
+        publicKey:
+          type: string
+        fingerprint:
+          type: string
+        trusted:
+          type: boolean
+          default: false
+
+    JumpServer:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        hostname:
+          type: string
+        port:
+          type: integer
+        username:
+          type: string
+        enabled:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    JumpServerCreate:
+      type: object
+      required: [name, hostname, username]
+      properties:
+        name:
+          type: string
+        hostname:
+          type: string
+        port:
+          type: integer
+          default: 22
+        username:
+          type: string
+        privateKey:
+          type: string
+          format: password
+        enabled:
+          type: boolean
+          default: true
+
+    BlockedIP:
+      type: object
+      properties:
+        id:
+          type: string
+        ipAddress:
+          type: string
+        blockedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        reason:
+          type: string
+        manualBlock:
+          type: boolean
+
+    BlockIPRequest:
+      type: object
+      required: [ipAddress]
+      properties:
+        ipAddress:
+          type: string
+        reason:
+          type: string
+        duration:
+          type: string
+          description: Duration string (e.g., "1h", "24h", "7d")
+
+    ProvisionJob:
+      type: object
+      properties:
+        id:
+          type: string
+        targetHost:
+          type: string
+        targetPort:
+          type: integer
+        targetUser:
+          type: string
+        status:
+          type: string
+          enum: [pending, running, completed, failed, cancelled]
+        output:
+          type: string
+        errorMessage:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+
+    ProvisionJobCreate:
+      type: object
+      required: [targetHost, targetUser]
+      properties:
+        targetHost:
+          type: string
+        targetPort:
+          type: integer
+          default: 22
+        targetUser:
+          type: string
+        jumpServerId:
+          type: string
+          description: Optional jump server to use
+
+    Rollback:
+      type: object
+      properties:
+        id:
+          type: string
+        projectId:
+          type: string
+        fromDeploymentId:
+          type: string
+        toDeploymentId:
+          type: string
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+        reason:
+          type: string
+        triggeredBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+
+    AgentBinary:
+      type: object
+      properties:
+        id:
+          type: string
+        version:
+          type: string
+        os:
+          type: string
+        arch:
+          type: string
+        filename:
+          type: string
+        size:
+          type: integer
+        checksum:
+          type: string
+        uploadedAt:
+          type: string
+          format: date-time
+
+    HealthCheckConfig:
+      type: object
+      properties:
+        projectId:
+          type: string
+        enabled:
+          type: boolean
+        url:
+          type: string
+        method:
+          type: string
+          enum: [GET, POST, HEAD]
+          default: GET
+        timeoutSeconds:
+          type: integer
+          default: 30
+        retries:
+          type: integer
+          default: 3
+        retryDelaySeconds:
+          type: integer
+          default: 5
+        expectedStatus:
+          type: integer
+          default: 200
+        bodyContains:
+          type: string
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        autoRollbackEnabled:
+          type: boolean
+          default: false
+        autoRollbackReleases:
+          type: integer
+          default: 1
+
+    # SSH Keys schemas
+    SSHKey:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        fingerprint:
+          type: string
+          description: SSH key fingerprint (SHA256)
+        keyType:
+          type: string
+          enum: [rsa, ed25519, ecdsa]
+        publicKey:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: string
+          format: date-time
+
+    SSHKeyCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        keyType:
+          type: string
+          enum: [rsa, ed25519, ecdsa]
+          default: ed25519
+        keySize:
+          type: integer
+          description: Key size (2048 or 4096 for RSA)
+          default: 4096
+
+    SSHKeyWithPrivate:
+      allOf:
+        - $ref: '#/components/schemas/SSHKey'
+        - type: object
+          properties:
+            privateKey:
+              type: string
+              description: Private key (only shown once at creation)
+
+    # Credentials schemas
+    Credential:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [password, ssh_key, token]
+        username:
+          type: string
+        host:
+          type: string
+          description: Optional host pattern this credential applies to
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CredentialCreate:
+      type: object
+      required: [name, type]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [password, ssh_key, token]
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+        sshKeyId:
+          type: string
+          description: Reference to SSH key (for ssh_key type)
+        token:
+          type: string
+          format: password
+        host:
+          type: string
+          description: Optional host pattern this credential applies to
+
+    CredentialUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+        sshKeyId:
+          type: string
+        token:
+          type: string
+          format: password
+        host:
+          type: string
+
+    CredentialTestResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        testedAt:
+          type: string
+          format: date-time
+
+    # Certificate schemas
+    AgentCertificate:
+      type: object
+      properties:
+        agentId:
+          type: string
+        serialNumber:
+          type: string
+        subject:
+          type: string
+        issuer:
+          type: string
+        notBefore:
+          type: string
+          format: date-time
+        notAfter:
+          type: string
+          format: date-time
+        fingerprint:
+          type: string
+        status:
+          type: string
+          enum: [valid, expired, revoked]
+        issuedAt:
+          type: string
+          format: date-time
+        revokedAt:
+          type: string
+          format: date-time
+
+    CertificateAuthority:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        subject:
+          type: string
+        serialNumber:
+          type: string
+        notBefore:
+          type: string
+          format: date-time
+        notAfter:
+          type: string
+          format: date-time
+        fingerprint:
+          type: string
+        isRoot:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    ServerCertificate:
+      type: object
+      properties:
+        subject:
+          type: string
+        issuer:
+          type: string
+        serialNumber:
+          type: string
+        notBefore:
+          type: string
+          format: date-time
+        notAfter:
+          type: string
+          format: date-time
+        fingerprint:
+          type: string
+        domains:
+          type: array
+          items:
+            type: string
+        autoRenew:
+          type: boolean
+
+    CertAuditEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        action:
+          type: string
+          enum: [issued, revoked, renewed, rotated]
+        subjectType:
+          type: string
+          enum: [agent, ca, server]
+        subjectId:
+          type: string
+        actor:
+          type: string
+        details:
+          type: string
+        ipAddress:
+          type: string
 
 security:
   - bearerAuth: []

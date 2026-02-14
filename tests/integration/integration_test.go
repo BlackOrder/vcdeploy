@@ -18,8 +18,11 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/security"
 	"github.com/BlackOrder/vcdeploy/internal/server"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
+	"github.com/rs/xid"
 	"go.uber.org/zap"
 )
+
+func strPtr(s string) *string { return &s }
 
 // TestFixture provides test infrastructure for integration tests.
 type TestFixture struct {
@@ -37,6 +40,10 @@ func NewTestFixture(t *testing.T) *TestFixture {
 
 	// Create temp directory
 	tempDir := t.TempDir()
+
+	// Point system config at temp directory so NewMasterServer can save/load master key
+	t.Setenv("VCDEPLOY_DATA_DIR", tempDir)
+	config.ResetSystemConfig()
 
 	// Create logger
 	logger := zap.NewNop()
@@ -97,17 +104,18 @@ func (f *TestFixture) CreateTestUser(username, password string) {
 // CreateTestProject creates a test project in the database.
 func (f *TestFixture) CreateTestProject(name, repo, branch string) *storage.Project {
 	f.T.Helper()
+	ctx := context.Background()
 
 	project := &storage.Project{
 		Name:       name,
 		Repository: repo,
 		Branch:     branch,
 		DeployPath: "/var/www/" + name,
-		Type:       "web",
+		TypeID:     strPtr("web"),
 		CreatedAt:  time.Now(),
 	}
 
-	if err := f.DB.CreateProject(project); err != nil {
+	if err := f.DB.CreateProject(ctx, project); err != nil {
 		f.T.Fatalf("Failed to create project: %v", err)
 	}
 
@@ -469,7 +477,7 @@ func TestSettingsStorage(t *testing.T) {
 		valueType string
 		encrypted bool
 	}{
-		{"server", "listen", ":8080", "string", false},
+		{"server", "listen", ":9000", "string", false},
 		{"server", "tls_enabled", "true", "bool", false},
 		{"security", "session_timeout", "3600", "int", false},
 		{"deploy", "keep_releases", "5", "int", false},
@@ -490,8 +498,8 @@ func TestSettingsStorage(t *testing.T) {
 	if setting == nil {
 		t.Fatal("Expected setting to exist")
 	}
-	if setting.Value != ":8080" {
-		t.Errorf("Expected :8080, got %s", setting.Value)
+	if setting.Value != ":9000" {
+		t.Errorf("Expected :9000, got %s", setting.Value)
 	}
 
 	// List settings by category
@@ -577,12 +585,13 @@ func TestSecretsStorage(t *testing.T) {
 func TestProjectCRUD(t *testing.T) {
 	f := NewTestFixture(t)
 	defer f.Close()
+	ctx := context.Background()
 
 	// Create
 	project := f.CreateTestProject("crud-project", "https://github.com/test/crud.git", "develop")
 
 	// Read by name
-	readProject, err := f.DB.GetProjectByName(context.Background(), project.Name)
+	readProject, err := f.DB.GetProjectByName(ctx, project.Name)
 	if err != nil {
 		t.Fatalf("Failed to get project: %v", err)
 	}
@@ -594,7 +603,7 @@ func TestProjectCRUD(t *testing.T) {
 	}
 
 	// List projects
-	projects, err := f.DB.ListProjects()
+	projects, err := f.DB.ListProjects(ctx)
 	if err != nil {
 		t.Fatalf("Failed to list projects: %v", err)
 	}
@@ -603,13 +612,13 @@ func TestProjectCRUD(t *testing.T) {
 	}
 
 	// Delete
-	err = f.DB.DeleteProject(project.Name)
+	err = f.DB.DeleteProject(ctx, project.Name)
 	if err != nil {
 		t.Fatalf("Failed to delete project: %v", err)
 	}
 
 	// Verify deletion
-	_, err = f.DB.GetProjectByName(context.Background(), project.Name)
+	_, err = f.DB.GetProjectByName(ctx, project.Name)
 	if err == nil {
 		t.Error("Expected error when getting deleted project")
 	}
@@ -662,7 +671,7 @@ func TestDeploymentFlow(t *testing.T) {
 	project := f.CreateTestProject("deploy-project", "https://github.com/test/deploy.git", "main")
 
 	// Create a deployment
-	deploymentID := fmt.Sprintf("deploy-%d", time.Now().UnixNano())
+	deploymentID := xid.New().String()
 	deployment := &storage.DeploymentRecord{
 		ID:          deploymentID,
 		Project:     project.Name,
@@ -723,7 +732,7 @@ func TestE2EDeploymentWorkflow(t *testing.T) {
 		BuildCmd:    "npm ci && npm run build",
 		CreatedAt:   time.Now(),
 	}
-	err := f.DB.CreateProjectType(projectType)
+	err := f.DB.CreateProjectType(ctx, projectType)
 	if err != nil {
 		t.Fatalf("Failed to create project type: %v", err)
 	}
@@ -734,10 +743,10 @@ func TestE2EDeploymentWorkflow(t *testing.T) {
 		Repository: "https://github.com/test/e2e-repo.git",
 		Branch:     "main",
 		DeployPath: "/var/www/e2e",
-		Type:       "nodejs-e2e",
+		TypeID:     strPtr("nodejs-e2e"),
 		CreatedAt:  time.Now(),
 	}
-	err = f.DB.CreateProject(project)
+	err = f.DB.CreateProject(ctx, project)
 	if err != nil {
 		t.Fatalf("Failed to create project: %v", err)
 	}
@@ -756,7 +765,7 @@ func TestE2EDeploymentWorkflow(t *testing.T) {
 	}
 
 	// Step 4: Create a deployment
-	deploymentID := fmt.Sprintf("e2e-deploy-%d", time.Now().UnixNano())
+	deploymentID := xid.New().String()
 	deployment := &storage.DeploymentRecord{
 		ID:            deploymentID,
 		Project:       project.Name,
@@ -852,7 +861,7 @@ func TestE2ESecretsManagement(t *testing.T) {
 	}
 
 	// Step 2: List secrets (project name is used as scope for ListSecrets)
-	storedSecrets, err := f.DB.ListSecrets(project.Name)
+	storedSecrets, err := f.DB.ListSecrets(ctx, project.Name)
 	if err != nil {
 		t.Fatalf("Failed to list secrets: %v", err)
 	}
@@ -874,13 +883,13 @@ func TestE2ESecretsManagement(t *testing.T) {
 	}
 
 	// Step 4: Delete a secret
-	err = f.DB.DeleteSecret(project.Name, "API_KEY")
+	err = f.DB.DeleteSecret(ctx, project.Name, "API_KEY")
 	if err != nil {
 		t.Fatalf("Failed to delete secret: %v", err)
 	}
 
 	// Step 5: Verify deletion
-	storedSecrets, err = f.DB.ListSecrets(project.Name)
+	storedSecrets, err = f.DB.ListSecrets(ctx, project.Name)
 	if err != nil {
 		t.Fatalf("Failed to list secrets after deletion: %v", err)
 	}
@@ -903,6 +912,8 @@ func TestE2EProjectTypeManagement(t *testing.T) {
 	f := NewTestFixture(t)
 	defer f.Close()
 
+	ctx := context.Background()
+
 	// Step 1: Create project types
 	types := []*storage.ProjectType{
 		{Name: "nodejs", Description: "Node.js application", BuildCmd: "npm ci && npm run build", CreatedAt: time.Now()},
@@ -911,24 +922,24 @@ func TestE2EProjectTypeManagement(t *testing.T) {
 	}
 
 	for _, pt := range types {
-		err := f.DB.CreateProjectType(pt)
+		err := f.DB.CreateProjectType(ctx, pt)
 		if err != nil {
 			t.Fatalf("Failed to create project type %s: %v", pt.Name, err)
 		}
 	}
 
 	// Step 2: List all types
-	storedTypes, err := f.DB.ListProjectTypes()
+	storedTypes, err := f.DB.ListProjectTypes(ctx)
 	if err != nil {
 		t.Fatalf("Failed to list project types: %v", err)
 	}
 
-	if len(storedTypes) != 3 {
-		t.Errorf("Expected 3 project types, got %d", len(storedTypes))
+	if len(storedTypes) != 4 {
+		t.Errorf("Expected 4 project types (3 custom + 1 seeded generic), got %d", len(storedTypes))
 	}
 
 	// Step 3: Get specific type
-	goType, err := f.DB.GetProjectTypeByName("go")
+	goType, err := f.DB.GetProjectTypeByName(ctx, "go")
 	if err != nil {
 		t.Fatalf("Failed to get project type 'go': %v", err)
 	}
@@ -938,13 +949,13 @@ func TestE2EProjectTypeManagement(t *testing.T) {
 
 	// Step 4: Update a type
 	goType.BuildCmd = "go build -ldflags '-s -w' -o app ./..."
-	err = f.DB.UpdateProjectTypeByName(goType)
+	err = f.DB.UpdateProjectTypeByName(ctx, goType)
 	if err != nil {
 		t.Fatalf("Failed to update project type: %v", err)
 	}
 
 	// Step 5: Verify update
-	goType, err = f.DB.GetProjectTypeByName("go")
+	goType, err = f.DB.GetProjectTypeByName(ctx, "go")
 	if err != nil {
 		t.Fatalf("Failed to get updated project type: %v", err)
 	}
@@ -953,18 +964,18 @@ func TestE2EProjectTypeManagement(t *testing.T) {
 	}
 
 	// Step 6: Delete a type
-	err = f.DB.DeleteProjectType("python")
+	err = f.DB.DeleteProjectType(ctx, "python")
 	if err != nil {
 		t.Fatalf("Failed to delete project type: %v", err)
 	}
 
 	// Step 7: Verify deletion
-	storedTypes, err = f.DB.ListProjectTypes()
+	storedTypes, err = f.DB.ListProjectTypes(ctx)
 	if err != nil {
 		t.Fatalf("Failed to list project types after deletion: %v", err)
 	}
-	if len(storedTypes) != 2 {
-		t.Errorf("Expected 2 project types after deletion, got %d", len(storedTypes))
+	if len(storedTypes) != 3 {
+		t.Errorf("Expected 3 project types after deletion (2 remaining + 1 seeded generic), got %d", len(storedTypes))
 	}
 
 	t.Log("E2E project type management workflow completed successfully")
@@ -1002,10 +1013,10 @@ func TestE2EAgentDeploymentWithLogs(t *testing.T) {
 		Repository: "https://github.com/test/workflow-app.git",
 		Branch:     "main",
 		DeployPath: "/var/www/workflow-app",
-		Type:       "web",
+		TypeID:     strPtr("web"),
 		CreatedAt:  time.Now(),
 	}
-	err = f.DB.CreateProject(project)
+	err = f.DB.CreateProject(ctx, project)
 	if err != nil {
 		t.Fatalf("Failed to create project: %v", err)
 	}
@@ -1021,7 +1032,7 @@ func TestE2EAgentDeploymentWithLogs(t *testing.T) {
 	t.Log("Step 3: Agent heartbeat updated")
 
 	// Step 4: Create a deployment
-	deploymentID := fmt.Sprintf("workflow-deploy-%d", time.Now().UnixNano())
+	deploymentID := xid.New().String()
 	deployment := &storage.DeploymentRecord{
 		ID:            deploymentID,
 		Project:       project.Name,
@@ -1188,16 +1199,16 @@ func TestE2EDeploymentFailureWorkflow(t *testing.T) {
 		Repository: "https://github.com/test/failure-app.git",
 		Branch:     "main",
 		DeployPath: "/var/www/failure-app",
-		Type:       "web",
+		TypeID:     strPtr("web"),
 		CreatedAt:  time.Now(),
 	}
-	err := f.DB.CreateProject(project)
+	err := f.DB.CreateProject(ctx, project)
 	if err != nil {
 		t.Fatalf("Failed to create project: %v", err)
 	}
 
 	// Step 2: Create a successful previous deployment (for rollback target)
-	prevDeploymentID := fmt.Sprintf("prev-deploy-%d", time.Now().UnixNano())
+	prevDeploymentID := xid.New().String()
 	prevCompletedAt := time.Now().Add(-1 * time.Hour)
 	prevDeployment := &storage.DeploymentRecord{
 		ID:            prevDeploymentID,
@@ -1218,7 +1229,7 @@ func TestE2EDeploymentFailureWorkflow(t *testing.T) {
 	}
 
 	// Step 3: Create new deployment that will fail
-	failedDeploymentID := fmt.Sprintf("failed-deploy-%d", time.Now().UnixNano())
+	failedDeploymentID := xid.New().String()
 	failedDeployment := &storage.DeploymentRecord{
 		ID:            failedDeploymentID,
 		Project:       project.Name,
@@ -1305,7 +1316,7 @@ func TestE2EDeploymentFailureWorkflow(t *testing.T) {
 	}
 
 	// Step 9: Create rollback deployment
-	rollbackDeploymentID := fmt.Sprintf("rollback-deploy-%d", time.Now().UnixNano())
+	rollbackDeploymentID := xid.New().String()
 	rollbackDeployment := &storage.DeploymentRecord{
 		ID:            rollbackDeploymentID,
 		Project:       project.Name,
@@ -1398,10 +1409,10 @@ func TestE2EMultiAgentDeployment(t *testing.T) {
 		Repository: "https://github.com/test/multi-app.git",
 		Branch:     "main",
 		DeployPath: "/var/www/multi-app",
-		Type:       "web",
+		TypeID:     strPtr("web"),
 		CreatedAt:  time.Now(),
 	}
-	err := f.DB.CreateProject(project)
+	err := f.DB.CreateProject(ctx, project)
 	if err != nil {
 		t.Fatalf("Failed to create project: %v", err)
 	}
@@ -1409,8 +1420,8 @@ func TestE2EMultiAgentDeployment(t *testing.T) {
 
 	// Step 3: Create deployment for each agent target
 	deploymentIDs := make([]string, 0)
-	for i, agent := range agents {
-		deploymentID := fmt.Sprintf("multi-deploy-%d-%d", i, time.Now().UnixNano())
+	for _, agent := range agents {
+		deploymentID := xid.New().String()
 		deployment := &storage.DeploymentRecord{
 			ID:            deploymentID,
 			Project:       project.Name,
@@ -1523,7 +1534,7 @@ func TestAuthenticationFlows(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateUser() error = %v", err)
 		}
-		if user.ID == 0 {
+		if user.ID == "" {
 			t.Error("CreateUser() did not set ID")
 		}
 
@@ -1567,7 +1578,7 @@ func TestAuthenticationFlows(t *testing.T) {
 			t.Fatalf("GetSessionByToken() error = %v", err)
 		}
 		if fetched.UserID != user.ID {
-			t.Errorf("GetSessionByToken() userID = %d, want %d", fetched.UserID, user.ID)
+			t.Errorf("GetSessionByToken() userID = %s, want %s", fetched.UserID, user.ID)
 		}
 
 		// Delete session (logout)

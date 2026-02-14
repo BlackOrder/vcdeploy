@@ -7,7 +7,8 @@ import (
 )
 
 // TestTOTPSecret is a known TOTP secret for testing purposes.
-// DO NOT use this in production.
+// DO NOT use this in production - this is only for automated tests.
+// #nosec G101 - This is intentional test data, not a real credential
 const TestTOTPSecret = "JBSWY3DPEHPK3PXP"
 
 // GenerateValidTOTP generates a valid TOTP code for the given secret at the current time.

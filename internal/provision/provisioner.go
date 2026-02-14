@@ -96,6 +96,14 @@ func (p *Provisioner) Provision(ctx context.Context, req *ProvisionRequest) (*Pr
 		return nil, fmt.Errorf("hostname is required")
 	}
 
+	// Validate against shell injection
+	if err := security.ValidateAgentID(req.AgentID); err != nil {
+		return nil, fmt.Errorf("invalid agent_id: %w", err)
+	}
+	if err := security.ValidateHostname(req.Hostname); err != nil {
+		return nil, fmt.Errorf("invalid hostname: %w", err)
+	}
+
 	// Set defaults
 	if req.SSHPort == 0 {
 		req.SSHPort = 22

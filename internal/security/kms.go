@@ -6,23 +6,29 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"database/sql"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/BlackOrder/vcdeploy/internal/storage"
+	"github.com/rs/xid"
 	"go.uber.org/zap"
 )
+
+// ErrKMSNotConfigured is returned when a KMS operation is attempted but KMS is nil.
+var ErrKMSNotConfigured = errors.New("KMS not configured: encryption/decryption operations are unavailable")
 
 // KMS provides AWS KMS-style key management with versioning and rotation.
 // Keys are never deleted, only deactivated for decryption backward compatibility.
 // Ciphertext format: v1:{key_id}:{base64_nonce}:{base64_ciphertext}
 type KMS struct {
-	db         *sql.DB
+	store      storage.Store
 	logger     *zap.Logger
+	masterKey  *MasterKey
 	cache      map[string]*EncryptionKey
 	cacheMu    sync.RWMutex
 	currentKey *EncryptionKey
@@ -70,20 +76,25 @@ func DefaultKMSConfig() KMSConfig {
 	}
 }
 
-// NewKMS creates a new KMS service backed by the database.
-func NewKMS(db *sql.DB, logger *zap.Logger) (*KMS, error) {
+// NewKMS creates a new KMS service backed by the store.
+// The masterKey is used to encrypt/decrypt KMS key material at rest.
+func NewKMS(ctx context.Context, store storage.Store, logger *zap.Logger, masterKey *MasterKey) (*KMS, error) {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
+	if masterKey == nil {
+		return nil, fmt.Errorf("master key is required for KMS initialization")
+	}
 
 	kms := &KMS{
-		db:     db,
-		logger: logger,
-		cache:  make(map[string]*EncryptionKey),
+		store:     store,
+		logger:    logger,
+		masterKey: masterKey,
+		cache:     make(map[string]*EncryptionKey),
 	}
 
 	// Load current active key
-	if err := kms.loadCurrentKey(); err != nil {
+	if err := kms.loadCurrentKey(ctx); err != nil {
 		return nil, err
 	}
 
@@ -102,7 +113,7 @@ func (k *KMS) Initialize(ctx context.Context) error {
 	}
 
 	// Generate initial key
-	key, err := k.generateKey()
+	key, err := k.generateKey(ctx)
 	if err != nil {
 		return fmt.Errorf("generate initial key: %w", err)
 	}
@@ -241,7 +252,7 @@ func (k *KMS) RotateKey(ctx context.Context) (*EncryptionKey, error) {
 	defer k.currentMu.Unlock()
 
 	// Generate new key
-	newKey, err := k.generateKey()
+	newKey, err := k.generateKey(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("generate new key: %w", err)
 	}
@@ -250,38 +261,22 @@ func (k *KMS) RotateKey(ctx context.Context) (*EncryptionKey, error) {
 	newKey.Status = KeyStatusActive
 	newKey.ActivatedAt = &now
 
-	// Start transaction
-	tx, err := k.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
 	// Deactivate current key
 	if k.currentKey != nil {
-		_, err = tx.ExecContext(ctx, `
-			UPDATE encryption_keys 
-			SET status = ?, deactivated_at = ?
-			WHERE id = ?
-		`, KeyStatusInactive, now, k.currentKey.ID)
-		if err != nil {
+		if err := k.store.UpdateEncryptionKeyStatus(ctx, k.currentKey.ID, string(KeyStatusInactive), nil); err != nil {
 			return nil, fmt.Errorf("deactivate current key: %w", err)
 		}
 		k.currentKey.Status = KeyStatusInactive
 		k.currentKey.DeactivatedAt = &now
 	}
 
-	// Insert new key
-	_, err = tx.ExecContext(ctx, `
-		INSERT INTO encryption_keys (id, version, key_material_encrypted, algorithm, status, created_at, activated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, newKey.ID, newKey.Version, newKey.KeyMaterial, newKey.Algorithm, newKey.Status, newKey.CreatedAt, newKey.ActivatedAt)
+	// Save new key
+	storageKey, err := k.toStorageKey(newKey)
 	if err != nil {
-		return nil, fmt.Errorf("insert new key: %w", err)
+		return nil, fmt.Errorf("convert key for storage: %w", err)
 	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit: %w", err)
+	if err := k.store.SaveEncryptionKey(ctx, storageKey); err != nil {
+		return nil, fmt.Errorf("save new key: %w", err)
 	}
 
 	k.currentKey = newKey
@@ -311,12 +306,7 @@ func (k *KMS) ScheduleKeyDeletion(ctx context.Context, keyID string, gracePeriod
 	}
 
 	scheduledTime := time.Now().Add(gracePeriod)
-	_, err = k.db.ExecContext(ctx, `
-		UPDATE encryption_keys 
-		SET status = ?, scheduled_deletion_at = ?, deletion_cancelled_at = NULL
-		WHERE id = ?
-	`, KeyStatusScheduled, scheduledTime, keyID)
-	if err != nil {
+	if err := k.store.UpdateEncryptionKeyStatus(ctx, keyID, string(KeyStatusScheduled), &scheduledTime); err != nil {
 		return fmt.Errorf("schedule deletion: %w", err)
 	}
 
@@ -340,17 +330,12 @@ func (k *KMS) CancelKeyDeletion(ctx context.Context, keyID string) error {
 		return fmt.Errorf("key is not scheduled for deletion")
 	}
 
-	now := time.Now()
-	_, err = k.db.ExecContext(ctx, `
-		UPDATE encryption_keys 
-		SET status = ?, scheduled_deletion_at = NULL, deletion_cancelled_at = ?
-		WHERE id = ?
-	`, KeyStatusInactive, now, keyID)
-	if err != nil {
+	if err := k.store.UpdateEncryptionKeyStatus(ctx, keyID, string(KeyStatusInactive), nil); err != nil {
 		return fmt.Errorf("cancel deletion: %w", err)
 	}
 
 	// Update cache
+	now := time.Now()
 	key.Status = KeyStatusInactive
 	key.ScheduledDeletionAt = nil
 	key.DeletionCancelledAt = &now
@@ -375,12 +360,7 @@ func (k *KMS) DeleteKeyNow(ctx context.Context, keyID string) error {
 		return nil // Already deleted
 	}
 
-	_, err = k.db.ExecContext(ctx, `
-		UPDATE encryption_keys 
-		SET status = ?
-		WHERE id = ?
-	`, KeyStatusDeleted, keyID)
-	if err != nil {
+	if err := k.store.UpdateEncryptionKeyStatus(ctx, keyID, string(KeyStatusDeleted), nil); err != nil {
 		return fmt.Errorf("delete key: %w", err)
 	}
 
@@ -394,66 +374,50 @@ func (k *KMS) DeleteKeyNow(ctx context.Context, keyID string) error {
 // ProcessScheduledDeletions processes keys that have passed their deletion grace period.
 // This should be called periodically by a background job.
 func (k *KMS) ProcessScheduledDeletions(ctx context.Context) (int, error) {
-	now := time.Now()
-	result, err := k.db.ExecContext(ctx, `
-		UPDATE encryption_keys 
-		SET status = ?
-		WHERE status = ? AND scheduled_deletion_at <= ?
-	`, KeyStatusDeleted, KeyStatusScheduled, now)
+	keys, err := k.store.ListEncryptionKeys(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("process deletions: %w", err)
+		return 0, fmt.Errorf("list keys: %w", err)
 	}
 
-	// Note: SQLite's RowsAffected() never returns an error
-	affected, _ := result.RowsAffected()
+	now := time.Now()
+	count := 0
 
-	// Clear affected keys from cache
-	if affected > 0 {
+	for _, storageKey := range keys {
+		if storageKey.Status == string(KeyStatusScheduled) && storageKey.ScheduledDeletionAt != nil && storageKey.ScheduledDeletionAt.Before(now) {
+			if err := k.store.UpdateEncryptionKeyStatus(ctx, storageKey.ID, string(KeyStatusDeleted), nil); err != nil {
+				k.logger.Warn("failed to process scheduled deletion", zap.String("keyID", storageKey.ID), zap.Error(err))
+				continue
+			}
+			count++
+		}
+	}
+
+	// Clear cache if any keys were deleted
+	if count > 0 {
 		k.invalidateCache()
 	}
 
-	return int(affected), nil
+	return count, nil
 }
 
 // ListKeys returns all encryption keys.
 func (k *KMS) ListKeys(ctx context.Context) ([]*EncryptionKey, error) {
-	rows, err := k.db.QueryContext(ctx, `
-		SELECT id, version, algorithm, status, created_at, activated_at, deactivated_at, scheduled_deletion_at, deletion_cancelled_at
-		FROM encryption_keys
-		ORDER BY version DESC
-	`)
+	storageKeys, err := k.store.ListEncryptionKeys(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("query keys: %w", err)
+		return nil, fmt.Errorf("list keys: %w", err)
 	}
-	defer rows.Close()
 
-	var keys []*EncryptionKey
-	for rows.Next() {
-		key := &EncryptionKey{}
-		var activatedAt, deactivatedAt, scheduledDeletionAt, deletionCancelledAt sql.NullTime
-		err := rows.Scan(
-			&key.ID, &key.Version, &key.Algorithm, &key.Status, &key.CreatedAt,
-			&activatedAt, &deactivatedAt, &scheduledDeletionAt, &deletionCancelledAt,
-		)
+	keys := make([]*EncryptionKey, 0, len(storageKeys))
+	for _, sk := range storageKeys {
+		key, err := k.fromStorageKey(sk)
 		if err != nil {
-			return nil, fmt.Errorf("scan key: %w", err)
-		}
-		if activatedAt.Valid {
-			key.ActivatedAt = &activatedAt.Time
-		}
-		if deactivatedAt.Valid {
-			key.DeactivatedAt = &deactivatedAt.Time
-		}
-		if scheduledDeletionAt.Valid {
-			key.ScheduledDeletionAt = &scheduledDeletionAt.Time
-		}
-		if deletionCancelledAt.Valid {
-			key.DeletionCancelledAt = &deletionCancelledAt.Time
+			k.logger.Warn("failed to decrypt key material", zap.String("keyID", sk.ID), zap.Error(err))
+			continue
 		}
 		keys = append(keys, key)
 	}
 
-	return keys, rows.Err()
+	return keys, nil
 }
 
 // GetCurrentKey returns the current active encryption key.
@@ -478,40 +442,28 @@ func (k *KMS) ReEncrypt(ctx context.Context, versioned string) (string, error) {
 
 // --- Internal methods ---
 
-func (k *KMS) loadCurrentKey() error {
-	row := k.db.QueryRow(`
-		SELECT id, version, key_material_encrypted, algorithm, status, created_at, activated_at
-		FROM encryption_keys
-		WHERE status = ?
-		LIMIT 1
-	`, KeyStatusActive)
-
-	key := &EncryptionKey{}
-	var activatedAt sql.NullTime
-	err := row.Scan(&key.ID, &key.Version, &key.KeyMaterial, &key.Algorithm, &key.Status, &key.CreatedAt, &activatedAt)
-	if err == sql.ErrNoRows {
-		// No active key yet
-		return nil
-	}
+func (k *KMS) loadCurrentKey(ctx context.Context) error {
+	storageKey, err := k.store.GetCurrentEncryptionKey(ctx)
 	if err != nil {
+		if errors.Is(err, storage.ErrNotFound) {
+			// No active key yet
+			return nil
+		}
 		return fmt.Errorf("load current key: %w", err)
 	}
-	if activatedAt.Valid {
-		key.ActivatedAt = &activatedAt.Time
-	}
 
+	key, err := k.fromStorageKey(storageKey)
+	if err != nil {
+		return fmt.Errorf("decrypt current key material: %w", err)
+	}
 	k.currentKey = key
 	k.cacheKey(key)
 	return nil
 }
 
-func (k *KMS) generateKey() (*EncryptionKey, error) {
-	// Generate random key ID
-	idBytes := make([]byte, 16)
-	if _, err := rand.Read(idBytes); err != nil {
-		return nil, fmt.Errorf("generate id: %w", err)
-	}
-	keyID := base64.URLEncoding.EncodeToString(idBytes)
+func (k *KMS) generateKey(ctx context.Context) (*EncryptionKey, error) {
+	// Generate XID-based key ID (time-sortable, globally unique)
+	keyID := xid.New().String()
 
 	// Generate key material
 	keyMaterial := make([]byte, 32) // AES-256
@@ -519,12 +471,13 @@ func (k *KMS) generateKey() (*EncryptionKey, error) {
 		return nil, fmt.Errorf("generate key material: %w", err)
 	}
 
-	// Get next version
-	var maxVersion sql.NullInt64
-	_ = k.db.QueryRow(`SELECT MAX(version) FROM encryption_keys`).Scan(&maxVersion)
+	// Get next version by listing existing keys
+	keys, _ := k.store.ListEncryptionKeys(ctx)
 	version := 1
-	if maxVersion.Valid {
-		version = int(maxVersion.Int64) + 1
+	for _, existingKey := range keys {
+		if existingKey.Version >= version {
+			version = existingKey.Version + 1
+		}
 	}
 
 	return &EncryptionKey{
@@ -538,11 +491,11 @@ func (k *KMS) generateKey() (*EncryptionKey, error) {
 }
 
 func (k *KMS) saveKey(ctx context.Context, key *EncryptionKey) error {
-	_, err := k.db.ExecContext(ctx, `
-		INSERT INTO encryption_keys (id, version, key_material_encrypted, algorithm, status, created_at, activated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, key.ID, key.Version, key.KeyMaterial, key.Algorithm, key.Status, key.CreatedAt, key.ActivatedAt)
-	return err
+	storageKey, err := k.toStorageKey(key)
+	if err != nil {
+		return fmt.Errorf("convert key for storage: %w", err)
+	}
+	return k.store.SaveEncryptionKey(ctx, storageKey)
 }
 
 func (k *KMS) getKey(ctx context.Context, keyID string) (*EncryptionKey, error) {
@@ -554,39 +507,19 @@ func (k *KMS) getKey(ctx context.Context, keyID string) (*EncryptionKey, error) 
 	}
 	k.cacheMu.RUnlock()
 
-	// Load from database
-	row := k.db.QueryRowContext(ctx, `
-		SELECT id, version, key_material_encrypted, algorithm, status, created_at, activated_at, deactivated_at, scheduled_deletion_at, deletion_cancelled_at
-		FROM encryption_keys
-		WHERE id = ?
-	`, keyID)
-
-	key := &EncryptionKey{}
-	var activatedAt, deactivatedAt, scheduledDeletionAt, deletionCancelledAt sql.NullTime
-	err := row.Scan(
-		&key.ID, &key.Version, &key.KeyMaterial, &key.Algorithm, &key.Status, &key.CreatedAt,
-		&activatedAt, &deactivatedAt, &scheduledDeletionAt, &deletionCancelledAt,
-	)
-	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("key not found: %s", keyID)
-	}
+	// Load from store
+	storageKey, err := k.store.GetEncryptionKey(ctx, keyID)
 	if err != nil {
+		if errors.Is(err, storage.ErrNotFound) {
+			return nil, fmt.Errorf("key not found: %s", keyID)
+		}
 		return nil, fmt.Errorf("load key: %w", err)
 	}
 
-	if activatedAt.Valid {
-		key.ActivatedAt = &activatedAt.Time
+	key, err := k.fromStorageKey(storageKey)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt key material: %w", err)
 	}
-	if deactivatedAt.Valid {
-		key.DeactivatedAt = &deactivatedAt.Time
-	}
-	if scheduledDeletionAt.Valid {
-		key.ScheduledDeletionAt = &scheduledDeletionAt.Time
-	}
-	if deletionCancelledAt.Valid {
-		key.DeletionCancelledAt = &deletionCancelledAt.Time
-	}
-
 	k.cacheKey(key)
 	return key, nil
 }
@@ -603,12 +536,56 @@ func (k *KMS) invalidateCache() {
 	k.cacheMu.Unlock()
 }
 
-func (k *KMS) logKeyUsage(ctx context.Context, keyID, operation, resourceType, resourceID string) error {
-	_, err := k.db.ExecContext(ctx, `
-		INSERT INTO encryption_key_usage (key_id, operation, resource_type, resource_id)
-		VALUES (?, ?, ?, ?)
-	`, keyID, operation, resourceType, resourceID)
-	return err
+func (k *KMS) logKeyUsage(_ context.Context, keyID, operation, resourceType, resourceID string) error {
+	// Key usage logging is now optional - skipped if encryption_key_usage table doesn't exist
+	// The main audit logging is handled through cert_audit_events
+	// ctx parameter reserved for future distributed tracing
+	k.logger.Debug("key usage",
+		zap.String("keyID", keyID),
+		zap.String("operation", operation),
+		zap.String("resourceType", resourceType),
+		zap.String("resourceID", resourceID))
+	return nil
+}
+
+// --- Type conversion helpers ---
+
+func (k *KMS) toStorageKey(key *EncryptionKey) (*storage.EncryptionKey, error) {
+	encrypted, err := k.masterKey.Encrypt(key.KeyMaterial)
+	if err != nil {
+		return nil, fmt.Errorf("encrypt key material: %w", err)
+	}
+	return &storage.EncryptionKey{
+		ID:                  key.ID,
+		Version:             key.Version,
+		KeyMaterialEnc:      encrypted,
+		Algorithm:           key.Algorithm,
+		Status:              string(key.Status),
+		CreatedAt:           key.CreatedAt,
+		ActivatedAt:         key.ActivatedAt,
+		DeactivatedAt:       key.DeactivatedAt,
+		ScheduledDeletionAt: key.ScheduledDeletionAt,
+		DeletionCancelledAt: key.DeletionCancelledAt,
+	}, nil
+}
+
+func (k *KMS) fromStorageKey(sk *storage.EncryptionKey) (*EncryptionKey, error) {
+	decrypted, err := k.masterKey.Decrypt(sk.KeyMaterialEnc)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt key material for key %s: %w", sk.ID, err)
+	}
+	return &EncryptionKey{
+		ID:                  sk.ID,
+		Version:             sk.Version,
+		KeyMaterial:         decrypted,
+		Algorithm:           sk.Algorithm,
+		Status:              KeyStatus(sk.Status),
+		CreatedAt:           sk.CreatedAt,
+		ActivatedAt:         sk.ActivatedAt,
+		DeactivatedAt:       sk.DeactivatedAt,
+		ScheduledDeletionAt: sk.ScheduledDeletionAt,
+		DeletionCancelledAt: sk.DeletionCancelledAt,
+	}, nil
 }
 
 // --- Helper functions for using KMS with existing secrets ---

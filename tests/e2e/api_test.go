@@ -34,8 +34,8 @@ var (
 func getTestConfig() *TestConfig {
 	configOnce.Do(func() {
 		cachedConfig = &TestConfig{
-			MasterHTTPURL: getEnvOrDefault("E2E_MASTER_HTTP_URL", "http://localhost:18080"),
-			MasterGRPCURL: getEnvOrDefault("E2E_MASTER_GRPC_URL", "localhost:19090"),
+			MasterHTTPURL: getEnvOrDefault("E2E_MASTER_HTTP_URL", "http://localhost:19000"),
+			MasterGRPCURL: getEnvOrDefault("E2E_MASTER_GRPC_URL", "localhost:19001"),
 			TargetSSHHost: getEnvOrDefault("E2E_TARGET_SSH_HOST", "localhost"),
 			TargetSSHPort: getEnvOrDefault("E2E_TARGET_SSH_PORT", "12222"),
 			GitServerURL:  getEnvOrDefault("E2E_GIT_SERVER_URL", "http://localhost:13000"),
@@ -179,10 +179,10 @@ func TestAPIProjects(t *testing.T) {
 
 	t.Run("create project", func(t *testing.T) {
 		project := map[string]interface{}{
-			"name":        "e2e-test-project",
-			"repository":  "https://github.com/example/test.git",
-			"branch":      "main",
-			"deploy_path": "/deploy/test",
+			"name":       "e2e-test-project",
+			"repository": "https://github.com/example/test.git",
+			"branch":     "main",
+			"deployPath": "/deploy/test",
 		}
 
 		body, err := json.Marshal(project)

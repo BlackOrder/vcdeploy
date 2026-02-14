@@ -28,9 +28,6 @@ type LocalRunner struct {
 	// If true, logs a warning and continues without user switching (less secure).
 	// If false (default), returns an error when user lookup fails.
 	FailOpenOnUserLookup bool
-	// SkipValidation disables command validation (NOT recommended for production).
-	// Only use this for trusted internal commands or testing.
-	SkipValidation bool
 }
 
 // NewLocalRunner creates a new local command runner with default command validation.
@@ -54,10 +51,11 @@ func (r *LocalRunner) Run(ctx context.Context, cmd string, opts deploy.RunOption
 	start := time.Now()
 
 	// Validate command before execution (defense against command injection - G204)
-	if !r.SkipValidation && r.validator != nil {
-		if err := r.validator.Validate(cmd); err != nil {
-			return nil, fmt.Errorf("command validation failed: %w", err)
-		}
+	if r.validator == nil {
+		return nil, fmt.Errorf("command validation failed: validator is required")
+	}
+	if err := r.validator.Validate(cmd); err != nil {
+		return nil, fmt.Errorf("command validation failed: %w", err)
 	}
 
 	// Build the command
@@ -109,10 +107,11 @@ func (r *LocalRunner) Run(ctx context.Context, cmd string, opts deploy.RunOption
 // RunWithOutput executes a command with streaming output.
 func (r *LocalRunner) RunWithOutput(ctx context.Context, cmd string, stdout, stderr io.Writer, opts deploy.RunOptions) error {
 	// Validate command before execution (defense against command injection - G204)
-	if !r.SkipValidation && r.validator != nil {
-		if err := r.validator.Validate(cmd); err != nil {
-			return fmt.Errorf("command validation failed: %w", err)
-		}
+	if r.validator == nil {
+		return fmt.Errorf("command validation failed: validator is required")
+	}
+	if err := r.validator.Validate(cmd); err != nil {
+		return fmt.Errorf("command validation failed: %w", err)
 	}
 
 	// Build the command
@@ -288,6 +287,9 @@ func lookupUser(username string) (int, error) {
 			return uid, nil
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		return 0, fmt.Errorf("reading passwd file: %w", err)
+	}
 
 	return 0, fmt.Errorf("user not found: %s", username)
 }
@@ -324,6 +326,9 @@ func lookupGroup(groupname string) (int, error) {
 			return gid, nil
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		return 0, fmt.Errorf("reading group file: %w", err)
+	}
 
 	return 0, fmt.Errorf("group not found: %s", groupname)
 }
@@ -353,6 +358,9 @@ func lookupUserPrimaryGroup(username string) (int, error) {
 			}
 			return gid, nil
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		return 0, fmt.Errorf("reading passwd file: %w", err)
 	}
 
 	return 0, fmt.Errorf("user not found: %s", username)

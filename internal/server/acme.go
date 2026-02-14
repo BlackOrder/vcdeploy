@@ -43,11 +43,12 @@ type ACMEClient struct {
 // ACMEClientConfig holds configuration for the ACME client.
 type ACMEClientConfig struct {
 	Logger       *zap.Logger
-	DirectoryURL string   // ACME directory URL (e.g., Let's Encrypt), empty for default
-	Email        string   // Contact email for ACME registration
-	Domains      []string // Domains to obtain certificates for
-	CacheDir     string   // Directory to cache certificates (defaults to ~/.vcdeploy/certs)
-	TestMode     bool     // Use self-signed certificates for testing
+	DirectoryURL string         // ACME directory URL (e.g., Let's Encrypt), empty for default
+	Email        string         // Contact email for ACME registration
+	Domains      []string       // Domains to obtain certificates for
+	CacheDir     string         // Directory to cache certificates (defaults to ~/.vcdeploy/certs)
+	TestMode     bool           // Use self-signed certificates for testing
+	Cache        autocert.Cache // Optional: custom cache (e.g., DBCertCache for database storage)
 }
 
 // ACME directory URLs
@@ -100,9 +101,18 @@ func NewACMEClient(cfg ACMEClientConfig) (*ACMEClient, error) {
 
 	// Only create autocert.Manager if not in test mode
 	if !cfg.TestMode {
+		// Use custom cache if provided (e.g., DBCertCache for database storage),
+		// otherwise fall back to filesystem-based DirCache
+		var cache autocert.Cache
+		if cfg.Cache != nil {
+			cache = cfg.Cache
+		} else {
+			cache = autocert.DirCache(cacheDir)
+		}
+
 		client.manager = &autocert.Manager{
 			Prompt:     autocert.AcceptTOS,
-			Cache:      autocert.DirCache(cacheDir),
+			Cache:      cache,
 			HostPolicy: autocert.HostWhitelist(cfg.Domains...),
 			Email:      cfg.Email,
 		}
@@ -235,6 +245,7 @@ func (c *ACMEClient) generateSelfSignedCertificate(ctx context.Context) (*tls.Ce
 	if c.cacheDir != "" {
 		certPath := filepath.Join(c.cacheDir, "self-signed.crt")
 		keyPath := filepath.Join(c.cacheDir, "self-signed.key")
+		// #nosec G306 - Certificate (not key) is typically world-readable
 		if err := os.WriteFile(certPath, certPEM, 0o644); err != nil {
 			c.logger.Warn("failed to save self-signed certificate", zap.Error(err))
 		}
@@ -287,14 +298,14 @@ func (c *ACMEClient) StartRenewalLoop(ctx context.Context) {
 
 // CertificateStatus returns information about the current certificate.
 type CertificateStatus struct {
-	HasCertificate bool      `json:"has_certificate"`
+	HasCertificate bool      `json:"hasCertificate"`
 	Domains        []string  `json:"domains"`
-	NotBefore      time.Time `json:"not_before"`
-	NotAfter       time.Time `json:"not_after"`
+	NotBefore      time.Time `json:"notBefore"`
+	NotAfter       time.Time `json:"notAfter"`
 	Issuer         string    `json:"issuer"`
-	DaysRemaining  int       `json:"days_remaining"`
-	NeedsRenewal   bool      `json:"needs_renewal"`
-	TestMode       bool      `json:"test_mode"`
+	DaysRemaining  int       `json:"daysRemaining"`
+	NeedsRenewal   bool      `json:"needsRenewal"`
+	TestMode       bool      `json:"testMode"`
 }
 
 // GetStatus returns the current certificate status.

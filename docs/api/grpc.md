@@ -28,6 +28,9 @@ service AgentService {
   
   // Heartbeat sends periodic health updates
   rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+  
+  // StreamRepoArchive streams a deployment archive from master to agent
+  rpc StreamRepoArchive(ArchiveRequest) returns (stream ArchiveChunk);
 }
 ```
 
@@ -157,16 +160,18 @@ message DeployCommand {
   string deployment_id = 1;
   string project = 2;
   string target = 3;
-  string repository = 4;
-  string branch = 5;
+  string repository = 4;           // Metadata only (not used by agent for cloning)
+  string branch = 5;               // Metadata only (not used by agent for cloning)
   string commit = 6;
   string path = 7;
   DeploymentSettings settings = 8;
   map<string, string> env_vars = 9;
-  bytes env_file_content = 10;
+  bytes env_file_content = 10;      // Encrypted env snapshot for this deployment
   repeated string pre_deploy_hooks = 11;
   repeated string post_deploy_hooks = 12;
   repeated ServiceReload reload_services = 13;
+  string archive_checksum = 14;     // SHA256 checksum of deployment archive
+  string archive_download_url = 15; // HMAC-signed fallback URL for archive download
 }
 
 message DeploymentSettings {
@@ -205,7 +210,7 @@ enum DeploymentState {
   DEPLOYMENT_STATE_UNSPECIFIED = 0;
   DEPLOYMENT_STATE_PENDING = 1;
   DEPLOYMENT_STATE_PREPARING = 2;
-  DEPLOYMENT_STATE_CLONING = 3;
+  DEPLOYMENT_STATE_EXTRACTING = 3;
   DEPLOYMENT_STATE_BUILDING = 4;
   DEPLOYMENT_STATE_DEPLOYING = 5;
   DEPLOYMENT_STATE_VERIFYING = 6;
@@ -226,7 +231,7 @@ message DeploymentLog {
   int64 timestamp = 2;
   LogLevel level = 3;
   string message = 4;
-  string source = 5;             // hook name, git, etc.
+  string source = 5;             // hook name, archive, etc.
 }
 
 enum LogLevel {
@@ -268,6 +273,10 @@ message RollbackCommand {
   int32 release_number = 5;      // 0 = previous release
   repeated string rollback_hooks = 6;
   repeated ServiceReload reload_services = 7;
+  string commit_hash = 8;          // Commit hash of release to rollback to
+  string archive_checksum = 9;     // SHA256 checksum of rollback archive
+  string archive_download_url = 10; // HMAC-signed fallback URL for archive download
+  bytes env_file_content = 11;     // Env snapshot from original deployment
 }
 ```
 

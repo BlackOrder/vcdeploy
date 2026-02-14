@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/BlackOrder/vcdeploy/internal/services"
@@ -14,7 +15,7 @@ import (
 
 // handleSecrets handles GET/POST for /api/v1/secrets and per-project secrets.
 func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
 	// Parse query params for filtering
@@ -25,12 +26,12 @@ func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		// Read access: viewer role + read scope
 		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
 		if s.secretService == nil {
-			s.jsonError(w, http.StatusInternalServerError, "Secret service not configured")
+			s.jsonError(w, http.StatusInternalServerError, "secret service not configured")
 			return
 		}
 
@@ -50,23 +51,23 @@ func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
 
 		if err != nil {
 			s.logger.Error("Failed to list secrets", zap.Error(err))
-			s.jsonError(w, http.StatusInternalServerError, "Failed to list secrets")
+			s.jsonError(w, http.StatusInternalServerError, "failed to list secrets")
 			return
 		}
 
 		// Return metadata only (no values for security)
 		type secretResponse struct {
-			ID        int64     `json:"id"`
+			ID        string    `json:"id"`
 			Project   string    `json:"project"`
 			Scope     string    `json:"scope"`
 			Key       string    `json:"key"`
-			CreatedAt time.Time `json:"created_at"`
-			UpdatedAt time.Time `json:"updated_at"`
+			CreatedAt time.Time `json:"createdAt"`
+			UpdatedAt time.Time `json:"updatedAt"`
 		}
 
-		result := make([]secretResponse, 0, len(secretsList))
+		allResults := make([]secretResponse, 0, len(secretsList))
 		for _, sec := range secretsList {
-			result = append(result, secretResponse{
+			allResults = append(allResults, secretResponse{
 				ID:        sec.ID,
 				Project:   sec.Project,
 				Scope:     sec.Scope,
@@ -75,12 +76,33 @@ func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
 				UpdatedAt: sec.UpdatedAt,
 			})
 		}
-		s.jsonResponse(w, result)
+
+		// Apply pagination
+		p := parsePagination(r)
+		totalCount := len(allResults)
+
+		// Apply offset
+		if p.Offset >= totalCount {
+			allResults = []secretResponse{}
+		} else {
+			allResults = allResults[p.Offset:]
+			// Apply limit
+			if p.Limit > 0 && p.Limit < len(allResults) {
+				allResults = allResults[:p.Limit]
+			}
+		}
+
+		s.jsonResponse(w, PaginatedResponse{
+			Items:      allResults,
+			TotalCount: int64(totalCount),
+			Limit:      p.Limit,
+			Offset:     p.Offset,
+		})
 
 	case http.MethodPost:
 		// Write access: user role + write scope
 		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -94,7 +116,7 @@ func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
+			s.jsonError(w, http.StatusBadRequest, "invalid JSON")
 			return
 		}
 
@@ -110,19 +132,19 @@ func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
 
 		// Use SecretService for encryption and storage
 		if s.secretService == nil {
-			s.jsonError(w, http.StatusInternalServerError, "Secret service not configured")
+			s.jsonError(w, http.StatusInternalServerError, "secret service not configured")
 			return
 		}
 
 		if err := s.secretService.Set(ctx, req.Project, req.Scope, req.Key, req.Value); err != nil {
 			s.logger.Error("Failed to store secret", zap.Error(err))
-			s.jsonError(w, http.StatusInternalServerError, "Failed to store secret")
+			s.jsonError(w, http.StatusInternalServerError, "failed to store secret")
 			return
 		}
 
 		s.logAudit(r, "create", "secret", fmt.Sprintf("project=%s scope=%s key=%s", req.Project, req.Scope, req.Key), "success")
 
-		s.jsonResponse(w, map[string]string{
+		s.writeJSON(w, http.StatusCreated, map[string]string{
 			"status":  "created",
 			"project": req.Project,
 			"scope":   req.Scope,
@@ -144,21 +166,97 @@ func (s *MasterServer) handleSecrets(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if s.secretService == nil {
-			s.jsonError(w, http.StatusInternalServerError, "Secret service not configured")
+			s.jsonError(w, http.StatusInternalServerError, "secret service not configured")
 			return
 		}
 
 		if err := s.secretService.Delete(ctx, project, scope, key); err != nil {
 			s.logger.Error("Failed to delete secret", zap.Error(err))
-			s.jsonError(w, http.StatusInternalServerError, "Failed to delete secret")
+			s.jsonError(w, http.StatusInternalServerError, "failed to delete secret")
 			return
 		}
 
 		s.logAudit(r, "delete", "secret", fmt.Sprintf("project=%s scope=%s key=%s", project, scope, key), "success")
 
-		s.jsonResponse(w, map[string]string{"status": "deleted"})
+		w.WriteHeader(http.StatusNoContent)
 
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+// handleSecret handles GET/DELETE for /api/v1/secrets/{project}/{scope}/{key}
+func (s *MasterServer) handleSecret(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
+	defer cancel()
+
+	// Parse path: /api/v1/secrets/{project}/{scope}/{key}
+	path := strings.TrimPrefix(r.URL.Path, "/api/v1/secrets/")
+	parts := strings.SplitN(path, "/", 3)
+	if len(parts) < 3 {
+		s.jsonError(w, http.StatusBadRequest, "path must be /secrets/{project}/{scope}/{key}")
+		return
+	}
+
+	project, scope, key := parts[0], parts[1], parts[2]
+
+	if project == "" || scope == "" || key == "" {
+		s.jsonError(w, http.StatusBadRequest, "project, scope and key are required")
+		return
+	}
+
+	if s.secretService == nil {
+		s.jsonError(w, http.StatusInternalServerError, "secret service not configured")
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		// Read access: viewer role + read scope
+		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
+			s.jsonError(w, status, msg)
+			return
+		}
+
+		value, err := s.secretService.Get(ctx, project, scope, key)
+		if err != nil {
+			if services.IsNotFound(err) {
+				s.jsonError(w, http.StatusNotFound, "secret not found")
+				return
+			}
+			s.logger.Error("Failed to get secret", zap.Error(err))
+			s.jsonError(w, http.StatusInternalServerError, "failed to get secret")
+			return
+		}
+
+		s.jsonResponse(w, map[string]string{
+			"project": project,
+			"scope":   scope,
+			"key":     key,
+			"value":   value,
+		})
+
+	case http.MethodDelete:
+		// Write access: user role + write scope
+		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
+			s.jsonError(w, status, msg)
+			return
+		}
+
+		if err := s.secretService.Delete(ctx, project, scope, key); err != nil {
+			if services.IsNotFound(err) {
+				s.jsonError(w, http.StatusNotFound, "secret not found")
+				return
+			}
+			s.logger.Error("Failed to delete secret", zap.Error(err))
+			s.jsonError(w, http.StatusInternalServerError, "failed to delete secret")
+			return
+		}
+
+		s.logAudit(r, "delete", "secret", fmt.Sprintf("project=%s scope=%s key=%s", project, scope, key), "success")
+		w.WriteHeader(http.StatusNoContent)
+
+	default:
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }

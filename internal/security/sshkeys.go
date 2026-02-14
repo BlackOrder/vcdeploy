@@ -68,6 +68,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rs/xid"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -81,7 +82,7 @@ type SSHKeyManager struct {
 
 // SSHKey represents an Ed25519 SSH key pair.
 type SSHKey struct {
-	ID               int64
+	ID               string
 	Name             string
 	PublicKey        string // OpenSSH format
 	PrivateKeyEnc    []byte // KMS-encrypted PEM
@@ -94,7 +95,7 @@ type SSHKey struct {
 
 // KnownHost represents a host key in the known_hosts table.
 type KnownHost struct {
-	ID             int64
+	ID             string
 	Hostname       string
 	Port           int
 	KeyType        string
@@ -113,8 +114,20 @@ func NewSSHKeyManager(db *sql.DB, kms *KMS) *SSHKeyManager {
 	}
 }
 
+// requireKMS returns an error if KMS is not configured.
+func (m *SSHKeyManager) requireKMS() error {
+	if m.kms == nil {
+		return ErrKMSNotConfigured
+	}
+	return nil
+}
+
 // GenerateKey creates a new Ed25519 SSH key pair and stores it in the database.
 func (m *SSHKeyManager) GenerateKey(ctx context.Context, name string) (*SSHKey, error) {
+	if err := m.requireKMS(); err != nil {
+		return nil, err
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -169,17 +182,14 @@ func (m *SSHKeyManager) GenerateKey(ctx context.Context, name string) (*SSHKey, 
 	}
 
 	// Save to database
-	result, err := m.db.ExecContext(ctx, `
-		INSERT INTO ssh_keys (name, public_key, private_key_encrypted, key_type, fingerprint, created_at)
-		VALUES (?, ?, ?, ?, ?, ?)
-	`, key.Name, key.PublicKey, key.PrivateKeyEnc, key.KeyType, key.Fingerprint, key.CreatedAt)
+	key.ID = xid.New().String()
+	_, err = m.db.ExecContext(ctx, `
+		INSERT INTO ssh_keys (id, name, public_key, private_key_encrypted, key_type, fingerprint, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, key.ID, key.Name, key.PublicKey, key.PrivateKeyEnc, key.KeyType, key.Fingerprint, key.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("save key: %w", err)
 	}
-
-	// Note: SQLite's LastInsertId() never returns an error
-	id, _ := result.LastInsertId()
-	key.ID = id
 
 	m.cache[name] = key
 
@@ -224,7 +234,7 @@ func (m *SSHKeyManager) GetKey(ctx context.Context, name string) (*SSHKey, error
 }
 
 // GetKeyByID retrieves a key by ID.
-func (m *SSHKeyManager) GetKeyByID(ctx context.Context, id int64) (*SSHKey, error) {
+func (m *SSHKeyManager) GetKeyByID(ctx context.Context, id string) (*SSHKey, error) {
 	row := m.db.QueryRowContext(ctx, `
 		SELECT id, name, public_key, private_key_encrypted, key_type, fingerprint, created_at, last_used_at
 		FROM ssh_keys
@@ -289,6 +299,10 @@ func (m *SSHKeyManager) DeleteKey(ctx context.Context, name string) error {
 
 // GetSigner returns an SSH signer for the key, decrypting if necessary.
 func (m *SSHKeyManager) GetSigner(ctx context.Context, name string) (ssh.Signer, error) {
+	if err := m.requireKMS(); err != nil {
+		return nil, err
+	}
+
 	key, err := m.GetKey(ctx, name)
 	if err != nil {
 		return nil, err
@@ -338,13 +352,13 @@ func (m *SSHKeyManager) AddKnownHost(ctx context.Context, hostname string, port 
 	now := time.Now()
 
 	_, err := m.db.ExecContext(ctx, `
-		INSERT INTO known_hosts (hostname, port, key_type, public_key, fingerprint, added_at, last_verified_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO known_hosts (id, hostname, port, key_type, public_key, fingerprint, added_at, last_verified_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(hostname, port, key_type) DO UPDATE SET
 			public_key = excluded.public_key,
 			fingerprint = excluded.fingerprint,
 			last_verified_at = excluded.last_verified_at
-	`, hostname, port, keyType, pubKeyStr, fingerprint, now, now)
+	`, xid.New().String(), hostname, port, keyType, pubKeyStr, fingerprint, now, now)
 	return err
 }
 

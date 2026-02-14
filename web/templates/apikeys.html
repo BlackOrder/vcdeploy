@@ -28,7 +28,7 @@
                     <th class="px-6 py-3 text-right text-xs font-medium text-dark-muted uppercase tracking-wider">Actions</th>
                 </tr>
             </thead>
-            <tbody id="apikeys-list" class="divide-y divide-dark-border" hx-get="/api/v1/apikeys" hx-trigger="load" hx-swap="innerHTML">
+            <tbody id="apikeys-list" class="divide-y divide-dark-border" hx-get="/api/v1/api-keys" hx-trigger="load" hx-swap="innerHTML">
                 <tr>
                     <td colspan="5" class="px-6 py-4 text-center text-dark-muted">Loading API keys...</td>
                 </tr>
@@ -140,7 +140,7 @@ async function createApiKey(e) {
     };
 
     try {
-        const response = await fetch('/api/v1/apikeys', {
+        const response = await fetch('/api/v1/api-keys', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
@@ -177,7 +177,7 @@ function closeShowKeyModal() {
 
 function revokeApiKey(id, name) {
     if (confirm('Are you sure you want to revoke the API key "' + name + '"? This cannot be undone.')) {
-        fetch('/api/v1/apikeys/' + id, { method: 'DELETE' })
+        fetch('/api/v1/api-keys/' + id, { method: 'DELETE' })
             .then(response => {
                 if (response.ok) {
                     htmx.trigger('#apikeys-list', 'htmx:load');

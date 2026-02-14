@@ -1,12 +1,12 @@
 # vcdeploy Master E2E Test Configuration
 
 server:
-  listen: ":8080"
+  listen: ":19000"
   tls:
     enabled: false
 
 grpc:
-  listen: ":9090"
+  listen: ":9001"
 
 ssh:
   default_user: deploy

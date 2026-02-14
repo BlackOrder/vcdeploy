@@ -11,8 +11,12 @@ import (
 
 	"github.com/BlackOrder/vcdeploy/internal/security"
 	"github.com/BlackOrder/vcdeploy/internal/services"
+	"github.com/BlackOrder/vcdeploy/internal/services/recipes"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 )
+
+// ErrKMSNotConfigured is returned when a KMS operation is attempted but KMS is nil.
+var ErrKMSNotConfigured = errors.New("KMS not configured: encryption/decryption operations are unavailable")
 
 // Ensure Service implements the interface.
 var _ services.SecretServicer = (*Service)(nil)
@@ -25,7 +29,7 @@ type Service struct {
 
 // Entry represents a decrypted secret.
 type Entry struct {
-	ID        int64
+	ID        string
 	Project   string
 	Scope     string
 	Key       string
@@ -42,8 +46,19 @@ func New(store storage.Store, kms *security.KMS) *Service {
 	}
 }
 
+// requireKMS returns an error if KMS is not configured.
+func (s *Service) requireKMS() error {
+	if s.kms == nil {
+		return ErrKMSNotConfigured
+	}
+	return nil
+}
+
 // Set creates or updates a secret with encryption.
 func (s *Service) Set(ctx context.Context, project, scope, key, value string) error {
+	if err := s.requireKMS(); err != nil {
+		return err
+	}
 	if err := ValidateKey(key); err != nil {
 		return fmt.Errorf("invalid secret key: %w", err)
 	}
@@ -70,8 +85,12 @@ func (s *Service) Set(ctx context.Context, project, scope, key, value string) er
 
 // Get retrieves and decrypts a secret. Returns the decrypted value or empty string if not found.
 func (s *Service) Get(ctx context.Context, project, scope, key string) (string, error) {
+	if err := s.requireKMS(); err != nil {
+		return "", err
+	}
+
 	secret, err := s.store.GetSecret(ctx, project, scope, key)
-	if errors.Is(err, storage.ErrNotFound) {
+	if services.IsNotFound(err) {
 		return "", nil
 	}
 	if err != nil {
@@ -89,8 +108,12 @@ func (s *Service) Get(ctx context.Context, project, scope, key string) (string, 
 
 // GetEntry retrieves and decrypts a secret with full metadata.
 func (s *Service) GetEntry(ctx context.Context, project, scope, key string) (*Entry, error) {
+	if err := s.requireKMS(); err != nil {
+		return nil, err
+	}
+
 	secret, err := s.store.GetSecret(ctx, project, scope, key)
-	if errors.Is(err, storage.ErrNotFound) {
+	if services.IsNotFound(err) {
 		return nil, services.NotFound("secrets.GetEntry", "secret", project+"/"+scope+"/"+key)
 	}
 	if err != nil {
@@ -115,7 +138,16 @@ func (s *Service) GetEntry(ctx context.Context, project, scope, key string) (*En
 }
 
 // Delete removes a secret.
+// Returns an error if the secret is used by any playbook activation.
 func (s *Service) Delete(ctx context.Context, project, scope, key string) error {
+	// Check if secret is used by any playbook activation
+	// Secret names are scoped: project/scope/key
+	secretRef := fmt.Sprintf("%s/%s/%s", project, scope, key)
+	depService := recipes.NewDependencyService(s.store)
+	if err := depService.CheckSecretDeletionSafe(ctx, secretRef); err != nil {
+		return err
+	}
+
 	return s.store.DeleteSecretCtx(ctx, project, scope, key)
 }
 
@@ -184,6 +216,10 @@ func (s *Service) ListAll(ctx context.Context) ([]services.SecretMetadata, error
 
 // Export returns all decrypted secrets for a scope as a map.
 func (s *Service) Export(ctx context.Context, project, scope string) (map[string]string, error) {
+	if err := s.requireKMS(); err != nil {
+		return nil, err
+	}
+
 	secrets, err := s.store.ListSecretsWithScope(ctx, project, scope)
 	if err != nil {
 		return nil, fmt.Errorf("listing secrets: %w", err)
@@ -232,6 +268,10 @@ func (s *Service) Import(ctx context.Context, project, scope string, secrets map
 // ReEncryptAll re-encrypts all secrets with the current KMS key.
 // Useful after key rotation.
 func (s *Service) ReEncryptAll(ctx context.Context) error {
+	if err := s.requireKMS(); err != nil {
+		return err
+	}
+
 	// Get all secrets from all projects/scopes
 	secrets, err := s.store.ListAllSecretsCtx(ctx)
 	if err != nil {

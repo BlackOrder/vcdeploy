@@ -18,7 +18,7 @@ func TestAPIKeysAPI(t *testing.T) {
 	ctx.MustLogin(cfg.AdminUsername, cfg.AdminPassword)
 
 	t.Run("list API keys", func(t *testing.T) {
-		resp, err := ctx.Client.Get("/api/v1/apikeys")
+		resp, err := ctx.Client.Get("/api/v1/api-keys")
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
@@ -36,13 +36,13 @@ func TestAPIKeysAPI(t *testing.T) {
 			"permissions": []string{"read:projects", "read:deployments"},
 		}
 
-		resp, err := ctx.Client.Post("/api/v1/apikeys", apiKey)
+		resp, err := ctx.Client.Post("/api/v1/api-keys", apiKey)
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
 		defer resp.Body.Close()
 
-		ctx.Assertions.StatusCreatedOrOK(resp)
+		ctx.Assertions.StatusCreated(resp)
 
 		var result map[string]interface{}
 		if err := testutil.DecodeJSON(resp, &result); err != nil {
@@ -61,7 +61,7 @@ func TestAPIKeysAPI(t *testing.T) {
 			t.Skip("no API key created")
 		}
 
-		resp, err := ctx.Client.Get(fmt.Sprintf("/api/v1/apikeys/%v", createdKeyID))
+		resp, err := ctx.Client.Get(fmt.Sprintf("/api/v1/api-keys/%v", createdKeyID))
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
@@ -118,7 +118,7 @@ func TestAPIKeysAPI(t *testing.T) {
 			t.Skip("no API key created")
 		}
 
-		resp, err := ctx.Client.Post(fmt.Sprintf("/api/v1/apikeys/%v/revoke", createdKeyID), nil)
+		resp, err := ctx.Client.Post(fmt.Sprintf("/api/v1/api-keys/%v/revoke", createdKeyID), nil)
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
@@ -148,27 +148,28 @@ func TestAPIKeysAPI(t *testing.T) {
 			t.Skip("no API key created")
 		}
 
-		resp, err := ctx.Client.Delete(fmt.Sprintf("/api/v1/apikeys/%v", createdKeyID))
+		resp, err := ctx.Client.Delete(fmt.Sprintf("/api/v1/api-keys/%v", createdKeyID))
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
 		defer resp.Body.Close()
 
-		ctx.Assertions.NoServerError(resp)
+		ctx.Assertions.StatusOK(resp)
 	})
 
-	t.Run("create API key with invalid permissions", func(t *testing.T) {
+	t.Run("create API key with invalid scopes", func(t *testing.T) {
 		apiKey := map[string]interface{}{
-			"name":        "invalid-perms-key",
-			"permissions": []string{"invalid:permission"},
+			"name":   "invalid-scopes-key",
+			"scopes": []string{"invalid:scope"},
 		}
 
-		resp, err := ctx.Client.Post("/api/v1/apikeys", apiKey)
+		resp, err := ctx.Client.Post("/api/v1/api-keys", apiKey)
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
 		defer resp.Body.Close()
 
+		// API validates scopes and rejects invalid ones
 		ctx.Assertions.StatusBadRequest(resp)
 	})
 
@@ -205,7 +206,7 @@ func TestAPIKeyScopes(t *testing.T) {
 				"permissions": ps.permissions,
 			}
 
-			resp, err := ctx.Client.Post("/api/v1/apikeys", apiKey)
+			resp, err := ctx.Client.Post("/api/v1/api-keys", apiKey)
 			if err != nil {
 				t.Fatalf("request failed: %v", err)
 			}

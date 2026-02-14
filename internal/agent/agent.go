@@ -2,9 +2,15 @@
 package agent
 
 import (
+	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"net/http"
@@ -26,7 +32,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 // Version information (set at build time via ldflags)
@@ -49,6 +54,7 @@ type Agent struct {
 	logger   *zap.Logger
 	strategy *deploy.SymlinkStrategy
 	runner   *LocalRunner
+	store    *AgentStore // Encrypted local storage
 
 	// gRPC connection to master
 	conn   *grpc.ClientConn
@@ -92,6 +98,18 @@ func NewAgent(cfg *config.AgentConfig, logger *zap.Logger) (*Agent, error) {
 	// Create the deployment strategy
 	strategy := deploy.NewSymlinkStrategy(runner)
 
+	// Create the local encrypted store
+	store, err := NewAgentStore(cfg.Paths.Data)
+	if err != nil {
+		return nil, fmt.Errorf("create agent store: %w", err)
+	}
+
+	// Initialize schema
+	if err := store.InitSchema(context.Background()); err != nil {
+		_ = store.Close() // #nosec G104 - best effort cleanup on error path
+		return nil, fmt.Errorf("initialize store schema: %w", err)
+	}
+
 	// Create HTTP client for health checks (reused for connection pooling)
 	httpClient := &http.Client{
 		Timeout: 30 * time.Second, // Default timeout, can be overridden per-request
@@ -114,6 +132,7 @@ func NewAgent(cfg *config.AgentConfig, logger *zap.Logger) (*Agent, error) {
 		logger:            logger,
 		strategy:          strategy,
 		runner:            runner,
+		store:             store,
 		httpClient:        httpClient,
 		activeDeployments: make(map[string]*activeDeployment),
 		shutdown:          make(chan struct{}),
@@ -140,6 +159,29 @@ func (a *Agent) Start(ctx context.Context) error {
 		return fmt.Errorf("connecting to master: %w", err)
 	}
 
+	// Auto-register if token is provided and we haven't registered yet
+	if a.config.Master.Token != "" {
+		a.logger.Info("Registration token provided, attempting auto-registration")
+
+		// Retry registration a few times in case of transient errors (e.g., database lock)
+		var registrationErr error
+		for attempt := 1; attempt <= 5; attempt++ {
+			if _, _, registrationErr = a.Register(ctx, a.config.Master.Token); registrationErr == nil {
+				a.logger.Info("Successfully registered with master")
+				break
+			}
+			a.logger.Warn("Registration attempt failed, retrying...",
+				zap.Int("attempt", attempt),
+				zap.Error(registrationErr))
+			// Wait before retrying (exponential backoff)
+			time.Sleep(time.Duration(attempt*500) * time.Millisecond)
+		}
+		if registrationErr != nil {
+			a.logger.Warn("Auto-registration failed after retries (agent may already be registered)",
+				zap.Error(registrationErr))
+		}
+	}
+
 	// Start heartbeat loop
 	a.wg.Go(func() {
 		a.heartbeatLoop(ctx)
@@ -148,6 +190,11 @@ func (a *Agent) Start(ctx context.Context) error {
 	// Start command listener
 	a.wg.Go(func() {
 		a.commandLoop(ctx)
+	})
+
+	// Start certificate expiry monitor
+	a.wg.Go(func() {
+		a.startCertMonitor(ctx)
 	})
 
 	// Wait for shutdown signal
@@ -169,19 +216,26 @@ func (a *Agent) connect(ctx context.Context) error {
 
 	var opts []grpc.DialOption
 
-	if a.config.Master.Cert != "" {
-		// Use TLS with CA cert
-		creds, err := credentials.NewClientTLSFromFile(a.config.Master.Cert, "")
+	// Try to use mTLS if we have stored certificates
+	tlsConfig, err := a.buildTLSConfig(ctx)
+	if err != nil {
+		a.logger.Debug("Could not build mTLS config, falling back", zap.Error(err))
+	}
+
+	if tlsConfig != nil {
+		// Use mTLS with stored certificates
+		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
+		a.logger.Info("Using mTLS with stored certificates")
+	} else if a.config.Master.CACert != "" {
+		// Use TLS with CA cert (server-only auth for initial registration)
+		creds, err := credentials.NewClientTLSFromFile(a.config.Master.CACert, "")
 		if err != nil {
 			return fmt.Errorf("loading CA cert: %w", err)
 		}
 		opts = append(opts, grpc.WithTransportCredentials(creds))
-	} else if a.config.Master.AllowInsecure {
-		// Explicit insecure mode - warn user
-		a.logger.Warn("Using insecure connection to master - TLS is disabled. This is NOT recommended for production!")
-		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		a.logger.Info("Using TLS with CA certificate (server-only auth)")
 	} else {
-		return fmt.Errorf("TLS certificate required: set master.cert or use master.allow_insecure=true (not recommended)")
+		return fmt.Errorf("TLS certificate required: set master.ca_cert for initial connection")
 	}
 
 	// Use the modern grpc.NewClient API
@@ -196,7 +250,7 @@ func (a *Agent) connect(ctx context.Context) error {
 
 	conn.Connect()
 	if !conn.WaitForStateChange(connectCtx, connectivity.Idle) {
-		conn.Close()
+		_ = conn.Close() // #nosec G104 - best effort cleanup on error path
 		return fmt.Errorf("connection timeout to master")
 	}
 
@@ -207,8 +261,36 @@ func (a *Agent) connect(ctx context.Context) error {
 	return nil
 }
 
+// buildTLSConfig creates a TLS config using stored certificates for mTLS.
+func (a *Agent) buildTLSConfig(ctx context.Context) (*tls.Config, error) {
+	// Load agent certificate (our identity)
+	agentCert, err := a.store.GetTLSCertificate(ctx, "agent")
+	if err != nil {
+		return nil, fmt.Errorf("load agent certificate: %w", err)
+	}
+
+	// Load CA certificate
+	caCertRecord, err := a.store.GetCertificate(ctx, "ca")
+	if err != nil {
+		return nil, fmt.Errorf("load CA certificate: %w", err)
+	}
+
+	// Parse CA certificate for verification
+	caCertPool := x509.NewCertPool()
+	if !caCertPool.AppendCertsFromPEM(caCertRecord.Certificate) {
+		return nil, fmt.Errorf("failed to parse CA certificate")
+	}
+
+	return &tls.Config{
+		Certificates: []tls.Certificate{*agentCert},
+		RootCAs:      caCertPool,
+		MinVersion:   tls.VersionTLS12,
+	}, nil
+}
+
 // Register registers the agent with the master server using a token.
 // Returns the mTLS certificate and CA certificate on success.
+// Certificates are automatically stored for future mTLS connections.
 func (a *Agent) Register(ctx context.Context, token string) (cert []byte, caCert []byte, err error) {
 	// Connect to master
 	if err := a.connect(ctx); err != nil {
@@ -223,7 +305,11 @@ func (a *Agent) Register(ctx context.Context, token string) (cert []byte, caCert
 		return nil, nil, fmt.Errorf("not connected")
 	}
 
-	hostname, _ := os.Hostname()
+	hostname, err := os.Hostname()
+	if err != nil {
+		a.logger.Warn("Failed to get hostname, using 'unknown'", zap.Error(err))
+		hostname = "unknown"
+	}
 
 	// Build capabilities
 	caps := &pb.AgentCapabilities{
@@ -256,16 +342,224 @@ func (a *Agent) Register(ctx context.Context, token string) (cert []byte, caCert
 
 	resp, err := client.Register(ctx, req)
 	if err != nil {
+		// Log audit event for failed registration
+		if logErr := a.store.LogAuditEvent(ctx, AuditEventConnect, fmt.Sprintf("registration failed: %v", err), false); logErr != nil {
+			a.logger.Warn("Failed to log audit event", zap.Error(logErr))
+		}
 		return nil, nil, fmt.Errorf("registration RPC failed: %w", err)
 	}
 
 	if !resp.Success {
+		if logErr := a.store.LogAuditEvent(ctx, AuditEventConnect, fmt.Sprintf("registration rejected: %s", resp.Error), false); logErr != nil {
+			a.logger.Warn("Failed to log audit event", zap.Error(logErr))
+		}
 		return nil, nil, fmt.Errorf("registration rejected: %s", resp.Error)
+	}
+
+	// Store the certificates
+	if len(resp.Certificate) > 0 {
+		// Parse certificate to get expiry
+		notAfter := time.Now().AddDate(1, 0, 0) // Default 1 year
+		if block, _ := pem.Decode(resp.Certificate); block != nil {
+			if parsed, err := x509.ParseCertificate(block.Bytes); err == nil {
+				notAfter = parsed.NotAfter
+			}
+		}
+
+		// Extract private key if present (agent cert includes key)
+		certPEM, keyPEM := splitCertAndKey(resp.Certificate)
+
+		if err := a.store.SaveCertificate(ctx, "agent", certPEM, keyPEM, notAfter); err != nil {
+			a.logger.Warn("Failed to save agent certificate", zap.Error(err))
+		} else {
+			a.logger.Info("Stored agent certificate", zap.Time("expires", notAfter))
+		}
+	}
+
+	if len(resp.CaCertificate) > 0 {
+		// CA cert has no private key
+		notAfter := time.Now().AddDate(10, 0, 0) // Default 10 years for CA
+		if block, _ := pem.Decode(resp.CaCertificate); block != nil {
+			if parsed, err := x509.ParseCertificate(block.Bytes); err == nil {
+				notAfter = parsed.NotAfter
+			}
+		}
+
+		if err := a.store.SaveCertificate(ctx, "ca", resp.CaCertificate, nil, notAfter); err != nil {
+			a.logger.Warn("Failed to save CA certificate", zap.Error(err))
+		} else {
+			a.logger.Info("Stored CA certificate", zap.Time("expires", notAfter))
+		}
+	}
+
+	// Save HMAC secret for future re-authentication
+	if len(resp.HmacSecret) > 0 {
+		if err := a.store.SaveHMACSecret(ctx, a.config.Master.Address, resp.HmacSecret); err != nil {
+			a.logger.Warn("Failed to save HMAC secret", zap.Error(err))
+		} else {
+			a.logger.Info("Stored HMAC secret for re-authentication")
+		}
+	}
+
+	// Log successful registration
+	if logErr := a.store.LogAuditEvent(ctx, AuditEventCertIssued, "agent registered successfully", true); logErr != nil {
+		a.logger.Warn("Failed to log audit event", zap.Error(logErr))
 	}
 
 	a.logger.Info("Registration successful")
 
 	return resp.Certificate, resp.CaCertificate, nil
+}
+
+// reauthenticate obtains a new certificate using HMAC authentication.
+// This is used when the agent's certificate has expired or is about to expire.
+// It connects to the dedicated re-auth port which doesn't require client certificates.
+func (a *Agent) reauthenticate(ctx context.Context) error {
+	// Get HMAC secret from store
+	hmacRecord, err := a.store.GetHMACSecret(ctx, a.config.Master.Address)
+	if err != nil {
+		return fmt.Errorf("get HMAC secret: %w", err)
+	}
+
+	// Generate nonce (32 bytes)
+	nonce := make([]byte, 32)
+	if _, err := rand.Read(nonce); err != nil {
+		return fmt.Errorf("generate nonce: %w", err)
+	}
+
+	// Compute HMAC signature: HMAC-SHA256(agent_id + ":" + timestamp + ":" + nonce)
+	timestamp := time.Now().Unix()
+	message := fmt.Sprintf("%s:%d:", a.config.Agent.ID, timestamp)
+	message += string(nonce)
+
+	mac := hmac.New(sha256.New, hmacRecord.Secret)
+	mac.Write([]byte(message))
+	signature := mac.Sum(nil)
+
+	// Get CA certificate for TLS
+	caCertRec, err := a.store.GetCertificate(ctx, "ca")
+	if err != nil {
+		return fmt.Errorf("load CA certificate: %w", err)
+	}
+
+	certPool := x509.NewCertPool()
+	if !certPool.AppendCertsFromPEM(caCertRec.Certificate) {
+		return fmt.Errorf("invalid CA certificate")
+	}
+
+	// Server-only TLS (no client certificate)
+	tlsConfig := &tls.Config{
+		RootCAs:    certPool,
+		MinVersion: tls.VersionTLS12,
+		// No Certificates field - we don't have a valid client cert
+	}
+
+	// Connect to re-auth port
+	// Default: same host as master, port 9444
+	host := strings.Split(a.config.Master.Address, ":")[0]
+	reauthAddress := host + ":9444"
+
+	a.logger.Info("Connecting to re-auth server", zap.String("address", reauthAddress))
+
+	//nolint:staticcheck // SA1019: grpc.DialContext is deprecated but still supported in 1.x
+	conn, err := grpc.DialContext(ctx, reauthAddress,
+		grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
+	if err != nil {
+		return fmt.Errorf("connect to reauth port: %w", err)
+	}
+	defer conn.Close()
+
+	client := pb.NewAgentServiceClient(conn)
+
+	resp, err := client.Reauthenticate(ctx, &pb.ReauthRequest{
+		AgentId:   a.config.Agent.ID,
+		Timestamp: timestamp,
+		Nonce:     nonce,
+		Signature: signature,
+	})
+	if err != nil {
+		return fmt.Errorf("reauthenticate RPC: %w", err)
+	}
+
+	// Parse certificate to get expiry
+	block, _ := pem.Decode(resp.Certificate)
+	if block == nil {
+		return fmt.Errorf("invalid certificate PEM")
+	}
+	parsedCert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return fmt.Errorf("parse certificate: %w", err)
+	}
+
+	// Save new certificate and private key
+	certPEM, keyPEM := splitCertAndKey(resp.Certificate)
+	if err := a.store.SaveCertificate(ctx, "agent", certPEM, keyPEM, parsedCert.NotAfter); err != nil {
+		return fmt.Errorf("save certificate: %w", err)
+	}
+
+	// Update CA certificate if provided
+	if len(resp.CaCertificate) > 0 {
+		notAfter := time.Now().AddDate(10, 0, 0)
+		if caBlock, _ := pem.Decode(resp.CaCertificate); caBlock != nil {
+			if parsed, err := x509.ParseCertificate(caBlock.Bytes); err == nil {
+				notAfter = parsed.NotAfter
+			}
+		}
+		if err := a.store.SaveCertificate(ctx, "ca", resp.CaCertificate, nil, notAfter); err != nil {
+			a.logger.Warn("Failed to update CA certificate", zap.Error(err))
+		}
+	}
+
+	if logErr := a.store.LogAuditEvent(ctx, AuditEventCertRenewed, "certificate renewed via HMAC re-auth", true); logErr != nil {
+		a.logger.Warn("Failed to log audit event", zap.Error(logErr))
+	}
+	a.logger.Info("Successfully reauthenticated and obtained new certificate",
+		zap.Time("expires", parsedCert.NotAfter))
+
+	return nil
+}
+
+// startCertMonitor monitors certificate expiry and triggers renewal/re-auth as needed.
+func (a *Agent) startCertMonitor(ctx context.Context) {
+	ticker := time.NewTicker(1 * time.Hour)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-a.shutdown:
+			return
+		case <-ticker.C:
+			a.checkCertificateExpiry(ctx)
+		}
+	}
+}
+
+// checkCertificateExpiry checks if the certificate is expired or expiring soon.
+func (a *Agent) checkCertificateExpiry(ctx context.Context) {
+	certRec, err := a.store.GetCertificate(ctx, "agent")
+	if err != nil {
+		a.logger.Error("Failed to load certificate for expiry check", zap.Error(err))
+		return
+	}
+
+	timeUntilExpiry := time.Until(certRec.NotAfter)
+	renewalThreshold := 6 * 30 * 24 * time.Hour // 6 months
+
+	if timeUntilExpiry < 0 {
+		a.logger.Error("Certificate has expired!", zap.Time("expired_at", certRec.NotAfter))
+		if err := a.reauthenticate(ctx); err != nil {
+			a.logger.Error("Failed to reauthenticate after cert expiry", zap.Error(err))
+		}
+	} else if timeUntilExpiry < renewalThreshold {
+		a.logger.Info("Certificate expiring soon, proactively renewing",
+			zap.Duration("time_until_expiry", timeUntilExpiry))
+		// Try normal renewal first, fall back to re-auth
+		if err := a.reauthenticate(ctx); err != nil {
+			a.logger.Warn("Proactive renewal failed", zap.Error(err))
+		}
+	}
 }
 
 func (a *Agent) heartbeatLoop(ctx context.Context) {
@@ -320,7 +614,11 @@ func (a *Agent) sendHeartbeat(ctx context.Context) error {
 		Arch:              runtime.GOARCH,
 	}
 
-	hostname, _ := os.Hostname()
+	hostname, err := os.Hostname()
+	if err != nil {
+		a.logger.Warn("Failed to get hostname for heartbeat log", zap.Error(err))
+		hostname = "unknown"
+	}
 	a.logger.Debug("Sending heartbeat",
 		zap.String("hostname", hostname),
 		zap.Int("active_deployments", len(activeStatuses)),
@@ -386,7 +684,7 @@ func (a *Agent) getActiveDeploymentStatuses() []*pb.DeploymentStatus {
 func (a *Agent) reconnect(ctx context.Context) error {
 	a.mu.Lock()
 	if a.conn != nil {
-		a.conn.Close()
+		_ = a.conn.Close() // #nosec G104 - best effort cleanup
 		a.conn = nil
 	}
 	a.mu.Unlock()
@@ -789,7 +1087,8 @@ func (a *Agent) performHealthCheckWithConfig(ctx context.Context, cmd *pb.Health
 	}
 	defer resp.Body.Close()
 
-	result.StatusCode = int32(resp.StatusCode) //nolint:gosec // G115: HTTP status codes are always small positive integers
+	// #nosec G115 - HTTP status codes are always small positive integers (100-599), well within int32 range
+	result.StatusCode = int32(resp.StatusCode)
 
 	// Read the response body
 	body, err := io.ReadAll(resp.Body)
@@ -1090,11 +1389,18 @@ func (a *Agent) Shutdown(ctx context.Context) error {
 
 	a.mu.Lock()
 	if a.conn != nil {
-		a.conn.Close()
+		_ = a.conn.Close() // #nosec G104 - best effort cleanup
 		a.conn = nil
 	}
 	a.running = false
 	a.mu.Unlock()
+
+	// Close the store
+	if a.store != nil {
+		if err := a.store.Close(); err != nil {
+			a.logger.Warn("Error closing agent store", zap.Error(err))
+		}
+	}
 
 	// Wait for goroutines with timeout
 	done := make(chan struct{})
@@ -1271,13 +1577,14 @@ func (a *Agent) performSelfUpdate(notification *pb.UpdateNotification) {
 	}
 
 	// Make it executable
+	// #nosec G302 - Binary needs execute permission
 	if err := os.Chmod(newBinaryPath, 0o755); err != nil {
 		a.logger.Error("Failed to make new binary executable", zap.Error(err))
 		return
 	}
 
 	// Verify new binary can run
-	cmd := exec.Command(newBinaryPath, "version")
+	cmd := exec.Command(newBinaryPath, "version") // #nosec G204 - newBinaryPath is internally constructed from version/OS/arch, not user input
 	if output, err := cmd.CombinedOutput(); err != nil {
 		a.logger.Error("New binary failed verification",
 			zap.Error(err),
@@ -1304,6 +1611,7 @@ func (a *Agent) performSelfUpdate(notification *pb.UpdateNotification) {
 	}
 
 	// Make the new binary executable again (in case copyFile didn't preserve permissions)
+	// #nosec G302 - Binary needs execute permission
 	if err := os.Chmod(execPath, 0o755); err != nil {
 		a.logger.Warn("Failed to set executable permissions", zap.Error(err))
 	}
@@ -1314,7 +1622,7 @@ func (a *Agent) performSelfUpdate(notification *pb.UpdateNotification) {
 	)
 
 	// Clean up backup
-	os.Remove(backupPath)
+	_ = os.Remove(backupPath) // #nosec G104 - best effort cleanup
 
 	// Trigger restart - the systemd service or supervisor should restart us
 	// We send SIGTERM to ourselves and rely on the process manager to restart
@@ -1349,7 +1657,7 @@ func (a *Agent) downloadBinary(url, destPath, expectedChecksum string, expectedS
 	}
 
 	// Create destination file
-	dest, err := os.Create(destPath)
+	dest, err := os.Create(destPath) // #nosec G304 - destPath is agent-controlled download destination
 	if err != nil {
 		return fmt.Errorf("create destination file: %w", err)
 	}
@@ -1385,13 +1693,13 @@ func (a *Agent) downloadBinary(url, destPath, expectedChecksum string, expectedS
 
 // copyFile copies a file from src to dst.
 func copyFile(src, dst string) error {
-	srcFile, err := os.Open(src)
+	srcFile, err := os.Open(src) // #nosec G304 - src is agent-controlled file path
 	if err != nil {
 		return err
 	}
 	defer srcFile.Close()
 
-	dstFile, err := os.Create(dst)
+	dstFile, err := os.Create(dst) // #nosec G304 - dst is agent-controlled file path
 	if err != nil {
 		return err
 	}
@@ -1402,4 +1710,43 @@ func copyFile(src, dst string) error {
 	}
 
 	return dstFile.Sync()
+}
+
+// splitCertAndKey separates a PEM bundle into certificate and key parts.
+// If the input contains both CERTIFICATE and PRIVATE KEY blocks, they are split.
+// Otherwise, certPEM equals the input and keyPEM is nil.
+func splitCertAndKey(data []byte) (certPEM, keyPEM []byte) {
+	var certBlocks [][]byte
+	var keyBlocks [][]byte
+
+	rest := data
+	for {
+		var block *pem.Block
+		block, rest = pem.Decode(rest)
+		if block == nil {
+			break
+		}
+
+		// Re-encode the block to preserve formatting
+		encoded := pem.EncodeToMemory(block)
+
+		switch block.Type {
+		case "CERTIFICATE":
+			certBlocks = append(certBlocks, encoded)
+		case "PRIVATE KEY", "RSA PRIVATE KEY", "EC PRIVATE KEY":
+			keyBlocks = append(keyBlocks, encoded)
+		default:
+			// Unknown block type, add to certs
+			certBlocks = append(certBlocks, encoded)
+		}
+	}
+
+	if len(certBlocks) > 0 {
+		certPEM = bytes.Join(certBlocks, nil)
+	}
+	if len(keyBlocks) > 0 {
+		keyPEM = bytes.Join(keyBlocks, nil)
+	}
+
+	return certPEM, keyPEM
 }

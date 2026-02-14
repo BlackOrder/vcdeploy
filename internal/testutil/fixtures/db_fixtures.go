@@ -9,6 +9,32 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 )
 
+// Centralized test ID constants for consistent, discoverable test identifiers.
+// These are stable string IDs (not real XIDs) for readability in test output.
+const (
+	TestUserID1    = "user-001"
+	TestUserID2    = "user-002"
+	TestUserID3    = "user-003"
+	TestProjectID1 = "project-001"
+	TestProjectID2 = "project-002"
+	TestAgentID1   = "agent-001"
+	TestAgentID2   = "agent-offline"
+	TestDeployID1  = "deploy-001"
+	TestDeployID2  = "deploy-pending"
+	TestDeployID3  = "deploy-running"
+	TestDeployID4  = "deploy-failed"
+	TestLogID1     = "log-001"
+	TestAPIKeyID1  = "apikey-001"
+	TestAPIKeyID2  = "apikey-002"
+	TestSecretID1  = "secret-001"
+	TestAuditID1   = "audit-001"
+	TestSettingID1 = "setting-001"
+	TestTypeID1    = "ptype-001"
+	TestTypeID2    = "ptype-002"
+	TestSessionID1 = "session-001"
+	TestSessionID2 = "session-expired"
+)
+
 // DBFixtures provides pre-built test data for database operations.
 type DBFixtures struct {
 	t *testing.T
@@ -19,12 +45,15 @@ func NewDBFixtures(t *testing.T) *DBFixtures {
 	return &DBFixtures{t: t}
 }
 
+// strPtr returns a pointer to the given string.
+func strPtr(s string) *string { return &s }
+
 // DefaultAgent returns a standard test agent.
 func (f *DBFixtures) DefaultAgent() *storage.Agent {
 	f.t.Helper()
 	now := time.Now()
 	return &storage.Agent{
-		ID:           "agent-001",
+		ID:           TestAgentID1,
 		Hostname:     "test-server.example.com",
 		Labels:       map[string]string{"env": "test", "role": "web"},
 		Capabilities: `{"docker":true,"systemd":true}`,
@@ -47,7 +76,7 @@ func (f *DBFixtures) AgentWithID(id string) *storage.Agent {
 func (f *DBFixtures) OfflineAgent() *storage.Agent {
 	f.t.Helper()
 	agent := f.DefaultAgent()
-	agent.ID = "agent-offline"
+	agent.ID = TestAgentID2
 	agent.Status = "offline"
 	agent.LastSeenAt = time.Now().Add(-1 * time.Hour)
 	return agent
@@ -58,12 +87,12 @@ func (f *DBFixtures) DefaultProject() *storage.Project {
 	f.t.Helper()
 	now := time.Now()
 	return &storage.Project{
-		ID:         1,
+		ID:         TestProjectID1,
 		Name:       "test-project",
 		Repository: "https://github.com/test/project.git",
 		Branch:     "main",
 		DeployPath: "/var/www/test-project",
-		Type:       "nodejs",
+		TypeID:     strPtr("nodejs"),
 		CreatedAt:  now.Add(-7 * 24 * time.Hour),
 		UpdatedAt:  now,
 	}
@@ -78,7 +107,7 @@ func (f *DBFixtures) ProjectWithName(name string) *storage.Project {
 }
 
 // ProjectWithID returns a project with a specific ID.
-func (f *DBFixtures) ProjectWithID(id int64) *storage.Project {
+func (f *DBFixtures) ProjectWithID(id string) *storage.Project {
 	f.t.Helper()
 	project := f.DefaultProject()
 	project.ID = id
@@ -90,7 +119,7 @@ func (f *DBFixtures) PHPProject() *storage.Project {
 	f.t.Helper()
 	project := f.DefaultProject()
 	project.Name = "php-app"
-	project.Type = "php"
+	project.TypeID = strPtr("php")
 	project.DeployPath = "/var/www/php-app"
 	return project
 }
@@ -100,7 +129,7 @@ func (f *DBFixtures) PythonProject() *storage.Project {
 	f.t.Helper()
 	project := f.DefaultProject()
 	project.Name = "python-api"
-	project.Type = "python"
+	project.TypeID = strPtr("python")
 	project.DeployPath = "/opt/apps/python-api"
 	return project
 }
@@ -110,9 +139,9 @@ func (f *DBFixtures) DefaultDeployment() *storage.DeploymentRecord {
 	f.t.Helper()
 	now := time.Now()
 	return &storage.DeploymentRecord{
-		ID:            "deploy-001",
+		ID:            TestDeployID1,
 		Project:       "test-project",
-		Target:        "agent-001",
+		Target:        TestAgentID1,
 		Branch:        "main",
 		CommitHash:    "abc123def456789",
 		Status:        "completed",
@@ -137,7 +166,7 @@ func (f *DBFixtures) DeploymentWithID(id string) *storage.DeploymentRecord {
 func (f *DBFixtures) PendingDeployment() *storage.DeploymentRecord {
 	f.t.Helper()
 	deployment := f.DefaultDeployment()
-	deployment.ID = "deploy-pending"
+	deployment.ID = TestDeployID2
 	deployment.Status = "pending"
 	deployment.CompletedAt = nil
 	return deployment
@@ -147,7 +176,7 @@ func (f *DBFixtures) PendingDeployment() *storage.DeploymentRecord {
 func (f *DBFixtures) RunningDeployment() *storage.DeploymentRecord {
 	f.t.Helper()
 	deployment := f.DefaultDeployment()
-	deployment.ID = "deploy-running"
+	deployment.ID = TestDeployID3
 	deployment.Status = "running"
 	deployment.CompletedAt = nil
 	return deployment
@@ -158,7 +187,7 @@ func (f *DBFixtures) FailedDeployment() *storage.DeploymentRecord {
 	f.t.Helper()
 	now := time.Now()
 	deployment := f.DefaultDeployment()
-	deployment.ID = "deploy-failed"
+	deployment.ID = TestDeployID4
 	deployment.Status = "failed"
 	deployment.CompletedAt = &now
 	deployment.ErrorMessage = "Build failed: npm install returned exit code 1"
@@ -169,8 +198,8 @@ func (f *DBFixtures) FailedDeployment() *storage.DeploymentRecord {
 func (f *DBFixtures) DefaultDeploymentLog() *storage.DeploymentLog {
 	f.t.Helper()
 	return &storage.DeploymentLog{
-		ID:           1,
-		DeploymentID: "deploy-001",
+		ID:           TestLogID1,
+		DeploymentID: TestDeployID1,
 		Level:        "INFO",
 		Message:      "Starting deployment",
 		Source:       "agent",
@@ -204,7 +233,7 @@ func (f *DBFixtures) DefaultUser() *storage.User {
 	f.t.Helper()
 	now := time.Now()
 	return &storage.User{
-		ID:                 1,
+		ID:                 TestUserID1,
 		Username:           "testuser",
 		PasswordHash:       "$2a$10$abcdefghijklmnopqrstuvwxyz", // bcrypt hash placeholder
 		Email:              "test@example.com",
@@ -229,21 +258,21 @@ func (f *DBFixtures) UserWithRole(role string) *storage.User {
 func (f *DBFixtures) ViewerUser() *storage.User {
 	f.t.Helper()
 	user := f.DefaultUser()
-	user.ID = 2
+	user.ID = TestUserID2
 	user.Username = "viewer"
 	user.Email = "viewer@example.com"
 	user.Role = "viewer"
 	return user
 }
 
-// OperatorUser returns a user with operator role.
-func (f *DBFixtures) OperatorUser() *storage.User {
+// RegularUser returns a user with regular 'user' role.
+func (f *DBFixtures) RegularUser() *storage.User {
 	f.t.Helper()
 	user := f.DefaultUser()
-	user.ID = 3
-	user.Username = "operator"
-	user.Email = "operator@example.com"
-	user.Role = "operator"
+	user.ID = TestUserID3
+	user.Username = "regularuser"
+	user.Email = "regularuser@example.com"
+	user.Role = "user"
 	return user
 }
 
@@ -253,8 +282,8 @@ func (f *DBFixtures) DefaultAPIKey() *storage.APIKey {
 	now := time.Now()
 	expiresAt := now.Add(365 * 24 * time.Hour)
 	return &storage.APIKey{
-		ID:         1,
-		UserID:     1,
+		ID:         TestAPIKeyID1,
+		UserID:     TestUserID1,
 		Name:       "test-api-key",
 		KeyHash:    "sha256:abcdef123456",
 		KeyPrefix:  "vcd_test",
@@ -269,7 +298,7 @@ func (f *DBFixtures) DefaultAPIKey() *storage.APIKey {
 func (f *DBFixtures) ExpiredAPIKey() *storage.APIKey {
 	f.t.Helper()
 	key := f.DefaultAPIKey()
-	key.ID = 2
+	key.ID = TestAPIKeyID2
 	key.Name = "expired-key"
 	expiredAt := time.Now().Add(-24 * time.Hour)
 	key.ExpiresAt = &expiredAt
@@ -281,7 +310,7 @@ func (f *DBFixtures) DefaultSecret() *storage.Secret {
 	f.t.Helper()
 	now := time.Now()
 	return &storage.Secret{
-		ID:             1,
+		ID:             TestSecretID1,
 		Project:        "test-project",
 		Scope:          "global",
 		Key:            "DATABASE_URL",
@@ -304,7 +333,7 @@ func (f *DBFixtures) SecretForProject(project, key string) *storage.Secret {
 func (f *DBFixtures) DefaultAuditEntry() *storage.AuditEntry {
 	f.t.Helper()
 	return &storage.AuditEntry{
-		ID:        1,
+		ID:        TestAuditID1,
 		Timestamp: time.Now(),
 		Source:    "api",
 		User:      "testuser",
@@ -331,7 +360,7 @@ func (f *DBFixtures) DefaultSetting() *storage.Setting {
 	f.t.Helper()
 	now := time.Now()
 	return &storage.Setting{
-		ID:          1,
+		ID:          TestSettingID1,
 		Category:    "app",
 		Key:         "name",
 		Value:       "VCDeploy Test",
@@ -358,7 +387,7 @@ func (f *DBFixtures) DefaultProjectType() *storage.ProjectType {
 	f.t.Helper()
 	now := time.Now()
 	return &storage.ProjectType{
-		ID:           1,
+		ID:           TestTypeID1,
 		Name:         "nodejs",
 		Description:  "Node.js application",
 		BuildCmd:     "npm ci && npm run build",
@@ -371,7 +400,7 @@ func (f *DBFixtures) DefaultProjectType() *storage.ProjectType {
 func (f *DBFixtures) PHPProjectType() *storage.ProjectType {
 	f.t.Helper()
 	pt := f.DefaultProjectType()
-	pt.ID = 2
+	pt.ID = TestTypeID2
 	pt.Name = "php"
 	pt.Description = "PHP application with Composer"
 	pt.BuildCmd = "composer install --no-dev && php artisan migrate"
@@ -383,8 +412,8 @@ func (f *DBFixtures) DefaultSession() *storage.Session {
 	f.t.Helper()
 	now := time.Now()
 	return &storage.Session{
-		ID:        "session-001",
-		UserID:    1,
+		ID:        TestSessionID1,
+		UserID:    TestUserID1,
 		Token:     "session-001",
 		IPAddress: "192.168.1.1",
 		UserAgent: "Mozilla/5.0 (Test Agent)",
@@ -398,7 +427,7 @@ func (f *DBFixtures) DefaultSession() *storage.Session {
 func (f *DBFixtures) ExpiredSession() *storage.Session {
 	f.t.Helper()
 	session := f.DefaultSession()
-	session.ID = "session-expired"
+	session.ID = TestSessionID2
 	session.ExpiresAt = time.Now().Add(-1 * time.Hour)
 	return session
 }
@@ -422,7 +451,7 @@ func (f *DBFixtures) SeedTestDB(store storage.Store) error {
 	for _, user := range []*storage.User{
 		f.DefaultUser(),
 		f.ViewerUser(),
-		f.OperatorUser(),
+		f.RegularUser(),
 	} {
 		if err := store.CreateUser(ctx, user); err != nil {
 			return err
@@ -434,7 +463,7 @@ func (f *DBFixtures) SeedTestDB(store storage.Store) error {
 		f.DefaultProjectType(),
 		f.PHPProjectType(),
 	} {
-		if err := store.CreateProjectType(pt); err != nil {
+		if err := store.CreateProjectType(ctx, pt); err != nil {
 			return err
 		}
 	}

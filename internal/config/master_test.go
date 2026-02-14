@@ -53,11 +53,11 @@ func TestLoadMasterConfig(t *testing.T) {
 			name: "valid config",
 			content: `
 server:
-  listen: ":8080"
+  listen: ":9000"
   tls:
     enabled: false
 grpc:
-  listen: ":9090"
+  listen: ":9001"
 ssh:
   default_user: testuser
   connection_timeout: 60s
@@ -67,10 +67,10 @@ security:
 `,
 			wantErr: false,
 			checkFunc: func(t *testing.T, c *MasterConfig) {
-				if c.Server.Listen != ":8080" {
+				if c.Server.Listen != ":9000" {
 					t.Errorf("unexpected server listen: %s", c.Server.Listen)
 				}
-				if c.GRPC.Listen != ":9090" {
+				if c.GRPC.Listen != ":9001" {
 					t.Errorf("unexpected gRPC listen: %s", c.GRPC.Listen)
 				}
 				if c.Server.TLS.Enabled {
@@ -115,9 +115,9 @@ grpc:
 			name: "webhooks config",
 			content: `
 server:
-  listen: ":8080"
+  listen: ":9000"
 grpc:
-  listen: ":9090"
+  listen: ":9001"
 webhooks:
   github:
     enabled: true
@@ -148,9 +148,9 @@ webhooks:
 			name: "backup config",
 			content: `
 server:
-  listen: ":8080"
+  listen: ":9000"
 grpc:
-  listen: ":9090"
+  listen: ":9001"
 backup:
   database:
     enabled: true
@@ -336,10 +336,10 @@ func TestMasterConfigValidate(t *testing.T) {
 			name: "minimal valid config",
 			config: &MasterConfig{
 				Server: ServerConfig{
-					Listen: ":8080",
+					Listen: ":9000",
 				},
 				GRPC: GRPCConfig{
-					Listen: ":9090",
+					Listen: ":9001",
 				},
 				Backup: BackupConfig{
 					Config: ConfigBackupConfig{

@@ -250,7 +250,7 @@ func (v *HostKeyVerifier) ExportToKnownHostsFile(ctx context.Context, filePath s
 		return fmt.Errorf("creating directory: %w", err)
 	}
 
-	f, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	f, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) // #nosec G304 - filePath is admin-controlled export destination
 	if err != nil {
 		return fmt.Errorf("creating known_hosts file: %w", err)
 	}
@@ -341,7 +341,7 @@ func (e *KnownHostsExporter) ExportAll(ctx context.Context, filePath string) err
 		return fmt.Errorf("creating directory: %w", err)
 	}
 
-	f, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	f, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) // #nosec G304 - filePath is admin-controlled export destination
 	if err != nil {
 		return fmt.Errorf("creating file: %w", err)
 	}

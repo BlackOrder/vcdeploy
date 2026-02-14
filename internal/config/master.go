@@ -18,6 +18,7 @@ type MasterConfig struct {
 	Security      SecurityConfig      `yaml:"security"`
 	Backup        BackupConfig        `yaml:"backup"`
 	Logs          LogsConfig          `yaml:"logs"`
+	Storage       StorageConfig       `yaml:"storage"`
 	Tracing       TracingConfig       `yaml:"tracing"`
 	Alerting      AlertingConfig      `yaml:"alerting"`
 	Webhooks      WebhooksConfig      `yaml:"webhooks"`
@@ -26,22 +27,62 @@ type MasterConfig struct {
 	Appearance    AppearanceConfig    `yaml:"appearance"`
 }
 
+// TLSMode defines the TLS operation mode.
+type TLSMode string
+
+const (
+	// TLSModeDisabled serves HTTP only (development, behind proxy).
+	TLSModeDisabled TLSMode = "disabled"
+	// TLSModeStatic uses certificate files provided by user.
+	TLSModeStatic TLSMode = "static"
+	// TLSModeACME uses automatic certificate management (Let's Encrypt).
+	TLSModeACME TLSMode = "acme"
+)
+
 // ServerConfig defines HTTP server settings.
 type ServerConfig struct {
-	Listen string    `yaml:"listen"`
-	TLS    TLSConfig `yaml:"tls"`
+	Listen       string    `yaml:"listen"`        // HTTP address (default: ":80")
+	HTTPSAddress string    `yaml:"https_address"` // HTTPS address (default: ":443")
+	SocketPath   string    `yaml:"socket_path"`   // Unix socket path for local CLI access (default: /var/run/vcdeploy/vcdeploy.sock)
+	TLS          TLSConfig `yaml:"tls"`
 }
 
 // TLSConfig defines TLS settings.
 type TLSConfig struct {
-	Enabled bool   `yaml:"enabled"`
-	Cert    string `yaml:"cert"`
-	Key     string `yaml:"key"`
+	// Mode determines TLS behavior: disabled, static, or acme
+	Mode TLSMode `yaml:"mode"`
+
+	// Static mode: paths to certificate and key files
+	CertFile string `yaml:"cert_file"`
+	KeyFile  string `yaml:"key_file"`
+
+	// ACME mode configuration
+	ACME ACMEConfig `yaml:"acme"`
+
+	// ForceHTTPS redirects HTTP to HTTPS when TLS enabled
+	ForceHTTPS bool `yaml:"force_https"`
+
+	// MinVersion is minimum TLS version ("1.2" or "1.3")
+	MinVersion string `yaml:"min_version"`
+
+	// Legacy fields for backward compatibility during migration
+	Enabled bool   `yaml:"enabled"` // Deprecated: use Mode instead
+	Cert    string `yaml:"cert"`    // Deprecated: use CertFile instead
+	Key     string `yaml:"key"`     // Deprecated: use KeyFile instead
+}
+
+// ACMEConfig defines ACME (Let's Encrypt) configuration.
+type ACMEConfig struct {
+	Email    string   `yaml:"email"`     // Contact email for Let's Encrypt
+	Domains  []string `yaml:"domains"`   // Domains to obtain certs for
+	Staging  bool     `yaml:"staging"`   // Use Let's Encrypt staging (for testing)
+	CacheDir string   `yaml:"cache_dir"` // Directory to cache certificates
 }
 
 // GRPCConfig defines gRPC server settings for agent connections.
 type GRPCConfig struct {
-	Listen string `yaml:"listen"`
+	Listen        string `yaml:"listen"`
+	ReauthAddress string `yaml:"reauth_address"` // Dedicated port for unauthenticated re-authentication
 }
 
 // SSHConfig defines SSH connection settings.
@@ -243,15 +284,28 @@ type AppearanceConfig struct {
 	Theme string `yaml:"theme"`
 }
 
+// StorageConfig defines storage settings.
+type StorageConfig struct {
+	// UseMemoryCache enables the in-memory cache layer with batched SQLite persistence.
+	// When enabled, all reads are served from memory and writes are batched,
+	// eliminating SQLITE_BUSY errors from concurrent access.
+	// Default: true
+	UseMemoryCache bool `yaml:"use_memory_cache"`
+}
+
 // DefaultMasterConfig returns a MasterConfig with default values.
 func DefaultMasterConfig() *MasterConfig {
 	return &MasterConfig{
 		Server: ServerConfig{
-			Listen: ":9000",
+			Listen:     ":9000",
+			SocketPath: "/var/run/vcdeploy/vcdeploy.sock",
 			TLS: TLSConfig{
-				Enabled: true,
-				Cert:    "/etc/vcdeploy/tls/cert.pem",
-				Key:     "/etc/vcdeploy/tls/key.pem",
+				Mode:       TLSModeDisabled,
+				CertFile:   "/etc/vcdeploy/certs/server.crt",
+				KeyFile:    "/etc/vcdeploy/certs/server.key",
+				Enabled:    true, // Deprecated: for backward compatibility
+				ForceHTTPS: true,
+				MinVersion: "1.2",
 			},
 		},
 		GRPC: GRPCConfig{
@@ -304,6 +358,9 @@ func DefaultMasterConfig() *MasterConfig {
 				Schedule: "0 3 * * *",
 			},
 		},
+		Storage: StorageConfig{
+			UseMemoryCache: true,
+		},
 		Webhooks: WebhooksConfig{
 			GitHub:    WebhookProviderConfig{Enabled: true, Path: "/webhook/github"},
 			GitLab:    WebhookProviderConfig{Enabled: true, Path: "/webhook/gitlab"},
@@ -334,7 +391,7 @@ func DefaultMasterConfig() *MasterConfig {
 func LoadMasterConfig(path string) (*MasterConfig, error) {
 	config := DefaultMasterConfig()
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 - path is admin-controlled config file location
 	if err != nil {
 		if os.IsNotExist(err) {
 			return config, nil // Use defaults if no config file
@@ -358,6 +415,7 @@ func LoadMaster(path string) (*MasterConfig, error) {
 func SaveMasterConfig(config *MasterConfig, path string) error {
 	// Ensure directory exists
 	dir := filepath.Dir(path)
+	// #nosec G301 - Config directory needs group access for service user
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("creating config directory: %w", err)
 	}
@@ -367,6 +425,7 @@ func SaveMasterConfig(config *MasterConfig, path string) error {
 		return fmt.Errorf("marshaling config: %w", err)
 	}
 
+	// #nosec G306 - Master config needs to be readable by service user
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return fmt.Errorf("writing config file: %w", err)
 	}
@@ -388,5 +447,32 @@ func (c *MasterConfig) Validate() error {
 	if c.Backup.Config.Versions < 1 {
 		return fmt.Errorf("backup.config.versions must be at least 1")
 	}
+
+	// TLS file validation for static mode
+	if c.Server.TLS.Mode == TLSModeStatic {
+		if c.Server.TLS.CertFile == "" {
+			return fmt.Errorf("tls.cert_file is required when tls.mode is 'static'")
+		}
+		if c.Server.TLS.KeyFile == "" {
+			return fmt.Errorf("tls.key_file is required when tls.mode is 'static'")
+		}
+		if _, err := os.Stat(c.Server.TLS.CertFile); err != nil {
+			return fmt.Errorf("TLS cert file not found: %s", c.Server.TLS.CertFile)
+		}
+		if _, err := os.Stat(c.Server.TLS.KeyFile); err != nil {
+			return fmt.Errorf("TLS key file not found: %s", c.Server.TLS.KeyFile)
+		}
+	}
+
+	// ACME mode validation
+	if c.Server.TLS.Mode == TLSModeACME {
+		if c.Server.TLS.ACME.Email == "" {
+			return fmt.Errorf("tls.acme.email is required when tls.mode is 'acme'")
+		}
+		if len(c.Server.TLS.ACME.Domains) == 0 {
+			return fmt.Errorf("tls.acme.domains is required when tls.mode is 'acme'")
+		}
+	}
+
 	return nil
 }

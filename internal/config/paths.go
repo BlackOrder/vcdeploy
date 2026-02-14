@@ -2,7 +2,6 @@
 package config
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -65,7 +64,7 @@ func GetSystemConfig() (*SystemConfig, error) {
 		// Try to load from config file
 		configPath := getSystemConfigPath()
 		if _, err := os.Stat(configPath); err == nil {
-			data, err := os.ReadFile(configPath)
+			data, err := os.ReadFile(configPath) // #nosec G304 - configPath is system config location
 			if err != nil {
 				systemConfigErr = err
 				return
@@ -111,13 +110,21 @@ func GetSystemConfig() (*SystemConfig, error) {
 	return systemConfig, systemConfigErr
 }
 
-// MustGetSystemConfig returns the system config or panics on error.
-// This should only be used during application startup where recovery is not possible.
-// Prefer GetSystemConfig() with proper error handling in most cases.
-func MustGetSystemConfig() *SystemConfig {
+// GetSystemConfigOrDefaults returns the system config, falling back to defaults on error.
+// This is safe to use in init() functions where error handling is not possible.
+// For code that can handle errors (command handlers, business logic), use GetSystemConfig() directly.
+func GetSystemConfigOrDefaults() *SystemConfig {
 	cfg, err := GetSystemConfig()
 	if err != nil {
-		panic(fmt.Sprintf("failed to load system config: %v", err))
+		// Return a fresh config with defaults - don't mutate the singleton
+		return &SystemConfig{
+			Paths: SystemPaths{
+				ConfigDir: DefaultConfigDir,
+				DataDir:   DefaultDataDir,
+				RunDir:    DefaultRunDir,
+				LogDir:    DefaultLogDir,
+			},
+		}
 	}
 	return cfg
 }
@@ -205,6 +212,7 @@ func (c *SystemConfig) EnsureDirectories() error {
 	}
 
 	for _, dir := range dirs {
+		// #nosec G301 - System directories need world-execute for service access
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}

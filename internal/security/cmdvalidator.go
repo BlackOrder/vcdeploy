@@ -76,6 +76,25 @@ var defaultAllowedBinaries = map[string]bool{
 	"tar":   true,
 	"unzip": true,
 
+	// Shell utilities (for hooks and logging)
+	"echo":  true,
+	"cat":   true,
+	"grep":  true,
+	"head":  true,
+	"tail":  true,
+	"wc":    true,
+	"date":  true,
+	"sleep": true,
+	"test":  true,
+	"true":  true,
+	"false": true,
+	"exit":  true, // For deployment scripts
+	"pwd":   true, // Print working directory
+
+	// Shell interpreters (needed for complex hooks)
+	"sh":   true,
+	"bash": true,
+
 	// System services (for reload hooks)
 	"systemctl": true,
 	"service":   true,
@@ -135,16 +154,16 @@ func (v *CommandValidator) BlockSubstring(s string) *CommandValidator {
 // Validate checks if a command is allowed to execute.
 // Returns nil if the command is safe, or an error describing why it was blocked.
 func (v *CommandValidator) Validate(cmd string) error {
-	cmd = strings.TrimSpace(cmd)
-	if cmd == "" {
-		return fmt.Errorf("%w: empty command", ErrCommandBlocked)
-	}
-
-	// Check for blocked substrings first (fast path for injection attempts)
+	// Check for blocked substrings BEFORE trimming (to catch \n, \r at boundaries)
 	for _, blocked := range v.BlockedSubstrings {
 		if strings.Contains(cmd, blocked) {
 			return fmt.Errorf("%w: contains blocked pattern %q", ErrCommandBlocked, blocked)
 		}
+	}
+
+	cmd = strings.TrimSpace(cmd)
+	if cmd == "" {
+		return fmt.Errorf("%w: empty command", ErrCommandBlocked)
 	}
 
 	// Extract the binary name from the command
@@ -183,14 +202,6 @@ func (v *CommandValidator) ValidateHooks(hooks []string) error {
 		}
 	}
 	return nil
-}
-
-// MustValidate panics if the command is not valid.
-// Use only during initialization or in tests.
-func (v *CommandValidator) MustValidate(cmd string) {
-	if err := v.Validate(cmd); err != nil {
-		panic(fmt.Sprintf("command validation failed: %v", err))
-	}
 }
 
 // extractBinary extracts the binary name from a command string.

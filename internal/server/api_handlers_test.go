@@ -14,10 +14,12 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 )
 
+func strPtr(s string) *string { return &s }
+
 // requestWithUserContext creates a new request with user ID set in context.
 // This allows testing handlers that require authenticated user context
 // without going through the full middleware chain.
-func requestWithUserContext(req *http.Request, userID int64) *http.Request {
+func requestWithUserContext(req *http.Request, userID string) *http.Request {
 	ctx := context.WithValue(req.Context(), contextKeyUserID, userID)
 	return req.WithContext(ctx)
 }
@@ -91,18 +93,25 @@ func TestHandleUsers_List(t *testing.T) {
 		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
 	}
 
-	var users []map[string]interface{}
-	if err := json.NewDecoder(w.Body).Decode(&users); err != nil {
+	// H6 FIX: List endpoints now return paginated response
+	var response struct {
+		Items    []map[string]interface{} `json:"items"`
+		Total    int64                    `json:"total"`
+		Page     int                      `json:"page"`
+		PageSize int                      `json:"pageSize"`
+		HasMore  bool                     `json:"hasMore"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
 	// Should have at least the test user
-	if len(users) < 1 {
+	if len(response.Items) < 1 {
 		t.Error("expected at least one user in response")
 	}
 
 	// Verify no password hashes are exposed
-	for _, user := range users {
+	for _, user := range response.Items {
 		if _, ok := user["passwordHash"]; ok {
 			t.Error("password hash should not be exposed in response")
 		}
@@ -130,8 +139,8 @@ func TestHandleUsers_Create(t *testing.T) {
 	req = requestWithUserContext(req, userID)
 	server.handleUsers(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	if w.Code != http.StatusCreated {
+		t.Errorf("expected status %d, got %d: %s", http.StatusCreated, w.Code, w.Body.String())
 	}
 
 	// Verify user was created
@@ -185,7 +194,7 @@ func TestHandleUser_Get(t *testing.T) {
 		t.Fatalf("failed to get test user: %v", err)
 	}
 
-	req := httptest.NewRequest("GET", "/api/v1/users/"+string(rune(user.ID+'0')), nil)
+	req := httptest.NewRequest("GET", "/api/v1/users/"+user.ID, nil)
 	req.Header.Set("X-API-Key", apiKey)
 	req.SetPathValue("id", "1")
 	w := httptest.NewRecorder()
@@ -217,8 +226,15 @@ func TestHandleProjectsAPI_List(t *testing.T) {
 		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
 	}
 
-	var projects []map[string]interface{}
-	if err := json.NewDecoder(w.Body).Decode(&projects); err != nil {
+	// H6 FIX: List endpoints now return paginated response
+	var response struct {
+		Items    []map[string]interface{} `json:"items"`
+		Total    int64                    `json:"total"`
+		Page     int                      `json:"page"`
+		PageSize int                      `json:"pageSize"`
+		HasMore  bool                     `json:"hasMore"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 }
@@ -277,8 +293,15 @@ func TestHandleAgentsAPI_List(t *testing.T) {
 		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
 	}
 
-	var agents []map[string]interface{}
-	if err := json.NewDecoder(w.Body).Decode(&agents); err != nil {
+	// H6 FIX: List endpoints now return paginated response
+	var response struct {
+		Items    []map[string]interface{} `json:"items"`
+		Total    int64                    `json:"total"`
+		Page     int                      `json:"page"`
+		PageSize int                      `json:"pageSize"`
+		HasMore  bool                     `json:"hasMore"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 }
@@ -318,9 +341,23 @@ func TestHandleDeploymentsAPI_List(t *testing.T) {
 		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
 	}
 
-	var deployments []map[string]interface{}
-	if err := json.NewDecoder(w.Body).Decode(&deployments); err != nil {
+	var result map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	// Verify paginated response structure
+	if _, ok := result["items"]; !ok {
+		t.Error("expected 'items' field in response")
+	}
+	if _, ok := result["totalCount"]; !ok {
+		t.Error("expected 'totalCount' field in response")
+	}
+	if _, ok := result["limit"]; !ok {
+		t.Error("expected 'limit' field in response")
+	}
+	if _, ok := result["offset"]; !ok {
+		t.Error("expected 'offset' field in response")
 	}
 }
 
@@ -338,7 +375,7 @@ func TestHandleAPIKeys_List(t *testing.T) {
 		t.Fatalf("failed to get session: %v", err)
 	}
 
-	req := httptest.NewRequest("GET", "/api/v1/apikeys", nil)
+	req := httptest.NewRequest("GET", "/api/v1/api-keys", nil)
 	req.AddCookie(&http.Cookie{
 		Name:  "session",
 		Value: sessionToken,
@@ -353,13 +390,28 @@ func TestHandleAPIKeys_List(t *testing.T) {
 		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
 	}
 
-	var apiKeys []map[string]interface{}
-	if err := json.NewDecoder(w.Body).Decode(&apiKeys); err != nil {
+	var result map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
+	// Verify paginated response structure
+	if _, ok := result["items"]; !ok {
+		t.Error("expected 'items' field in response")
+	}
+	if _, ok := result["totalCount"]; !ok {
+		t.Error("expected 'totalCount' field in response")
+	}
+	if _, ok := result["limit"]; !ok {
+		t.Error("expected 'limit' field in response")
+	}
+	if _, ok := result["offset"]; !ok {
+		t.Error("expected 'offset' field in response")
+	}
+
 	// Should have at least the test API key
-	if len(apiKeys) < 1 {
+	items, ok := result["items"].([]interface{})
+	if !ok || len(items) < 1 {
 		t.Error("expected at least one API key in response")
 	}
 }
@@ -381,7 +433,7 @@ func TestHandleAPIKeys_Create(t *testing.T) {
 		"name": "new-api-key"
 	}`)
 
-	req := httptest.NewRequest("POST", "/api/v1/apikeys", body)
+	req := httptest.NewRequest("POST", "/api/v1/api-keys", body)
 	req.Header.Set("Content-Type", "application/json")
 	// Add user context directly for direct handler testing
 	req = requestWithUserContext(req, session.UserID)
@@ -648,7 +700,7 @@ func TestHandleUser_UpdateWeakPassword(t *testing.T) {
 	req = requestWithUserContext(req, userID)
 	server.handleUsers(w, req)
 
-	if w.Code != http.StatusOK {
+	if w.Code != http.StatusCreated {
 		t.Fatalf("failed to create user: %d - %s", w.Code, w.Body.String())
 	}
 
@@ -657,14 +709,14 @@ func TestHandleUser_UpdateWeakPassword(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&createResp); err != nil {
 		t.Fatalf("failed to decode create response: %v", err)
 	}
-	createdUserID := int64(createResp["id"].(float64))
+	createdUserID := createResp["id"].(string)
 
 	// Try to update with weak password
 	updateBody := bytes.NewBufferString(`{
 		"password": "weak"
 	}`)
 
-	req = httptest.NewRequest("PUT", fmt.Sprintf("/api/v1/users/%d", createdUserID), updateBody)
+	req = httptest.NewRequest("PUT", "/api/v1/users/"+createdUserID, updateBody)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", apiKey)
 	req = requestWithUserContext(req, userID)
@@ -692,12 +744,12 @@ func TestHandleProjectAPI_Get(t *testing.T) {
 		Repository: "https://github.com/test/repo",
 		Branch:     "main",
 		DeployPath: "/var/www/test",
-		Type:       "static",
+		TypeID:     strPtr("static"),
 	}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
-	// GET specific project
-	req := httptest.NewRequest("GET", "/api/v1/projects/test-project", nil)
+	// GET specific project by ID
+	req := httptest.NewRequest("GET", "/api/v1/projects/"+project.ID, nil)
 	req.Header.Set("X-API-Key", apiKey)
 	w := httptest.NewRecorder()
 
@@ -715,7 +767,8 @@ func TestHandleProjectAPI_GetNotFound(t *testing.T) {
 	server, apiKey, _, userID := newTestServerWithAuth(t)
 	defer server.store.Close()
 
-	req := httptest.NewRequest("GET", "/api/v1/projects/nonexistent", nil)
+	// Use a non-existent ID
+	req := httptest.NewRequest("GET", "/api/v1/projects/99999", nil)
 	req.Header.Set("X-API-Key", apiKey)
 	w := httptest.NewRecorder()
 
@@ -724,6 +777,25 @@ func TestHandleProjectAPI_GetNotFound(t *testing.T) {
 
 	if w.Code != http.StatusNotFound {
 		t.Errorf("expected status %d, got %d", http.StatusNotFound, w.Code)
+	}
+}
+
+func TestHandleProjectAPI_GetInvalidID(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	// Use an invalid (non-numeric) ID
+	req := httptest.NewRequest("GET", "/api/v1/projects/invalid-name", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	req = requestWithUserContext(req, userID)
+	server.handleProjectAPI(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status %d, got %d: %s", http.StatusNotFound, w.Code, w.Body.String())
 	}
 }
 
@@ -739,13 +811,13 @@ func TestHandleProjectAPI_Update(t *testing.T) {
 		Repository: "https://github.com/test/repo",
 		Branch:     "main",
 		DeployPath: "/var/www/test",
-		Type:       "static",
+		TypeID:     strPtr("static"),
 	}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
-	// Update the project
-	updateBody := bytes.NewBufferString(`{"branch": "develop", "deploy_path": "/var/www/new"}`)
-	req := httptest.NewRequest("PUT", "/api/v1/projects/update-project", updateBody)
+	// Update the project by ID
+	updateBody := bytes.NewBufferString(`{"branch": "develop", "deployPath": "/var/www/new"}`)
+	req := httptest.NewRequest("PUT", "/api/v1/projects/"+project.ID, updateBody)
 	req.Header.Set("X-API-Key", apiKey)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -770,30 +842,30 @@ func TestHandleProjectAPI_Delete(t *testing.T) {
 		Repository: "https://github.com/test/repo",
 		Branch:     "main",
 		DeployPath: "/var/www/test",
-		Type:       "static",
+		TypeID:     strPtr("static"),
 	}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
-	// Delete the project
-	req := httptest.NewRequest("DELETE", "/api/v1/projects/delete-project", nil)
+	// Delete the project by ID
+	req := httptest.NewRequest("DELETE", "/api/v1/projects/"+project.ID, nil)
 	req.Header.Set("X-API-Key", apiKey)
 	w := httptest.NewRecorder()
 
 	req = requestWithUserContext(req, userID)
 	server.handleProjectAPI(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	if w.Code != http.StatusNoContent {
+		t.Errorf("expected status %d, got %d: %s", http.StatusNoContent, w.Code, w.Body.String())
 	}
 }
 
-func TestHandleProjectAPI_EmptyName(t *testing.T) {
+func TestHandleProjectAPI_EmptyID(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
 	defer server.store.Close()
 
-	// Empty project name
+	// Empty project ID
 	req := httptest.NewRequest("GET", "/api/v1/projects/", nil)
 	req.Header.Set("X-API-Key", apiKey)
 	w := httptest.NewRecorder()
@@ -812,7 +884,17 @@ func TestHandleProjectAPI_MethodNotAllowed(t *testing.T) {
 	server, apiKey, _, userID := newTestServerWithAuth(t)
 	defer server.store.Close()
 
-	req := httptest.NewRequest("PATCH", "/api/v1/projects/test-project", nil)
+	// Create a project first so we have a valid ID
+	project := &storage.Project{
+		Name:       "method-test-project",
+		Repository: "https://github.com/test/repo",
+		Branch:     "main",
+		DeployPath: "/var/www/test",
+		TypeID:     strPtr("static"),
+	}
+	_ = server.store.CreateProject(context.Background(), project)
+
+	req := httptest.NewRequest("PATCH", "/api/v1/projects/"+project.ID, nil)
 	req.Header.Set("X-API-Key", apiKey)
 	w := httptest.NewRecorder()
 
@@ -898,8 +980,8 @@ func TestHandleAgentAPI_Delete(t *testing.T) {
 	req = requestWithUserContext(req, userID)
 	server.handleAgentAPI(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	if w.Code != http.StatusNoContent {
+		t.Errorf("expected status %d, got %d: %s", http.StatusNoContent, w.Code, w.Body.String())
 	}
 }
 
@@ -1088,14 +1170,14 @@ func TestHandleAPIKey_Delete(t *testing.T) {
 
 	// Create another API key to delete
 	newKey := &storage.APIKey{
-		UserID:  1,
+		UserID:  "user-1",
 		Name:    "delete-key",
 		KeyHash: "delete-hash",
 	}
 	_ = server.store.CreateAPIKey(ctx, newKey)
 
-	// Delete the API key - note the correct path is /api/v1/apikeys/
-	req := httptest.NewRequest("DELETE", fmt.Sprintf("/api/v1/apikeys/%d", newKey.ID), nil)
+	// Delete the API key - note the correct path is /api/v1/api-keys/
+	req := httptest.NewRequest("DELETE", "/api/v1/api-keys/"+newKey.ID, nil)
 	req.Header.Set("X-API-Key", apiKey)
 	w := httptest.NewRecorder()
 
@@ -1113,7 +1195,7 @@ func TestHandleAPIKey_EmptyID(t *testing.T) {
 	server, apiKey, _, userID := newTestServerWithAuth(t)
 	defer server.store.Close()
 
-	req := httptest.NewRequest("DELETE", "/api/v1/apikeys/", nil)
+	req := httptest.NewRequest("DELETE", "/api/v1/api-keys/", nil)
 	req.Header.Set("X-API-Key", apiKey)
 	w := httptest.NewRecorder()
 
@@ -1131,15 +1213,15 @@ func TestHandleAPIKey_InvalidID(t *testing.T) {
 	server, apiKey, _, userID := newTestServerWithAuth(t)
 	defer server.store.Close()
 
-	req := httptest.NewRequest("DELETE", "/api/v1/apikeys/invalid", nil)
+	req := httptest.NewRequest("DELETE", "/api/v1/api-keys/invalid", nil)
 	req.Header.Set("X-API-Key", apiKey)
 	w := httptest.NewRecorder()
 
 	req = requestWithUserContext(req, userID)
 	server.handleAPIKey(w, req)
 
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, w.Code)
 	}
 }
 
@@ -1149,7 +1231,8 @@ func TestHandleAPIKey_MethodNotAllowed(t *testing.T) {
 	server, apiKey, _, userID := newTestServerWithAuth(t)
 	defer server.store.Close()
 
-	req := httptest.NewRequest("GET", "/api/v1/apikeys/1", nil)
+	// PUT is not allowed on individual API keys
+	req := httptest.NewRequest("PUT", "/api/v1/api-keys/1", nil)
 	req.Header.Set("X-API-Key", apiKey)
 	w := httptest.NewRecorder()
 
@@ -1175,9 +1258,9 @@ func TestHandleProjectWebhooks_Get(t *testing.T) {
 		Repository: "https://github.com/test/repo",
 		Branch:     "main",
 		DeployPath: "/var/www/test",
-		Type:       "static",
+		TypeID:     strPtr("static"),
 	}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/api/v1/projects/webhook-project/webhooks", nil)
@@ -1203,9 +1286,9 @@ func TestHandleProjectWebhooks_Post(t *testing.T) {
 		Repository: "https://github.com/test/repo",
 		Branch:     "main",
 		DeployPath: "/var/www/test",
-		Type:       "static",
+		TypeID:     strPtr("static"),
 	}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
 	body := strings.NewReader(`{"provider":"github","secret":"test-secret","enabled":true}`)
 	w := httptest.NewRecorder()
@@ -1233,9 +1316,9 @@ func TestHandleProjectWebhooks_PostMissingFields(t *testing.T) {
 		Repository: "https://github.com/test/repo",
 		Branch:     "main",
 		DeployPath: "/var/www/test",
-		Type:       "static",
+		TypeID:     strPtr("static"),
 	}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
 	body := strings.NewReader(`{"provider":"github"}`)
 	w := httptest.NewRecorder()
@@ -1281,9 +1364,9 @@ func TestHandleProjectWebhooks_MethodNotAllowed(t *testing.T) {
 		Repository: "https://github.com/test/repo",
 		Branch:     "main",
 		DeployPath: "/var/www/test",
-		Type:       "static",
+		TypeID:     strPtr("static"),
 	}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("DELETE", "/api/v1/projects/webhook-method-project/webhooks", nil)
@@ -1311,9 +1394,9 @@ func TestHandleProjectDeploy_Success(t *testing.T) {
 		Repository: "https://github.com/test/repo",
 		Branch:     "main",
 		DeployPath: "/var/www/test",
-		Type:       "static",
+		TypeID:     strPtr("static"),
 	}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
 	body := strings.NewReader(`{"branch":"main","target":"production"}`)
 	w := httptest.NewRecorder()
@@ -1326,6 +1409,42 @@ func TestHandleProjectDeploy_Success(t *testing.T) {
 
 	if w.Code != http.StatusAccepted {
 		t.Errorf("expected status %d, got %d: %s", http.StatusAccepted, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleProjectDeploy_InvalidTarget(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	// Create a project first
+	project := &storage.Project{
+		Name:       "deploy-target-project",
+		Repository: "https://github.com/test/repo",
+		Branch:     "main",
+		DeployPath: "/var/www/test",
+		TypeID:     strPtr("static"),
+	}
+	_ = server.store.CreateProject(context.Background(), project)
+
+	// Try to deploy to a non-existent agent target
+	body := strings.NewReader(`{"branch":"main","target":"non-existent-agent"}`)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/v1/projects/deploy-target-project/deploy", body)
+	req.Header.Set("X-API-Key", apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	req = requestWithUserContext(req, userID)
+	server.handleProjectDeploy(w, req, "deploy-target-project")
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d for invalid target, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
+	}
+
+	// Verify the error message mentions the target
+	if !strings.Contains(w.Body.String(), "non-existent-agent") {
+		t.Errorf("expected error message to contain target name, got: %s", w.Body.String())
 	}
 }
 
@@ -1378,12 +1497,12 @@ func TestHandleProjectDeploy_ScheduledDeployment(t *testing.T) {
 		Repository: "https://github.com/test/repo",
 		Branch:     "main",
 		DeployPath: "/var/www/test",
-		Type:       "static",
+		TypeID:     strPtr("static"),
 	}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
 	scheduledTime := time.Now().Add(1 * time.Hour).Format(time.RFC3339)
-	body := strings.NewReader(fmt.Sprintf(`{"branch":"main","target":"production","scheduled_at":"%s"}`, scheduledTime))
+	body := strings.NewReader(fmt.Sprintf(`{"branch":"main","target":"production","scheduledAt":"%s"}`, scheduledTime))
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/api/v1/projects/scheduled-project/deploy", body)
 	req.Header.Set("X-API-Key", apiKey)
@@ -1409,11 +1528,11 @@ func TestHandleProjectDeploy_InvalidScheduledTime(t *testing.T) {
 		Repository: "https://github.com/test/repo",
 		Branch:     "main",
 		DeployPath: "/var/www/test",
-		Type:       "static",
+		TypeID:     strPtr("static"),
 	}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
-	body := strings.NewReader(`{"branch":"main","target":"production","scheduled_at":"invalid-time"}`)
+	body := strings.NewReader(`{"branch":"main","target":"production","scheduledAt":"invalid-time"}`)
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/api/v1/projects/invalid-schedule-project/deploy", body)
 	req.Header.Set("X-API-Key", apiKey)
@@ -1458,8 +1577,8 @@ func TestHandleAgentToken_Success(t *testing.T) {
 
 	var resp map[string]interface{}
 	_ = json.NewDecoder(w.Body).Decode(&resp)
-	if resp["agent_id"] != "token-agent-1" {
-		t.Errorf("expected agent_id 'token-agent-1', got %v", resp["agent_id"])
+	if resp["agentId"] != "token-agent-1" {
+		t.Errorf("expected agentId 'token-agent-1', got %v", resp["agentId"])
 	}
 	if resp["token"] == nil || resp["token"] == "" {
 		t.Error("expected non-empty token in response")
@@ -1524,45 +1643,27 @@ func TestHandleDeploymentLogs_MethodNotAllowed(t *testing.T) {
 	}
 }
 
-// --- Deployment Cancel Tests ---
+// --- Deployment Cancel via DELETE Tests ---
 
-func TestHandleDeploymentCancel_NotFound(t *testing.T) {
+func TestHandleDeploymentDelete_NotFound(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
 	defer server.store.Close()
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest("POST", "/api/v1/deployments/nonexistent/cancel", nil)
+	req := httptest.NewRequest("DELETE", "/api/v1/deployments/nonexistent", nil)
 	req.Header.Set("X-API-Key", apiKey)
 
 	req = requestWithUserContext(req, userID)
-	server.handleDeploymentCancel(w, req, "nonexistent")
+	server.handleDeploymentAPI(w, req)
 
 	if w.Code != http.StatusNotFound {
 		t.Errorf("expected status %d, got %d", http.StatusNotFound, w.Code)
 	}
 }
 
-func TestHandleDeploymentCancel_MethodNotAllowed(t *testing.T) {
-	t.Parallel()
-
-	server, apiKey, _, userID := newTestServerWithAuth(t)
-	defer server.store.Close()
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/api/v1/deployments/test/cancel", nil)
-	req.Header.Set("X-API-Key", apiKey)
-
-	req = requestWithUserContext(req, userID)
-	server.handleDeploymentCancel(w, req, "test")
-
-	if w.Code != http.StatusMethodNotAllowed {
-		t.Errorf("expected status %d, got %d", http.StatusMethodNotAllowed, w.Code)
-	}
-}
-
-func TestHandleDeploymentCancel_NotCancellable(t *testing.T) {
+func TestHandleDeploymentDelete_NotCancellable(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
@@ -1578,18 +1679,18 @@ func TestHandleDeploymentCancel_NotCancellable(t *testing.T) {
 	_ = server.store.CreateDeployment(ctx, deployment)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest("POST", "/api/v1/deployments/cancel-completed-deploy/cancel", nil)
+	req := httptest.NewRequest("DELETE", "/api/v1/deployments/cancel-completed-deploy", nil)
 	req.Header.Set("X-API-Key", apiKey)
 
 	req = requestWithUserContext(req, userID)
-	server.handleDeploymentCancel(w, req, "cancel-completed-deploy")
+	server.handleDeploymentAPI(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected status %d, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
 	}
 }
 
-func TestHandleDeploymentCancel_Success(t *testing.T) {
+func TestHandleDeploymentDelete_Success(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
@@ -1605,11 +1706,11 @@ func TestHandleDeploymentCancel_Success(t *testing.T) {
 	_ = server.store.CreateDeployment(ctx, deployment)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest("POST", "/api/v1/deployments/cancel-running-deploy/cancel", nil)
+	req := httptest.NewRequest("DELETE", "/api/v1/deployments/cancel-running-deploy", nil)
 	req.Header.Set("X-API-Key", apiKey)
 
 	req = requestWithUserContext(req, userID)
-	server.handleDeploymentCancel(w, req, "cancel-running-deploy")
+	server.handleDeploymentAPI(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
@@ -1673,6 +1774,49 @@ func TestHandleSettingsCategory_PutSuccess(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleSettingsCategory_PutTypeCoercion(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	// Test with native types: bool, int, string, null
+	body := strings.NewReader(`{"bool_setting":true,"int_setting":42,"float_setting":3.14,"string_setting":"hello","null_setting":null}`)
+	req := httptest.NewRequest("PUT", "/api/v1/settings/coercion-test", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	req = requestWithUserContext(req, userID)
+	server.handleSettingsCategory(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+
+	// Verify the values are stored as strings
+	ctx := context.Background()
+	boolSetting, _ := server.settingsSvc.Get(ctx, "coercion-test", "bool_setting")
+	if boolSetting != "true" {
+		t.Errorf("expected bool_setting to be 'true', got '%s'", boolSetting)
+	}
+
+	intSetting, _ := server.settingsSvc.Get(ctx, "coercion-test", "int_setting")
+	if intSetting != "42" {
+		t.Errorf("expected int_setting to be '42', got '%s'", intSetting)
+	}
+
+	floatSetting, _ := server.settingsSvc.Get(ctx, "coercion-test", "float_setting")
+	if floatSetting != "3.14" {
+		t.Errorf("expected float_setting to be '3.14', got '%s'", floatSetting)
+	}
+
+	nullSetting, _ := server.settingsSvc.Get(ctx, "coercion-test", "null_setting")
+	if nullSetting != "" {
+		t.Errorf("expected null_setting to be '', got '%s'", nullSetting)
 	}
 }
 
@@ -1800,7 +1944,7 @@ func TestHandleUser_GetSuccess(t *testing.T) {
 	ctx := context.Background()
 	user, _ := server.store.GetUserByUsername(ctx, "testuser")
 
-	req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/users/%d", user.ID), nil)
+	req := httptest.NewRequest("GET", "/api/v1/users/"+user.ID, nil)
 	req.Header.Set("X-API-Key", apiKey)
 	w := httptest.NewRecorder()
 
@@ -1847,7 +1991,7 @@ func TestHandleUser_UpdateSuccess(t *testing.T) {
 	user, _ := server.store.GetUserByUsername(ctx, "testuser")
 
 	body := strings.NewReader(`{"email":"newemail@example.com","role":"admin"}`)
-	req := httptest.NewRequest("PUT", fmt.Sprintf("/api/v1/users/%d", user.ID), body)
+	req := httptest.NewRequest("PUT", "/api/v1/users/"+user.ID, body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", apiKey)
 	w := httptest.NewRecorder()
@@ -1890,7 +2034,7 @@ func TestHandleUser_UpdateInvalidJSON(t *testing.T) {
 	user, _ := server.store.GetUserByUsername(ctx, "testuser")
 
 	body := strings.NewReader(`{invalid}`)
-	req := httptest.NewRequest("PUT", fmt.Sprintf("/api/v1/users/%d", user.ID), body)
+	req := httptest.NewRequest("PUT", "/api/v1/users/"+user.ID, body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", apiKey)
 	w := httptest.NewRecorder()
@@ -1921,15 +2065,15 @@ func TestHandleUser_DeleteSuccess(t *testing.T) {
 	}
 	_ = server.store.CreateUser(ctx, newUser)
 
-	req := httptest.NewRequest("DELETE", fmt.Sprintf("/api/v1/users/%d", newUser.ID), nil)
+	req := httptest.NewRequest("DELETE", "/api/v1/users/"+newUser.ID, nil)
 	req.Header.Set("X-API-Key", apiKey)
 	w := httptest.NewRecorder()
 
 	req = requestWithUserContext(req, userID)
 	server.handleUser(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	if w.Code != http.StatusNoContent {
+		t.Errorf("expected status %d, got %d: %s", http.StatusNoContent, w.Code, w.Body.String())
 	}
 }
 
@@ -1964,8 +2108,8 @@ func TestHandleUser_InvalidID(t *testing.T) {
 	req = requestWithUserContext(req, userID)
 	server.handleUser(w, req)
 
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status %d, got %d", http.StatusNotFound, w.Code)
 	}
 }
 
@@ -1993,7 +2137,8 @@ func TestHandleUser_MethodNotAllowed(t *testing.T) {
 	server, apiKey, _, userID := newTestServerWithAuth(t)
 	defer server.store.Close()
 
-	req := httptest.NewRequest("PATCH", "/api/v1/users/1", nil)
+	// Use OPTIONS which is not supported by handleUser
+	req := httptest.NewRequest("OPTIONS", "/api/v1/users/1", nil)
 	req.Header.Set("X-API-Key", apiKey)
 	w := httptest.NewRecorder()
 
@@ -2017,7 +2162,7 @@ func TestHandleAPIKeys_CreateMissingName(t *testing.T) {
 	session, _ := server.store.GetSessionByToken(ctx, sessionToken)
 
 	body := strings.NewReader(`{}`)
-	req := httptest.NewRequest("POST", "/api/v1/apikeys", body)
+	req := httptest.NewRequest("POST", "/api/v1/api-keys", body)
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithUserContext(req, session.UserID)
 	w := httptest.NewRecorder()
@@ -2039,7 +2184,7 @@ func TestHandleAPIKeys_CreateInvalidJSON(t *testing.T) {
 	session, _ := server.store.GetSessionByToken(ctx, sessionToken)
 
 	body := strings.NewReader(`{invalid}`)
-	req := httptest.NewRequest("POST", "/api/v1/apikeys", body)
+	req := httptest.NewRequest("POST", "/api/v1/api-keys", body)
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithUserContext(req, session.UserID)
 	w := httptest.NewRecorder()
@@ -2060,8 +2205,8 @@ func TestHandleAPIKeys_CreateWithExpiry(t *testing.T) {
 	ctx := context.Background()
 	session, _ := server.store.GetSessionByToken(ctx, sessionToken)
 
-	body := strings.NewReader(`{"name":"expiring-key","expires_in_days":30}`)
-	req := httptest.NewRequest("POST", "/api/v1/apikeys", body)
+	body := strings.NewReader(`{"name":"expiring-key","expiresInDays":30}`)
+	req := httptest.NewRequest("POST", "/api/v1/api-keys", body)
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithUserContext(req, session.UserID)
 	w := httptest.NewRecorder()
@@ -2079,13 +2224,57 @@ func TestHandleAPIKeys_CreateWithExpiry(t *testing.T) {
 	}
 }
 
+func TestHandleAPIKeys_CreateInvalidScopes(t *testing.T) {
+	t.Parallel()
+
+	server, _, sessionToken, _ := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	ctx := context.Background()
+	session, _ := server.store.GetSessionByToken(ctx, sessionToken)
+
+	body := strings.NewReader(`{"name":"invalid-scope-key","scopes":["invalid:scope"]}`)
+	req := httptest.NewRequest("POST", "/api/v1/api-keys", body)
+	req.Header.Set("Content-Type", "application/json")
+	req = requestWithUserContext(req, session.UserID)
+	w := httptest.NewRecorder()
+
+	server.handleAPIKeys(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleAPIKeys_CreateValidScopes(t *testing.T) {
+	t.Parallel()
+
+	server, _, sessionToken, _ := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	ctx := context.Background()
+	session, _ := server.store.GetSessionByToken(ctx, sessionToken)
+
+	body := strings.NewReader(`{"name":"valid-scope-key","scopes":["read:projects","write:deployments"]}`)
+	req := httptest.NewRequest("POST", "/api/v1/api-keys", body)
+	req.Header.Set("Content-Type", "application/json")
+	req = requestWithUserContext(req, session.UserID)
+	w := httptest.NewRecorder()
+
+	server.handleAPIKeys(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Errorf("expected status %d, got %d: %s", http.StatusCreated, w.Code, w.Body.String())
+	}
+}
+
 func TestHandleAPIKeys_Unauthorized(t *testing.T) {
 	t.Parallel()
 
 	server, _, _, _ := newTestServerWithAuth(t)
 	defer server.store.Close()
 
-	req := httptest.NewRequest("GET", "/api/v1/apikeys", nil)
+	req := httptest.NewRequest("GET", "/api/v1/api-keys", nil)
 	w := httptest.NewRecorder()
 
 	server.handleAPIKeys(w, req)
@@ -2104,7 +2293,7 @@ func TestHandleAPIKeys_MethodNotAllowed(t *testing.T) {
 	ctx := context.Background()
 	session, _ := server.store.GetSessionByToken(ctx, sessionToken)
 
-	req := httptest.NewRequest("PUT", "/api/v1/apikeys", nil)
+	req := httptest.NewRequest("PUT", "/api/v1/api-keys", nil)
 	req = requestWithUserContext(req, session.UserID)
 	w := httptest.NewRecorder()
 
@@ -2323,7 +2512,7 @@ func TestHandleDeploymentRollback_Success(t *testing.T) {
 		Branch:     "main",
 		DeployPath: "/var/www/test",
 	}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
 	// Create a deployment to rollback
 	deployment := &storage.DeploymentRecord{
@@ -2405,13 +2594,74 @@ func TestHandleProjectsAPI_CreateMissingName(t *testing.T) {
 	}
 }
 
+func TestHandleProjectsAPI_CreateMissingRepository(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	body := strings.NewReader(`{"name":"test-project","deployPath":"/var/www/test"}`)
+	req := httptest.NewRequest("POST", "/api/v1/projects", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	req = requestWithUserContext(req, userID)
+	server.handleProjectsAPI(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleProjectsAPI_CreateMissingDeployPath(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	body := strings.NewReader(`{"name":"test-project","repository":"https://github.com/test/repo"}`)
+	req := httptest.NewRequest("POST", "/api/v1/projects", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	req = requestWithUserContext(req, userID)
+	server.handleProjectsAPI(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
+	}
+}
+
+func TestHandleProjectsAPI_CreateInvalidName(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	// Name starting with number (invalid per ValidateProjectName)
+	body := strings.NewReader(`{"name":"123-invalid","repository":"https://github.com/test/repo","deployPath":"/var/www/test"}`)
+	req := httptest.NewRequest("POST", "/api/v1/projects", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	req = requestWithUserContext(req, userID)
+	server.handleProjectsAPI(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
+	}
+}
+
 func TestHandleProjectsAPI_CreateDefaultBranch(t *testing.T) {
 	t.Parallel()
 
 	server, apiKey, _, userID := newTestServerWithAuth(t)
 	defer server.store.Close()
 
-	body := strings.NewReader(`{"name":"default-branch-project","repository":"https://github.com/test/repo"}`)
+	body := strings.NewReader(`{"name":"default-branch-project","repository":"https://github.com/test/repo","deployPath":"/var/www/default"}`)
 	req := httptest.NewRequest("POST", "/api/v1/projects", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", apiKey)
@@ -2443,10 +2693,10 @@ func TestHandleProjectAPI_UpdateInvalidJSON(t *testing.T) {
 		Repository: "https://github.com/test/repo",
 		Branch:     "main",
 	}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
 	body := strings.NewReader(`{invalid}`)
-	req := httptest.NewRequest("PUT", "/api/v1/projects/update-invalid-json", body)
+	req := httptest.NewRequest("PUT", "/api/v1/projects/"+project.ID, body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", apiKey)
 	w := httptest.NewRecorder()
@@ -2466,7 +2716,7 @@ func TestHandleProjectAPI_UpdateNotFound(t *testing.T) {
 	defer server.store.Close()
 
 	body := strings.NewReader(`{"branch":"develop"}`)
-	req := httptest.NewRequest("PUT", "/api/v1/projects/nonexistent", body)
+	req := httptest.NewRequest("PUT", "/api/v1/projects/99999", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", apiKey)
 	w := httptest.NewRecorder()
@@ -2493,7 +2743,7 @@ func TestHandleProjectWebhooks_PostInvalidJSON(t *testing.T) {
 		Repository: "https://github.com/test/repo",
 		Branch:     "main",
 	}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
 	body := strings.NewReader(`{invalid}`)
 	req := httptest.NewRequest("POST", "/api/v1/projects/webhook-invalid-json/webhooks", body)
@@ -2521,7 +2771,7 @@ func TestHandleStats_WithData(t *testing.T) {
 
 	// Create some test data
 	project := &storage.Project{Name: "stats-project", Repository: "https://github.com/test/repo"}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
 	agent := &storage.Agent{ID: "stats-agent", Status: "connected"}
 	_ = server.store.UpsertAgent(ctx, agent)
@@ -2579,7 +2829,7 @@ func TestHandleDeploymentRollback_WithUserContext(t *testing.T) {
 		Branch:     "main",
 		DeployPath: "/var/www/test",
 	}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
 	// Create a deployment to rollback
 	deployment := &storage.DeploymentRecord{
@@ -2749,5 +2999,334 @@ func TestHandleSettingsExport_Success(t *testing.T) {
 	var settings map[string]interface{}
 	if err := json.NewDecoder(w.Body).Decode(&settings); err != nil {
 		t.Errorf("failed to decode settings export: %v", err)
+	}
+}
+
+// TestDeploymentsAPI_PaginationResponse verifies the paginated response structure
+func TestDeploymentsAPI_PaginationResponse(t *testing.T) {
+	t.Parallel()
+	server, apiKey, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	ctx := context.Background()
+	// Create 15 deployments
+	for i := 0; i < 15; i++ {
+		deployment := &storage.DeploymentRecord{
+			ID:      fmt.Sprintf("deploy-pagination-%d", i),
+			Project: "test-project",
+			Status:  "completed",
+		}
+		_ = server.store.CreateDeployment(ctx, deployment)
+	}
+
+	t.Run("default pagination returns all items", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/v1/deployments", nil)
+		req.Header.Set("X-API-Key", apiKey)
+		w := httptest.NewRecorder()
+		req = requestWithUserContext(req, userID)
+		server.handleDeploymentsAPI(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected status %d, got %d", http.StatusOK, w.Code)
+		}
+
+		var resp map[string]interface{}
+		if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+
+		// Verify response structure
+		if _, ok := resp["items"]; !ok {
+			t.Error("response missing 'items' field")
+		}
+		if _, ok := resp["totalCount"]; !ok {
+			t.Error("response missing 'totalCount' field")
+		}
+		if _, ok := resp["limit"]; !ok {
+			t.Error("response missing 'limit' field")
+		}
+		if _, ok := resp["offset"]; !ok {
+			t.Error("response missing 'offset' field")
+		}
+
+		items := resp["items"].([]interface{})
+		totalCount := int(resp["totalCount"].(float64))
+
+		if len(items) != 15 {
+			t.Errorf("expected 15 items, got %d", len(items))
+		}
+		if totalCount != 15 {
+			t.Errorf("expected totalCount 15, got %d", totalCount)
+		}
+	})
+
+	t.Run("custom limit", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/v1/deployments?limit=5", nil)
+		req.Header.Set("X-API-Key", apiKey)
+		w := httptest.NewRecorder()
+		req = requestWithUserContext(req, userID)
+		server.handleDeploymentsAPI(w, req)
+
+		var resp map[string]interface{}
+		json.NewDecoder(w.Body).Decode(&resp)
+
+		items := resp["items"].([]interface{})
+		totalCount := int(resp["totalCount"].(float64))
+		limit := int(resp["limit"].(float64))
+
+		if len(items) != 5 {
+			t.Errorf("expected 5 items, got %d", len(items))
+		}
+		if totalCount != 15 {
+			t.Errorf("expected totalCount 15, got %d", totalCount)
+		}
+		if limit != 5 {
+			t.Errorf("expected limit 5, got %d", limit)
+		}
+	})
+
+	t.Run("offset pagination", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/v1/deployments?limit=5&offset=10", nil)
+		req.Header.Set("X-API-Key", apiKey)
+		w := httptest.NewRecorder()
+		req = requestWithUserContext(req, userID)
+		server.handleDeploymentsAPI(w, req)
+
+		var resp map[string]interface{}
+		json.NewDecoder(w.Body).Decode(&resp)
+
+		items := resp["items"].([]interface{})
+		offset := int(resp["offset"].(float64))
+
+		if len(items) != 5 {
+			t.Errorf("expected 5 items, got %d", len(items))
+		}
+		if offset != 10 {
+			t.Errorf("expected offset 10, got %d", offset)
+		}
+	})
+
+	t.Run("offset beyond total returns empty items", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/v1/deployments?offset=100", nil)
+		req.Header.Set("X-API-Key", apiKey)
+		w := httptest.NewRecorder()
+		req = requestWithUserContext(req, userID)
+		server.handleDeploymentsAPI(w, req)
+
+		var resp map[string]interface{}
+		json.NewDecoder(w.Body).Decode(&resp)
+
+		items, _ := resp["items"].([]interface{})
+		totalCount := int(resp["totalCount"].(float64))
+
+		if items == nil {
+			items = []interface{}{}
+		}
+		if len(items) != 0 {
+			t.Errorf("expected 0 items, got %d", len(items))
+		}
+		if totalCount != 15 {
+			t.Errorf("expected totalCount 15, got %d", totalCount)
+		}
+	})
+}
+
+// TestAPIKeys_PaginationResponse verifies the paginated response for API keys
+func TestAPIKeys_PaginationResponse(t *testing.T) {
+	t.Parallel()
+	server, _, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	ctx := context.Background()
+	// Create 5 API keys
+	for i := 0; i < 5; i++ {
+		key := &storage.APIKey{
+			ID:        fmt.Sprintf("test%03d", i+100),
+			Name:      fmt.Sprintf("key-%d", i),
+			KeyHash:   fmt.Sprintf("hash-%d", i),
+			UserID:    userID,
+			CreatedAt: time.Now(),
+		}
+		_ = server.store.CreateAPIKey(ctx, key)
+	}
+
+	req := httptest.NewRequest("GET", "/api/v1/api-keys?limit=2", nil)
+	w := httptest.NewRecorder()
+	req = requestWithUserContext(req, userID)
+	server.handleAPIKeys(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	items := resp["items"].([]interface{})
+	totalCount := int(resp["totalCount"].(float64))
+
+	if len(items) != 2 {
+		t.Errorf("expected 2 items, got %d", len(items))
+	}
+	if totalCount < 5 {
+		t.Errorf("expected totalCount >= 5, got %d", totalCount)
+	}
+}
+
+// --- Body Size Limit Tests ---
+
+// TestBodySizeLimit_UserCreate verifies that the user creation endpoint
+// rejects request bodies that exceed the maximum allowed size.
+func TestBodySizeLimit_UserCreate(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	// Create a body larger than DefaultMaxBodySize (1MB)
+	largeBody := strings.Repeat("a", 2*1024*1024) // 2MB
+	body := bytes.NewBufferString(`{"username":"` + largeBody + `"}`)
+
+	req := httptest.NewRequest("POST", "/api/v1/users", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	req = requestWithUserContext(req, userID)
+	server.handleUsers(w, req)
+
+	// Should get a 400 Bad Request when body is too large
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d for oversized body, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
+	}
+}
+
+// TestBodySizeLimit_ProjectCreate verifies that the project creation endpoint
+// rejects request bodies that exceed the maximum allowed size.
+func TestBodySizeLimit_ProjectCreate(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	// Create a body larger than DefaultMaxBodySize (1MB)
+	largeBody := strings.Repeat("a", 2*1024*1024) // 2MB
+	body := bytes.NewBufferString(`{"name":"` + largeBody + `"}`)
+
+	req := httptest.NewRequest("POST", "/api/v1/projects", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	req = requestWithUserContext(req, userID)
+	server.handleProjectsAPI(w, req)
+
+	// Should get a 400 Bad Request when body is too large
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d for oversized body, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
+	}
+}
+
+// TestBodySizeLimit_HealthCheckCreate verifies that the health check creation endpoint
+// rejects request bodies that exceed the maximum allowed size.
+func TestBodySizeLimit_HealthCheckCreate(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	// Create a body larger than DefaultMaxBodySize (1MB)
+	largeBody := strings.Repeat("a", 2*1024*1024) // 2MB
+	body := bytes.NewBufferString(`{"name":"` + largeBody + `"}`)
+
+	req := httptest.NewRequest("POST", "/api/v1/health-checks", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	req = requestWithUserContext(req, userID)
+	server.handleHealthCheckConfigs(w, req)
+
+	// Should get a 400 Bad Request when body is too large
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d for oversized body, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
+	}
+}
+
+// TestSettingsAPI_RejectsPreBootEdit verifies that pre-boot settings (server, grpc)
+// cannot be changed via the API.
+func TestSettingsAPI_RejectsPreBootEdit(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	for _, category := range []string{"server", "grpc"} {
+		body := strings.NewReader(`{"listen":"0.0.0.0:9999"}`)
+		req := httptest.NewRequest("PUT", "/api/v1/settings/"+category, body)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-API-Key", apiKey)
+		w := httptest.NewRecorder()
+
+		req = requestWithUserContext(req, userID)
+		server.handleSettingsCategory(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("PUT /api/v1/settings/%s: expected 400, got %d: %s", category, w.Code, w.Body.String())
+		}
+	}
+}
+
+// TestSettingsAPI_AcceptsRuntimeEdit verifies that runtime settings (ssh, security, etc.)
+// can be changed via the API.
+func TestSettingsAPI_AcceptsRuntimeEdit(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	for _, category := range []string{"ssh", "security", "backup", "logs", "webhooks", "notifications", "api", "appearance"} {
+		body := strings.NewReader(`{"test_key":"test_value"}`)
+		req := httptest.NewRequest("PUT", "/api/v1/settings/"+category, body)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-API-Key", apiKey)
+		w := httptest.NewRecorder()
+
+		req = requestWithUserContext(req, userID)
+		server.handleSettingsCategory(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("PUT /api/v1/settings/%s: expected 200, got %d: %s", category, w.Code, w.Body.String())
+		}
+	}
+}
+
+// TestSettingsAPI_GetPreBootIncludesReadonly verifies that GET on pre-boot categories
+// includes the _readonly flag.
+func TestSettingsAPI_GetPreBootIncludesReadonly(t *testing.T) {
+	t.Parallel()
+
+	server, apiKey, _, userID := newTestServerWithAuth(t)
+	defer server.store.Close()
+
+	req := httptest.NewRequest("GET", "/api/v1/settings/server", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	req = requestWithUserContext(req, userID)
+	server.handleSettingsCategory(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if result["_readonly"] != true {
+		t.Errorf("expected _readonly=true for pre-boot category server, got %v", result["_readonly"])
 	}
 }

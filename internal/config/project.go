@@ -114,7 +114,7 @@ type NotificationTarget struct {
 
 // LoadProjectConfig loads a project configuration from a file.
 func LoadProjectConfig(path string) (*ProjectConfig, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 - path is admin-controlled config file location
 	if err != nil {
 		return nil, fmt.Errorf("reading project file: %w", err)
 	}
@@ -132,7 +132,7 @@ func LoadProjectConfig(path string) (*ProjectConfig, error) {
 		config.Deployment.Strategy = "symlink"
 	}
 	if config.Deployment.KeepReleases == 0 {
-		config.Deployment.KeepReleases = 5
+		config.Deployment.KeepReleases = DefaultKeepReleases
 	}
 	if config.Env.PlaceholderPattern == "" {
 		config.Env.PlaceholderPattern = "${SECRET_NAME}"
@@ -148,6 +148,7 @@ func LoadProjectConfig(path string) (*ProjectConfig, error) {
 // SaveProjectConfig saves a project configuration to a file.
 func SaveProjectConfig(config *ProjectConfig, path string) error {
 	dir := filepath.Dir(path)
+	// #nosec G301 - Project directory needs group access for agents
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("creating project directory: %w", err)
 	}
@@ -157,6 +158,7 @@ func SaveProjectConfig(config *ProjectConfig, path string) error {
 		return fmt.Errorf("marshaling project: %w", err)
 	}
 
+	// #nosec G306 - Project config needs to be readable by agents
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return fmt.Errorf("writing project file: %w", err)
 	}

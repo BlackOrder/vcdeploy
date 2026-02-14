@@ -223,7 +223,7 @@ func (j *AuditExportJob) Run(ctx context.Context) error {
 	}
 
 	// Write to file
-	file, err := os.Create(exportPath)
+	file, err := os.Create(exportPath) // #nosec G304 - exportPath is admin-controlled audit export destination
 	if err != nil {
 		return fmt.Errorf("creating export file: %w", err)
 	}
@@ -374,14 +374,14 @@ func (j *LogRotationJob) Run(ctx context.Context) error {
 
 func (j *LogRotationJob) rotateFile(src, dst string) error {
 	// Open source file
-	srcFile, err := os.Open(src)
+	srcFile, err := os.Open(src) // #nosec G304 - src is admin-controlled log file path
 	if err != nil {
 		return fmt.Errorf("opening source: %w", err)
 	}
 	defer srcFile.Close()
 
 	// Create destination file
-	dstFile, err := os.Create(dst)
+	dstFile, err := os.Create(dst) // #nosec G304 - dst is admin-controlled rotated log destination
 	if err != nil {
 		return fmt.Errorf("creating destination: %w", err)
 	}
@@ -393,8 +393,8 @@ func (j *LogRotationJob) rotateFile(src, dst string) error {
 	}
 
 	// Close files before truncating
-	srcFile.Close()
-	dstFile.Close()
+	_ = srcFile.Close() // #nosec G104 - intentional close before truncate
+	_ = dstFile.Close() // #nosec G104 - intentional close before truncate
 
 	// Truncate original file
 	if err := os.Truncate(src, 0); err != nil {

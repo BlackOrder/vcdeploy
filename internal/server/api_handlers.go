@@ -12,12 +12,27 @@ import (
 	"strings"
 	"time"
 
+	"github.com/BlackOrder/vcdeploy/internal/config"
 	"github.com/BlackOrder/vcdeploy/internal/proto"
 	"github.com/BlackOrder/vcdeploy/internal/services"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"github.com/BlackOrder/vcdeploy/internal/validation"
+	"github.com/rs/xid"
 	"go.uber.org/zap"
 )
+
+// WriteJSONError writes a JSON error response to the ResponseWriter.
+// This is a standalone helper for use by middleware that don't have access to *MasterServer.
+// For handlers with MasterServer access, use s.jsonError() instead which includes logging.
+func WriteJSONError(w http.ResponseWriter, status int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	// Best-effort encoding - if this fails, there's nothing more we can do
+	_ = json.NewEncoder(w).Encode(ErrorResponse{
+		Error:   true,
+		Message: message,
+	})
+}
 
 // --- Stats API ---
 
@@ -69,21 +84,21 @@ func (s *MasterServer) handleStats(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	s.jsonResponse(w, map[string]interface{}{
-		"projects": map[string]interface{}{
-			"total": len(projects),
+	s.jsonResponse(w, DashboardStatsResponse{
+		Projects: ProjectStats{
+			Total: len(projects),
 		},
-		"agents": map[string]interface{}{
-			"total":     len(agents),
-			"connected": connectedAgents,
+		Agents: AgentStats{
+			Total:     len(agents),
+			Connected: connectedAgents,
 		},
-		"deployments": map[string]interface{}{
-			"success": successCount,
-			"failed":  failedCount,
-			"running": runningCount,
-			"total":   len(deployments),
+		Deployments: DeploymentStats{
+			Success: successCount,
+			Failed:  failedCount,
+			Running: runningCount,
+			Total:   len(deployments),
 		},
-		"timestamp": time.Now().UTC(),
+		Timestamp: time.Now().UTC(),
 	})
 }
 
@@ -98,11 +113,13 @@ func (s *MasterServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		// Admin-only: listing all users
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
-		users, err := s.userService.List(ctx)
+		// H6: Add pagination support for users endpoint
+		p := parsePagination(r)
+		result, err := s.userService.ListPaginated(ctx, p)
 		if err != nil {
 			s.logger.Error("Failed to list users", zap.Error(err))
 			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
@@ -110,30 +127,39 @@ func (s *MasterServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Sanitize - remove password hashes
-		result := make([]map[string]interface{}, 0, len(users))
-		for _, u := range users {
-			result = append(result, map[string]interface{}{
-				"id":        u.ID,
-				"username":  u.Username,
-				"email":     u.Email,
-				"role":      u.Role,
-				"createdAt": u.CreatedAt,
+		users := make([]UserListResponse, 0, len(result.Items))
+		for _, u := range result.Items {
+			users = append(users, UserListResponse{
+				ID:          u.ID,
+				Username:    u.Username,
+				Email:       u.Email,
+				Role:        u.Role,
+				TOTPEnabled: u.TOTPEnabled,
+				CreatedAt:   u.CreatedAt,
 			})
 		}
-		s.jsonResponse(w, result)
+		// Return paginated response with metadata
+		s.jsonResponse(w, PaginatedResponse{
+			Items:      users,
+			TotalCount: result.TotalCount,
+			Limit:      result.Pagination.Limit,
+			Offset:     result.Pagination.Offset,
+		})
 
 	case http.MethodPost:
 		// Admin-only: creating users
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
 		var req struct {
-			Username string `json:"username"`
-			Email    string `json:"email"`
-			Password string `json:"password"`
-			Role     string `json:"role"`
+			Username    string `json:"username"`
+			Email       string `json:"email"`
+			Password    string `json:"password"`
+			Role        string `json:"role"`
+			TOTPEnabled bool   `json:"totpEnabled"`
+			TOTPSecret  string `json:"totpSecret"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
 			s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
@@ -145,12 +171,30 @@ func (s *MasterServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 			s.jsonError(w, http.StatusBadRequest, "username and password required")
 			return
 		}
+		if req.Email != "" {
+			if err := services.ValidateEmail(req.Email); err != nil {
+				s.jsonError(w, http.StatusBadRequest, "invalid email format")
+				return
+			}
+		}
 		if req.Role == "" {
 			req.Role = "user"
 		}
 
+		// Validate role
+		if err := services.ValidateRole(req.Role); err != nil {
+			s.jsonError(w, http.StatusBadRequest, "role must be admin, user, or viewer")
+			return
+		}
+
+		// Build create options
+		var createOpts []services.CreateUserOption
+		if req.TOTPEnabled && req.TOTPSecret != "" {
+			createOpts = append(createOpts, services.WithTOTP(req.TOTPSecret))
+		}
+
 		// Create user through service (handles password validation and hashing)
-		user, err := s.userService.Create(ctx, req.Username, req.Password, req.Email, req.Role)
+		user, err := s.userService.Create(ctx, req.Username, req.Password, req.Email, req.Role, createOpts...)
 		if err != nil {
 			s.logger.Error("Failed to create user", zap.Error(err))
 			// Check if it's a password validation error (should return 400)
@@ -165,11 +209,12 @@ func (s *MasterServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 
 		s.logAudit(r, "create", "user", fmt.Sprintf("Created user: %s", req.Username), "success")
 
-		s.jsonResponse(w, map[string]interface{}{
-			"id":       user.ID,
-			"username": user.Username,
-			"email":    user.Email,
-			"role":     user.Role,
+		s.writeJSON(w, http.StatusCreated, UserCreateResponse{
+			ID:        user.ID,
+			Username:  user.Username,
+			Email:     user.Email,
+			Role:      user.Role,
+			CreatedAt: user.CreatedAt,
 		})
 
 	default:
@@ -179,16 +224,30 @@ func (s *MasterServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 
 // handleUser handles individual user operations.
 func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
-	// Extract user ID from path: /api/v1/users/{id}
+	// Extract user ID from path: /api/v1/users/{id} or /api/v1/users/{id}/totp
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/users/")
 	if path == "" {
 		s.jsonError(w, http.StatusBadRequest, "User ID required")
 		return
 	}
 
-	userID, err := strconv.ParseInt(path, 10, 64)
-	if err != nil {
+	// Check for "me" special case
+	if strings.HasPrefix(path, "me") {
+		s.handleUserMe(w, r)
+		return
+	}
+
+	// Parse user ID and check for sub-resources
+	parts := strings.Split(path, "/")
+	userID := parts[0]
+	if userID == "" {
 		s.jsonError(w, http.StatusBadRequest, "Invalid user ID")
+		return
+	}
+
+	// Check for TOTP sub-resource: /users/{id}/totp
+	if len(parts) > 1 && parts[1] == "totp" {
+		s.handleAdminUserTOTP(w, r, userID)
 		return
 	}
 
@@ -199,7 +258,7 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		// Admin-only: viewing other user details
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -213,18 +272,18 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
-		s.jsonResponse(w, map[string]interface{}{
-			"id":        user.ID,
-			"username":  user.Username,
-			"email":     user.Email,
-			"role":      user.Role,
-			"createdAt": user.CreatedAt,
+		s.jsonResponse(w, UserResponse{
+			ID:        user.ID,
+			Username:  user.Username,
+			Email:     user.Email,
+			Role:      user.Role,
+			CreatedAt: user.CreatedAt,
 		})
 
 	case http.MethodPut:
 		// Admin-only: updating users
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -264,6 +323,12 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 				s.jsonError(w, http.StatusBadRequest, err.Error())
 				return
 			}
+			// Invalidate all sessions for this user (security best practice)
+			if err := s.sessionService.DeleteAllForUser(ctx, userID); err != nil {
+				s.logger.Error("Failed to invalidate sessions after password change",
+					zap.String("user_id", userID),
+					zap.Error(err))
+			}
 		}
 
 		if err := s.userService.Update(ctx, user); err != nil {
@@ -273,12 +338,12 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 		}
 
 		s.logAudit(r, "update", "user", fmt.Sprintf("Updated user: %s", user.Username), "success")
-		s.jsonResponse(w, map[string]string{"status": "updated"})
+		s.jsonResponse(w, StatusResponse{Status: "updated"})
 
 	case http.MethodDelete:
 		// Admin-only: deleting users
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -306,8 +371,78 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 			"email":    user.Email,
 			"role":     user.Role,
 		}
-		s.logAuditWithSnapshot(r, "delete", "user", fmt.Sprintf("%d", user.ID), userSnapshot, fmt.Sprintf("Deleted user: %s", user.Username), "success")
-		s.jsonResponse(w, map[string]string{"status": "deleted"})
+		s.logAuditWithSnapshot(r, "delete", "user", user.ID, userSnapshot, fmt.Sprintf("Deleted user: %s", user.Username), "success")
+		w.WriteHeader(http.StatusNoContent)
+
+	case http.MethodPatch:
+		// Admin-only: partial updates (e.g., password change)
+		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
+			s.jsonError(w, status, msg)
+			return
+		}
+
+		var req struct {
+			Email    string `json:"email,omitempty"`
+			Role     string `json:"role,omitempty"`
+			Password string `json:"password,omitempty"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
+			s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
+			return
+		}
+
+		user, err := s.userService.GetByID(ctx, userID)
+		if err != nil {
+			if services.IsNotFound(err) {
+				s.jsonError(w, http.StatusNotFound, "User not found")
+				return
+			}
+			s.logger.Error("Failed to get user", zap.Error(err))
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+			return
+		}
+
+		// Update only provided fields
+		updated := false
+		if req.Email != "" {
+			user.Email = req.Email
+			updated = true
+		}
+		if req.Role != "" {
+			user.Role = req.Role
+			updated = true
+		}
+
+		// Handle password update via service
+		if req.Password != "" {
+			if err := s.userService.UpdatePassword(ctx, userID, req.Password); err != nil {
+				s.logger.Error("Failed to update password", zap.Error(err))
+				if strings.Contains(err.Error(), "password validation failed") {
+					s.jsonError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+				return
+			}
+			// Invalidate all sessions for this user (security best practice)
+			if err := s.sessionService.DeleteAllForUser(ctx, userID); err != nil {
+				s.logger.Error("Failed to invalidate sessions after password change",
+					zap.String("user_id", userID),
+					zap.Error(err))
+			}
+			updated = true
+		}
+
+		if updated && (req.Email != "" || req.Role != "") {
+			if err := s.userService.Update(ctx, user); err != nil {
+				s.logger.Error("Failed to update user", zap.Error(err))
+				s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+				return
+			}
+		}
+
+		s.logAudit(r, "update", "user", fmt.Sprintf("Updated user: %s", user.Username), "success")
+		s.jsonResponse(w, StatusResponse{Status: "updated"})
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -315,6 +450,47 @@ func (s *MasterServer) handleUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // --- Settings API ---
+
+// handleSettingsAll handles GET /api/v1/settings to list all settings grouped by category.
+func (s *MasterServer) handleSettingsAll(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
+	defer cancel()
+
+	// Read access: viewer role + read scope
+	if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
+		s.jsonError(w, status, msg)
+		return
+	}
+
+	if s.settingsSvc == nil {
+		s.jsonError(w, http.StatusInternalServerError, "Settings service not configured")
+		return
+	}
+
+	// Get all settings grouped by category
+	allSettings, err := s.settingsSvc.ListAll(ctx)
+	if err != nil {
+		s.logger.Error("Failed to list settings", zap.Error(err))
+		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	// Group by category
+	result := make(map[string]map[string]interface{})
+	for _, setting := range allSettings {
+		if result[setting.Category] == nil {
+			result[setting.Category] = make(map[string]interface{})
+		}
+		result[setting.Category][setting.Key] = setting.Value
+	}
+
+	s.jsonResponse(w, result)
+}
 
 // handleSettingsCategory handles settings operations for a category.
 func (s *MasterServer) handleSettingsCategory(w http.ResponseWriter, r *http.Request) {
@@ -334,7 +510,7 @@ func (s *MasterServer) handleSettingsCategory(w http.ResponseWriter, r *http.Req
 	case http.MethodGet:
 		// Read access: viewer role + read scope
 		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -354,12 +530,22 @@ func (s *MasterServer) handleSettingsCategory(w http.ResponseWriter, r *http.Req
 		for _, setting := range settings {
 			result[setting.Key] = setting.Value
 		}
+		if config.IsPreBootCategory(category) {
+			result["_readonly"] = true
+		}
 		s.jsonResponse(w, result)
 
 	case http.MethodPut:
 		// Admin-only: changing settings
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
+			return
+		}
+
+		// Pre-boot categories are read-only — must edit master.yaml and restart
+		if config.IsPreBootCategory(category) {
+			s.jsonError(w, http.StatusBadRequest,
+				fmt.Sprintf("Settings in category %q are read-only. Edit master.yaml and restart the server.", category))
 			return
 		}
 
@@ -368,13 +554,38 @@ func (s *MasterServer) handleSettingsCategory(w http.ResponseWriter, r *http.Req
 			return
 		}
 
-		var req map[string]string
+		var req map[string]interface{}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
 			s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
 			return
 		}
 
-		for key, value := range req {
+		for key, rawValue := range req {
+			// Type coercion: convert non-string values to strings
+			var value string
+			switch v := rawValue.(type) {
+			case string:
+				value = v
+			case bool:
+				if v {
+					value = "true"
+				} else {
+					value = "false"
+				}
+			case float64:
+				// JSON numbers are float64; format as integer if whole number
+				if v == float64(int64(v)) {
+					value = strconv.FormatInt(int64(v), 10)
+				} else {
+					value = strconv.FormatFloat(v, 'f', -1, 64)
+				}
+			case nil:
+				value = ""
+			default:
+				s.jsonError(w, http.StatusBadRequest, fmt.Sprintf("invalid type for setting %s", key))
+				return
+			}
+
 			if err := s.settingsSvc.Set(ctx, category, key, value, false); err != nil {
 				s.logger.Error("Failed to set setting", zap.String("key", key), zap.Error(err))
 				s.jsonError(w, http.StatusInternalServerError, "Internal server error")
@@ -383,7 +594,7 @@ func (s *MasterServer) handleSettingsCategory(w http.ResponseWriter, r *http.Req
 		}
 
 		s.logAudit(r, "update", "settings", fmt.Sprintf("Updated settings category: %s", category), "success")
-		s.jsonResponse(w, map[string]string{"status": "updated"})
+		s.jsonResponse(w, StatusResponse{Status: "updated"})
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -402,7 +613,7 @@ func (s *MasterServer) handleSettingsExport(w http.ResponseWriter, r *http.Reque
 
 	// Admin-only: exporting settings
 	if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-		http.Error(w, msg, status)
+		s.jsonError(w, status, msg)
 		return
 	}
 
@@ -447,7 +658,7 @@ func (s *MasterServer) handleSettingsImport(w http.ResponseWriter, r *http.Reque
 
 	// Admin-only: importing settings
 	if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-		http.Error(w, msg, status)
+		s.jsonError(w, status, msg)
 		return
 	}
 
@@ -482,9 +693,9 @@ func (s *MasterServer) handleSettingsImport(w http.ResponseWriter, r *http.Reque
 	}
 
 	s.logAudit(r, "import", "settings", fmt.Sprintf("Imported %d settings", count), "success")
-	s.jsonResponse(w, map[string]interface{}{
-		"status":   "imported",
-		"imported": count,
+	s.jsonResponse(w, SettingsImportResponse{
+		Status:   "imported",
+		Imported: count,
 	})
 }
 
@@ -499,22 +710,28 @@ func (s *MasterServer) handleProjectsAPI(w http.ResponseWriter, r *http.Request)
 	case http.MethodGet:
 		// Read access: viewer role + read scope
 		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
-		projects, err := s.projectService.List(ctx)
+		p := parsePagination(r)
+		result, err := s.projectService.ListPaginated(ctx, p)
 		if err != nil {
 			s.logger.Error("Failed to list projects", zap.Error(err))
 			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
-		s.jsonResponse(w, projects)
+		s.jsonResponse(w, PaginatedResponse{
+			Items:      result.Items,
+			TotalCount: result.TotalCount,
+			Limit:      result.Pagination.Limit,
+			Offset:     result.Pagination.Offset,
+		})
 
 	case http.MethodPost:
 		// Write access: user role + write scope
 		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -522,7 +739,7 @@ func (s *MasterServer) handleProjectsAPI(w http.ResponseWriter, r *http.Request)
 			Name       string `json:"name"`
 			Repository string `json:"repository"`
 			Branch     string `json:"branch"`
-			DeployPath string `json:"deploy_path"`
+			DeployPath string `json:"deployPath"`
 			Type       string `json:"type"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
@@ -532,6 +749,18 @@ func (s *MasterServer) handleProjectsAPI(w http.ResponseWriter, r *http.Request)
 
 		if req.Name == "" {
 			s.jsonError(w, http.StatusBadRequest, "name is required")
+			return
+		}
+		if err := services.ValidateProjectName(req.Name); err != nil {
+			s.jsonError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if req.Repository == "" {
+			s.jsonError(w, http.StatusBadRequest, "repository is required")
+			return
+		}
+		if req.DeployPath == "" {
+			s.jsonError(w, http.StatusBadRequest, "deployPath is required")
 			return
 		}
 		if req.Branch == "" {
@@ -546,8 +775,7 @@ func (s *MasterServer) handleProjectsAPI(w http.ResponseWriter, r *http.Request)
 		}
 
 		s.logAudit(r, "create", "project", fmt.Sprintf("Created project: %s", req.Name), "success")
-		w.WriteHeader(http.StatusCreated)
-		s.jsonResponse(w, project)
+		s.writeJSON(w, http.StatusCreated, project)
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -556,13 +784,19 @@ func (s *MasterServer) handleProjectsAPI(w http.ResponseWriter, r *http.Request)
 
 // handleProjectAPI handles individual project operations.
 func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) {
-	// Extract project name from path: /api/v1/projects/{name}
+	// Extract project ID from path: /api/v1/projects/{id}
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/projects/")
 	parts := strings.Split(path, "/")
-	projectName := parts[0]
+	projectIDStr := parts[0]
 
-	if projectName == "" {
-		s.jsonError(w, http.StatusBadRequest, "Project name required")
+	if projectIDStr == "" {
+		s.jsonError(w, http.StatusBadRequest, "Project ID required")
+		return
+	}
+
+	projectID := projectIDStr
+	if projectID == "" {
+		s.jsonError(w, http.StatusBadRequest, "Invalid project ID")
 		return
 	}
 
@@ -570,20 +804,17 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 	if len(parts) > 1 {
 		switch parts[1] {
 		case "webhooks":
-			s.handleProjectWebhooks(w, r, projectName)
+			s.handleProjectWebhooksByID(w, r, projectID)
 			return
-		case "deploy":
-			s.handleProjectDeploy(w, r, projectName)
-			return
+		// NOTE: "deploy" shortcut removed - use POST /deployments with project field instead
 		case "health-config":
-			// Get project ID first
-			ctx := r.Context()
-			project, err := s.projectService.GetByName(ctx, projectName)
-			if err != nil {
-				s.jsonError(w, http.StatusNotFound, "Project not found")
-				return
-			}
-			s.handleProjectHealthConfig(w, r, project.ID)
+			s.handleProjectHealthConfig(w, r, projectID)
+			return
+		case "playbook":
+			s.handleProjectPlaybookByID(w, r, projectID)
+			return
+		case "clone":
+			s.handleProjectClone(w, r, projectID)
 			return
 		}
 	}
@@ -595,11 +826,11 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 	case http.MethodGet:
 		// Read access: viewer role + read scope
 		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
-		project, err := s.projectService.GetByName(ctx, projectName)
+		project, err := s.projectService.GetByID(ctx, projectID)
 		if err != nil {
 			s.jsonError(w, http.StatusNotFound, "Project not found")
 			return
@@ -609,14 +840,15 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 	case http.MethodPut:
 		// Write access: user role + write scope
 		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
 		var req struct {
+			Name       string `json:"name"`
 			Repository string `json:"repository"`
 			Branch     string `json:"branch"`
-			DeployPath string `json:"deploy_path"`
+			DeployPath string `json:"deployPath"`
 			Type       string `json:"type"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
@@ -624,13 +856,16 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 
-		project, err := s.projectService.GetByName(ctx, projectName)
+		project, err := s.projectService.GetByID(ctx, projectID)
 		if err != nil {
 			s.jsonError(w, http.StatusNotFound, "Project not found")
 			return
 		}
 
 		// Update fields
+		if req.Name != "" {
+			project.Name = req.Name
+		}
 		if req.Repository != "" {
 			project.Repository = req.Repository
 		}
@@ -641,27 +876,28 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 			project.DeployPath = req.DeployPath
 		}
 		if req.Type != "" {
-			project.Type = req.Type
+			typeID := req.Type
+			project.TypeID = &typeID
 		}
 
-		if err := s.projectService.Update(ctx, project); err != nil {
+		if err := s.projectService.UpdateByID(ctx, project); err != nil {
 			s.logger.Error("Failed to update project", zap.Error(err))
 			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
-		s.logAudit(r, "update", "project", fmt.Sprintf("Updated project: %s", projectName), "success")
+		s.logAudit(r, "update", "project", fmt.Sprintf("Updated project: %s", projectID), "success")
 		s.jsonResponse(w, project)
 
 	case http.MethodDelete:
 		// Write access: user role + write scope
 		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
 		// Fetch project before deletion to capture snapshot for audit
-		project, err := s.projectService.GetByName(ctx, projectName)
+		project, err := s.projectService.GetByID(ctx, projectID)
 		if err != nil {
 			if services.IsNotFound(err) {
 				s.jsonError(w, http.StatusNotFound, "Project not found")
@@ -672,19 +908,89 @@ func (s *MasterServer) handleProjectAPI(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 
-		if err := s.projectService.Delete(ctx, projectName); err != nil {
+		if err := s.projectService.DeleteByID(ctx, projectID); err != nil {
 			s.logger.Error("Failed to delete project", zap.Error(err))
 			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
 		// Log with snapshot of deleted resource
-		s.logAuditWithSnapshot(r, "delete", "project", fmt.Sprintf("%d", project.ID), project, fmt.Sprintf("Deleted project: %s", projectName), "success")
-		s.jsonResponse(w, map[string]string{"status": "deleted"})
+		s.logAuditWithSnapshot(r, "delete", "project", project.ID, project, fmt.Sprintf("Deleted project: %s (ID: %s)", project.Name, projectID), "success")
+		w.WriteHeader(http.StatusNoContent)
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
+}
+
+// handleProjectClone creates a copy of an existing project.
+func (s *MasterServer) handleProjectClone(w http.ResponseWriter, r *http.Request, projectID string) {
+	if r.Method != http.MethodPost {
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
+	defer cancel()
+
+	// Check write access
+	if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
+		s.jsonError(w, status, msg)
+		return
+	}
+
+	// Get source project
+	source, err := s.projectService.GetByID(ctx, projectID)
+	if err != nil {
+		if services.IsNotFound(err) {
+			s.jsonError(w, http.StatusNotFound, "Project not found")
+			return
+		}
+		s.logger.Error("Failed to get project", zap.Error(err))
+		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	// Parse request for new project name
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
+		s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
+		return
+	}
+
+	if req.Name == "" {
+		s.jsonError(w, http.StatusBadRequest, "New project name is required")
+		return
+	}
+
+	// Check if name already exists
+	existing, _ := s.projectService.GetByName(ctx, req.Name)
+	if existing != nil {
+		s.jsonError(w, http.StatusConflict, "Project with this name already exists")
+		return
+	}
+
+	// Create new project with same configuration
+	newProject, err := s.projectService.Create(ctx, req.Name, source.Repository, source.Branch, source.DeployPath, derefStr(source.TypeID))
+	if err != nil {
+		s.logger.Error("Failed to create cloned project", zap.Error(err))
+		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	// Copy additional settings
+	if source.AutoRollbackEnabled || source.RollbackOnHealthFail {
+		newProject.AutoRollbackEnabled = source.AutoRollbackEnabled
+		newProject.RollbackOnHealthFail = source.RollbackOnHealthFail
+		if err := s.projectService.Update(ctx, newProject); err != nil {
+			s.logger.Warn("Failed to update cloned project settings", zap.Error(err))
+		}
+	}
+
+	s.logAudit(r, "clone", "project", fmt.Sprintf("Cloned project %s from %s (ID: %s)", req.Name, source.Name, projectID), "success")
+	s.writeJSON(w, http.StatusCreated, newProject)
 }
 
 // handleProjectWebhooks handles webhook configuration for a project.
@@ -698,22 +1004,43 @@ func (s *MasterServer) handleProjectWebhooks(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	s.handleProjectWebhooksInternal(ctx, w, r, project)
+}
+
+// handleProjectWebhooksByID handles webhook configuration for a project by ID.
+func (s *MasterServer) handleProjectWebhooksByID(w http.ResponseWriter, r *http.Request, projectID string) {
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
+	defer cancel()
+
+	project, err := s.projectService.GetByID(ctx, projectID)
+	if err != nil {
+		s.jsonError(w, http.StatusNotFound, "Project not found")
+		return
+	}
+
+	s.handleProjectWebhooksInternal(ctx, w, r, project)
+}
+
+// handleProjectWebhooksInternal is the shared implementation for webhook handling.
+func (s *MasterServer) handleProjectWebhooksInternal(ctx context.Context, w http.ResponseWriter, r *http.Request, project *storage.Project) {
 	switch r.Method {
 	case http.MethodGet:
 		// Read access: viewer role + read scope
 		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
 		// Get all webhooks for this project
-		webhooksList := make([]map[string]interface{}, 0)
+		webhooksList := make([]WebhookResponse, 0)
 		for _, provider := range []string{"github", "gitlab", "bitbucket"} {
 			wh, err := s.webhookService.Get(ctx, project.ID, provider)
 			if err == nil && wh != nil {
-				webhooksList = append(webhooksList, map[string]interface{}{
-					"provider": provider,
-					"enabled":  wh.Enabled,
+				webhooksList = append(webhooksList, WebhookResponse{
+					Provider:  provider,
+					Enabled:   wh.Enabled,
+					CreatedAt: &wh.CreatedAt,
+					UpdatedAt: &wh.UpdatedAt,
 				})
 			}
 		}
@@ -722,7 +1049,7 @@ func (s *MasterServer) handleProjectWebhooks(w http.ResponseWriter, r *http.Requ
 	case http.MethodPost:
 		// Write access: user role + write scope
 		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -730,7 +1057,7 @@ func (s *MasterServer) handleProjectWebhooks(w http.ResponseWriter, r *http.Requ
 			Provider      string `json:"provider"`
 			Secret        string `json:"secret"`
 			Enabled       bool   `json:"enabled"`
-			RequireSecret *bool  `json:"require_secret"` // Pointer to detect if field was provided
+			RequireSecret *bool  `json:"requireSecret"` // Pointer to detect if field was provided
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
 			s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
@@ -754,16 +1081,25 @@ func (s *MasterServer) handleProjectWebhooks(w http.ResponseWriter, r *http.Requ
 			return
 		}
 
-		s.logAudit(r, "create", "webhook", fmt.Sprintf("Configured %s webhook for project: %s", req.Provider, projectName), "success")
-		w.WriteHeader(http.StatusCreated)
-		s.jsonResponse(w, map[string]string{"status": "created"})
+		s.logAudit(r, "create", "webhook", fmt.Sprintf("Configured %s webhook for project: %s", req.Provider, project.Name), "success")
+		s.writeJSON(w, http.StatusCreated, StatusResponse{Status: "created"})
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
 }
 
+// deployRequest holds parsed deployment parameters.
+// Used to pass pre-decoded request data between handlers, avoiding double body reads.
+type deployRequest struct {
+	Branch      string `json:"branch"`
+	Commit      string `json:"commit"`
+	Target      string `json:"target"`
+	ScheduledAt string `json:"scheduledAt,omitempty"`
+}
+
 // handleProjectDeploy triggers a deployment for a project.
+// Called from webhook handlers where the body has not been pre-consumed.
 func (s *MasterServer) handleProjectDeploy(w http.ResponseWriter, r *http.Request, projectName string) {
 	if r.Method != http.MethodPost {
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -779,15 +1115,23 @@ func (s *MasterServer) handleProjectDeploy(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	var req struct {
-		Branch      string `json:"branch"`
-		Target      string `json:"target"`
-		ScheduledAt string `json:"scheduled_at,omitempty"`
-	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
-		// Empty body is OK - use defaults
-		req.Branch = project.Branch
-		req.Target = "production"
+	// Body not yet consumed — pass nil so handleProjectDeployInternal reads it
+	s.handleProjectDeployInternal(ctx, w, r, project, nil)
+}
+
+// handleProjectDeployInternal is the shared implementation for deployment triggering.
+// If parsed is non-nil, the request body has already been decoded (e.g. from handleDeploymentsAPI).
+// If parsed is nil, the body is read directly from r.
+func (s *MasterServer) handleProjectDeployInternal(ctx context.Context, w http.ResponseWriter, r *http.Request, project *storage.Project, parsed *deployRequest) {
+	var req deployRequest
+	if parsed != nil {
+		req = *parsed
+	} else {
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
+			// Empty body is OK - use defaults
+			req.Branch = project.Branch
+			req.Target = "production"
+		}
 	}
 
 	if req.Branch == "" {
@@ -795,6 +1139,19 @@ func (s *MasterServer) handleProjectDeploy(w http.ResponseWriter, r *http.Reques
 	}
 	if req.Target == "" {
 		req.Target = "production"
+	}
+
+	// Validate target exists as a registered agent (skip for default "production" target)
+	if req.Target != "production" && s.agentService != nil {
+		if _, err := s.agentService.GetByID(ctx, req.Target); err != nil {
+			if services.IsNotFound(err) {
+				s.jsonError(w, http.StatusBadRequest, fmt.Sprintf("target agent %q not found", req.Target))
+				return
+			}
+			s.logger.Error("Failed to validate target agent", zap.Error(err))
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+			return
+		}
 	}
 
 	// Get username from context
@@ -805,7 +1162,7 @@ func (s *MasterServer) handleProjectDeploy(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	deploymentID := fmt.Sprintf("deploy-%d", time.Now().UnixNano())
+	deploymentID := xid.New().String()
 
 	// Check if scheduled
 	if req.ScheduledAt != "" {
@@ -821,12 +1178,12 @@ func (s *MasterServer) handleProjectDeploy(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		s.logAudit(r, "schedule", "deployment", fmt.Sprintf("Scheduled deployment for %s at %s", projectName, scheduledTime), "success")
+		s.logAudit(r, "schedule", "deployment", fmt.Sprintf("Scheduled deployment for %s at %s", project.Name, scheduledTime), "success")
 		w.WriteHeader(http.StatusAccepted)
-		s.jsonResponse(w, map[string]interface{}{
-			"id":           deploymentID,
-			"status":       "scheduled",
-			"scheduled_at": scheduledTime,
+		s.jsonResponse(w, ScheduledDeploymentResponse{
+			ID:          deploymentID,
+			Status:      "scheduled",
+			ScheduledAt: scheduledTime,
 		})
 		return
 	}
@@ -837,6 +1194,7 @@ func (s *MasterServer) handleProjectDeploy(w http.ResponseWriter, r *http.Reques
 		Project:     project.Name,
 		Target:      req.Target,
 		Branch:      req.Branch,
+		CommitHash:  req.Commit,
 		Status:      "pending",
 		TriggeredBy: username,
 		StartedAt:   time.Now(),
@@ -848,7 +1206,7 @@ func (s *MasterServer) handleProjectDeploy(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	s.logAudit(r, "trigger", "deployment", fmt.Sprintf("Triggered deployment for %s", projectName), "success")
+	s.logAudit(r, "trigger", "deployment", fmt.Sprintf("Triggered deployment for %s", project.Name), "success")
 	w.WriteHeader(http.StatusAccepted)
 	s.jsonResponse(w, deployment)
 }
@@ -867,17 +1225,23 @@ func (s *MasterServer) handleAgentsAPI(w http.ResponseWriter, r *http.Request) {
 
 	// Read access: viewer role + read scope
 	if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-		http.Error(w, msg, status)
+		s.jsonError(w, status, msg)
 		return
 	}
 
-	agents, err := s.agentService.List(ctx)
+	p := parsePagination(r)
+	result, err := s.agentService.ListPaginated(ctx, p)
 	if err != nil {
 		s.logger.Error("Failed to list agents", zap.Error(err))
 		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
-	s.jsonResponse(w, agents)
+	s.jsonResponse(w, PaginatedResponse{
+		Items:      result.Items,
+		TotalCount: result.TotalCount,
+		Limit:      result.Pagination.Limit,
+		Offset:     result.Pagination.Offset,
+	})
 }
 
 // handleAgentAPI handles individual agent operations.
@@ -890,6 +1254,11 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 	// Handle special paths that don't require agent ID
 	if agentID == "updates" && len(parts) > 1 && parts[1] == "pending" {
 		s.handleAgentsNeedingUpdate(w, r)
+		return
+	}
+
+	if agentID == "updates" && len(parts) > 1 && parts[1] == "history" {
+		s.handleAllAgentUpdateHistory(w, r)
 		return
 	}
 
@@ -929,12 +1298,16 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		// Read access: viewer role + read scope
 		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
 		agent, err := s.agentService.GetByID(ctx, agentID)
 		if err != nil {
+			if services.IsNotFound(err) {
+				s.jsonError(w, http.StatusNotFound, "Agent not found")
+				return
+			}
 			s.logger.Error("Failed to get agent", zap.Error(err))
 			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
@@ -948,7 +1321,7 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPut:
 		// Write access: user role + write scope
 		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -971,7 +1344,13 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 			agent.Labels = req.Labels
 		}
 		if req.Status != "" {
-			agent.Status = req.Status
+			// Validate agent status
+			validStatuses := map[string]bool{"online": true, "offline": true, "maintenance": true, "connected": true, "disconnected": true}
+			if !validStatuses[req.Status] {
+				s.jsonError(w, http.StatusBadRequest, "status must be one of: online, offline, maintenance, connected, disconnected")
+				return
+			}
+			agent.Status = storage.AgentStatus(req.Status)
 		}
 
 		if err := s.agentService.Upsert(ctx, agent); err != nil {
@@ -986,7 +1365,7 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		// Admin-only: deleting agents
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -1020,7 +1399,7 @@ func (s *MasterServer) handleAgentAPI(w http.ResponseWriter, r *http.Request) {
 			"lastSeenAt": agent.LastSeenAt,
 		}
 		s.logAuditWithSnapshot(r, "delete", "agent", agentID, agentSnapshot, fmt.Sprintf("Deleted agent: %s", agentID), "success")
-		s.jsonResponse(w, map[string]string{"status": "deleted"})
+		w.WriteHeader(http.StatusNoContent)
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -1050,10 +1429,10 @@ func (s *MasterServer) handleAgentToken(w http.ResponseWriter, r *http.Request, 
 
 	s.logAudit(r, "create", "agent_token", fmt.Sprintf("Generated token for agent: %s", agentID), "success")
 
-	s.jsonResponse(w, map[string]string{
-		"agent_id": agentID,
-		"token":    token,
-		"expires":  "30m", // Token expires after 30 minutes if not used
+	s.jsonResponse(w, AgentTokenResponse{
+		AgentID: agentID,
+		Token:   token,
+		Expires: "30m", // Token expires after 30 minutes if not used
 	})
 }
 
@@ -1068,33 +1447,40 @@ func (s *MasterServer) handleDeploymentsAPI(w http.ResponseWriter, r *http.Reque
 	case http.MethodGet:
 		// Read access: viewer role + read scope
 		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
 		// Parse pagination
 		p := parsePagination(r)
 
-		deployments, err := s.deploymentService.ListRecent(ctx, p.Limit)
+		result, err := s.deploymentService.ListPaginated(ctx, p)
 		if err != nil {
 			s.logger.Error("Failed to list deployments", zap.Error(err))
 			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
-		s.jsonResponse(w, deployments)
+		s.jsonResponse(w, PaginatedResponse{
+			Items:      result.Items,
+			TotalCount: result.TotalCount,
+			Limit:      result.Pagination.Limit,
+			Offset:     result.Pagination.Offset,
+		})
 
 	case http.MethodPost:
 		// Write access: user role + write scope
 		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
 		var req struct {
 			Project     string `json:"project"`
 			Branch      string `json:"branch"`
+			Commit      string `json:"commit"`
 			Target      string `json:"target"`
-			ScheduledAt string `json:"scheduled_at,omitempty"`
+			Force       bool   `json:"force"`
+			ScheduledAt string `json:"scheduledAt,omitempty"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
 			s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
@@ -1106,8 +1492,22 @@ func (s *MasterServer) handleDeploymentsAPI(w http.ResponseWriter, r *http.Reque
 			return
 		}
 
-		// Forward to project deploy handler
-		s.handleProjectDeploy(w, r, req.Project)
+		// Forward parsed request to project deploy handler (avoids re-decoding consumed body)
+		ctx2, cancel2 := context.WithTimeout(ctx, TimeoutDefault)
+		defer cancel2()
+
+		project, err := s.projectService.GetByName(ctx2, req.Project)
+		if err != nil {
+			s.jsonError(w, http.StatusNotFound, "Project not found")
+			return
+		}
+
+		s.handleProjectDeployInternal(ctx2, w, r, project, &deployRequest{
+			Branch:      req.Branch,
+			Commit:      req.Commit,
+			Target:      req.Target,
+			ScheduledAt: req.ScheduledAt,
+		})
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -1129,11 +1529,12 @@ func (s *MasterServer) handleDeploymentAPI(w http.ResponseWriter, r *http.Reques
 	// Check for actions
 	if len(parts) > 1 {
 		switch parts[1] {
-		case "cancel":
-			s.handleDeploymentCancel(w, r, deploymentID)
-			return
+		// NOTE: "cancel" removed - use DELETE /deployments/{id} instead
 		case "rollback":
 			s.handleDeploymentRollback(w, r, deploymentID)
+			return
+		case "retry":
+			s.handleDeploymentRetry(w, r, deploymentID)
 			return
 		case "logs":
 			// Check for streaming request
@@ -1153,6 +1554,10 @@ func (s *MasterServer) handleDeploymentAPI(w http.ResponseWriter, r *http.Reques
 	case http.MethodGet:
 		deployment, err := s.deploymentService.GetByID(ctx, deploymentID)
 		if err != nil {
+			if services.IsNotFound(err) {
+				s.jsonError(w, http.StatusNotFound, "Deployment not found")
+				return
+			}
 			s.logger.Error("Failed to get deployment", zap.Error(err))
 			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 			return
@@ -1164,93 +1569,79 @@ func (s *MasterServer) handleDeploymentAPI(w http.ResponseWriter, r *http.Reques
 		s.jsonResponse(w, deployment)
 
 	case http.MethodDelete:
-		// Cancel if running, otherwise just acknowledge
+		// Cancel deployment - handles scheduled, pending, and running deployments
 		deployment, err := s.deploymentService.GetByID(ctx, deploymentID)
 		if err != nil || deployment == nil {
 			s.jsonError(w, http.StatusNotFound, "Deployment not found")
 			return
 		}
 
+		// Check if deployment can be cancelled
+		if deployment.Status != "running" && deployment.Status != "pending" && deployment.Status != "scheduled" {
+			s.jsonError(w, http.StatusBadRequest, fmt.Sprintf("deployment cannot be cancelled (status: %s)", deployment.Status))
+			return
+		}
+
+		// Handle scheduled deployments
 		if deployment.Status == "scheduled" {
 			if err := s.deploymentService.CancelScheduled(ctx, deploymentID); err != nil {
-				s.logger.Error("Failed to cancel deployment", zap.Error(err))
+				s.logger.Error("Failed to cancel scheduled deployment", zap.Error(err))
 				s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 				return
 			}
+			s.logAudit(r, "cancel", "deployment", fmt.Sprintf("Cancelled scheduled deployment: %s", deploymentID), "success")
+			s.jsonResponse(w, StatusResponse{Status: "cancelled"})
+			return
 		}
 
+		// Try to send cancel command to agent if deployment is running
+		if deployment.Status == "running" && s.agentServer != nil {
+			agentID := deployment.Target
+			if agentID == "" {
+				connectedAgents := s.agentServer.GetConnectedAgents()
+				if len(connectedAgents) > 0 {
+					agentID = connectedAgents[0]
+				}
+			}
+
+			if agentID != "" && s.agentServer.IsAgentConnected(agentID) {
+				cancelCmd := &proto.CancelCommand{
+					DeploymentId: deploymentID,
+					Reason:       "Cancelled by user via API",
+				}
+				if err := s.agentServer.SendCancelCommand(agentID, cancelCmd); err != nil {
+					s.logger.Warn("Failed to send cancel command to agent",
+						zap.String("agent", agentID),
+						zap.Error(err),
+					)
+				} else {
+					s.logger.Info("Sent cancel command to agent",
+						zap.String("deployment_id", deploymentID),
+						zap.String("agent", agentID),
+					)
+				}
+			}
+		}
+
+		// Update status
+		now := time.Now()
+		deployment.Status = "cancelled"
+		deployment.CompletedAt = &now
+		if err := s.deploymentService.Update(ctx, deployment); err != nil {
+			s.logger.Error("Failed to cancel deployment", zap.Error(err))
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+			return
+		}
+
+		// Publish SSE event
+		s.publishDeploymentEvent(deployment.ID, deployment.Project, "cancelled", deployment.Target, deployment.Branch, "Deployment cancelled")
+
 		s.logAudit(r, "cancel", "deployment", fmt.Sprintf("Cancelled deployment: %s", deploymentID), "success")
-		s.jsonResponse(w, map[string]string{"status": "cancelled"})
+		s.jsonResponse(w, StatusResponse{Status: "cancelled"})
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
-}
-
-// handleDeploymentCancel cancels a running deployment.
-func (s *MasterServer) handleDeploymentCancel(w http.ResponseWriter, r *http.Request, deploymentID string) {
-	if r.Method != http.MethodPost {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
-	defer cancel()
-
-	deployment, err := s.deploymentService.GetByID(ctx, deploymentID)
-	if err != nil || deployment == nil {
-		s.jsonError(w, http.StatusNotFound, "Deployment not found")
-		return
-	}
-
-	if deployment.Status != "running" && deployment.Status != "pending" && deployment.Status != "scheduled" {
-		s.jsonError(w, http.StatusBadRequest, "deployment cannot be cancelled (not running)")
-		return
-	}
-
-	// Try to send cancel command to agent if deployment is running
-	if deployment.Status == "running" && s.agentServer != nil {
-		// Determine target agent
-		agentID := deployment.Target
-		if agentID == "" {
-			// Try to find the agent handling this deployment
-			connectedAgents := s.agentServer.GetConnectedAgents()
-			if len(connectedAgents) > 0 {
-				agentID = connectedAgents[0]
-			}
-		}
-
-		if agentID != "" && s.agentServer.IsAgentConnected(agentID) {
-			cancelCmd := &proto.CancelCommand{
-				DeploymentId: deploymentID,
-				Reason:       "Cancelled by user via API",
-			}
-			if err := s.agentServer.SendCancelCommand(agentID, cancelCmd); err != nil {
-				s.logger.Warn("Failed to send cancel command to agent",
-					zap.String("agent", agentID),
-					zap.Error(err),
-				)
-			} else {
-				s.logger.Info("Sent cancel command to agent",
-					zap.String("deployment_id", deploymentID),
-					zap.String("agent", agentID),
-				)
-			}
-		}
-	}
-
-	// Update status
-	now := time.Now()
-	deployment.Status = "cancelled"
-	deployment.CompletedAt = &now
-	if err := s.deploymentService.Update(ctx, deployment); err != nil {
-		s.logger.Error("Failed to cancel deployment", zap.Error(err))
-		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
-		return
-	}
-
-	s.logAudit(r, "cancel", "deployment", fmt.Sprintf("Cancelled deployment: %s", deploymentID), "success")
-	s.jsonResponse(w, map[string]string{"status": "cancelled"})
 }
 
 // handleDeploymentRollback triggers a rollback for a deployment.
@@ -1295,6 +1686,9 @@ func (s *MasterServer) handleDeploymentRollback(w http.ResponseWriter, r *http.R
 		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
+
+	// Publish SSE event for new rollback deployment
+	s.publishDeploymentEvent(rollback.ID, rollback.Project, "pending", rollback.Target, rollback.Branch, "Rollback initiated")
 
 	// Try to send rollback command to agent
 	if s.agentServer != nil {
@@ -1356,6 +1750,112 @@ func (s *MasterServer) handleDeploymentRollback(w http.ResponseWriter, r *http.R
 	s.jsonResponse(w, rollback)
 }
 
+// handleDeploymentRetry creates a new deployment with the same configuration as a failed one.
+func (s *MasterServer) handleDeploymentRetry(w http.ResponseWriter, r *http.Request, deploymentID string) {
+	if r.Method != http.MethodPost {
+		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
+	defer cancel()
+
+	// Check write access
+	if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
+		s.jsonError(w, status, msg)
+		return
+	}
+
+	deployment, err := s.deploymentService.GetByID(ctx, deploymentID)
+	if err != nil || deployment == nil {
+		s.jsonError(w, http.StatusNotFound, "Deployment not found")
+		return
+	}
+
+	// Only allow retry of failed or cancelled deployments
+	if deployment.Status != "failed" && deployment.Status != "cancelled" && deployment.Status != "error" {
+		s.jsonError(w, http.StatusBadRequest, "Can only retry failed or cancelled deployments")
+		return
+	}
+
+	// Get username from context
+	username := "api"
+	if userID, ok := GetUserIDFromContext(r.Context()); ok {
+		if user, err := s.userService.GetByID(ctx, userID); err == nil && user != nil {
+			username = user.Username
+		}
+	}
+
+	// Create new deployment with same configuration
+	newDeploymentID := xid.New().String()
+	newDeployment := &storage.DeploymentRecord{
+		ID:            newDeploymentID,
+		Project:       deployment.Project,
+		Target:        deployment.Target,
+		Branch:        deployment.Branch,
+		Status:        "pending",
+		TriggeredBy:   username,
+		TriggerSource: "retry:" + deploymentID,
+		StartedAt:     time.Now(),
+	}
+
+	if err := s.deploymentService.Create(ctx, newDeployment); err != nil {
+		s.logger.Error("Failed to create retry deployment", zap.Error(err))
+		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	// Publish SSE event for retry deployment
+	s.publishDeploymentEvent(newDeployment.ID, newDeployment.Project, "pending", newDeployment.Target, newDeployment.Branch, "Retry initiated")
+
+	// Try to send deploy command to agent
+	if s.agentServer != nil {
+		agentID := deployment.Target
+		if agentID == "" {
+			connectedAgents := s.agentServer.GetConnectedAgents()
+			if len(connectedAgents) > 0 {
+				agentID = connectedAgents[0]
+			}
+		}
+
+		if agentID != "" && s.agentServer.IsAgentConnected(agentID) {
+			project, err := s.projectService.GetByName(ctx, deployment.Project)
+			if err == nil && project != nil {
+				deployCmd := &proto.DeployCommand{
+					DeploymentId: newDeploymentID,
+					Project:      deployment.Project,
+					Branch:       deployment.Branch,
+					Target:       deployment.Target,
+					Repository:   project.Repository,
+					Path:         project.DeployPath,
+				}
+
+				newDeployment.Status = "running"
+				if err := s.deploymentService.Update(ctx, newDeployment); err != nil {
+					s.logger.Error("Failed to update deployment status to running", zap.Error(err))
+				}
+
+				if err := s.agentServer.SendDeployCommand(agentID, deployCmd); err != nil {
+					s.logger.Error("Failed to send deploy command to agent",
+						zap.String("agent", agentID),
+						zap.Error(err),
+					)
+					newDeployment.Status = "failed"
+					now := time.Now()
+					newDeployment.CompletedAt = &now
+					if err := s.deploymentService.Update(ctx, newDeployment); err != nil {
+						s.logger.Error("Failed to update deployment status to failed", zap.Error(err))
+					}
+				}
+			}
+		}
+	}
+
+	s.logAudit(r, "retry", "deployment", fmt.Sprintf("Retried deployment: %s as %s", deploymentID, newDeploymentID), "success")
+	w.WriteHeader(http.StatusAccepted)
+	s.jsonResponse(w, newDeployment)
+}
+
 // handleDeploymentLogs returns logs for a deployment.
 func (s *MasterServer) handleDeploymentLogs(w http.ResponseWriter, r *http.Request, deploymentID string) {
 	if r.Method != http.MethodGet {
@@ -1366,111 +1866,64 @@ func (s *MasterServer) handleDeploymentLogs(w http.ResponseWriter, r *http.Reque
 	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
-	logs, err := s.deploymentService.ListLogs(ctx, deploymentID)
+	p := parsePagination(r)
+	result, err := s.deploymentService.ListLogsPaginated(ctx, deploymentID, p)
 	if err != nil {
 		s.logger.Error("Failed to get deployment logs", zap.Error(err))
 		s.jsonError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
-	s.jsonResponse(w, logs)
+	s.jsonResponse(w, PaginatedResponse{
+		Items:      result.Items,
+		TotalCount: result.TotalCount,
+		Limit:      result.Pagination.Limit,
+		Offset:     result.Pagination.Offset,
+	})
 }
 
 // handleDeploymentLogsStream streams deployment logs using Server-Sent Events (SSE).
 // This allows real-time log streaming without WebSocket dependencies.
 func (s *MasterServer) handleDeploymentLogsStream(w http.ResponseWriter, r *http.Request, deploymentID string) {
-	if r.Method != http.MethodGet {
-		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	// Set SSE headers
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		s.jsonError(w, http.StatusInternalServerError, "Streaming not supported")
-		return
-	}
-
-	// Send initial logs
 	ctx := r.Context()
-	logs, err := s.deploymentService.ListLogs(ctx, deploymentID)
-	if err != nil {
-		fmt.Fprintf(w, "event: error\ndata: %s\n\n", err.Error())
-		flusher.Flush()
-		return
-	}
-
-	// Send existing logs
-	for _, log := range logs {
-		logJSON, err := json.Marshal(log)
-		if err != nil {
-			s.logger.Error("Failed to marshal log", zap.Error(err))
-			continue
-		}
-		fmt.Fprintf(w, "data: %s\n\n", logJSON)
-	}
-	flusher.Flush()
-
-	// Track the last log ID we've seen
-	lastID := int64(0)
-	if len(logs) > 0 {
-		lastID = logs[len(logs)-1].ID
-	}
-
-	// Poll for new logs until deployment completes or client disconnects
-	// Max streaming duration prevents resource exhaustion from abandoned connections
-	const maxStreamDuration = 30 * time.Minute
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-	timeout := time.NewTimer(maxStreamDuration)
-	defer timeout.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			// Client disconnected
-			return
-		case <-timeout.C:
-			// Max streaming duration reached
-			fmt.Fprintf(w, "event: timeout\ndata: {\"message\":\"Max streaming duration reached\"}\n\n")
-			flusher.Flush()
-			return
-		case <-ticker.C:
-			// Check for new logs
-			newLogs, err := s.deploymentService.ListLogsAfter(ctx, deploymentID, lastID)
+	s.streamLogs(w, r, streamLogsConfig{
+		listLogs: func() ([]interface{}, string, error) {
+			logs, err := s.deploymentService.ListLogs(ctx, deploymentID)
 			if err != nil {
-				s.logger.Error("Failed to poll logs", zap.Error(err))
-				continue
+				return nil, "", err
 			}
-
-			for _, log := range newLogs {
-				logJSON, err := json.Marshal(log)
-				if err != nil {
-					s.logger.Error("Failed to marshal log", zap.Error(err))
-					continue
-				}
-				fmt.Fprintf(w, "data: %s\n\n", logJSON)
-				lastID = log.ID
+			result := make([]interface{}, len(logs))
+			var lastID string
+			for i, l := range logs {
+				result[i] = l
+				lastID = l.ID
 			}
-			flusher.Flush()
-
-			// Check if deployment is complete
+			return result, lastID, nil
+		},
+		listLogsAfter: func(afterID string) ([]interface{}, string, error) {
+			logs, err := s.deploymentService.ListLogsAfter(ctx, deploymentID, afterID)
+			if err != nil {
+				return nil, afterID, err
+			}
+			result := make([]interface{}, len(logs))
+			newLastID := afterID
+			for i, l := range logs {
+				result[i] = l
+				newLastID = l.ID
+			}
+			return result, newLastID, nil
+		},
+		isComplete: func() (bool, string) {
 			deployment, err := s.deploymentService.GetByID(ctx, deploymentID)
-			if err != nil {
-				continue
+			if err != nil || deployment == nil {
+				return false, ""
 			}
-			if deployment != nil && (deployment.Status == "success" || deployment.Status == "failed" || deployment.Status == "cancelled") {
-				// Send completion event
-				fmt.Fprintf(w, "event: complete\ndata: {\"status\":\"%s\"}\n\n", deployment.Status)
-				flusher.Flush()
-				return
+			switch deployment.Status {
+			case "success", "failed", "cancelled":
+				return true, string(deployment.Status)
 			}
-		}
-	}
+			return false, ""
+		},
+	})
 }
 
 // --- API Keys API ---
@@ -1491,7 +1944,7 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		// Read access: viewer role + read scope (users can view their own keys)
 		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -1503,22 +1956,44 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Sanitize - don't return the hash
-		result := make([]map[string]interface{}, 0, len(keys))
+		allResults := make([]APIKeyResponse, 0, len(keys))
 		for _, k := range keys {
-			result = append(result, map[string]interface{}{
-				"id":         k.ID,
-				"name":       k.Name,
-				"createdAt":  k.CreatedAt,
-				"expiresAt":  k.ExpiresAt,
-				"lastUsedAt": k.LastUsedAt,
+			allResults = append(allResults, APIKeyResponse{
+				ID:         k.ID,
+				Name:       k.Name,
+				CreatedAt:  k.CreatedAt,
+				ExpiresAt:  k.ExpiresAt,
+				LastUsedAt: k.LastUsedAt,
 			})
 		}
-		s.jsonResponse(w, result)
+
+		// Apply pagination
+		p := parsePagination(r)
+		totalCount := len(allResults)
+
+		// Apply offset
+		var paginatedResults []APIKeyResponse
+		if p.Offset >= totalCount {
+			paginatedResults = []APIKeyResponse{}
+		} else {
+			paginatedResults = allResults[p.Offset:]
+			// Apply limit
+			if p.Limit > 0 && p.Limit < len(paginatedResults) {
+				paginatedResults = paginatedResults[:p.Limit]
+			}
+		}
+
+		s.jsonResponse(w, PaginatedResponse{
+			Items:      paginatedResults,
+			TotalCount: int64(totalCount),
+			Limit:      p.Limit,
+			Offset:     p.Offset,
+		})
 
 	case http.MethodPost:
 		// Write access: user role + write scope
 		if msg, status, ok := s.enforcementMiddleware.CheckWriteAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -1526,7 +2001,7 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 			Name        string   `json:"name"`
 			Description string   `json:"description"`
 			Scopes      []string `json:"scopes"`
-			ExpiresIn   int      `json:"expires_in_days"` // 0 = no expiry
+			ExpiresIn   int      `json:"expiresInDays"` // 0 = no expiry
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
 			s.jsonError(w, http.StatusBadRequest, "Invalid JSON")
@@ -1535,6 +2010,12 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 
 		if req.Name == "" {
 			s.jsonError(w, http.StatusBadRequest, "name is required")
+			return
+		}
+
+		// Validate scopes before creating the key
+		if err := services.ValidateAPIKeyScopes(req.Scopes); err != nil {
+			s.jsonError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 
@@ -1561,13 +2042,13 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 		s.logAudit(r, "create", "apikey", fmt.Sprintf("Created API key: %s", req.Name), "success")
 
 		// Return the raw key (only time it's visible)
-		w.WriteHeader(http.StatusCreated)
-		s.jsonResponse(w, map[string]interface{}{
-			"id":        apiKey.ID,
-			"name":      apiKey.Name,
-			"key":       rawKey, // Only returned on creation!
-			"scopes":    scopes,
-			"expiresAt": expiresAt,
+		s.writeJSON(w, http.StatusCreated, APIKeyCreateResponse{
+			ID:        apiKey.ID,
+			Name:      apiKey.Name,
+			Key:       rawKey, // Only returned on creation!
+			Scopes:    scopes,
+			ExpiresAt: expiresAt,
+			CreatedAt: apiKey.CreatedAt,
 		})
 
 	default:
@@ -1577,10 +2058,19 @@ func (s *MasterServer) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 
 // handleAPIKey handles individual API key operations.
 func (s *MasterServer) handleAPIKey(w http.ResponseWriter, r *http.Request) {
-	// Extract key ID from path: /api/v1/apikeys/{id}
-	path := strings.TrimPrefix(r.URL.Path, "/api/v1/apikeys/")
-	keyID, err := strconv.ParseInt(path, 10, 64)
-	if err != nil {
+	// Extract key ID from path: /api/v1/api-keys/{id}
+	// Also handles /api/v1/api-keys/{id}/revoke
+	path := strings.TrimPrefix(r.URL.Path, "/api/v1/api-keys/")
+
+	// Check for /revoke suffix (POST to revoke is treated like DELETE)
+	isRevoke := false
+	if strings.HasSuffix(path, "/revoke") {
+		path = strings.TrimSuffix(path, "/revoke")
+		isRevoke = true
+	}
+
+	keyID := path
+	if keyID == "" {
 		s.jsonError(w, http.StatusBadRequest, "Invalid key ID")
 		return
 	}
@@ -1589,6 +2079,29 @@ func (s *MasterServer) handleAPIKey(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	switch r.Method {
+	case http.MethodGet:
+		// Get API key by ID
+		key, err := s.apiKeyService.GetByID(ctx, keyID)
+		if err != nil {
+			if services.IsNotFound(err) {
+				s.jsonError(w, http.StatusNotFound, "API key not found")
+				return
+			}
+			s.logger.Error("Failed to get API key", zap.Error(err))
+			s.jsonError(w, http.StatusInternalServerError, "Internal server error")
+			return
+		}
+		s.jsonResponse(w, key)
+
+	case http.MethodPost:
+		// POST to /revoke endpoint
+		if !isRevoke {
+			s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+			return
+		}
+		// Fall through to delete/revoke the key
+		fallthrough
+
 	case http.MethodDelete:
 		if err := s.apiKeyService.Delete(ctx, keyID); err != nil {
 			s.logger.Error("Failed to revoke API key", zap.Error(err))
@@ -1596,8 +2109,8 @@ func (s *MasterServer) handleAPIKey(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		s.logAudit(r, "revoke", "apikey", fmt.Sprintf("Revoked API key ID: %d", keyID), "success")
-		s.jsonResponse(w, map[string]string{"status": "revoked"})
+		s.logAudit(r, "revoke", "apikey", fmt.Sprintf("Revoked API key ID: %s", keyID), "success")
+		s.jsonResponse(w, StatusResponse{Status: "revoked"})
 
 	default:
 		s.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -1607,11 +2120,19 @@ func (s *MasterServer) handleAPIKey(w http.ResponseWriter, r *http.Request) {
 // --- Helper methods ---
 
 // jsonError sends a JSON error response.
+// H12 FIX: Properly handles encoder errors instead of ignoring them.
 func (s *MasterServer) jsonError(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"error":   true,
-		"message": message,
-	})
+	// H14 FIX: Use the ErrorResponse type instead of inline map
+	if err := json.NewEncoder(w).Encode(ErrorResponse{
+		Error:   true,
+		Message: message,
+	}); err != nil {
+		s.logger.Error("Failed to encode JSON error response",
+			zap.Error(err),
+			zap.String("message", message),
+			zap.Int("status", status),
+		)
+	}
 }

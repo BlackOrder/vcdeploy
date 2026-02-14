@@ -1,0 +1,474 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold">Account Settings</h1>
+        <a href="/change-password" class="px-4 py-2 text-sm font-medium text-dark-text hover:text-white border border-dark-border rounded-md">
+            Change Password
+        </a>
+    </div>
+
+    <!-- Account Info -->
+    <div class="bg-dark-card border border-dark-border rounded-lg p-6">
+        <h2 class="text-lg font-medium mb-4">Account Information</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <p class="text-sm text-dark-muted">Username</p>
+                <p class="font-medium">{{.User.Username}}</p>
+            </div>
+            <div>
+                <p class="text-sm text-dark-muted">Email</p>
+                <p class="font-medium">{{.User.Email}}</p>
+            </div>
+            <div>
+                <p class="text-sm text-dark-muted">Role</p>
+                <p class="font-medium">{{.User.Role}}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Two-Factor Authentication -->
+    <div class="bg-dark-card border border-dark-border rounded-lg p-6">
+        <div class="flex items-center justify-between mb-4">
+            <div>
+                <h2 class="text-lg font-medium">Two-Factor Authentication</h2>
+                <p class="text-sm text-dark-muted">Add an extra layer of security to your account</p>
+            </div>
+            {{if .User.TOTPEnabled}}
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-900/50 text-green-400">
+                <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                </svg>
+                Enabled
+            </span>
+            {{else}}
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-yellow-900/50 text-yellow-400">
+                <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                </svg>
+                Not Enabled
+            </span>
+            {{end}}
+        </div>
+
+        {{if .User.TOTPEnabled}}
+        <!-- TOTP Enabled State -->
+        <div class="space-y-4">
+            <div class="p-4 bg-dark-bg rounded-lg">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="font-medium">Recovery Codes</p>
+                        <p class="text-sm text-dark-muted">
+                            {{if gt .RecoveryCodesRemaining 0}}
+                            You have <span class="text-accent-400 font-medium">{{.RecoveryCodesRemaining}}</span> recovery codes remaining
+                            {{else}}
+                            <span class="text-red-400">No recovery codes remaining!</span>
+                            {{end}}
+                        </p>
+                    </div>
+                    <button onclick="showRegenerateCodesModal()" 
+                        class="px-4 py-2 text-sm font-medium text-dark-text hover:text-white border border-dark-border rounded-md">
+                        Regenerate Codes
+                    </button>
+                </div>
+            </div>
+
+            <div class="pt-4 border-t border-dark-border">
+                <button onclick="showDisableTOTPModal()"
+                    class="px-4 py-2 text-sm font-medium text-red-400 hover:text-red-300 border border-red-500/50 hover:border-red-400 rounded-md">
+                    Disable Two-Factor Authentication
+                </button>
+            </div>
+        </div>
+        {{else}}
+        <!-- TOTP Setup Flow -->
+        <div id="totp-setup-flow">
+            <button onclick="startTOTPSetup()"
+                class="px-4 py-2 bg-accent-600 hover:bg-accent-700 text-white text-sm font-medium rounded-md">
+                Enable Two-Factor Authentication
+            </button>
+        </div>
+        {{end}}
+    </div>
+
+    <!-- Status messages -->
+    <div id="profile-status"></div>
+</div>
+
+<!-- TOTP Setup Modal -->
+<div id="totp-setup-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-dark-card border border-dark-border rounded-lg max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="px-6 py-4 border-b border-dark-border flex items-center justify-between">
+            <h3 class="text-lg font-medium">Set Up Two-Factor Authentication</h3>
+            <button onclick="closeTOTPSetupModal()" class="text-dark-muted hover:text-white">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        
+        <!-- Step 1: Scan QR Code -->
+        <div id="totp-step-1" class="p-6 space-y-4">
+            <div class="text-center">
+                <p class="text-sm text-dark-muted mb-4">Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.)</p>
+                <div id="qr-code" class="flex justify-center mb-4">
+                    <div class="w-48 h-48 bg-white p-2 rounded-lg">
+                        <div id="qrcode-canvas"></div>
+                    </div>
+                </div>
+                <p class="text-xs text-dark-muted">Or enter this code manually:</p>
+                <code id="totp-secret" class="block mt-2 text-sm font-mono bg-dark-bg px-3 py-2 rounded"></code>
+            </div>
+            <button onclick="showStep2()" class="w-full px-4 py-2 bg-accent-600 hover:bg-accent-700 text-white text-sm font-medium rounded-md">
+                Continue
+            </button>
+        </div>
+
+        <!-- Step 2: Verify Code -->
+        <div id="totp-step-2" class="p-6 space-y-4 hidden">
+            <div>
+                <p class="text-sm text-dark-muted mb-4">Enter the 6-digit code from your authenticator app to verify setup:</p>
+                <input type="text" id="verify-code" pattern="[0-9]{6}" maxlength="6" 
+                    class="w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text text-center text-2xl tracking-widest font-mono"
+                    placeholder="000000" autocomplete="off">
+            </div>
+            <div id="verify-error" class="hidden text-red-400 text-sm"></div>
+            <button onclick="verifyTOTP()" class="w-full px-4 py-2 bg-accent-600 hover:bg-accent-700 text-white text-sm font-medium rounded-md">
+                Verify and Enable
+            </button>
+            <button onclick="showStep1()" class="w-full px-4 py-2 text-sm font-medium text-dark-muted hover:text-white">
+                ← Back
+            </button>
+        </div>
+
+        <!-- Step 3: Recovery Codes -->
+        <div id="totp-step-3" class="p-6 space-y-4 hidden">
+            <div class="text-center">
+                <div class="mb-4 text-green-400">
+                    <svg class="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+                <h4 class="text-lg font-medium mb-2">Two-Factor Authentication Enabled!</h4>
+                <p class="text-sm text-dark-muted mb-4">Save these recovery codes in a secure location. Each code can only be used once.</p>
+            </div>
+            <div class="bg-dark-bg rounded-lg p-4">
+                <div id="recovery-codes" class="grid grid-cols-2 gap-2 font-mono text-sm"></div>
+            </div>
+            <div class="bg-yellow-900/30 border border-yellow-500/50 rounded-lg p-4">
+                <div class="flex">
+                    <svg class="w-5 h-5 text-yellow-400 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                    </svg>
+                    <p class="text-sm text-yellow-200">These codes will not be shown again. Store them securely!</p>
+                </div>
+            </div>
+            <button onclick="copyRecoveryCodes()" class="w-full px-4 py-2 text-sm font-medium text-dark-text hover:text-white border border-dark-border rounded-md">
+                Copy to Clipboard
+            </button>
+            <button onclick="finishSetup()" class="w-full px-4 py-2 bg-accent-600 hover:bg-accent-700 text-white text-sm font-medium rounded-md">
+                I've Saved My Codes
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Regenerate Recovery Codes Modal -->
+<div id="regenerate-codes-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-dark-card border border-dark-border rounded-lg max-w-md w-full mx-4">
+        <div class="px-6 py-4 border-b border-dark-border flex items-center justify-between">
+            <h3 class="text-lg font-medium">Regenerate Recovery Codes</h3>
+            <button onclick="closeRegenerateModal()" class="text-dark-muted hover:text-white">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        
+        <div id="regenerate-step-1" class="p-6 space-y-4">
+            <div class="bg-yellow-900/30 border border-yellow-500/50 rounded-lg p-4 mb-4">
+                <p class="text-sm text-yellow-200">This will invalidate all existing recovery codes.</p>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-dark-muted mb-1">Enter your current 2FA code to confirm:</label>
+                <input type="text" id="regenerate-totp-code" pattern="[0-9]{6}" maxlength="6"
+                    class="w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text text-center text-xl tracking-widest font-mono"
+                    placeholder="000000" autocomplete="off">
+            </div>
+            <div id="regenerate-error" class="hidden text-red-400 text-sm"></div>
+            <div class="flex space-x-3">
+                <button onclick="closeRegenerateModal()" class="flex-1 px-4 py-2 text-sm font-medium text-dark-text hover:text-white border border-dark-border rounded-md">
+                    Cancel
+                </button>
+                <button onclick="regenerateRecoveryCodes()" class="flex-1 px-4 py-2 bg-accent-600 hover:bg-accent-700 text-white text-sm font-medium rounded-md">
+                    Regenerate
+                </button>
+            </div>
+        </div>
+
+        <div id="regenerate-step-2" class="p-6 space-y-4 hidden">
+            <div class="text-center">
+                <h4 class="text-lg font-medium mb-2">New Recovery Codes</h4>
+                <p class="text-sm text-dark-muted mb-4">Save these codes in a secure location.</p>
+            </div>
+            <div class="bg-dark-bg rounded-lg p-4">
+                <div id="new-recovery-codes" class="grid grid-cols-2 gap-2 font-mono text-sm"></div>
+            </div>
+            <div class="bg-yellow-900/30 border border-yellow-500/50 rounded-lg p-4">
+                <p class="text-sm text-yellow-200">These codes will not be shown again!</p>
+            </div>
+            <button onclick="copyNewRecoveryCodes()" class="w-full px-4 py-2 text-sm font-medium text-dark-text hover:text-white border border-dark-border rounded-md">
+                Copy to Clipboard
+            </button>
+            <button onclick="closeAndRefresh()" class="w-full px-4 py-2 bg-accent-600 hover:bg-accent-700 text-white text-sm font-medium rounded-md">
+                Done
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Disable TOTP Modal -->
+<div id="disable-totp-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-dark-card border border-dark-border rounded-lg max-w-md w-full mx-4">
+        <div class="px-6 py-4 border-b border-dark-border flex items-center justify-between">
+            <h3 class="text-lg font-medium text-red-400">Disable Two-Factor Authentication</h3>
+            <button onclick="closeDisableTOTPModal()" class="text-dark-muted hover:text-white">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        <div class="p-6 space-y-4">
+            <div class="bg-red-900/30 border border-red-500/50 rounded-lg p-4">
+                <p class="text-sm text-red-200">Warning: This will remove the extra security from your account.</p>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-dark-muted mb-1">Enter your current 2FA code to confirm:</label>
+                <input type="text" id="disable-totp-code" pattern="[0-9]{6}" maxlength="6"
+                    class="w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text text-center text-xl tracking-widest font-mono"
+                    placeholder="000000" autocomplete="off">
+            </div>
+            <div id="disable-error" class="hidden text-red-400 text-sm"></div>
+            <div class="flex space-x-3">
+                <button onclick="closeDisableTOTPModal()" class="flex-1 px-4 py-2 text-sm font-medium text-dark-text hover:text-white border border-dark-border rounded-md">
+                    Cancel
+                </button>
+                <button onclick="disableTOTP()" class="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-md">
+                    Disable 2FA
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- QR Code Library -->
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}></script>
+
+<script{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}>
+let currentSecret = '';
+let currentRecoveryCodes = [];
+
+async function startTOTPSetup() {
+    try {
+        const resp = await fetch('/api/v1/totp/setup', { method: 'POST' });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Failed to start setup');
+        
+        currentSecret = data.secret;
+        document.getElementById('totp-secret').textContent = formatSecret(data.secret);
+        
+        // Generate QR code
+        const canvas = document.getElementById('qrcode-canvas');
+        canvas.innerHTML = '';
+        QRCode.toCanvas(canvas, data.uri, { width: 176, margin: 0 }, function(err) {
+            if (err) console.error('QR error:', err);
+        });
+        
+        showStep1();
+        document.getElementById('totp-setup-modal').classList.remove('hidden');
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+function formatSecret(secret) {
+    return secret.match(/.{1,4}/g).join(' ');
+}
+
+function showStep1() {
+    document.getElementById('totp-step-1').classList.remove('hidden');
+    document.getElementById('totp-step-2').classList.add('hidden');
+    document.getElementById('totp-step-3').classList.add('hidden');
+}
+
+function showStep2() {
+    document.getElementById('totp-step-1').classList.add('hidden');
+    document.getElementById('totp-step-2').classList.remove('hidden');
+    document.getElementById('totp-step-3').classList.add('hidden');
+    document.getElementById('verify-code').focus();
+}
+
+async function verifyTOTP() {
+    const code = document.getElementById('verify-code').value;
+    const errorDiv = document.getElementById('verify-error');
+    
+    if (!code || code.length !== 6) {
+        errorDiv.textContent = 'Please enter a 6-digit code';
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+    
+    try {
+        const resp = await fetch('/api/v1/totp/enable', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ secret: currentSecret, totp_code: code })
+        });
+        const data = await resp.json();
+        
+        if (!resp.ok) {
+            errorDiv.textContent = data.error || 'Invalid code';
+            errorDiv.classList.remove('hidden');
+            return;
+        }
+        
+        // Show recovery codes
+        currentRecoveryCodes = data.recovery_codes || [];
+        const codesDiv = document.getElementById('recovery-codes');
+        codesDiv.innerHTML = currentRecoveryCodes.map(c => 
+            `<div class="bg-dark-card px-3 py-2 rounded text-center">${c}</div>`
+        ).join('');
+        
+        document.getElementById('totp-step-2').classList.add('hidden');
+        document.getElementById('totp-step-3').classList.remove('hidden');
+        errorDiv.classList.add('hidden');
+    } catch (err) {
+        errorDiv.textContent = 'Error: ' + err.message;
+        errorDiv.classList.remove('hidden');
+    }
+}
+
+function copyRecoveryCodes() {
+    navigator.clipboard.writeText(currentRecoveryCodes.join('\n'));
+    alert('Recovery codes copied to clipboard');
+}
+
+function finishSetup() {
+    closeTOTPSetupModal();
+    location.reload();
+}
+
+function closeTOTPSetupModal() {
+    document.getElementById('totp-setup-modal').classList.add('hidden');
+    document.getElementById('verify-code').value = '';
+    document.getElementById('verify-error').classList.add('hidden');
+}
+
+// Regenerate Recovery Codes
+function showRegenerateCodesModal() {
+    document.getElementById('regenerate-codes-modal').classList.remove('hidden');
+    document.getElementById('regenerate-step-1').classList.remove('hidden');
+    document.getElementById('regenerate-step-2').classList.add('hidden');
+    document.getElementById('regenerate-totp-code').value = '';
+    document.getElementById('regenerate-error').classList.add('hidden');
+}
+
+function closeRegenerateModal() {
+    document.getElementById('regenerate-codes-modal').classList.add('hidden');
+}
+
+async function regenerateRecoveryCodes() {
+    const code = document.getElementById('regenerate-totp-code').value;
+    const errorDiv = document.getElementById('regenerate-error');
+    
+    if (!code || code.length !== 6) {
+        errorDiv.textContent = 'Please enter a 6-digit code';
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+    
+    try {
+        const resp = await fetch('/api/v1/totp/recovery/regenerate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ totp_code: code })
+        });
+        const data = await resp.json();
+        
+        if (!resp.ok) {
+            errorDiv.textContent = data.error || 'Invalid code';
+            errorDiv.classList.remove('hidden');
+            return;
+        }
+        
+        // Show new codes
+        const codes = data.recovery_codes || [];
+        const codesDiv = document.getElementById('new-recovery-codes');
+        codesDiv.innerHTML = codes.map(c => 
+            `<div class="bg-dark-card px-3 py-2 rounded text-center">${c}</div>`
+        ).join('');
+        
+        currentRecoveryCodes = codes;
+        document.getElementById('regenerate-step-1').classList.add('hidden');
+        document.getElementById('regenerate-step-2').classList.remove('hidden');
+    } catch (err) {
+        errorDiv.textContent = 'Error: ' + err.message;
+        errorDiv.classList.remove('hidden');
+    }
+}
+
+function copyNewRecoveryCodes() {
+    navigator.clipboard.writeText(currentRecoveryCodes.join('\n'));
+    alert('Recovery codes copied to clipboard');
+}
+
+function closeAndRefresh() {
+    closeRegenerateModal();
+    location.reload();
+}
+
+// Disable TOTP
+function showDisableTOTPModal() {
+    document.getElementById('disable-totp-modal').classList.remove('hidden');
+    document.getElementById('disable-totp-code').value = '';
+    document.getElementById('disable-error').classList.add('hidden');
+}
+
+function closeDisableTOTPModal() {
+    document.getElementById('disable-totp-modal').classList.add('hidden');
+}
+
+async function disableTOTP() {
+    const code = document.getElementById('disable-totp-code').value;
+    const errorDiv = document.getElementById('disable-error');
+    
+    if (!code || code.length !== 6) {
+        errorDiv.textContent = 'Please enter a 6-digit code';
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+    
+    try {
+        const resp = await fetch('/api/v1/totp/disable', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ totp_code: code })
+        });
+        const data = await resp.json();
+        
+        if (!resp.ok) {
+            errorDiv.textContent = data.error || 'Invalid code';
+            errorDiv.classList.remove('hidden');
+            return;
+        }
+        
+        closeDisableTOTPModal();
+        location.reload();
+    } catch (err) {
+        errorDiv.textContent = 'Error: ' + err.message;
+        errorDiv.classList.remove('hidden');
+    }
+}
+</script>
+{{end}}
