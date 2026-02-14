@@ -24,7 +24,7 @@ func TestMemoryStore_LoadFromDB(t *testing.T) {
 	}
 
 	project := &Project{Name: "test-project"}
-	if err := db.CreateProject(project); err != nil {
+	if err := db.CreateProject(ctx, project); err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 
@@ -54,7 +54,7 @@ func TestMemoryStore_LoadFromDB(t *testing.T) {
 		t.Errorf("GetProjectByName() error = %v", err)
 	}
 	if loadedProject.ID != project.ID {
-		t.Errorf("Project ID = %d, want %d", loadedProject.ID, project.ID)
+		t.Errorf("Project ID = %s, want %s", loadedProject.ID, project.ID)
 	}
 
 	loadedSetting, err := memStore.GetSetting(ctx, "test", "key1")
@@ -101,15 +101,15 @@ func TestMemoryStore_LoadProjects(t *testing.T) {
 
 	// Create project type and projects
 	pt := &ProjectType{Name: "web", Description: "Web apps"}
-	db.CreateProjectType(pt)
+	db.CreateProjectType(ctx, pt)
 
 	for i := 0; i < 3; i++ {
 		project := &Project{
 			Name:       "project" + string(rune('0'+i)),
-			Type:       pt.Name,
+			TypeID:     strPtr(pt.Name),
 			Repository: "git@example.com:test.git",
 		}
-		db.CreateProject(project)
+		db.CreateProject(ctx, project)
 	}
 
 	memStore := NewMemoryStore(nil)
@@ -119,14 +119,14 @@ func TestMemoryStore_LoadProjects(t *testing.T) {
 		t.Fatalf("LoadFromDB() error = %v", err)
 	}
 
-	projects, _ := memStore.ListProjects()
+	projects, _ := memStore.ListProjects(ctx)
 	if len(projects) != 3 {
 		t.Errorf("len(projects) = %d, want 3", len(projects))
 	}
 
-	types, _ := memStore.ListProjectTypes()
-	if len(types) != 1 {
-		t.Errorf("len(types) = %d, want 1", len(types))
+	types, _ := memStore.ListProjectTypes(ctx)
+	if len(types) != 2 {
+		t.Errorf("len(types) = %d, want 2 (1 custom + 1 seeded generic)", len(types))
 	}
 }
 
@@ -266,7 +266,7 @@ func TestMemoryStore_LoadSessions(t *testing.T) {
 		t.Fatal("loaded session is nil")
 	}
 	if loaded.UserID != user.ID {
-		t.Errorf("UserID = %d, want %d", loaded.UserID, user.ID)
+		t.Errorf("UserID = %s, want %s", loaded.UserID, user.ID)
 	}
 }
 
@@ -359,8 +359,8 @@ func TestMemoryStore_LoadNextIDs(t *testing.T) {
 	}
 	memStore.CreateUser(ctx, newUser)
 
-	// New user should have ID > 10
-	if newUser.ID <= 10 {
-		t.Errorf("New user ID = %d, want > 10", newUser.ID)
+	// New user should have ID set
+	if newUser.ID == "" {
+		t.Error("New user ID should be set")
 	}
 }

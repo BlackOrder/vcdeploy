@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 	"time"
+
+	"github.com/rs/xid"
 )
 
 // --- Agent methods ---
@@ -47,7 +49,7 @@ func (s *MemoryStore) UpsertAgent(ctx context.Context, agent *Agent) error {
 	agent.RegisteredAt = now
 	agent.LastSeenAt = now
 	if agent.Status == "" {
-		agent.Status = "online"
+		agent.Status = AgentStatusOnline
 	}
 	if agent.UpdatePolicy == "" {
 		agent.UpdatePolicy = AgentUpdatePolicyImmediate
@@ -108,6 +110,37 @@ func (s *MemoryStore) ListAgents(ctx context.Context) ([]*Agent, error) {
 	return agents, nil
 }
 
+// ListAgentsPaginated returns agents with pagination support.
+func (s *MemoryStore) ListAgentsPaginated(ctx context.Context, limit, offset int) ([]*Agent, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Convert map to slice
+	all := make([]*Agent, 0, len(s.agents))
+	for _, a := range s.agents {
+		// Copy-on-read
+		cp := *a
+		if a.Labels != nil {
+			cp.Labels = make(map[string]string, len(a.Labels))
+			for k, v := range a.Labels {
+				cp.Labels[k] = v
+			}
+		}
+		all = append(all, &cp)
+	}
+
+	// Apply pagination
+	if offset >= len(all) {
+		return []*Agent{}, nil
+	}
+	end := offset + limit
+	if end > len(all) {
+		end = len(all)
+	}
+
+	return all[offset:end], nil
+}
+
 // CountAgents returns the total number of agents.
 func (s *MemoryStore) CountAgents(ctx context.Context) (int64, error) {
 	s.mu.RLock()
@@ -123,7 +156,7 @@ func (s *MemoryStore) CountAgentsByStatus(ctx context.Context) (map[string]int64
 
 	counts := make(map[string]int64)
 	for _, a := range s.agents {
-		counts[a.Status]++
+		counts[a.Status.String()]++
 	}
 	return counts, nil
 }
@@ -251,10 +284,18 @@ func isInUpdateWindow(now time.Time, windowStart, windowEnd string) bool {
 	nowMinutes := now.Hour()*60 + now.Minute()
 
 	var startHour, startMin, endHour, endMin int
-	_, _ = parseTimeComponent(startParts[0], &startHour)
-	_, _ = parseTimeComponent(startParts[1], &startMin)
-	_, _ = parseTimeComponent(endParts[0], &endHour)
-	_, _ = parseTimeComponent(endParts[1], &endMin)
+	if ok, _ := parseTimeComponent(startParts[0], &startHour); !ok {
+		return false // Invalid start hour format
+	}
+	if ok, _ := parseTimeComponent(startParts[1], &startMin); !ok {
+		return false // Invalid start minute format
+	}
+	if ok, _ := parseTimeComponent(endParts[0], &endHour); !ok {
+		return false // Invalid end hour format
+	}
+	if ok, _ := parseTimeComponent(endParts[1], &endMin); !ok {
+		return false // Invalid end minute format
+	}
 
 	startMinutes := startHour*60 + startMin
 	endMinutes := endHour*60 + endMin
@@ -292,7 +333,9 @@ func (s *MemoryStore) CreateAgentBinary(ctx context.Context, binary *AgentBinary
 		}
 	}
 
-	binary.ID = nextID(&s.nextAgentBinaryID)
+	if binary.ID == "" {
+		binary.ID = xid.New().String()
+	}
 	binary.UploadedAt = time.Now()
 
 	// Copy-on-store
@@ -304,7 +347,7 @@ func (s *MemoryStore) CreateAgentBinary(ctx context.Context, binary *AgentBinary
 }
 
 // GetAgentBinary retrieves an agent binary by ID.
-func (s *MemoryStore) GetAgentBinary(ctx context.Context, id int64) (*AgentBinary, error) {
+func (s *MemoryStore) GetAgentBinary(ctx context.Context, id string) (*AgentBinary, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -359,7 +402,7 @@ func (s *MemoryStore) ListAgentBinaries(ctx context.Context) ([]*AgentBinary, er
 }
 
 // SetCurrentAgentBinary sets an agent binary as the current version.
-func (s *MemoryStore) SetCurrentAgentBinary(ctx context.Context, id int64) error {
+func (s *MemoryStore) SetCurrentAgentBinary(ctx context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -383,7 +426,7 @@ func (s *MemoryStore) SetCurrentAgentBinary(ctx context.Context, id int64) error
 }
 
 // DeleteAgentBinary removes an agent binary by ID.
-func (s *MemoryStore) DeleteAgentBinary(ctx context.Context, id int64) error {
+func (s *MemoryStore) DeleteAgentBinary(ctx context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -403,10 +446,12 @@ func (s *MemoryStore) CreateAgentUpdateHistory(ctx context.Context, history *Age
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	history.ID = nextID(&s.nextAgentUpdateID)
+	if history.ID == "" {
+		history.ID = xid.New().String()
+	}
 	history.StartedAt = time.Now()
 	if history.Status == "" {
-		history.Status = "pending"
+		history.Status = UpdateStatusPending
 	}
 
 	// Copy-on-store
@@ -418,7 +463,7 @@ func (s *MemoryStore) CreateAgentUpdateHistory(ctx context.Context, history *Age
 }
 
 // GetAgentUpdateHistory retrieves an update history record by ID.
-func (s *MemoryStore) GetAgentUpdateHistory(ctx context.Context, id int64) (*AgentUpdateHistory, error) {
+func (s *MemoryStore) GetAgentUpdateHistory(ctx context.Context, id string) (*AgentUpdateHistory, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -462,6 +507,41 @@ func (s *MemoryStore) ListAgentUpdateHistory(ctx context.Context, agentID string
 			cp := *h
 			all = append(all, &cp)
 		}
+	}
+
+	// Sort by StartedAt descending (newest first)
+	for i := 0; i < len(all)-1; i++ {
+		for j := i + 1; j < len(all); j++ {
+			if all[j].StartedAt.After(all[i].StartedAt) {
+				all[i], all[j] = all[j], all[i]
+			}
+		}
+	}
+
+	total := int64(len(all))
+
+	// Apply pagination
+	if offset >= len(all) {
+		return []*AgentUpdateHistory{}, total, nil
+	}
+	end := offset + limit
+	if end > len(all) {
+		end = len(all)
+	}
+
+	return all[offset:end], total, nil
+}
+
+// ListAllAgentUpdateHistory returns all update history across all agents with pagination.
+func (s *MemoryStore) ListAllAgentUpdateHistory(ctx context.Context, limit, offset int) ([]*AgentUpdateHistory, int64, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Collect all history
+	var all []*AgentUpdateHistory
+	for _, h := range s.agentUpdates {
+		cp := *h
+		all = append(all, &cp)
 	}
 
 	// Sort by StartedAt descending (newest first)

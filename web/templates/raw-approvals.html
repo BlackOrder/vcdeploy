@@ -1,0 +1,184 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold">RAW Command Approvals</h1>
+            <p class="mt-1 text-sm text-dark-muted">Review and approve RAW components that bypass command validation</p>
+        </div>
+    </div>
+
+    <!-- Warning Banner -->
+    <div class="bg-yellow-500/10 border border-yellow-500/50 rounded-lg p-4">
+        <div class="flex">
+            <svg class="h-5 w-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+            </svg>
+            <div class="ml-3">
+                <h4 class="text-sm font-medium text-yellow-400">Security Notice</h4>
+                <p class="mt-1 text-sm text-yellow-300">RAW components can execute arbitrary shell commands without validation. Only approve components you have thoroughly reviewed and trust.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pending Approvals -->
+    <div>
+        <h2 class="text-lg font-medium mb-4">Pending Approvals</h2>
+        {{if .PendingApprovals}}
+        <div class="space-y-4">
+            {{range .PendingApprovals}}
+            <div class="bg-dark-card border border-dark-border rounded-lg p-4">
+                <div class="flex items-start justify-between">
+                    <div class="flex-1">
+                        <div class="flex items-center space-x-2">
+                            <h3 class="text-sm font-medium text-dark-text">{{.Name}}</h3>
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-accent-500/20 text-accent-400">
+                                {{.Version}}
+                            </span>
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-dark-bg text-dark-muted">
+                                {{.Namespace}}
+                            </span>
+                        </div>
+                        <p class="text-xs text-dark-muted mt-1">{{.Slug}}</p>
+                        {{if .Description}}
+                        <p class="mt-2 text-sm text-dark-muted">{{.Description}}</p>
+                        {{end}}
+                    </div>
+                    <button onclick="showApprovalModal({{.ID}}, '{{.Name}}')"
+                        class="px-3 py-1.5 text-sm font-medium text-white bg-accent-600 hover:bg-accent-700 rounded-md">
+                        Review & Approve
+                    </button>
+                </div>
+            </div>
+            {{end}}
+        </div>
+        {{else}}
+        <div class="text-center py-8 bg-dark-card border border-dark-border rounded-lg">
+            <svg class="mx-auto h-12 w-12 text-dark-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <h3 class="mt-2 text-sm font-medium text-dark-text">No Pending Approvals</h3>
+            <p class="mt-1 text-sm text-dark-muted">All RAW components have been reviewed.</p>
+        </div>
+        {{end}}
+    </div>
+
+    <!-- Approved Components -->
+    <div>
+        <h2 class="text-lg font-medium mb-4">Approved Components</h2>
+        {{if .ApprovedComponents}}
+        <div class="bg-dark-card border border-dark-border rounded-lg overflow-hidden">
+            <table class="min-w-full divide-y divide-dark-border">
+                <thead>
+                    <tr class="bg-dark-bg">
+                        <th class="px-6 py-3 text-left text-xs font-medium text-dark-muted uppercase tracking-wider">Component</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-dark-muted uppercase tracking-wider">Version</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-dark-muted uppercase tracking-wider">Approved At</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-dark-muted uppercase tracking-wider">Note</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-dark-muted uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-dark-border">
+                    {{range .ApprovedComponents}}
+                    <tr class="hover:bg-dark-bg/50">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm font-medium text-dark-text">{{.Name}}</div>
+                            <div class="text-xs text-dark-muted">{{.Slug}}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-accent-500/20 text-accent-400">
+                                {{.Version}}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-dark-muted">{{.ApprovedAt}}</td>
+                        <td class="px-6 py-4 text-sm text-dark-muted max-w-xs truncate">{{if .ApprovalNote}}{{.ApprovalNote}}{{else}}-{{end}}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <button onclick="revokeApproval({{.ComponentID}})"
+                                class="text-red-400 hover:text-red-300">
+                                Revoke
+                            </button>
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+        {{else}}
+        <div class="text-center py-8 bg-dark-card border border-dark-border rounded-lg">
+            <svg class="mx-auto h-12 w-12 text-dark-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+            </svg>
+            <h3 class="mt-2 text-sm font-medium text-dark-text">No Approved Components</h3>
+            <p class="mt-1 text-sm text-dark-muted">No RAW components have been approved yet.</p>
+        </div>
+        {{end}}
+    </div>
+</div>
+
+<!-- Approval Modal -->
+<div id="approval-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-dark-card border border-dark-border rounded-lg max-w-md w-full mx-4">
+        <div class="px-6 py-4 border-b border-dark-border flex items-center justify-between">
+            <h3 class="text-lg font-medium">Approve RAW Component</h3>
+            <button onclick="document.getElementById('approval-modal').classList.add('hidden')" class="text-dark-muted hover:text-white">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        <form id="approval-form" hx-post="/api/v1/recipes/raw-approvals" hx-ext="json-enc"
+            hx-on::after-request="if(event.detail.successful) { document.getElementById('approval-modal').classList.add('hidden'); location.reload(); }">
+            <input type="hidden" name="component_id" id="approval-component-id">
+            <div class="p-6 space-y-4">
+                <p class="text-sm text-dark-muted">
+                    You are about to approve <span id="approval-component-name" class="font-medium text-dark-text"></span>.
+                    This will allow it to be used in playbooks without command validation.
+                </p>
+                <div>
+                    <label class="block text-sm font-medium text-dark-muted mb-1">Approval Note (optional)</label>
+                    <textarea name="note" rows="3"
+                        class="block w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text focus:outline-none focus:ring-2 focus:ring-accent-500"
+                        placeholder="Reason for approval, review findings, etc."></textarea>
+                </div>
+                <div class="flex items-center">
+                    <input type="checkbox" id="approval-confirm" required
+                        class="rounded border-dark-border bg-dark-bg text-accent-600 focus:ring-accent-500">
+                    <label for="approval-confirm" class="ml-2 text-sm text-dark-muted">
+                        I have reviewed the commands and confirm they are safe to execute
+                    </label>
+                </div>
+            </div>
+            <div class="px-6 py-4 border-t border-dark-border flex justify-end space-x-3">
+                <button type="button" onclick="document.getElementById('approval-modal').classList.add('hidden')"
+                    class="px-4 py-2 text-sm font-medium text-dark-muted hover:text-white border border-dark-border rounded-md">
+                    Cancel
+                </button>
+                <button type="submit"
+                    class="px-4 py-2 text-sm font-medium text-white bg-accent-600 hover:bg-accent-700 rounded-md">
+                    Approve Component
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}>
+    function showApprovalModal(componentId, componentName) {
+        document.getElementById('approval-component-id').value = componentId;
+        document.getElementById('approval-component-name').textContent = componentName;
+        document.getElementById('approval-confirm').checked = false;
+        document.getElementById('approval-modal').classList.remove('hidden');
+    }
+
+    function revokeApproval(componentId) {
+        if (confirm('Are you sure you want to revoke approval for this component? It will no longer be usable in playbooks.')) {
+            htmx.ajax('DELETE', '/api/v1/recipes/raw-approvals/' + componentId, {
+                swap: 'none'
+            }).then(() => {
+                location.reload();
+            });
+        }
+    }
+</script>
+{{end}}

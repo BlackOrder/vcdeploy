@@ -28,7 +28,7 @@ func New(store storage.Store) *Service {
 }
 
 // Create creates a new API key and returns the raw key (only shown once).
-func (s *Service) Create(ctx context.Context, userID int64, name string, scopes []string, expiresAt *time.Time) (string, *storage.APIKey, error) {
+func (s *Service) Create(ctx context.Context, userID string, name string, scopes []string, expiresAt *time.Time) (string, *storage.APIKey, error) {
 	// Generate raw key
 	rawKey, err := generateAPIKey()
 	if err != nil {
@@ -77,18 +77,33 @@ func (s *Service) GetByRawKey(ctx context.Context, rawKey string) (*storage.APIK
 	return key, nil
 }
 
+// GetByID retrieves an API key by its ID.
+func (s *Service) GetByID(ctx context.Context, keyID string) (*storage.APIKey, error) {
+	key, err := s.store.GetAPIKeyByID(ctx, keyID)
+	if err != nil {
+		return nil, err // Returns ErrNotFound if not found
+	}
+
+	// Check if expired
+	if !key.IsValid() {
+		return nil, storage.ErrNotFound
+	}
+
+	return key, nil
+}
+
 // Delete removes an API key by ID.
-func (s *Service) Delete(ctx context.Context, keyID int64) error {
+func (s *Service) Delete(ctx context.Context, keyID string) error {
 	return s.store.DeleteAPIKey(ctx, keyID)
 }
 
 // List returns all API keys for a user.
-func (s *Service) List(ctx context.Context, userID int64) ([]*storage.APIKey, error) {
+func (s *Service) List(ctx context.Context, userID string) ([]*storage.APIKey, error) {
 	return s.store.ListAPIKeys(ctx, userID)
 }
 
 // UpdateUsage updates the last used timestamp for an API key.
-func (s *Service) UpdateUsage(ctx context.Context, keyID int64) error {
+func (s *Service) UpdateUsage(ctx context.Context, keyID string) error {
 	return s.store.UpdateAPIKeyUsage(ctx, keyID)
 }
 

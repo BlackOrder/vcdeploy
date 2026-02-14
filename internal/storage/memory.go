@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -38,28 +37,29 @@ type MemoryStore struct {
 	provisionWrites   chan WriteOp
 
 	// In-memory data (source of truth for reads)
-	users         map[int64]*User
+	users         map[string]*User
 	usersByName   map[string]*User
 	sessions      map[string]*Session
 	apiKeys       map[string]*APIKey // keyed by hash
-	apiKeysByUser map[int64][]*APIKey
+	apiKeysByUser map[string][]*APIKey
 
 	settings map[string]*Setting // keyed by "category:key"
 
-	projects       map[int64]*Project
+	projects       map[string]*Project
 	projectsByName map[string]*Project
-	projectTypes   map[int64]*ProjectType
-	webhooks       map[int64]*ProjectWebhook
+	projectTypes   map[string]*ProjectType
+	webhooks       map[string]*ProjectWebhook
 	secrets        map[string]*Secret // keyed by "project:scope:key"
 
 	agents        map[string]*Agent
-	agentBinaries map[int64]*AgentBinary
-	agentUpdates  map[int64]*AgentUpdateHistory
+	agentBinaries map[string]*AgentBinary
+	agentUpdates  map[string]*AgentUpdateHistory
 
 	deployments         map[string]*DeploymentRecord
 	deploymentLogs      map[string][]*DeploymentLog
-	deploymentRollbacks map[int64]*DeploymentRollback
+	deploymentRollbacks map[string]*DeploymentRollback
 	scheduledDeploys    map[string]*ScheduledDeployment
+	deploymentAgents    map[string][]DeploymentAgent // keyed by deployment_id
 
 	auditLogs []*AuditEntry // append-only slice
 
@@ -67,29 +67,43 @@ type MemoryStore struct {
 	rateLimits map[string]*RateLimitRecord // keyed by "key:bucket"
 
 	provisionJobs map[string]*ProvisionJob
-	sshHostKeys   map[int64]*SSHHostKey
-	jumpServers   map[int64]*SSHJumpServer
+	provisionLogs map[string][]*ProvisionLog // keyed by job ID
+	sshHostKeys   map[string]*SSHHostKey
+	jumpServers   map[string]*SSHJumpServer
 
-	healthCheckConfigs map[int64]*HealthCheckConfig
+	healthCheckConfigs map[string]*HealthCheckConfig
 
-	// ID generators (atomic)
-	nextUserID          atomic.Int64
-	nextAPIKeyID        atomic.Int64
-	nextProjectID       atomic.Int64
-	nextProjectTypeID   atomic.Int64
-	nextWebhookID       atomic.Int64
-	nextSecretID        atomic.Int64
-	nextAgentBinaryID   atomic.Int64
-	nextAgentUpdateID   atomic.Int64
-	nextDeploymentLogID atomic.Int64
-	nextRollbackID      atomic.Int64
-	nextAuditID         atomic.Int64
-	nextBlockedIPID     atomic.Int64
-	nextRateLimitID     atomic.Int64
-	nextSSHHostKeyID    atomic.Int64
-	nextJumpServerID    atomic.Int64
-	nextHealthCheckID   atomic.Int64
-	nextSettingID       atomic.Int64
+	// Security tables (Stage 1 migration)
+	certificateAuthorities map[string]*CertificateAuthority
+	agentCertificates      map[string]*AgentCertificate  // keyed by serial number
+	serverCertificates     map[string]*ServerCertificate // keyed by hostname
+	registrationTokens     map[string]*RegistrationToken // keyed by token
+	sourceCredentials      map[string]*SourceCredential
+	revokedCertificates    map[string]*RevokedCertificate // keyed by serial number
+	encryptionKeys         map[string]*EncryptionKey
+	sshKeys                map[string]*SSHKey
+	certAuditEvents        []*CertAuditEvent // append-only slice
+
+	// ACME certificate storage
+	acmeCertificates map[string]*ACMECertificate // keyed by domain
+	acmeAccounts     map[string]*ACMEAccount     // keyed by email
+
+	// Recovery codes storage
+	recoveryCodes map[string][]*RecoveryCode // keyed by user ID
+
+	// Recipe and playbook storage
+	recipeComponents        map[string]*RecipeComponent
+	recipeComponentsByKey   map[string]*RecipeComponent // keyed by "namespace:slug:version"
+	playbooks               map[string]*Playbook
+	playbooksByKey          map[string]*Playbook // keyed by "namespace:slug:version"
+	playbookActivations     map[string]*PlaybookActivation
+	activationsByProject    map[string][]*PlaybookActivation // keyed by project ID
+	activationsByPlaybook   map[string][]*PlaybookActivation // keyed by playbook ID
+	variableBindings        map[string]*PlaybookVariableBinding
+	bindingsByActivation    map[string][]*PlaybookVariableBinding // keyed by activation ID
+	bindingsBySourceRef     map[string][]*PlaybookVariableBinding // keyed by "sourceType:sourceRef"
+	rawApprovals            map[string]*RawCommandApproval
+	rawApprovalsByComponent map[string][]*RawCommandApproval // keyed by component ID
 
 	// Shutdown coordination
 	done chan struct{}
@@ -193,28 +207,29 @@ func NewMemoryStore(cfg *MemoryStoreConfig) *MemoryStore {
 		provisionWrites:   make(chan WriteOp, bufSize),
 
 		// Initialize all maps
-		users:         make(map[int64]*User),
+		users:         make(map[string]*User),
 		usersByName:   make(map[string]*User),
 		sessions:      make(map[string]*Session),
 		apiKeys:       make(map[string]*APIKey),
-		apiKeysByUser: make(map[int64][]*APIKey),
+		apiKeysByUser: make(map[string][]*APIKey),
 
 		settings: make(map[string]*Setting),
 
-		projects:       make(map[int64]*Project),
+		projects:       make(map[string]*Project),
 		projectsByName: make(map[string]*Project),
-		projectTypes:   make(map[int64]*ProjectType),
-		webhooks:       make(map[int64]*ProjectWebhook),
+		projectTypes:   make(map[string]*ProjectType),
+		webhooks:       make(map[string]*ProjectWebhook),
 		secrets:        make(map[string]*Secret),
 
 		agents:        make(map[string]*Agent),
-		agentBinaries: make(map[int64]*AgentBinary),
-		agentUpdates:  make(map[int64]*AgentUpdateHistory),
+		agentBinaries: make(map[string]*AgentBinary),
+		agentUpdates:  make(map[string]*AgentUpdateHistory),
 
 		deployments:         make(map[string]*DeploymentRecord),
 		deploymentLogs:      make(map[string][]*DeploymentLog),
-		deploymentRollbacks: make(map[int64]*DeploymentRollback),
+		deploymentRollbacks: make(map[string]*DeploymentRollback),
 		scheduledDeploys:    make(map[string]*ScheduledDeployment),
+		deploymentAgents:    make(map[string][]DeploymentAgent),
 
 		auditLogs: make([]*AuditEntry, 0),
 
@@ -222,10 +237,43 @@ func NewMemoryStore(cfg *MemoryStoreConfig) *MemoryStore {
 		rateLimits: make(map[string]*RateLimitRecord),
 
 		provisionJobs: make(map[string]*ProvisionJob),
-		sshHostKeys:   make(map[int64]*SSHHostKey),
-		jumpServers:   make(map[int64]*SSHJumpServer),
+		provisionLogs: make(map[string][]*ProvisionLog),
+		sshHostKeys:   make(map[string]*SSHHostKey),
+		jumpServers:   make(map[string]*SSHJumpServer),
 
-		healthCheckConfigs: make(map[int64]*HealthCheckConfig),
+		healthCheckConfigs: make(map[string]*HealthCheckConfig),
+
+		// Security maps
+		certificateAuthorities: make(map[string]*CertificateAuthority),
+		agentCertificates:      make(map[string]*AgentCertificate),
+		serverCertificates:     make(map[string]*ServerCertificate),
+		registrationTokens:     make(map[string]*RegistrationToken),
+		sourceCredentials:      make(map[string]*SourceCredential),
+		revokedCertificates:    make(map[string]*RevokedCertificate),
+		encryptionKeys:         make(map[string]*EncryptionKey),
+		sshKeys:                make(map[string]*SSHKey),
+		certAuditEvents:        make([]*CertAuditEvent, 0),
+
+		// ACME maps
+		acmeCertificates: make(map[string]*ACMECertificate),
+		acmeAccounts:     make(map[string]*ACMEAccount),
+
+		// Recovery codes map
+		recoveryCodes: make(map[string][]*RecoveryCode),
+
+		// Recipe and playbook maps
+		recipeComponents:        make(map[string]*RecipeComponent),
+		recipeComponentsByKey:   make(map[string]*RecipeComponent),
+		playbooks:               make(map[string]*Playbook),
+		playbooksByKey:          make(map[string]*Playbook),
+		playbookActivations:     make(map[string]*PlaybookActivation),
+		activationsByProject:    make(map[string][]*PlaybookActivation),
+		activationsByPlaybook:   make(map[string][]*PlaybookActivation),
+		variableBindings:        make(map[string]*PlaybookVariableBinding),
+		bindingsByActivation:    make(map[string][]*PlaybookVariableBinding),
+		bindingsBySourceRef:     make(map[string][]*PlaybookVariableBinding),
+		rawApprovals:            make(map[string]*RawCommandApproval),
+		rawApprovalsByComponent: make(map[string][]*RawCommandApproval),
 
 		done: make(chan struct{}),
 	}
@@ -313,14 +361,43 @@ func (s *MemoryStore) startWriteWorker(name string, db *sql.DB, writes <-chan Wr
 	}()
 }
 
-// executeWriteOp executes a single write operation within a transaction.
-// This is the callback passed to FlushBatchFunc.
-func (s *MemoryStore) executeWriteOp(tx *sql.Tx, op WriteOp) error {
-	// This will be implemented per-table in the entity-specific files.
-	// For now, return nil as a placeholder.
-	// Each entity file will register its executor.
+// FlushPending drains all pending write operations to SQLite without
+// shutting down the write workers. Call this before import/export to
+// ensure the on-disk database is up to date.
+func (s *MemoryStore) FlushPending() error {
+	channels := []chan WriteOp{
+		s.coreWrites,
+		s.projectsWrites,
+		s.agentsWrites,
+		s.deploymentsWrites,
+		s.auditWrites,
+		s.ratelimitWrites,
+		s.provisionWrites,
+	}
+
+	// Wait until all channels are empty
+	for attempts := 0; attempts < 100; attempts++ {
+		allEmpty := true
+		for _, ch := range channels {
+			if len(ch) > 0 {
+				allEmpty = false
+				break
+			}
+		}
+		if allEmpty {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// Wait one more flush interval to ensure the last batch is committed
+	time.Sleep(250 * time.Millisecond)
 	return nil
 }
+
+// Reload is a no-op for bare MemoryStore (no underlying DB to reload from).
+// CachedStore overrides this to reload from SQLite.
+func (s *MemoryStore) Reload(_ context.Context) error { return nil }
 
 // Close signals all write workers to stop, waits for them to drain,
 // and closes all database connections.
@@ -403,11 +480,6 @@ func (s *MemoryStore) queueWrite(ch chan<- WriteOp, op WriteOp) {
 		// Force send (will block if necessary)
 		ch <- op
 	}
-}
-
-// nextID atomically increments and returns the next ID for a given counter.
-func nextID(counter *atomic.Int64) int64 {
-	return counter.Add(1)
 }
 
 // settingKey returns the map key for a setting.

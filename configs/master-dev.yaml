@@ -11,6 +11,7 @@ server:
 grpc:
   listen: ":9001"
 
+# SSH settings (for provisioning and git repo access — not used for deployment)
 ssh:
   default_user: ${USER}
   default_key: ~/.ssh/id_ed25519
@@ -55,6 +56,13 @@ webhooks:
     enabled: true
     path: /webhook/bitbucket
 
+# Archive settings (dev)
+archive:
+  storage_dir: /tmp/vcdeploy-master/archives
+  keep_count: 5
+  max_total_size: 1GB
+  signed_url_expiry: 10m
+
 notifications:
   providers:
     slack:
@@ -66,6 +74,8 @@ notifications:
 
 api:
   enabled: true
+  rate_limit:
+    enabled: false  # Disable rate limiting for dev/testing
 
 appearance:
   theme: dark

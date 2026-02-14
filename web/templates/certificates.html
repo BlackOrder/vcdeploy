@@ -1,0 +1,85 @@
+{{template "base" .}}
+
+{{define "title"}}Certificates{{end}}
+
+{{define "content"}}
+<div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold">Certificate Management</h1>
+        <button hx-post="/api/v1/certificates/cas/rotate" 
+                hx-confirm="Are you sure you want to rotate the CA? This will create a new CA certificate."
+                hx-swap="none"
+                hx-on::after-request="htmx.trigger('#ca-list', 'refresh')"
+                class="bg-accent-600 hover:bg-accent-700 text-white px-4 py-2 rounded">
+            Rotate CA
+        </button>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
+            <div class="text-sm text-gray-500 dark:text-gray-400">Active</div>
+            <div class="text-2xl font-bold text-green-600" id="stat-active">{{.Stats.Active}}</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
+            <div class="text-sm text-gray-500 dark:text-gray-400">Expiring Soon</div>
+            <div class="text-2xl font-bold text-yellow-600" id="stat-expiring">{{.Stats.Expiring}}</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
+            <div class="text-sm text-gray-500 dark:text-gray-400">Expired</div>
+            <div class="text-2xl font-bold text-red-600" id="stat-expired">{{.Stats.Expired}}</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
+            <div class="text-sm text-gray-500 dark:text-gray-400">Revoked</div>
+            <div class="text-2xl font-bold text-gray-600" id="stat-revoked">{{.Stats.Revoked}}</div>
+        </div>
+    </div>
+
+    <!-- CA Certificates Section -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-8">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">Certificate Authorities</h2>
+        </div>
+        <div class="p-4" id="ca-list" hx-get="/partials/certificates/cas" hx-trigger="load, refresh">
+            <div class="text-center py-4 text-gray-500">Loading...</div>
+        </div>
+    </div>
+
+    <!-- Agent Certificates Section -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+            <h2 class="text-lg font-semibold">Agent Certificates</h2>
+            <div class="flex gap-2">
+                <select id="cert-status-filter" class="px-3 py-1 border rounded dark:bg-gray-700 dark:border-gray-600"
+                        hx-get="/partials/certificates/agents" 
+                        hx-trigger="change"
+                        hx-target="#agent-certs-body"
+                        hx-include="this">
+                    <option value="">All Statuses</option>
+                    <option value="active">Active</option>
+                    <option value="expiring">Expiring Soon</option>
+                    <option value="expired">Expired</option>
+                    <option value="revoked">Revoked</option>
+                </select>
+            </div>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Agent ID</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Serial</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Status</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Issued</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Expires</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="agent-certs-body" hx-get="/partials/certificates/agents" hx-trigger="load" hx-swap="innerHTML">
+                    <tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{{end}}

@@ -7,26 +7,27 @@ import (
 	"testing"
 
 	"github.com/BlackOrder/vcdeploy/internal/config"
+	"github.com/BlackOrder/vcdeploy/internal/services"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"go.uber.org/zap"
 )
 
 // mockUserService implements services.UserServicer for testing
 type mockUserService struct {
-	users map[int64]*storage.User
+	users map[string]*storage.User
 }
 
 func newMockUserService() *mockUserService {
 	return &mockUserService{
-		users: make(map[int64]*storage.User),
+		users: make(map[string]*storage.User),
 	}
 }
 
-func (m *mockUserService) Create(ctx context.Context, username, password, email, role string) (*storage.User, error) {
+func (m *mockUserService) Create(ctx context.Context, username, password, email, role string, opts ...services.CreateUserOption) (*storage.User, error) {
 	return nil, nil
 }
 
-func (m *mockUserService) GetByID(ctx context.Context, id int64) (*storage.User, error) {
+func (m *mockUserService) GetByID(ctx context.Context, id string) (*storage.User, error) {
 	if user, ok := m.users[id]; ok {
 		return user, nil
 	}
@@ -41,6 +42,14 @@ func (m *mockUserService) List(ctx context.Context) ([]*storage.User, error) {
 	return nil, nil
 }
 
+func (m *mockUserService) ListPaginated(ctx context.Context, p services.Pagination) (*services.ListResult[*storage.User], error) {
+	return &services.ListResult[*storage.User]{
+		Items:      nil,
+		TotalCount: 0,
+		Pagination: p,
+	}, nil
+}
+
 func (m *mockUserService) Count(ctx context.Context) (int64, error) {
 	return 0, nil
 }
@@ -49,11 +58,11 @@ func (m *mockUserService) Update(ctx context.Context, user *storage.User) error 
 	return nil
 }
 
-func (m *mockUserService) Delete(ctx context.Context, id int64) error {
+func (m *mockUserService) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-func (m *mockUserService) DeleteWithCleanup(ctx context.Context, id int64) error {
+func (m *mockUserService) DeleteWithCleanup(ctx context.Context, id string) error {
 	return nil
 }
 
@@ -61,11 +70,11 @@ func (m *mockUserService) VerifyPassword(ctx context.Context, username, password
 	return nil, nil
 }
 
-func (m *mockUserService) UpdatePassword(ctx context.Context, userID int64, newPassword string) error {
+func (m *mockUserService) UpdatePassword(ctx context.Context, userID string, newPassword string) error {
 	return nil
 }
 
-func (m *mockUserService) SetTOTP(ctx context.Context, userID int64, secret string, enabled bool) error {
+func (m *mockUserService) SetTOTP(ctx context.Context, userID string, secret string, enabled bool) error {
 	return nil
 }
 
@@ -190,7 +199,7 @@ func TestRequire2FAForAdmin(t *testing.T) {
 			Security: config.SecurityConfig{Require2FAAdmin: true},
 		}
 		userSvc := newMockUserService()
-		userSvc.addUser(&storage.User{ID: 1, Username: "user", Role: "user", TOTPEnabled: false})
+		userSvc.addUser(&storage.User{ID: "user-1", Username: "user", Role: "user", TOTPEnabled: false})
 		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
 
 		handler := mw.Require2FAForAdmin(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -198,7 +207,7 @@ func TestRequire2FAForAdmin(t *testing.T) {
 		}))
 
 		req := httptest.NewRequest("GET", "/", nil)
-		ctx := context.WithValue(req.Context(), contextKeyUserID, int64(1))
+		ctx := context.WithValue(req.Context(), contextKeyUserID, "user-1")
 		req = req.WithContext(ctx)
 		rr := httptest.NewRecorder()
 
@@ -214,7 +223,7 @@ func TestRequire2FAForAdmin(t *testing.T) {
 			Security: config.SecurityConfig{Require2FAAdmin: true},
 		}
 		userSvc := newMockUserService()
-		userSvc.addUser(&storage.User{ID: 1, Username: "admin", Role: "admin", TOTPEnabled: true})
+		userSvc.addUser(&storage.User{ID: "user-1", Username: "admin", Role: "admin", TOTPEnabled: true})
 		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
 
 		handler := mw.Require2FAForAdmin(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -222,7 +231,7 @@ func TestRequire2FAForAdmin(t *testing.T) {
 		}))
 
 		req := httptest.NewRequest("GET", "/", nil)
-		ctx := context.WithValue(req.Context(), contextKeyUserID, int64(1))
+		ctx := context.WithValue(req.Context(), contextKeyUserID, "user-1")
 		req = req.WithContext(ctx)
 		rr := httptest.NewRecorder()
 
@@ -238,7 +247,7 @@ func TestRequire2FAForAdmin(t *testing.T) {
 			Security: config.SecurityConfig{Require2FAAdmin: true},
 		}
 		userSvc := newMockUserService()
-		userSvc.addUser(&storage.User{ID: 1, Username: "admin", Role: "admin", TOTPEnabled: false})
+		userSvc.addUser(&storage.User{ID: "user-1", Username: "admin", Role: "admin", TOTPEnabled: false})
 		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
 
 		handler := mw.Require2FAForAdmin(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -246,7 +255,7 @@ func TestRequire2FAForAdmin(t *testing.T) {
 		}))
 
 		req := httptest.NewRequest("GET", "/", nil)
-		ctx := context.WithValue(req.Context(), contextKeyUserID, int64(1))
+		ctx := context.WithValue(req.Context(), contextKeyUserID, "user-1")
 		req = req.WithContext(ctx)
 		rr := httptest.NewRecorder()
 
@@ -406,7 +415,7 @@ func TestChainMiddleware(t *testing.T) {
 
 func TestUserContext(t *testing.T) {
 	user := &storage.User{
-		ID:       1,
+		ID:       "user-1",
 		Username: "testuser",
 		Role:     "admin",
 	}
@@ -419,7 +428,7 @@ func TestUserContext(t *testing.T) {
 	}
 
 	if retrieved.ID != user.ID {
-		t.Errorf("Expected user ID %d, got %d", user.ID, retrieved.ID)
+		t.Errorf("Expected user ID %s, got %s", user.ID, retrieved.ID)
 	}
 
 	if retrieved.Username != user.Username {
@@ -497,7 +506,7 @@ func TestRequire2FAForAdminFunc(t *testing.T) {
 			Security: config.SecurityConfig{Require2FAAdmin: true},
 		}
 		userSvc := newMockUserService()
-		userSvc.addUser(&storage.User{ID: 1, Username: "user", Role: "viewer", TOTPEnabled: false})
+		userSvc.addUser(&storage.User{ID: "user-1", Username: "user", Role: "viewer", TOTPEnabled: false})
 		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
 
 		handlerFunc := mw.Require2FAForAdminFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -505,7 +514,7 @@ func TestRequire2FAForAdminFunc(t *testing.T) {
 		})
 
 		req := httptest.NewRequest("GET", "/", nil)
-		ctx := context.WithValue(req.Context(), contextKeyUserID, int64(1))
+		ctx := context.WithValue(req.Context(), contextKeyUserID, "user-1")
 		req = req.WithContext(ctx)
 		rr := httptest.NewRecorder()
 
@@ -521,7 +530,7 @@ func TestRequire2FAForAdminFunc(t *testing.T) {
 			Security: config.SecurityConfig{Require2FAAdmin: true},
 		}
 		userSvc := newMockUserService()
-		userSvc.addUser(&storage.User{ID: 1, Username: "admin", Role: "admin", TOTPEnabled: true})
+		userSvc.addUser(&storage.User{ID: "user-1", Username: "admin", Role: "admin", TOTPEnabled: true})
 		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
 
 		handlerFunc := mw.Require2FAForAdminFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -529,7 +538,7 @@ func TestRequire2FAForAdminFunc(t *testing.T) {
 		})
 
 		req := httptest.NewRequest("GET", "/", nil)
-		ctx := context.WithValue(req.Context(), contextKeyUserID, int64(1))
+		ctx := context.WithValue(req.Context(), contextKeyUserID, "user-1")
 		req = req.WithContext(ctx)
 		rr := httptest.NewRecorder()
 
@@ -545,7 +554,7 @@ func TestRequire2FAForAdminFunc(t *testing.T) {
 			Security: config.SecurityConfig{Require2FAAdmin: true},
 		}
 		userSvc := newMockUserService()
-		userSvc.addUser(&storage.User{ID: 1, Username: "admin", Role: "admin", TOTPEnabled: false})
+		userSvc.addUser(&storage.User{ID: "user-1", Username: "admin", Role: "admin", TOTPEnabled: false})
 		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
 
 		handlerFunc := mw.Require2FAForAdminFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -553,7 +562,7 @@ func TestRequire2FAForAdminFunc(t *testing.T) {
 		})
 
 		req := httptest.NewRequest("GET", "/admin", nil)
-		ctx := context.WithValue(req.Context(), contextKeyUserID, int64(1))
+		ctx := context.WithValue(req.Context(), contextKeyUserID, "user-1")
 		req = req.WithContext(ctx)
 		rr := httptest.NewRecorder()
 
@@ -576,7 +585,7 @@ func TestRequire2FAForAdminFunc(t *testing.T) {
 		})
 
 		req := httptest.NewRequest("GET", "/", nil)
-		ctx := context.WithValue(req.Context(), contextKeyUserID, int64(999)) // Non-existent user
+		ctx := context.WithValue(req.Context(), contextKeyUserID, "nonexistent") // Non-existent user
 		req = req.WithContext(ctx)
 		rr := httptest.NewRecorder()
 
@@ -735,7 +744,7 @@ func TestRequireRole(t *testing.T) {
 
 	t.Run("allows exact role match", func(t *testing.T) {
 		userSvc := newMockUserService()
-		userSvc.addUser(&storage.User{ID: 1, Username: "admin", Role: "admin"})
+		userSvc.addUser(&storage.User{ID: "user-1", Username: "admin", Role: "admin"})
 		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
 
 		handler := mw.RequireRole("admin")(func(w http.ResponseWriter, r *http.Request) {
@@ -743,7 +752,7 @@ func TestRequireRole(t *testing.T) {
 		})
 
 		req := httptest.NewRequest("GET", "/admin", nil)
-		ctx := context.WithValue(req.Context(), contextKeyUserID, int64(1))
+		ctx := context.WithValue(req.Context(), contextKeyUserID, "user-1")
 		req = req.WithContext(ctx)
 		rr := httptest.NewRecorder()
 
@@ -756,7 +765,7 @@ func TestRequireRole(t *testing.T) {
 
 	t.Run("rejects role mismatch", func(t *testing.T) {
 		userSvc := newMockUserService()
-		userSvc.addUser(&storage.User{ID: 1, Username: "user", Role: "user"})
+		userSvc.addUser(&storage.User{ID: "user-1", Username: "user", Role: "user"})
 		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
 
 		handler := mw.RequireRole("admin")(func(w http.ResponseWriter, r *http.Request) {
@@ -764,7 +773,7 @@ func TestRequireRole(t *testing.T) {
 		})
 
 		req := httptest.NewRequest("GET", "/admin", nil)
-		ctx := context.WithValue(req.Context(), contextKeyUserID, int64(1))
+		ctx := context.WithValue(req.Context(), contextKeyUserID, "user-1")
 		req = req.WithContext(ctx)
 		rr := httptest.NewRecorder()
 
@@ -802,7 +811,7 @@ func TestRequireRole(t *testing.T) {
 		})
 
 		req := httptest.NewRequest("GET", "/admin", nil)
-		ctx := context.WithValue(req.Context(), contextKeyUserID, int64(999))
+		ctx := context.WithValue(req.Context(), contextKeyUserID, "nonexistent")
 		req = req.WithContext(ctx)
 		rr := httptest.NewRecorder()
 
@@ -822,7 +831,7 @@ func TestRequireMinRole(t *testing.T) {
 
 	t.Run("admin can access admin-required", func(t *testing.T) {
 		userSvc := newMockUserService()
-		userSvc.addUser(&storage.User{ID: 1, Username: "admin", Role: "admin"})
+		userSvc.addUser(&storage.User{ID: "user-1", Username: "admin", Role: "admin"})
 		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
 
 		handler := mw.RequireMinRole("admin")(func(w http.ResponseWriter, r *http.Request) {
@@ -830,7 +839,7 @@ func TestRequireMinRole(t *testing.T) {
 		})
 
 		req := httptest.NewRequest("GET", "/admin", nil)
-		ctx := context.WithValue(req.Context(), contextKeyUserID, int64(1))
+		ctx := context.WithValue(req.Context(), contextKeyUserID, "user-1")
 		req = req.WithContext(ctx)
 		rr := httptest.NewRecorder()
 
@@ -843,7 +852,7 @@ func TestRequireMinRole(t *testing.T) {
 
 	t.Run("admin can access user-required", func(t *testing.T) {
 		userSvc := newMockUserService()
-		userSvc.addUser(&storage.User{ID: 1, Username: "admin", Role: "admin"})
+		userSvc.addUser(&storage.User{ID: "user-1", Username: "admin", Role: "admin"})
 		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
 
 		handler := mw.RequireMinRole("user")(func(w http.ResponseWriter, r *http.Request) {
@@ -851,7 +860,7 @@ func TestRequireMinRole(t *testing.T) {
 		})
 
 		req := httptest.NewRequest("GET", "/resource", nil)
-		ctx := context.WithValue(req.Context(), contextKeyUserID, int64(1))
+		ctx := context.WithValue(req.Context(), contextKeyUserID, "user-1")
 		req = req.WithContext(ctx)
 		rr := httptest.NewRecorder()
 
@@ -864,7 +873,7 @@ func TestRequireMinRole(t *testing.T) {
 
 	t.Run("user cannot access admin-required", func(t *testing.T) {
 		userSvc := newMockUserService()
-		userSvc.addUser(&storage.User{ID: 1, Username: "user", Role: "user"})
+		userSvc.addUser(&storage.User{ID: "user-1", Username: "user", Role: "user"})
 		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
 
 		handler := mw.RequireMinRole("admin")(func(w http.ResponseWriter, r *http.Request) {
@@ -872,7 +881,7 @@ func TestRequireMinRole(t *testing.T) {
 		})
 
 		req := httptest.NewRequest("GET", "/admin", nil)
-		ctx := context.WithValue(req.Context(), contextKeyUserID, int64(1))
+		ctx := context.WithValue(req.Context(), contextKeyUserID, "user-1")
 		req = req.WithContext(ctx)
 		rr := httptest.NewRecorder()
 
@@ -885,7 +894,7 @@ func TestRequireMinRole(t *testing.T) {
 
 	t.Run("viewer can access viewer-required", func(t *testing.T) {
 		userSvc := newMockUserService()
-		userSvc.addUser(&storage.User{ID: 1, Username: "viewer", Role: "viewer"})
+		userSvc.addUser(&storage.User{ID: "user-1", Username: "viewer", Role: "viewer"})
 		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
 
 		handler := mw.RequireMinRole("viewer")(func(w http.ResponseWriter, r *http.Request) {
@@ -893,7 +902,7 @@ func TestRequireMinRole(t *testing.T) {
 		})
 
 		req := httptest.NewRequest("GET", "/view", nil)
-		ctx := context.WithValue(req.Context(), contextKeyUserID, int64(1))
+		ctx := context.WithValue(req.Context(), contextKeyUserID, "user-1")
 		req = req.WithContext(ctx)
 		rr := httptest.NewRecorder()
 
@@ -906,7 +915,7 @@ func TestRequireMinRole(t *testing.T) {
 
 	t.Run("viewer cannot access user-required", func(t *testing.T) {
 		userSvc := newMockUserService()
-		userSvc.addUser(&storage.User{ID: 1, Username: "viewer", Role: "viewer"})
+		userSvc.addUser(&storage.User{ID: "user-1", Username: "viewer", Role: "viewer"})
 		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
 
 		handler := mw.RequireMinRole("user")(func(w http.ResponseWriter, r *http.Request) {
@@ -914,7 +923,7 @@ func TestRequireMinRole(t *testing.T) {
 		})
 
 		req := httptest.NewRequest("GET", "/resource", nil)
-		ctx := context.WithValue(req.Context(), contextKeyUserID, int64(1))
+		ctx := context.WithValue(req.Context(), contextKeyUserID, "user-1")
 		req = req.WithContext(ctx)
 		rr := httptest.NewRecorder()
 
@@ -1170,12 +1179,12 @@ func TestCheckWriteAccess(t *testing.T) {
 
 	t.Run("allows with write scope and user role", func(t *testing.T) {
 		userSvc := newMockUserService()
-		userSvc.addUser(&storage.User{ID: 1, Username: "editor", Role: "user"})
+		userSvc.addUser(&storage.User{ID: "user-1", Username: "editor", Role: "user"})
 		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
 
 		apiKey := &storage.APIKey{Scopes: `["write"]`}
 		ctx := WithAPIKeyContext(context.Background(), apiKey)
-		ctx = context.WithValue(ctx, contextKeyUserID, int64(1))
+		ctx = context.WithValue(ctx, contextKeyUserID, "user-1")
 
 		msg, status, ok := mw.CheckWriteAccess(ctx)
 		if !ok {
@@ -1188,12 +1197,12 @@ func TestCheckWriteAccess(t *testing.T) {
 
 	t.Run("rejects read-only API key", func(t *testing.T) {
 		userSvc := newMockUserService()
-		userSvc.addUser(&storage.User{ID: 1, Username: "editor", Role: "user"})
+		userSvc.addUser(&storage.User{ID: "user-1", Username: "editor", Role: "user"})
 		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
 
 		apiKey := &storage.APIKey{KeyPrefix: "test", Scopes: `["read"]`}
 		ctx := WithAPIKeyContext(context.Background(), apiKey)
-		ctx = context.WithValue(ctx, contextKeyUserID, int64(1))
+		ctx = context.WithValue(ctx, contextKeyUserID, "user-1")
 
 		msg, status, ok := mw.CheckWriteAccess(ctx)
 		if ok {
@@ -1209,12 +1218,12 @@ func TestCheckWriteAccess(t *testing.T) {
 
 	t.Run("rejects viewer role", func(t *testing.T) {
 		userSvc := newMockUserService()
-		userSvc.addUser(&storage.User{ID: 1, Username: "viewer", Role: "viewer"})
+		userSvc.addUser(&storage.User{ID: "user-1", Username: "viewer", Role: "viewer"})
 		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
 
 		apiKey := &storage.APIKey{Scopes: `["write"]`}
 		ctx := WithAPIKeyContext(context.Background(), apiKey)
-		ctx = context.WithValue(ctx, contextKeyUserID, int64(1))
+		ctx = context.WithValue(ctx, contextKeyUserID, "user-1")
 
 		_, status, ok := mw.CheckWriteAccess(ctx)
 		if ok {
@@ -1234,12 +1243,12 @@ func TestCheckAdminAccess(t *testing.T) {
 
 	t.Run("allows with admin scope and admin role", func(t *testing.T) {
 		userSvc := newMockUserService()
-		userSvc.addUser(&storage.User{ID: 1, Username: "admin", Role: "admin"})
+		userSvc.addUser(&storage.User{ID: "user-1", Username: "admin", Role: "admin"})
 		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
 
 		apiKey := &storage.APIKey{Scopes: `["admin"]`}
 		ctx := WithAPIKeyContext(context.Background(), apiKey)
-		ctx = context.WithValue(ctx, contextKeyUserID, int64(1))
+		ctx = context.WithValue(ctx, contextKeyUserID, "user-1")
 
 		msg, status, ok := mw.CheckAdminAccess(ctx)
 		if !ok {
@@ -1252,12 +1261,12 @@ func TestCheckAdminAccess(t *testing.T) {
 
 	t.Run("rejects write-only API key", func(t *testing.T) {
 		userSvc := newMockUserService()
-		userSvc.addUser(&storage.User{ID: 1, Username: "admin", Role: "admin"})
+		userSvc.addUser(&storage.User{ID: "user-1", Username: "admin", Role: "admin"})
 		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
 
 		apiKey := &storage.APIKey{KeyPrefix: "test", Scopes: `["write"]`}
 		ctx := WithAPIKeyContext(context.Background(), apiKey)
-		ctx = context.WithValue(ctx, contextKeyUserID, int64(1))
+		ctx = context.WithValue(ctx, contextKeyUserID, "user-1")
 
 		_, status, ok := mw.CheckAdminAccess(ctx)
 		if ok {
@@ -1270,12 +1279,12 @@ func TestCheckAdminAccess(t *testing.T) {
 
 	t.Run("rejects non-admin user role", func(t *testing.T) {
 		userSvc := newMockUserService()
-		userSvc.addUser(&storage.User{ID: 1, Username: "user", Role: "user"})
+		userSvc.addUser(&storage.User{ID: "user-1", Username: "user", Role: "user"})
 		mw := NewEnforcementMiddleware(cfg, userSvc, logger)
 
 		apiKey := &storage.APIKey{Scopes: `["admin"]`}
 		ctx := WithAPIKeyContext(context.Background(), apiKey)
-		ctx = context.WithValue(ctx, contextKeyUserID, int64(1))
+		ctx = context.WithValue(ctx, contextKeyUserID, "user-1")
 
 		_, status, ok := mw.CheckAdminAccess(ctx)
 		if ok {

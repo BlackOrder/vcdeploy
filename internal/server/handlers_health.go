@@ -30,7 +30,7 @@ type CheckResult struct {
 // handleHealth handles the /api/v1/health endpoint.
 // Returns detailed health status including database and gRPC connectivity.
 func (s *MasterServer) handleHealth(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), TimeoutDefault)
 	defer cancel()
 
 	health := s.buildDetailedHealth(ctx)
@@ -47,7 +47,14 @@ func (s *MasterServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 // handleHealthzLive handles /healthz and /livez (Kubernetes liveness probe).
 // Returns 200 if the process is alive.
+// Note: /healthz is deprecated; use /livez for liveness or /health for detailed status.
 func (s *MasterServer) handleHealthzLive(w http.ResponseWriter, r *http.Request) {
+	// Add deprecation header for legacy /healthz endpoint
+	if r.URL.Path == "/healthz" {
+		w.Header().Set("Deprecation", "true")
+		w.Header().Set("Link", "</livez>; rel=\"successor-version\", </health>; rel=\"alternate\"")
+		w.Header().Set("Sunset", "2025-06-01")
+	}
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("ok"))
 }
@@ -61,7 +68,7 @@ func (s *MasterServer) handleHealthzReady(w http.ResponseWriter, r *http.Request
 	// Check database connectivity
 	if err := s.store.Conn().PingContext(ctx); err != nil {
 		s.logger.Warn("Readiness check failed: database not ready", zap.Error(err))
-		http.Error(w, "database not ready", http.StatusServiceUnavailable)
+		s.jsonError(w, http.StatusServiceUnavailable, "database not ready")
 		return
 	}
 

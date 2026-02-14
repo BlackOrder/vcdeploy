@@ -65,6 +65,7 @@ vcdeploy agent --config /etc/vcdeploy/agent.yaml
 
 ### Deployment Orchestration
 - Project-based deployment configurations
+- Target-based deployment (agent or master-local)
 - Pre/post deployment hooks
 - Rollback support
 - Health checks integration
@@ -92,6 +93,7 @@ vcdeploy agent --config /etc/vcdeploy/agent.yaml
 - [Quick Start Guide](quickstart.md) - Get up and running in 5 minutes
 - [Installation Guide](installation.md) - Detailed installation instructions
 - [Architecture Overview](architecture/overview.md) - How vcdeploy works
+- [Targets Configuration](config/targets.md) - Deployment target setup
 - [API Reference](api.md) - REST API documentation
 - [gRPC API](api/grpc.md) - Agent communication protocol
 

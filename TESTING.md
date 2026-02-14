@@ -201,7 +201,7 @@ func TestConfigValidation(t *testing.T) {
         {
             name: "valid config",
             config: Config{
-                Server: ServerConfig{Port: 8080},
+                Server: ServerConfig{Port: 9000},
             },
             wantErr: false,
         },
@@ -414,6 +414,102 @@ xdg-open coverage.html  # Linux
 
 Coverage reports are uploaded to Codecov on each push. View the coverage badge and detailed reports at:
 - https://codecov.io/gh/BlackOrder/vcdeploy
+
+## Skip Traceability Matrix
+
+This section documents all `t.Skip()` calls in the test suite and explains why each test is skipped and where equivalent coverage exists.
+
+### Skip Categories
+
+| Category | Count | Coverage Location | Notes |
+|----------|-------|-------------------|-------|
+| OS-specific (Linux) | 1 | CI runs on Linux | `machine_key_test.go:64` - primary platform |
+| OS-specific (macOS) | 2 | macOS CI diff-only | `machine_key_test.go:82,100` - UUID retrieval |
+| Root privileges | 3 | Integration tests with Docker | `executor_test.go:97,109`, `agent_test.go:767` |
+| External services (ACME) | 1 | Manual with staging endpoint | `acme_integration_test.go:36` |
+| Database dependencies | 2 | Integration tests | `db_recipes_test.go:276,300` |
+| Template loading | 3 | E2E tests with proper setup | `master_test.go:39,42,1180` |
+| Network timeout | 1 | Integration tests | `admin_test.go:1825` |
+| Consolidated schema | 3 | Single migration design | `migrations_test.go:402,459,511` |
+| E2E resource not available | 19 | Dynamic skip when fixture missing | E2E tests create fixtures first |
+| ACME environment | 1 | Manual test only | Requires `ACME_TEST_DOMAIN` |
+| Component validation | 1 | Integration tests | `resolver_test.go:185` |
+
+### Detailed Skip Explanations
+
+#### Root Privileges (3 skips)
+- `cmd/vcdeploy/commands/executor_test.go:97` - Test requires root for file ownership tests
+- `cmd/vcdeploy/commands/executor_test.go:109` - Test requires non-root user
+- `internal/agent/agent_test.go:767` - Agent restart requires root
+
+**Coverage:** Integration tests run as root in Docker containers.
+
+#### OS-Specific Tests (3 skips)
+- `internal/agent/machine_key_test.go:52` - Machine ID not available on all OS
+- `internal/agent/machine_key_test.go:64` - Linux-specific `/etc/machine-id`
+- `internal/agent/machine_key_test.go:82,100` - macOS-specific `ioreg`
+
+**Coverage:** CI runs full suite on Linux (primary platform). macOS gets diff-only tests.
+
+#### Template Loading (3 skips)
+- `internal/server/master_test.go:39,42` - Templates directory not found
+- `internal/server/master_test.go:1180` - UI tests need templates loaded
+
+**Coverage:** E2E tests ensure templates are available via docker-compose setup.
+
+#### E2E Dynamic Skips (19 skips)
+- `tests/e2e/agents_test.go` - Skip if no agents available
+- `tests/e2e/users_test.go` - Skip if no user created
+- `tests/e2e/api_extended_test.go` - Skip if master not available
+
+**Coverage:** These are conditional skips that run when fixtures exist. E2E suite creates fixtures before running dependent tests.
+
+#### Database Dependencies (2 skips)
+- `internal/storage/db_recipes_test.go:276` - Requires full chain setup
+- `internal/storage/db_recipes_test.go:300` - Requires user in database
+
+**Coverage:** Integration tests with full database available.
+
+#### Consolidated Schema Skips (3 skips)
+- `migrations_test.go:402,459,511` - Tests for multi-migration scenarios
+
+**Coverage:** These tests are no longer relevant after Stage 1 schema consolidation. The tests remain to document the expected behavior if the schema is ever split again.
+
+### Platform Support
+
+| Platform | Support Level | Test Coverage |
+|----------|---------------|---------------|
+| Linux | Primary | Full test suite in CI |
+| macOS | Secondary | OS-specific diff-only tests |
+| Windows | Not Supported | No tests |
+
+**Rationale:**
+- Linux is the primary deployment platform (servers)
+- macOS needs only OS-specific code paths verified (UUID, system info)
+- Windows is not a deployment target
+
+### Coverage Baseline (as of 2025-01-17)
+
+Packages below 50% coverage that need improvement:
+
+| Package | Coverage | Notes |
+|---------|----------|-------|
+| `cmd/vcdeploy/commands` | 20.0% | CLI commands need more tests |
+| `internal/agent` | 38.3% | Agent lifecycle tests needed |
+| `internal/git` | 39.5% | Git operations tests needed |
+| `internal/proto` | 9.4% | gRPC generated code |
+| `internal/provision` | 44.0% | Improved from 23.3% after worker tests |
+| `internal/server` | 44.1% | HTTP handlers need more coverage |
+| `internal/tracing` | 37.5% | Tracing infrastructure |
+| `internal/testutil` | 16.4% | Test utilities (acceptable low coverage) |
+
+Packages with good coverage (80%+):
+- `internal/alerting` — 95.8%
+- `internal/metrics` — 100%
+- `internal/security` — 81.3%
+- `internal/services/*` — Most services 80%+
+- `internal/validation` — 97.3%
+- `internal/webhooks` — 85.3%
 
 ## Best Practices
 

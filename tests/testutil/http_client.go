@@ -151,6 +151,23 @@ func DecodeJSON(resp *http.Response, v interface{}) error {
 	return json.NewDecoder(resp.Body).Decode(v)
 }
 
+// PaginatedResponse represents a paginated API response.
+type PaginatedResponse struct {
+	Items      []map[string]interface{} `json:"items"`
+	TotalCount int                      `json:"totalCount"`
+	Limit      int                      `json:"limit"`
+	Offset     int                      `json:"offset"`
+}
+
+// DecodePaginatedJSON decodes a paginated JSON response body.
+func DecodePaginatedJSON(resp *http.Response) (*PaginatedResponse, error) {
+	var result PaginatedResponse
+	if err := DecodeJSON(resp, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 // ReadBody reads and returns the response body as a string.
 func ReadBody(resp *http.Response) (string, error) {
 	defer resp.Body.Close()
@@ -177,7 +194,7 @@ func WaitForEndpoint(ctx context.Context, url string, timeout time.Duration) err
 			}
 			resp, err := client.Do(req)
 			if err == nil {
-				resp.Body.Close()
+				_ = resp.Body.Close() // #nosec G104 - best effort cleanup in test
 				if resp.StatusCode == http.StatusOK {
 					return nil
 				}
@@ -208,7 +225,7 @@ func WaitForEndpointWithRetry(url string, timeout, retryInterval time.Duration) 
 			}
 			resp, err := client.Do(req)
 			if err == nil {
-				resp.Body.Close()
+				_ = resp.Body.Close() // #nosec G104 - best effort cleanup in test
 				if resp.StatusCode == http.StatusOK {
 					return nil
 				}

@@ -2,12 +2,21 @@ package projects
 
 import (
 	"context"
-	"errors"
 	"testing"
 
+	"github.com/BlackOrder/vcdeploy/internal/services"
 	"github.com/BlackOrder/vcdeploy/internal/services/testutil"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 )
+
+func derefStr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+func strPtr(s string) *string { return &s }
 
 func newTestService(t *testing.T) (*Service, storage.Store) {
 	t.Helper()
@@ -38,7 +47,7 @@ func TestService_Create(t *testing.T) {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	if project.ID == 0 {
+	if project.ID == "" {
 		t.Error("Create() did not set project ID")
 	}
 	if project.Name != "my-project" {
@@ -50,8 +59,8 @@ func TestService_Create(t *testing.T) {
 	if project.Branch != "main" {
 		t.Errorf("Create() branch = %v, want %v", project.Branch, "main")
 	}
-	if project.Type != "nodejs" {
-		t.Errorf("Create() type = %v, want %v", project.Type, "nodejs")
+	if derefStr(project.TypeID) != "nodejs" {
+		t.Errorf("Create() type = %v, want %v", derefStr(project.TypeID), "nodejs")
 	}
 }
 
@@ -77,8 +86,8 @@ func TestService_Create_Defaults(t *testing.T) {
 	if project.Branch != "main" {
 		t.Errorf("Create() default branch = %v, want %v", project.Branch, "main")
 	}
-	if project.Type != "generic" {
-		t.Errorf("Create() default type = %v, want %v", project.Type, "generic")
+	if derefStr(project.TypeID) != "" {
+		t.Errorf("Create() default type = %v, want empty (NULL)", derefStr(project.TypeID))
 	}
 }
 
@@ -235,7 +244,8 @@ func TestService_Update_AllFields(t *testing.T) {
 	project.Repository = "https://github.com/new/repo"
 	project.Branch = "develop"
 	project.DeployPath = "/opt/new-path"
-	project.Type = "python"
+	pythonType := "python"
+	project.TypeID = &pythonType
 
 	err := svc.Update(ctx, project)
 	if err != nil {
@@ -256,8 +266,8 @@ func TestService_Update_AllFields(t *testing.T) {
 	if updated.DeployPath != "/opt/new-path" {
 		t.Errorf("Update() deployPath = %v, want %v", updated.DeployPath, "/opt/new-path")
 	}
-	if updated.Type != "python" {
-		t.Errorf("Update() type = %v, want %v", updated.Type, "python")
+	if derefStr(updated.TypeID) != "python" {
+		t.Errorf("Update() type = %v, want %v", derefStr(updated.TypeID), "python")
 	}
 }
 
@@ -299,8 +309,8 @@ func TestService_Create_AllFields(t *testing.T) {
 	if project.DeployPath != "/opt/deploy/full" {
 		t.Errorf("Create() deployPath = %v, want %v", project.DeployPath, "/opt/deploy/full")
 	}
-	if project.Type != "python" {
-		t.Errorf("Create() type = %v, want %v", project.Type, "python")
+	if derefStr(project.TypeID) != "python" {
+		t.Errorf("Create() type = %v, want %v", derefStr(project.TypeID), "python")
 	}
 	if project.CreatedAt.IsZero() {
 		t.Error("Create() CreatedAt should be set")
@@ -335,13 +345,13 @@ func TestService_DeleteWithCleanup(t *testing.T) {
 	conn := db.Conn()
 
 	// Add a webhook
-	_, err := conn.ExecContext(ctx, `INSERT INTO project_webhooks (project_id, provider, enabled) VALUES (?, 'github', 1)`, project.ID)
+	_, err := conn.ExecContext(ctx, `INSERT INTO project_webhooks (id, project_id, provider, enabled) VALUES (?, ?, 'github', 1)`, "uid-wh-cleanup", project.ID)
 	if err != nil {
 		t.Fatalf("Failed to insert webhook: %v", err)
 	}
 
 	// Add a secret
-	_, err = conn.ExecContext(ctx, `INSERT INTO secrets (project, scope, key, value_encrypted, created_at) VALUES (?, 'env', 'TEST_KEY', X'00', datetime('now'))`, project.Name)
+	_, err = conn.ExecContext(ctx, `INSERT INTO secrets (id, project, scope, key, value_encrypted, created_at) VALUES (?, ?, 'env', 'TEST_KEY', X'00', datetime('now'))`, "uid-secret-cleanup", project.Name)
 	if err != nil {
 		t.Fatalf("Failed to insert secret: %v", err)
 	}
@@ -393,7 +403,7 @@ func TestService_DeleteWithCleanup_NotFound(t *testing.T) {
 		t.Error("DeleteWithCleanup() expected error for nonexistent project")
 	}
 	// Verify it's a not found error
-	if !errors.Is(err, storage.ErrNotFound) {
+	if !services.IsNotFound(err) {
 		// Check if wrapped
 		if err.Error() == "" || !containsStr(err.Error(), "not found") && !containsStr(err.Error(), "getting project") {
 			t.Errorf("DeleteWithCleanup() error = %v, expected not found related error", err)
@@ -432,11 +442,11 @@ func TestService_DeleteWithCleanup_OnlyWebhooks(t *testing.T) {
 
 	// Add only webhooks
 	conn := db.Conn()
-	_, err := conn.ExecContext(ctx, `INSERT INTO project_webhooks (project_id, provider, enabled) VALUES (?, 'github', 1)`, project.ID)
+	_, err := conn.ExecContext(ctx, `INSERT INTO project_webhooks (id, project_id, provider, enabled) VALUES (?, ?, 'github', 1)`, "uid-wh-only1", project.ID)
 	if err != nil {
 		t.Fatalf("Failed to insert webhook: %v", err)
 	}
-	_, err = conn.ExecContext(ctx, `INSERT INTO project_webhooks (project_id, provider, enabled) VALUES (?, 'gitlab', 0)`, project.ID)
+	_, err = conn.ExecContext(ctx, `INSERT INTO project_webhooks (id, project_id, provider, enabled) VALUES (?, ?, 'gitlab', 0)`, "uid-wh-only2", project.ID)
 	if err != nil {
 		t.Fatalf("Failed to insert webhook: %v", err)
 	}
@@ -534,7 +544,7 @@ func TestService_Update_NonExistent(t *testing.T) {
 		Repository: "https://example.com",
 		Branch:     "main",
 		DeployPath: "/var/www",
-		Type:       "generic",
+		TypeID:     strPtr("generic"),
 	}
 
 	err := svc.Update(ctx, project)
@@ -604,7 +614,7 @@ func TestService_Create_TypeVariations(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{"", "generic"},                // default
+		{"", ""},                       // NULL (no default)
 		{"nodejs", "nodejs"},           // explicit
 		{"python", "python"},           // explicit
 		{"go", "go"},                   // explicit
@@ -620,8 +630,8 @@ func TestService_Create_TypeVariations(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Create() with type %q error = %v", tc.input, err)
 		}
-		if project.Type != tc.expected {
-			t.Errorf("Create() with type %q: got %q, want %q", tc.input, project.Type, tc.expected)
+		if derefStr(project.TypeID) != tc.expected {
+			t.Errorf("Create() with type %q: got %q, want %q", tc.input, derefStr(project.TypeID), tc.expected)
 		}
 	}
 }
@@ -671,7 +681,7 @@ func TestService_Create_IDIsSet(t *testing.T) {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	if project.ID == 0 {
+	if project.ID == "" {
 		t.Error("Create() should set ID > 0")
 	}
 }
@@ -708,8 +718,8 @@ func TestService_GetByName_ReturnsAllFields(t *testing.T) {
 	if found.DeployPath != "/deploy/path" {
 		t.Errorf("GetByName() DeployPath = %v, want %v", found.DeployPath, "/deploy/path")
 	}
-	if found.Type != "python" {
-		t.Errorf("GetByName() Type = %v, want %v", found.Type, "python")
+	if derefStr(found.TypeID) != "python" {
+		t.Errorf("GetByName() TypeID = %v, want %v", derefStr(found.TypeID), "python")
 	}
 	if found.CreatedAt.IsZero() {
 		t.Error("GetByName() CreatedAt should not be zero")
@@ -761,7 +771,7 @@ func TestService_Update_PreservesID(t *testing.T) {
 		t.Fatalf("GetByName() error = %v", err)
 	}
 	if updated.ID != originalID {
-		t.Errorf("Update() changed ID from %d to %d", originalID, updated.ID)
+		t.Errorf("Update() changed ID from %s to %s", originalID, updated.ID)
 	}
 }
 

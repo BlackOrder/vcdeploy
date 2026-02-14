@@ -31,8 +31,13 @@ func setupTestSettingsDB(t *testing.T) (storage.Store, *security.KMS, func()) {
 		t.Fatalf("migrate database: %v", err)
 	}
 
-	// Initialize KMS
-	kms, err := security.NewKMS(db.Conn(), nil)
+	// Initialize KMS (db implements storage.Store interface)
+	masterKey, err := security.GenerateMasterKey()
+	if err != nil {
+		db.Close()
+		t.Fatalf("generate master key: %v", err)
+	}
+	kms, err := security.NewKMS(context.Background(), db, nil, masterKey)
 	if err != nil {
 		db.Close()
 		t.Fatalf("init KMS: %v", err)
@@ -165,7 +170,7 @@ func TestSettingsService_GetRequiredInt(t *testing.T) {
 	ctx := context.Background()
 
 	// Set an integer
-	if err := svc.SetInt(ctx, "test", "port", 8080); err != nil {
+	if err := svc.SetInt(ctx, "test", "port", 9000); err != nil {
 		t.Fatalf("SetInt failed: %v", err)
 	}
 
@@ -174,8 +179,8 @@ func TestSettingsService_GetRequiredInt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetRequiredInt failed: %v", err)
 	}
-	if val != 8080 {
-		t.Errorf("expected 8080, got %d", val)
+	if val != 9000 {
+		t.Errorf("expected 9000, got %d", val)
 	}
 
 	// Test with non-existent
@@ -555,7 +560,7 @@ func TestSettingsService_ExportImport(t *testing.T) {
 	ctx := context.Background()
 
 	// Set some values
-	if err := svc.Set(ctx, "server", "listen", ":8080", false); err != nil {
+	if err := svc.Set(ctx, "server", "listen", ":9000", false); err != nil {
 		t.Fatalf("Set failed: %v", err)
 	}
 	if err := svc.SetBool(ctx, "server", "tls_enabled", true); err != nil {
@@ -1123,5 +1128,109 @@ func TestSettingsService_ListByCategoryEmpty(t *testing.T) {
 
 	if len(settings) != 0 {
 		t.Errorf("expected empty list for nonexistent category, got %d", len(settings))
+	}
+}
+
+// TestSetDefaults_PreBootAlwaysOverwrites verifies that pre-boot settings
+// (server, grpc) always overwrite user edits on restart.
+func TestSetDefaults_PreBootAlwaysOverwrites(t *testing.T) {
+	db, kms, cleanup := setupTestSettingsDB(t)
+	defer cleanup()
+
+	svc := NewSettingsService(db, kms)
+	ctx := context.Background()
+
+	// Seed defaults
+	if err := svc.SetDefaults(ctx); err != nil {
+		t.Fatalf("SetDefaults: %v", err)
+	}
+
+	// Simulate user editing a pre-boot field via API
+	if err := svc.Set(ctx, "server", "listen", "0.0.0.0:9999", false); err != nil {
+		t.Fatalf("Set server.listen: %v", err)
+	}
+
+	// Verify the user's edit took effect
+	val, err := svc.Get(ctx, "server", "listen")
+	if err != nil {
+		t.Fatalf("Get server.listen: %v", err)
+	}
+	if val != "0.0.0.0:9999" {
+		t.Fatalf("expected user value 0.0.0.0:9999, got %s", val)
+	}
+
+	// Simulate server restart: SetDefaults called again
+	if err := svc.SetDefaults(ctx); err != nil {
+		t.Fatalf("SetDefaults (restart): %v", err)
+	}
+
+	// Pre-boot field should be overwritten back to the YAML default
+	defaults := DefaultMasterConfig()
+	val, err = svc.Get(ctx, "server", "listen")
+	if err != nil {
+		t.Fatalf("Get after restart: %v", err)
+	}
+	if val != defaults.Server.Listen {
+		t.Errorf("pre-boot field should be overwritten: got %q, want %q", val, defaults.Server.Listen)
+	}
+}
+
+// TestSetDefaults_RuntimePreservesUserEdits verifies that runtime settings
+// (ssh, security, backup, etc.) preserve user edits across restarts.
+func TestSetDefaults_RuntimePreservesUserEdits(t *testing.T) {
+	db, kms, cleanup := setupTestSettingsDB(t)
+	defer cleanup()
+
+	svc := NewSettingsService(db, kms)
+	ctx := context.Background()
+
+	// Seed defaults (first boot)
+	if err := svc.SetDefaults(ctx); err != nil {
+		t.Fatalf("SetDefaults: %v", err)
+	}
+
+	// Simulate user editing a runtime field
+	if err := svc.Set(ctx, "ssh", "default_user", "custom-user", false); err != nil {
+		t.Fatalf("Set ssh.default_user: %v", err)
+	}
+
+	// Verify user edit
+	val, err := svc.Get(ctx, "ssh", "default_user")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if val != "custom-user" {
+		t.Fatalf("expected custom-user, got %s", val)
+	}
+
+	// Simulate server restart
+	if err := svc.SetDefaults(ctx); err != nil {
+		t.Fatalf("SetDefaults (restart): %v", err)
+	}
+
+	// Runtime field should PRESERVE the user's custom value
+	val, err = svc.Get(ctx, "ssh", "default_user")
+	if err != nil {
+		t.Fatalf("Get after restart: %v", err)
+	}
+	if val != "custom-user" {
+		t.Errorf("runtime field should survive restart: got %q, want %q", val, "custom-user")
+	}
+}
+
+// TestIsPreBootCategory verifies the pre-boot classification.
+func TestIsPreBootCategory(t *testing.T) {
+	preBoot := []string{"server", "grpc"}
+	runtime := []string{"ssh", "security", "backup", "logs", "webhooks", "notifications", "api", "appearance"}
+
+	for _, cat := range preBoot {
+		if !IsPreBootCategory(cat) {
+			t.Errorf("expected %q to be pre-boot", cat)
+		}
+	}
+	for _, cat := range runtime {
+		if IsPreBootCategory(cat) {
+			t.Errorf("expected %q to be runtime (not pre-boot)", cat)
+		}
 	}
 }

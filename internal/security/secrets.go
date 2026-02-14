@@ -20,7 +20,7 @@ type SecretService struct {
 
 // SecretEntry represents a decrypted secret.
 type SecretEntry struct {
-	ID        int64
+	ID        string
 	Project   string
 	Scope     string
 	Key       string
@@ -31,7 +31,7 @@ type SecretEntry struct {
 
 // SecretMetadata represents secret info without the value.
 type SecretMetadata struct {
-	ID        int64
+	ID        string
 	Project   string
 	Scope     string
 	Key       string
@@ -47,8 +47,19 @@ func NewSecretService(store storage.Store, kms *KMS) *SecretService {
 	}
 }
 
+// requireKMS returns an error if KMS is not configured.
+func (s *SecretService) requireKMS() error {
+	if s.kms == nil {
+		return ErrKMSNotConfigured
+	}
+	return nil
+}
+
 // Set creates or updates a secret with encryption.
 func (s *SecretService) Set(ctx context.Context, project, scope, key, value string) error {
+	if err := s.requireKMS(); err != nil {
+		return err
+	}
 	if err := ValidateSecretKey(key); err != nil {
 		return fmt.Errorf("invalid secret key: %w", err)
 	}
@@ -75,6 +86,10 @@ func (s *SecretService) Set(ctx context.Context, project, scope, key, value stri
 
 // Get retrieves and decrypts a secret.
 func (s *SecretService) Get(ctx context.Context, project, scope, key string) (*SecretEntry, error) {
+	if err := s.requireKMS(); err != nil {
+		return nil, err
+	}
+
 	secret, err := s.store.GetSecret(ctx, project, scope, key)
 	if errors.Is(err, storage.ErrNotFound) {
 		return nil, nil
@@ -170,6 +185,10 @@ func (s *SecretService) ListAll(ctx context.Context) ([]*SecretMetadata, error) 
 
 // Export returns all decrypted secrets for a scope as a map.
 func (s *SecretService) Export(ctx context.Context, project, scope string) (map[string]string, error) {
+	if err := s.requireKMS(); err != nil {
+		return nil, err
+	}
+
 	secrets, err := s.store.ListSecretsWithScope(ctx, project, scope)
 	if err != nil {
 		return nil, fmt.Errorf("listing secrets: %w", err)
@@ -218,6 +237,10 @@ func (s *SecretService) Import(ctx context.Context, project, scope string, secre
 // ReEncryptAll re-encrypts all secrets with the current KMS key.
 // Useful after key rotation.
 func (s *SecretService) ReEncryptAll(ctx context.Context) error {
+	if err := s.requireKMS(); err != nil {
+		return err
+	}
+
 	// Get all secrets from all projects/scopes
 	secrets, err := s.store.ListAllSecretsCtx(ctx)
 	if err != nil {

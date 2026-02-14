@@ -61,7 +61,7 @@ go run ./cmd/vcdeploy version
 ### Run Tests
 
 ```bash
-# Run all tests
+# Run all unit tests
 go test ./...
 
 # Run with coverage
@@ -71,8 +71,42 @@ go tool cover -html=coverage.out
 # Run specific package tests
 go test -v ./internal/services/users/
 
+# Run service layer tests
+go test -v ./internal/services/...
+
+# Run server/handler tests
+go test -v ./internal/server/...
+
+# Run storage tests
+go test -v ./internal/storage/...
+
+# Run end-to-end tests (requires running server)
+cd tests/e2e && go test -v ./...
+
+# Run UI tests (requires Playwright)
+cd tests/ui && npm install && npx playwright test
+
 # Run integration tests (requires Docker)
 go test -tags=integration ./tests/integration/
+
+# Run with race detector
+go test -race ./...
+
+# Run benchmarks
+go test -bench=. ./...
+```
+
+### Using Make
+
+```bash
+# Run tests with make (recommended)
+make test
+
+# Run with coverage report
+make test-coverage
+
+# Run benchmarks
+make test-bench
 ```
 
 ### Run Linter

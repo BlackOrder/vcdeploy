@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/bcrypt"
@@ -37,7 +38,7 @@ func LoadMasterKey(keyPath string) (*MasterKey, error) {
 	}
 
 	// Load from file
-	data, err := os.ReadFile(keyPath)
+	data, err := os.ReadFile(keyPath) // #nosec G304 - keyPath is admin-controlled master key location
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("master key not found at %s (run 'vcdeploy init' to generate)", keyPath)
@@ -133,9 +134,14 @@ func hashKeyID(key []byte) string {
 
 // --- Password hashing ---
 
+// BcryptCost is the cost factor for bcrypt hashing.
+// Higher values are more secure but slower. Minimum of 12 is recommended.
+// This is a var (not const) so tests can override it to bcrypt.MinCost for speed.
+var BcryptCost = 12
+
 // HashPassword creates a bcrypt hash of the password.
 func HashPassword(password string) (string, error) {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), BcryptCost)
 	if err != nil {
 		return "", fmt.Errorf("hashing password: %w", err)
 	}
@@ -257,4 +263,29 @@ func GenerateSecureToken(length int) (string, error) {
 		return "", fmt.Errorf("generating secure token: %w", err)
 	}
 	return hex.EncodeToString(bytes), nil
+}
+
+// LoadOrGenerateMasterKey loads the master key from the default location (DataDir/master.key),
+// or generates a new one on first boot. This is the standard way to obtain a MasterKey
+// for both server and CLI operations.
+func LoadOrGenerateMasterKey(dataDir string) (*MasterKey, error) {
+	keyPath := filepath.Join(dataDir, "master.key")
+	mk, err := LoadMasterKey(keyPath)
+	if err == nil {
+		return mk, nil
+	}
+
+	// First boot — auto-generate
+	mk, err = GenerateMasterKey()
+	if err != nil {
+		return nil, fmt.Errorf("generate master key: %w", err)
+	}
+	// Ensure data directory exists (first boot)
+	if err := os.MkdirAll(dataDir, 0o700); err != nil {
+		return nil, fmt.Errorf("create data directory %s: %w", dataDir, err)
+	}
+	if err := mk.SaveToFile(keyPath); err != nil {
+		return nil, fmt.Errorf("save master key to %s: %w", keyPath, err)
+	}
+	return mk, nil
 }

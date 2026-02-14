@@ -1,0 +1,342 @@
+{{template "base" .}}
+
+{{define "title"}}Agent Provisioning{{end}}
+
+{{define "content"}}
+<div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold">Agent Provisioning</h1>
+    </div>
+
+    <!-- Registration Tokens Section -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-8">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+            <div>
+                <h2 class="text-lg font-semibold">Registration Tokens</h2>
+                <p class="text-sm text-gray-500 mt-1">Tokens used for secure agent registration</p>
+            </div>
+            <button hx-post="/api/v1/agents/registration-tokens"
+                    hx-swap="none"
+                    hx-on::after-request="location.reload()"
+                    class="bg-accent-600 hover:bg-accent-700 text-white px-3 py-1 rounded text-sm">
+                Generate Token
+            </button>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Token (prefix)</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Agent ID Pattern</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Status</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Created</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Expires</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Uses</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {{range .RegistrationTokens}}
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td class="px-4 py-3 font-mono text-sm">
+                            {{if .Token}}{{slice .Token 0 12}}...{{else}}•••••••••••{{end}}
+                        </td>
+                        <td class="px-4 py-3 font-mono text-sm">{{.AgentIDPattern}}</td>
+                        <td class="px-4 py-3">
+                            {{if eq .Status "active"}}
+                            <span class="px-2 py-1 text-xs rounded bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">Active</span>
+                            {{else if eq .Status "used"}}
+                            <span class="px-2 py-1 text-xs rounded bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">Used</span>
+                            {{else if eq .Status "expired"}}
+                            <span class="px-2 py-1 text-xs rounded bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300">Expired</span>
+                            {{else}}
+                            <span class="px-2 py-1 text-xs rounded bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">{{.Status}}</span>
+                            {{end}}
+                        </td>
+                        <td class="px-4 py-3 text-sm">{{formatTime .CreatedAt}}</td>
+                        <td class="px-4 py-3 text-sm">{{formatTime .ExpiresAt}}</td>
+                        <td class="px-4 py-3 text-sm">{{.UsedCount}}/{{if .MaxUses}}{{.MaxUses}}{{else}}∞{{end}}</td>
+                        <td class="px-4 py-3">
+                            {{if eq .Status "active"}}
+                            <button hx-delete="/api/v1/agents/registration-tokens/{{.ID}}"
+                                    hx-confirm="Revoke this registration token?"
+                                    hx-swap="none"
+                                    hx-on::after-request="location.reload()"
+                                    class="text-red-600 hover:text-red-800 text-sm">
+                                Revoke
+                            </button>
+                            {{end}}
+                        </td>
+                    </tr>
+                    {{else}}
+                    <tr>
+                        <td colspan="7" class="px-4 py-8 text-center text-gray-500">
+                            No registration tokens. Generate one to enable secure agent registration.
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Agent Binaries Section -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-8">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+            <div>
+                <h2 class="text-lg font-semibold">Agent Binaries</h2>
+                <p class="text-sm text-gray-500 mt-1">Pre-built agent binaries for different platforms</p>
+            </div>
+            <button onclick="document.getElementById('upload-binary-modal').classList.remove('hidden')"
+                    class="bg-accent-600 hover:bg-accent-700 text-white px-3 py-1 rounded text-sm">
+                Upload Binary
+            </button>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Version</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">OS</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Arch</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Size</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">SHA256</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Current</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {{range .AgentBinaries}}
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td class="px-4 py-3 font-mono text-sm">{{.Version}}</td>
+                        <td class="px-4 py-3">{{.OS}}</td>
+                        <td class="px-4 py-3">{{.Arch}}</td>
+                        <td class="px-4 py-3 text-sm">{{formatBytes .SizeBytes}}</td>
+                        <td class="px-4 py-3 font-mono text-xs text-gray-600 truncate max-w-xs">{{.ChecksumSHA256}}</td>
+                        <td class="px-4 py-3">
+                            {{if .IsCurrent}}<span class="text-green-600">✓ Current</span>{{end}}
+                        </td>
+                        <td class="px-4 py-3 flex gap-2">
+                            {{if not .IsCurrent}}
+                            <button hx-post="/api/v1/agents/binaries/{{.ID}}/set-current"
+                                    hx-swap="none"
+                                    hx-on::after-request="location.reload()"
+                                    class="text-blue-600 hover:text-blue-800 text-sm">
+                                Set Current
+                            </button>
+                            {{end}}
+                            <a href="/api/v1/agents/binaries/{{.ID}}/download" 
+                               class="text-green-600 hover:text-green-800 text-sm">
+                                Download
+                            </a>
+                        </td>
+                    </tr>
+                    {{else}}
+                    <tr>
+                        <td colspan="7" class="px-4 py-8 text-center text-gray-500">
+                            No agent binaries uploaded.
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Pending Provision Jobs -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+            <div>
+                <h2 class="text-lg font-semibold">Provisioning Jobs</h2>
+                <p class="text-sm text-gray-500 mt-1">Track agent deployment progress</p>
+            </div>
+            <button onclick="document.getElementById('provision-modal').classList.remove('hidden')"
+                    class="bg-accent-600 hover:bg-accent-700 text-white px-3 py-1 rounded text-sm">
+                New Provision Job
+            </button>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-sm font-medium">ID</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Target Host</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Status</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Stage</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Progress</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Started</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {{range .PendingJobs}}
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td class="px-4 py-3 font-mono text-sm">{{slice .ID 0 8}}</td>
+                        <td class="px-4 py-3 font-mono text-sm">{{.TargetHost}}:{{.TargetPort}}</td>
+                        <td class="px-4 py-3">
+                            {{if eq .Status "pending"}}
+                            <span class="px-2 py-1 text-xs rounded bg-yellow-100 text-yellow-800">Pending</span>
+                            {{else if eq .Status "running"}}
+                            <span class="px-2 py-1 text-xs rounded bg-blue-100 text-blue-800">Running</span>
+                            {{else if eq .Status "completed"}}
+                            <span class="px-2 py-1 text-xs rounded bg-green-100 text-green-800">Completed</span>
+                            {{else if eq .Status "failed"}}
+                            <span class="px-2 py-1 text-xs rounded bg-red-100 text-red-800">Failed</span>
+                            {{else}}
+                            <span class="px-2 py-1 text-xs rounded bg-gray-100 text-gray-800">{{.Status}}</span>
+                            {{end}}
+                        </td>
+                        <td class="px-4 py-3 text-sm">{{.Stage}}</td>
+                        <td class="px-4 py-3">
+                            <div class="w-24 bg-gray-200 rounded-full h-2">
+                                <div class="bg-blue-600 h-2 rounded-full" style="width: {{.Progress}}%"></div>
+                            </div>
+                            <span class="text-xs text-gray-500">{{.Progress}}%</span>
+                        </td>
+                        <td class="px-4 py-3 text-sm">{{formatTime .StartedAt}}</td>
+                        <td class="px-4 py-3">
+                            <a href="/provision/{{.ID}}/logs" class="text-blue-600 hover:text-blue-800 text-sm">
+                                View Logs
+                            </a>
+                        </td>
+                    </tr>
+                    {{else}}
+                    <tr>
+                        <td colspan="7" class="px-4 py-8 text-center text-gray-500">
+                            No active provisioning jobs.
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Upload Binary Modal -->
+<div id="upload-binary-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+            <h3 class="text-lg font-semibold">Upload Agent Binary</h3>
+            <button onclick="document.getElementById('upload-binary-modal').classList.add('hidden')"
+                    class="text-gray-500 hover:text-gray-700">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        <form hx-post="/api/v1/agents/binaries" hx-encoding="multipart/form-data" hx-swap="none" hx-on::after-request="location.reload()" class="p-4 space-y-4">
+            <div>
+                <label class="block text-sm font-medium mb-1">Version</label>
+                <input type="text" name="version" required placeholder="v1.0.0"
+                       class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600">
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium mb-1">OS</label>
+                    <select name="os" required
+                            class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600">
+                        <option value="linux">Linux</option>
+                        <option value="darwin">macOS</option>
+                        <option value="windows">Windows</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1">Architecture</label>
+                    <select name="arch" required
+                            class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600">
+                        <option value="amd64">amd64</option>
+                        <option value="arm64">arm64</option>
+                        <option value="arm">arm</option>
+                    </select>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium mb-1">Binary File</label>
+                <input type="file" name="binary" required
+                       class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600">
+            </div>
+            <div class="flex items-center gap-2">
+                <input type="checkbox" name="is_current" id="is_current">
+                <label for="is_current" class="text-sm">Set as current version</label>
+            </div>
+            <div class="flex justify-end gap-2 pt-4">
+                <button type="button" onclick="document.getElementById('upload-binary-modal').classList.add('hidden')"
+                        class="px-4 py-2 border rounded hover:bg-gray-100 dark:hover:bg-gray-700">
+                    Cancel
+                </button>
+                <button type="submit"
+                        class="px-4 py-2 bg-accent-600 hover:bg-accent-700 text-white rounded">
+                    Upload
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- New Provision Job Modal -->
+<div id="provision-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+            <h3 class="text-lg font-semibold">Start Provision Job</h3>
+            <button onclick="document.getElementById('provision-modal').classList.add('hidden')"
+                    class="text-gray-500 hover:text-gray-700">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        <form hx-post="/api/v1/provision/jobs" hx-swap="none" hx-on::after-request="location.reload()" class="p-4 space-y-4">
+            <div class="grid grid-cols-3 gap-4">
+                <div class="col-span-2">
+                    <label class="block text-sm font-medium mb-1">Target Host</label>
+                    <input type="text" name="target_host" required
+                           class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600"
+                           placeholder="192.168.1.100">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1">Port</label>
+                    <input type="number" name="target_port" value="22" required
+                           class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600">
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium mb-1">Username</label>
+                <input type="text" name="target_user" required
+                       class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600"
+                       placeholder="root">
+            </div>
+            <div>
+                <label class="block text-sm font-medium mb-1">SSH Key</label>
+                <select name="ssh_key_id" required
+                        class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600">
+                    <option value="">Select an SSH key...</option>
+                    {{range .SSHKeys}}
+                    <option value="{{.ID}}">{{.Name}}</option>
+                    {{end}}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium mb-1">Agent Binary</label>
+                <select name="agent_binary_id" required
+                        class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600">
+                    <option value="">Select a binary...</option>
+                    {{range .AgentBinaries}}
+                    <option value="{{.ID}}">{{.Version}} ({{.OS}}/{{.Arch}}){{if .IsCurrent}} - Current{{end}}</option>
+                    {{end}}
+                </select>
+            </div>
+            <div class="flex justify-end gap-2 pt-4">
+                <button type="button" onclick="document.getElementById('provision-modal').classList.add('hidden')"
+                        class="px-4 py-2 border rounded hover:bg-gray-100 dark:hover:bg-gray-700">
+                    Cancel
+                </button>
+                <button type="submit"
+                        class="px-4 py-2 bg-accent-600 hover:bg-accent-700 text-white rounded">
+                    Start Provisioning
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{{end}}

@@ -49,6 +49,18 @@ func (m *mockAgentService) List(_ context.Context) ([]*storage.Agent, error) {
 	return agents, nil
 }
 
+func (m *mockAgentService) ListPaginated(_ context.Context, p services.Pagination) (*services.ListResult[*storage.Agent], error) {
+	agents := make([]*storage.Agent, 0, len(m.agents))
+	for _, a := range m.agents {
+		agents = append(agents, a)
+	}
+	return &services.ListResult[*storage.Agent]{
+		Items:      agents,
+		TotalCount: int64(len(agents)),
+		Pagination: p,
+	}, nil
+}
+
 func (m *mockAgentService) Count(_ context.Context) (int64, error) {
 	return int64(len(m.agents)), nil
 }
@@ -56,7 +68,7 @@ func (m *mockAgentService) Count(_ context.Context) (int64, error) {
 func (m *mockAgentService) CountByStatus(_ context.Context) (map[string]int64, error) {
 	result := make(map[string]int64)
 	for _, a := range m.agents {
-		result[a.Status]++
+		result[a.Status.String()]++
 	}
 	return result, nil
 }

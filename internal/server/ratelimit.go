@@ -9,6 +9,11 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/peer"
+	"google.golang.org/grpc/status"
 )
 
 // RateLimiter provides rate limiting functionality with IP blocking support.
@@ -71,14 +76,14 @@ type tokenBucket struct {
 // RateLimitStatus represents the rate limit status for an IP.
 type RateLimitStatus struct {
 	IP              string    `json:"ip"`
-	TokensRemaining float64   `json:"tokens_remaining"`
-	RequestsPerSec  float64   `json:"requests_per_sec"`
-	BurstSize       int       `json:"burst_size"`
+	TokensRemaining float64   `json:"tokensRemaining"`
+	RequestsPerSec  float64   `json:"requestsPerSec"`
+	BurstSize       int       `json:"burstSize"`
 	Violations      int       `json:"violations"`
-	IsBlocked       bool      `json:"is_blocked"`
-	BlockedUntil    time.Time `json:"blocked_until,omitempty"`
-	IsWhitelisted   bool      `json:"is_whitelisted"`
-	IsBlacklisted   bool      `json:"is_blacklisted"`
+	IsBlocked       bool      `json:"isBlocked"`
+	BlockedUntil    time.Time `json:"blockedUntil,omitempty"`
+	IsWhitelisted   bool      `json:"isWhitelisted"`
+	IsBlacklisted   bool      `json:"isBlacklisted"`
 }
 
 // DefaultRateLimitConfig returns a sensible default configuration.
@@ -90,6 +95,7 @@ func DefaultRateLimitConfig() RateLimitConfig {
 		BlockThreshold:    10,
 		CleanupInterval:   5 * time.Minute,
 		PerEndpointLimits: map[string]EndpointLimit{
+			// Authentication endpoints - strict limits to prevent brute force
 			"/api/v1/login": {
 				RequestsPerSecond: 1, // Strict limit for login
 				BurstSize:         5,
@@ -97,6 +103,31 @@ func DefaultRateLimitConfig() RateLimitConfig {
 			"/api/v1/register": {
 				RequestsPerSecond: 0.1, // Very strict for registration
 				BurstSize:         2,
+			},
+			// API key creation - prevent mass key generation
+			"/api/v1/api-keys": {
+				RequestsPerSecond: 0.5, // 1 request per 2 seconds
+				BurstSize:         3,
+			},
+			// Certificate issuance endpoints - prevent DoS on CA
+			"/api/v1/certificates": {
+				RequestsPerSecond: 0.2, // 1 request per 5 seconds
+				BurstSize:         2,
+			},
+			// TOTP verification - prevent brute force
+			"/api/v1/totp/verify": {
+				RequestsPerSecond: 0.5, // 1 request per 2 seconds
+				BurstSize:         3,
+			},
+			// Password change endpoint
+			"/api/v1/password": {
+				RequestsPerSecond: 0.2, // 1 request per 5 seconds
+				BurstSize:         2,
+			},
+			// SSH key management - prevent mass key injection
+			"/api/v1/ssh-keys": {
+				RequestsPerSecond: 0.5, // 1 request per 2 seconds
+				BurstSize:         3,
 			},
 		},
 	}
@@ -161,10 +192,10 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 					retryAfter = 0
 				}
 				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
-				http.Error(w, "IP address blocked", http.StatusForbidden)
+				WriteJSONError(w, http.StatusForbidden, "IP address blocked")
 			} else {
 				w.Header().Set("Retry-After", "1")
-				http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
+				WriteJSONError(w, http.StatusTooManyRequests, "Rate limit exceeded")
 			}
 			return
 		}
@@ -367,11 +398,11 @@ func (rl *RateLimiter) ListBlockedIPs(ctx context.Context) ([]BlockedIP, error) 
 // BlockedIP represents a blocked IP address.
 type BlockedIP struct {
 	ID          int64     `json:"id"`
-	IPAddress   string    `json:"ip_address"`
-	BlockedAt   time.Time `json:"blocked_at"`
-	ExpiresAt   time.Time `json:"expires_at"`
+	IPAddress   string    `json:"ipAddress"`
+	BlockedAt   time.Time `json:"blockedAt"`
+	ExpiresAt   time.Time `json:"expiresAt"`
 	Reason      string    `json:"reason"`
-	ManualBlock bool      `json:"manual_block"`
+	ManualBlock bool      `json:"manualBlock"`
 }
 
 // Stop stops the rate limiter's background goroutines.
@@ -577,4 +608,130 @@ func NewAPIKeyRateLimiter(rl *RateLimiter, keyHash string) *APIKeyRateLimiter {
 func (akl *APIKeyRateLimiter) Allow(endpoint string) (bool, RateLimitStatus) {
 	key := akl.prefix + endpoint
 	return akl.rl.Allow(key, endpoint)
+}
+
+// --- gRPC Rate Limiting ---
+
+// GRPCRateLimitConfig configures gRPC rate limiting.
+type GRPCRateLimitConfig struct {
+	// GlobalRPS is the global rate limit in requests per second
+	GlobalRPS float64 `yaml:"global_rps" json:"global_rps"`
+
+	// PerClientRPS is the per-client rate limit in requests per second
+	PerClientRPS float64 `yaml:"per_client_rps" json:"per_client_rps"`
+
+	// Burst is the maximum burst size
+	Burst int `yaml:"burst" json:"burst"`
+
+	// Enabled controls whether rate limiting is active
+	Enabled bool `yaml:"enabled" json:"enabled"`
+
+	// ExemptMethods is a list of gRPC method names exempt from rate limiting
+	ExemptMethods []string `yaml:"exempt_methods" json:"exempt_methods"`
+}
+
+// DefaultGRPCRateLimitConfig returns sensible defaults for gRPC rate limiting.
+func DefaultGRPCRateLimitConfig() GRPCRateLimitConfig {
+	return GRPCRateLimitConfig{
+		GlobalRPS:     1000, // 1000 requests per second globally
+		PerClientRPS:  100,  // 100 requests per second per client
+		Burst:         50,   // Allow bursts up to 50 requests
+		Enabled:       true,
+		ExemptMethods: []string{}, // No exempt methods by default
+	}
+}
+
+// GRPCRateLimiter provides rate limiting specifically for gRPC services.
+// It uses the existing RateLimiter infrastructure but provides gRPC interceptors.
+type GRPCRateLimiter struct {
+	rl     *RateLimiter
+	config GRPCRateLimitConfig
+}
+
+// NewGRPCRateLimiter creates a new gRPC rate limiter.
+func NewGRPCRateLimiter(rl *RateLimiter, cfg GRPCRateLimitConfig) *GRPCRateLimiter {
+	return &GRPCRateLimiter{
+		rl:     rl,
+		config: cfg,
+	}
+}
+
+// isExemptMethod checks if a method is exempt from rate limiting.
+func (grl *GRPCRateLimiter) isExemptMethod(method string) bool {
+	for _, exempt := range grl.config.ExemptMethods {
+		if exempt == method {
+			return true
+		}
+	}
+	return false
+}
+
+// ExtractGRPCClientIP extracts the client IP from gRPC peer context.
+func ExtractGRPCClientIP(ctx context.Context) string {
+	p, ok := peer.FromContext(ctx)
+	if !ok {
+		return ""
+	}
+
+	addr := p.Addr.String()
+	// Extract IP from "ip:port" format
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr
+	}
+	return host
+}
+
+// UnaryRateLimitInterceptor returns a gRPC unary interceptor that applies rate limiting.
+func UnaryRateLimitInterceptor(grl *GRPCRateLimiter) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		if grl == nil || grl.rl == nil || !grl.config.Enabled {
+			return handler(ctx, req)
+		}
+
+		// Check if method is exempt
+		if grl.isExemptMethod(info.FullMethod) {
+			return handler(ctx, req)
+		}
+
+		clientIP := ExtractGRPCClientIP(ctx)
+		if clientIP == "" {
+			clientIP = "unknown"
+		}
+
+		// Use the existing rate limiter with gRPC endpoint
+		allowed, _ := grl.rl.Allow(clientIP, info.FullMethod)
+		if !allowed {
+			return nil, status.Errorf(codes.ResourceExhausted, "rate limit exceeded")
+		}
+
+		return handler(ctx, req)
+	}
+}
+
+// StreamRateLimitInterceptor returns a gRPC stream interceptor that applies rate limiting.
+func StreamRateLimitInterceptor(grl *GRPCRateLimiter) grpc.StreamServerInterceptor {
+	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		if grl == nil || grl.rl == nil || !grl.config.Enabled {
+			return handler(srv, ss)
+		}
+
+		// Check if method is exempt
+		if grl.isExemptMethod(info.FullMethod) {
+			return handler(srv, ss)
+		}
+
+		clientIP := ExtractGRPCClientIP(ss.Context())
+		if clientIP == "" {
+			clientIP = "unknown"
+		}
+
+		// Use the existing rate limiter with gRPC endpoint
+		allowed, _ := grl.rl.Allow(clientIP, info.FullMethod)
+		if !allowed {
+			return status.Errorf(codes.ResourceExhausted, "rate limit exceeded")
+		}
+
+		return handler(srv, ss)
+	}
 }

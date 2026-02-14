@@ -44,3 +44,10 @@ api:
     enabled: false
 
 test_mode: true
+
+# Archive settings (test)
+archive:
+  storage_dir: /var/lib/vcdeploy/archives
+  keep_count: 5
+  max_total_size: 1GB
+  signed_url_expiry: 10m

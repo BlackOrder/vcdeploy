@@ -40,7 +40,7 @@ This document describes the architecture of VCDeploy, a deployment automation pl
 |---------|---------|
 | `internal/agent` | Agent daemon implementation |
 | `internal/config` | Configuration structures (YAML parsing) |
-| `internal/deploy` | Deployment execution logic (`Executor`, `Orchestrator`, `SSHRunner`) |
+| `internal/deploy` | Deployment execution logic (`Executor`, `Orchestrator`, `ArchiveRunner`) |
 | `internal/server` | Master HTTP/gRPC servers, handlers, middleware |
 | `internal/services` | Business logic layer with clean interfaces |
 | `internal/storage` | SQLite database operations, models, migrations |

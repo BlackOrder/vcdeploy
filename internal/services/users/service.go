@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/BlackOrder/vcdeploy/internal/security"
@@ -28,7 +27,12 @@ func New(store storage.Store) *Service {
 }
 
 // Create creates a new user with validated password.
-func (s *Service) Create(ctx context.Context, username, password, email, role string) (*storage.User, error) {
+func (s *Service) Create(ctx context.Context, username, password, email, role string, opts ...services.CreateUserOption) (*storage.User, error) {
+	// Apply options
+	var options services.CreateUserOptions
+	for _, opt := range opts {
+		opt(&options)
+	}
 	// Validate password complexity
 	if err := security.ValidatePassword(password); err != nil {
 		return nil, fmt.Errorf("password validation failed: %w", err)
@@ -50,6 +54,8 @@ func (s *Service) Create(ctx context.Context, username, password, email, role st
 		PasswordHash: hash,
 		Email:        email,
 		Role:         role,
+		TOTPEnabled:  options.TOTPEnabled,
+		TOTPSecret:   options.TOTPSecret,
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}
@@ -62,10 +68,10 @@ func (s *Service) Create(ctx context.Context, username, password, email, role st
 }
 
 // GetByID retrieves a user by ID.
-func (s *Service) GetByID(ctx context.Context, id int64) (*storage.User, error) {
+func (s *Service) GetByID(ctx context.Context, id string) (*storage.User, error) {
 	user, err := s.store.GetUserByID(ctx, id)
-	if errors.Is(err, storage.ErrNotFound) {
-		return nil, services.NotFound("users.GetByID", "user", strconv.FormatInt(id, 10))
+	if services.IsNotFound(err) {
+		return nil, services.NotFound("users.GetByID", "user", id)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("getting user: %w", err)
@@ -76,7 +82,7 @@ func (s *Service) GetByID(ctx context.Context, id int64) (*storage.User, error) 
 // GetByUsername retrieves a user by username.
 func (s *Service) GetByUsername(ctx context.Context, username string) (*storage.User, error) {
 	user, err := s.store.GetUserByUsername(ctx, username)
-	if errors.Is(err, storage.ErrNotFound) {
+	if services.IsNotFound(err) {
 		return nil, services.NotFound("users.GetByUsername", "user", username)
 	}
 	if err != nil {
@@ -94,6 +100,23 @@ func (s *Service) List(ctx context.Context) ([]*storage.User, error) {
 	return users, nil
 }
 
+// ListPaginated returns users with pagination support (H6).
+func (s *Service) ListPaginated(ctx context.Context, p services.Pagination) (*services.ListResult[*storage.User], error) {
+	users, err := s.store.ListUsersPaginated(ctx, p.Limit, p.Offset)
+	if err != nil {
+		return nil, fmt.Errorf("listing users: %w", err)
+	}
+	count, err := s.store.CountUsers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("counting users: %w", err)
+	}
+	return &services.ListResult[*storage.User]{
+		Items:      users,
+		TotalCount: count,
+		Pagination: p,
+	}, nil
+}
+
 // Update updates a user's information.
 func (s *Service) Update(ctx context.Context, user *storage.User) error {
 	if err := s.store.UpdateUserByID(ctx, user); err != nil {
@@ -103,7 +126,7 @@ func (s *Service) Update(ctx context.Context, user *storage.User) error {
 }
 
 // Delete removes a user by ID.
-func (s *Service) Delete(ctx context.Context, id int64) error {
+func (s *Service) Delete(ctx context.Context, id string) error {
 	if err := s.store.DeleteUser(ctx, id); err != nil {
 		return fmt.Errorf("deleting user: %w", err)
 	}
@@ -114,7 +137,7 @@ func (s *Service) Delete(ctx context.Context, id int64) error {
 // Returns the user if valid, services.ErrNotFound if user not found, or ErrInvalidPassword if password wrong.
 func (s *Service) VerifyPassword(ctx context.Context, username, password string) (*storage.User, error) {
 	user, err := s.store.GetUserByUsername(ctx, username)
-	if errors.Is(err, storage.ErrNotFound) {
+	if services.IsNotFound(err) {
 		return nil, services.NotFound("users.VerifyPassword", "user", username)
 	}
 	if err != nil {
@@ -129,7 +152,7 @@ func (s *Service) VerifyPassword(ctx context.Context, username, password string)
 }
 
 // UpdatePassword updates a user's password with validation.
-func (s *Service) UpdatePassword(ctx context.Context, userID int64, newPassword string) error {
+func (s *Service) UpdatePassword(ctx context.Context, userID string, newPassword string) error {
 	// Validate password complexity
 	if err := security.ValidatePassword(newPassword); err != nil {
 		return fmt.Errorf("password validation failed: %w", err)
@@ -158,7 +181,7 @@ func (s *Service) UpdatePassword(ctx context.Context, userID int64, newPassword 
 }
 
 // SetTOTP configures TOTP for a user.
-func (s *Service) SetTOTP(ctx context.Context, userID int64, secret string, enabled bool) error {
+func (s *Service) SetTOTP(ctx context.Context, userID string, secret string, enabled bool) error {
 	user, err := s.store.GetUserByID(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("getting user: %w", err)
@@ -184,7 +207,7 @@ func (s *Service) Count(ctx context.Context) (int64, error) {
 }
 
 // DeleteWithCleanup deletes a user and all associated data (sessions, API keys) in a transaction.
-func (s *Service) DeleteWithCleanup(ctx context.Context, userID int64) error {
+func (s *Service) DeleteWithCleanup(ctx context.Context, userID string) error {
 	return s.store.RunInTransaction(ctx, func(tx *sql.Tx) error {
 		// Delete all user's sessions
 		if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ?`, userID); err != nil {

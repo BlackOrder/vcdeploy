@@ -51,9 +51,9 @@ func TestMigrationStatus(t *testing.T) {
 		t.Fatalf("GetMigrationStatus() failed: %v", err)
 	}
 
-	// Check that we have migrations
-	if len(status) < 5 {
-		t.Errorf("Expected at least 5 migrations, got %d", len(status))
+	// Check that we have migrations (consolidated schema = 1 migration)
+	if len(status) < 1 {
+		t.Errorf("Expected at least 1 migration, got %d", len(status))
 	}
 
 	// Check that status contains required fields
@@ -397,8 +397,9 @@ func TestMigrateToUpward(t *testing.T) {
 		t.Fatalf("GetMigrationStatus() failed: %v", err)
 	}
 
+	// Consolidated schema has only 1 migration - skip tests that require multiple
 	if len(status) < 3 {
-		t.Skip("Need at least 3 migrations for this test")
+		t.Skip("Need at least 3 migrations for this test (consolidated schema has only 1)")
 	}
 
 	// Roll back 2 migrations
@@ -453,8 +454,9 @@ func TestMigrateToDownward(t *testing.T) {
 		t.Fatalf("GetMigrationStatus() failed: %v", err)
 	}
 
+	// Consolidated schema has only 1 migration - skip tests that require multiple
 	if len(status) < 3 {
-		t.Skip("Need at least 3 migrations for this test")
+		t.Skip("Need at least 3 migrations for this test (consolidated schema has only 1)")
 	}
 
 	// Find max version
@@ -504,8 +506,9 @@ func TestMigrateDownMultiple(t *testing.T) {
 		}
 	}
 
+	// Consolidated schema has only 1 migration - skip tests that require multiple
 	if appliedBefore < 3 {
-		t.Skip("Need at least 3 migrations for this test")
+		t.Skip("Need at least 3 migrations for this test (consolidated schema has only 1)")
 	}
 
 	// Roll back 2 migrations

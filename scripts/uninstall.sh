@@ -219,15 +219,15 @@ remove_firewall() {
     
     # firewalld (RHEL/CentOS/Fedora)
     if command -v firewall-cmd &> /dev/null; then
-        firewall-cmd --permanent --remove-port=8080/tcp 2>/dev/null || true
-        firewall-cmd --permanent --remove-port=9090/tcp 2>/dev/null || true
+        firewall-cmd --permanent --remove-port=9000/tcp 2>/dev/null || true
+        firewall-cmd --permanent --remove-port=9001/tcp 2>/dev/null || true
         firewall-cmd --reload 2>/dev/null || true
     fi
     
     # ufw (Ubuntu)
     if command -v ufw &> /dev/null; then
-        ufw delete allow 8080/tcp 2>/dev/null || true
-        ufw delete allow 9090/tcp 2>/dev/null || true
+        ufw delete allow 9000/tcp 2>/dev/null || true
+        ufw delete allow 9001/tcp 2>/dev/null || true
     fi
 }
 

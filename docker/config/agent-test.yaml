@@ -2,6 +2,7 @@
 # Used for E2E testing
 
 agent:
+  id: "test-agent"
   name: "test-agent"
   labels:
     env: test
@@ -9,17 +10,11 @@ agent:
     os: linux
 
 master:
-  address: "master:9090"
-  insecure: true
+  address: "master:9001"
+  token: "test-registration-token"  # Auto-registration token for test mode
+  ca_cert: "/etc/vcdeploy/ca.pem"   # CA certificate for TLS
 
-heartbeat:
-  interval: 5s
-
-deploy:
-  work_dir: "/deploy"
-  cleanup: true
-
-logging:
-  level: debug
-  format: json
-  output: stdout
+# Archive cache settings (test)
+archive:
+  cache_dir: /var/lib/vcdeploy/cache/archives
+  keep_count: 3

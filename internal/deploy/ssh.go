@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/BlackOrder/vcdeploy/internal/config"
+	"github.com/BlackOrder/vcdeploy/internal/security"
 	"github.com/BlackOrder/vcdeploy/internal/validation"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
@@ -24,9 +25,13 @@ type SSHRunner struct {
 	config     *SSHConfig
 	client     *ssh.Client
 	jumpClient *ssh.Client // Jump server connection (if using jump host)
+	validator  *security.CommandValidator
 	mu         sync.Mutex
 	lastUsed   time.Time
 }
+
+// Ensure SSHRunner implements CommandRunner interface
+var _ CommandRunner = (*SSHRunner)(nil)
 
 // SSHConfig contains SSH connection settings.
 type SSHConfig struct {
@@ -52,8 +57,13 @@ type SSHConfig struct {
 	InsecureIgnoreHostKey bool   // If true, skip host key verification (for testing only)
 }
 
-// NewSSHRunner creates a new SSH runner.
+// NewSSHRunner creates a new SSH runner with default command validation.
 func NewSSHRunner(config *SSHConfig) (*SSHRunner, error) {
+	return NewSSHRunnerWithValidator(config, security.NewCommandValidator())
+}
+
+// NewSSHRunnerWithValidator creates a new SSH runner with a custom validator.
+func NewSSHRunnerWithValidator(config *SSHConfig, validator *security.CommandValidator) (*SSHRunner, error) {
 	if config.Port == 0 {
 		config.Port = 22
 	}
@@ -65,7 +75,8 @@ func NewSSHRunner(config *SSHConfig) (*SSHRunner, error) {
 	}
 
 	return &SSHRunner{
-		config: config,
+		config:    config,
+		validator: validator,
 	}, nil
 }
 
@@ -76,6 +87,14 @@ func (r *SSHRunner) Connect(ctx context.Context) error {
 
 	if r.client != nil {
 		return nil // Already connected
+	}
+
+	// Validate required connection parameters
+	if r.config.Host == "" {
+		return errors.New("ssh: host is required")
+	}
+	if r.config.User == "" {
+		return errors.New("ssh: user is required")
 	}
 
 	clientConfig, err := r.buildClientConfig()
@@ -101,14 +120,14 @@ func (r *SSHRunner) Connect(ctx context.Context) error {
 		// Dial target through jump server
 		conn, err := jumpClient.Dial("tcp", addr)
 		if err != nil {
-			jumpClient.Close()
+			_ = jumpClient.Close() // #nosec G104 - best effort cleanup
 			return fmt.Errorf("connecting through jump server: %w", err)
 		}
 
 		ncc, chans, reqs, err := ssh.NewClientConn(conn, addr, clientConfig)
 		if err != nil {
-			conn.Close()
-			jumpClient.Close()
+			_ = conn.Close()       // #nosec G104 - best effort cleanup
+			_ = jumpClient.Close() // #nosec G104 - best effort cleanup
 			return fmt.Errorf("ssh handshake through jump: %w", err)
 		}
 
@@ -124,7 +143,7 @@ func (r *SSHRunner) Connect(ctx context.Context) error {
 
 		ncc, chans, reqs, err := ssh.NewClientConn(conn, addr, clientConfig)
 		if err != nil {
-			conn.Close()
+			_ = conn.Close() // #nosec G104 - best effort cleanup
 			return fmt.Errorf("ssh handshake: %w", err)
 		}
 
@@ -221,7 +240,10 @@ func (r *SSHRunner) buildHostKeyCallback() (ssh.HostKeyCallback, error) {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
 			// Fallback to system config path if home dir unavailable
-			sysCfg := config.MustGetSystemConfig()
+			sysCfg, cfgErr := config.GetSystemConfig()
+			if cfgErr != nil {
+				return nil, fmt.Errorf("failed to get system config for known_hosts path: %w", cfgErr)
+			}
 			knownHostsPath = filepath.Join(sysCfg.Paths.DataDir, "known_hosts")
 		} else {
 			knownHostsPath = filepath.Join(homeDir, ".ssh", "known_hosts")
@@ -236,11 +258,11 @@ func (r *SSHRunner) buildHostKeyCallback() (ssh.HostKeyCallback, error) {
 
 	// Create known_hosts file if it doesn't exist
 	if _, err := os.Stat(knownHostsPath); os.IsNotExist(err) {
-		f, err := os.OpenFile(knownHostsPath, os.O_CREATE|os.O_RDONLY, 0o600)
+		f, err := os.OpenFile(knownHostsPath, os.O_CREATE|os.O_RDONLY, 0o600) // #nosec G304 - knownHostsPath is admin-controlled SSH config path
 		if err != nil {
 			return nil, fmt.Errorf("creating known_hosts file: %w", err)
 		}
-		f.Close()
+		_ = f.Close() // #nosec G104 - best effort cleanup
 	}
 
 	// Try to create callback from known_hosts file
@@ -299,7 +321,7 @@ func (r *SSHRunner) tofuCallback(wrapped ssh.HostKeyCallback, knownHostsPath str
 
 // addToKnownHosts appends a host key to the known_hosts file.
 func (r *SSHRunner) addToKnownHosts(knownHostsPath, hostname string, key ssh.PublicKey) error {
-	f, err := os.OpenFile(knownHostsPath, os.O_APPEND|os.O_WRONLY, 0o600)
+	f, err := os.OpenFile(knownHostsPath, os.O_APPEND|os.O_WRONLY, 0o600) // #nosec G304 - knownHostsPath is admin-controlled SSH config path
 	if err != nil {
 		return fmt.Errorf("opening known_hosts: %w", err)
 	}
@@ -312,7 +334,7 @@ func (r *SSHRunner) addToKnownHosts(knownHostsPath, hostname string, key ssh.Pub
 }
 
 func (r *SSHRunner) loadKey(path, passphrase string) (ssh.Signer, error) {
-	key, err := os.ReadFile(path)
+	key, err := os.ReadFile(path) // #nosec G304 - path is admin-controlled SSH key location
 	if err != nil {
 		return nil, fmt.Errorf("reading key file: %w", err)
 	}
@@ -325,6 +347,13 @@ func (r *SSHRunner) loadKey(path, passphrase string) (ssh.Signer, error) {
 
 // Run executes a command and returns the result.
 func (r *SSHRunner) Run(ctx context.Context, cmd string, opts RunOptions) (*CommandResult, error) {
+	// Validate command if validator present
+	if r.validator != nil {
+		if err := r.validator.Validate(cmd); err != nil {
+			return nil, fmt.Errorf("command validation failed: %w", err)
+		}
+	}
+
 	if err := r.Connect(ctx); err != nil {
 		return nil, err
 	}
@@ -371,6 +400,13 @@ func (r *SSHRunner) Run(ctx context.Context, cmd string, opts RunOptions) (*Comm
 
 // RunWithOutput executes a command with streaming output.
 func (r *SSHRunner) RunWithOutput(ctx context.Context, cmd string, stdout, stderr io.Writer, opts RunOptions) error {
+	// Validate command if validator present
+	if r.validator != nil {
+		if err := r.validator.Validate(cmd); err != nil {
+			return fmt.Errorf("command validation failed: %w", err)
+		}
+	}
+
 	if err := r.Connect(ctx); err != nil {
 		return err
 	}
@@ -540,7 +576,7 @@ func (p *SSHPool) cleanup() {
 	cutoff := time.Now().Add(-p.idleTimeout)
 	for key, runner := range p.connections {
 		if runner.LastUsed().Before(cutoff) {
-			runner.Close()
+			_ = runner.Close() // #nosec G104 - best effort cleanup
 			delete(p.connections, key)
 		}
 	}
@@ -555,7 +591,7 @@ func (p *SSHPool) Close() error {
 	defer p.mu.Unlock()
 
 	for key, runner := range p.connections {
-		runner.Close()
+		_ = runner.Close() // #nosec G104 - best effort cleanup
 		delete(p.connections, key)
 	}
 	return nil

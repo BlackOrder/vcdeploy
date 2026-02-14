@@ -1,0 +1,299 @@
+// Package server provides API endpoint handlers.
+package server
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/BlackOrder/vcdeploy/internal/security"
+	"github.com/BlackOrder/vcdeploy/internal/services"
+	"github.com/BlackOrder/vcdeploy/internal/storage"
+	"github.com/BlackOrder/vcdeploy/internal/validation"
+	"github.com/rs/xid"
+	"go.uber.org/zap"
+)
+
+// --- Provisioning API Handlers ---
+
+// ProvisionAgentRequest represents a request to provision an agent via SSH.
+type ProvisionAgentRequest struct {
+	AgentID    string `json:"agent_id"`
+	TargetHost string `json:"target_host"`
+	SSHUser    string `json:"ssh_user"`
+	SSHKeyID   string `json:"ssh_key_id"`
+	SSHPort    int    `json:"ssh_port,omitempty"`
+}
+
+// Validate validates the provision request.
+func (r *ProvisionAgentRequest) Validate() error {
+	if r.AgentID == "" {
+		return services.NewInputError("agent_id is required", "agent_id")
+	}
+	if err := security.ValidateAgentID(r.AgentID); err != nil {
+		return services.NewInputError(fmt.Sprintf("invalid agent_id: %v", err), "agent_id")
+	}
+	if r.TargetHost == "" {
+		return services.NewInputError("target_host is required", "target_host")
+	}
+	if err := security.ValidateHostname(r.TargetHost); err != nil {
+		return services.NewInputError(fmt.Sprintf("invalid target_host: %v", err), "target_host")
+	}
+	if r.SSHUser == "" {
+		return services.NewInputError("ssh_user is required", "ssh_user")
+	}
+	if r.SSHKeyID == "" {
+		return services.NewInputError("ssh_key_id is required", "ssh_key_id")
+	}
+	return nil
+}
+
+// handleProvisionAgent handles /api/v1/agents/provision endpoints.
+func (s *MasterServer) handleProvisionAgent(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/api/v1/agents/provision")
+
+	if path == "" || path == "/" {
+		if r.Method == http.MethodPost {
+			s.handleStartProvisioning(w, r)
+			return
+		}
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	// Extract provision job ID from path
+	path = strings.TrimPrefix(path, "/")
+	parts := strings.Split(path, "/")
+	jobID := parts[0]
+
+	if len(parts) == 2 {
+		switch parts[1] {
+		case "status":
+			s.handleGetProvisionStatus(w, r, jobID)
+			return
+		case "logs":
+			s.handleGetProvisionLogs(w, r, jobID)
+			return
+		}
+	}
+
+	s.jsonError(w, http.StatusNotFound, "not found")
+}
+
+// handleStartProvisioning starts a new provisioning job.
+func (s *MasterServer) handleStartProvisioning(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var req ProvisionAgentRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&req); err != nil {
+		s.jsonError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if err := req.Validate(); err != nil {
+		var inputErr *services.InputError
+		if errors.As(err, &inputErr) {
+			s.jsonError(w, http.StatusBadRequest, inputErr.Message)
+			return
+		}
+		s.jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// Set default SSH port
+	if req.SSHPort == 0 {
+		req.SSHPort = 22
+	}
+
+	// Verify SSH key exists
+	_, err := s.store.GetSSHKey(ctx, req.SSHKeyID)
+	if err != nil {
+		if services.IsNotFound(err) || strings.Contains(err.Error(), "not found") {
+			s.jsonError(w, http.StatusBadRequest, "SSH key not found")
+			return
+		}
+		s.logger.Error("Failed to get SSH key", zap.Error(err))
+		s.jsonError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	// Get initiated by user
+	initiatedBy := "system"
+	if userID, ok := GetUserIDFromContext(ctx); ok && userID != "" {
+		user, err := s.userService.GetByID(ctx, userID)
+		if err == nil {
+			initiatedBy = user.Username
+		}
+	}
+
+	// Create provision job
+	jobID := xid.New().String()
+	keyID := req.SSHKeyID // Convert to pointer
+	job := &storage.ProvisionJob{
+		ID:         jobID,
+		TargetHost: req.TargetHost,
+		TargetPort: req.SSHPort,
+		TargetUser: req.SSHUser,
+		SSHKeyID:   &keyID,
+		Status:     "pending",
+		Stage:      "initialized",
+		Progress:   0,
+		StartedAt:  time.Now(),
+	}
+
+	if err := s.provisionService.CreateJob(ctx, job); err != nil {
+		s.logger.Error("Failed to create provision job", zap.Error(err))
+		s.jsonError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	// Job is saved to database and will be picked up by the provisioning worker's
+	// background polling loop (every 5 seconds).
+
+	s.logAudit(r, "provision", "agent", "Started provisioning agent: "+req.AgentID+" on "+req.TargetHost+" by "+initiatedBy, "success")
+
+	s.jsonResponse(w, ProvisionJobCreateResponse{
+		JobID:      jobID,
+		AgentID:    req.AgentID,
+		TargetHost: req.TargetHost,
+		Status:     "pending",
+		Message:    "Provisioning job created",
+	})
+}
+
+// handleGetProvisionStatus gets the status of a provisioning job.
+func (s *MasterServer) handleGetProvisionStatus(w http.ResponseWriter, r *http.Request, jobID string) {
+	if r.Method != http.MethodGet {
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	ctx := r.Context()
+
+	job, err := s.provisionService.GetJob(ctx, jobID)
+	if err != nil {
+		if services.IsNotFound(err) || strings.Contains(err.Error(), "not found") {
+			s.jsonError(w, http.StatusNotFound, "provision job not found")
+			return
+		}
+		s.logger.Error("Failed to get provision job", zap.Error(err), zap.String("job_id", jobID))
+		s.jsonError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	s.jsonResponse(w, ProvisionJobResponse{
+		ID:           job.ID,
+		TargetHost:   job.TargetHost,
+		TargetPort:   job.TargetPort,
+		TargetUser:   job.TargetUser,
+		Status:       job.Status.String(),
+		Stage:        job.Stage,
+		Progress:     job.Progress,
+		ErrorMessage: job.ErrorMessage,
+		StartedAt:    job.StartedAt,
+		CompletedAt:  job.CompletedAt,
+	})
+}
+
+// handleGetProvisionLogs gets the logs of a provisioning job.
+func (s *MasterServer) handleGetProvisionLogs(w http.ResponseWriter, r *http.Request, jobID string) {
+	if r.Method != http.MethodGet {
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	// Check for streaming request
+	if r.URL.Query().Get("stream") == "true" {
+		s.handleProvisionLogsStream(w, r, jobID)
+		return
+	}
+
+	ctx := r.Context()
+
+	// Verify job exists
+	job, err := s.provisionService.GetJob(ctx, jobID)
+	if err != nil {
+		if services.IsNotFound(err) || strings.Contains(err.Error(), "not found") {
+			s.jsonError(w, http.StatusNotFound, "provision job not found")
+			return
+		}
+		s.logger.Error("Failed to get provision job", zap.Error(err), zap.String("job_id", jobID))
+		s.jsonError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	// Get the actual logs from storage
+	logs, err := s.store.ListProvisionLogs(ctx, jobID)
+	if err != nil {
+		s.logger.Error("Failed to get provision logs", zap.Error(err), zap.String("job_id", jobID))
+		s.jsonError(w, http.StatusInternalServerError, "failed to retrieve logs")
+		return
+	}
+
+	// Convert logs to response type
+	logEntries := make([]*ProvisionLogEntry, 0, len(logs))
+	for _, l := range logs {
+		logEntries = append(logEntries, &ProvisionLogEntry{
+			ID:        l.ID,
+			JobID:     l.JobID,
+			Timestamp: l.Timestamp,
+			Level:     l.Level,
+			Message:   l.Message,
+		})
+	}
+
+	s.jsonResponse(w, ProvisionLogsResponse{
+		JobID:  job.ID,
+		Status: job.Status.String(),
+		Stage:  job.Stage,
+		Logs:   logEntries,
+	})
+}
+
+// handleProvisionLogsStream streams provision job logs using Server-Sent Events (SSE).
+func (s *MasterServer) handleProvisionLogsStream(w http.ResponseWriter, r *http.Request, jobID string) {
+	ctx := r.Context()
+	s.streamLogs(w, r, streamLogsConfig{
+		listLogs: func() ([]interface{}, string, error) {
+			logs, err := s.store.ListProvisionLogs(ctx, jobID)
+			if err != nil {
+				return nil, "", err
+			}
+			result := make([]interface{}, len(logs))
+			var lastID string
+			for i, l := range logs {
+				result[i] = l
+				lastID = l.ID
+			}
+			return result, lastID, nil
+		},
+		listLogsAfter: func(afterID string) ([]interface{}, string, error) {
+			logs, err := s.store.ListProvisionLogsAfter(ctx, jobID, afterID)
+			if err != nil {
+				return nil, afterID, err
+			}
+			result := make([]interface{}, len(logs))
+			newLastID := afterID
+			for i, l := range logs {
+				result[i] = l
+				newLastID = l.ID
+			}
+			return result, newLastID, nil
+		},
+		isComplete: func() (bool, string) {
+			job, err := s.provisionService.GetJob(ctx, jobID)
+			if err != nil || job == nil {
+				return false, ""
+			}
+			status := job.Status.String()
+			switch status {
+			case "completed", "failed", "cancelled":
+				return true, status
+			}
+			return false, ""
+		},
+	})
+}

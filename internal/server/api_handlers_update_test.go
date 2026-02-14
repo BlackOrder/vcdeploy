@@ -41,13 +41,25 @@ func TestHandleAgentBinaries(t *testing.T) {
 			t.Errorf("Expected status %d, got %d: %s", http.StatusOK, rr.Code, rr.Body.String())
 		}
 
-		var binaries []*storage.AgentBinary
-		if err := json.NewDecoder(rr.Body).Decode(&binaries); err != nil {
+		var resp map[string]interface{}
+		if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
 
-		if len(binaries) != 1 {
-			t.Errorf("Expected 1 binary, got %d", len(binaries))
+		// Verify paginated response structure
+		if _, ok := resp["items"]; !ok {
+			t.Error("Response missing 'items' field")
+		}
+		if _, ok := resp["totalCount"]; !ok {
+			t.Error("Response missing 'totalCount' field")
+		}
+
+		items, ok := resp["items"].([]interface{})
+		if !ok {
+			t.Fatalf("items is not an array")
+		}
+		if len(items) != 1 {
+			t.Errorf("Expected 1 binary, got %d", len(items))
 		}
 	})
 }
@@ -154,13 +166,13 @@ func TestHandleAgentUpdateConfig(t *testing.T) {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
 
-		if config["update_policy"] != "immediate" {
-			t.Errorf("Expected update_policy 'immediate', got %v", config["update_policy"])
+		if config["updatePolicy"] != "immediate" {
+			t.Errorf("Expected updatePolicy 'immediate', got %v", config["updatePolicy"])
 		}
 	})
 
 	t.Run("PUT - update config to scheduled", func(t *testing.T) {
-		body := bytes.NewBufferString(`{"update_policy":"scheduled","update_window_start":"02:00","update_window_end":"04:00"}`)
+		body := bytes.NewBufferString(`{"updatePolicy":"scheduled","updateWindowStart":"02:00","updateWindowEnd":"04:00"}`)
 		req := requestWithAdminContext(httptest.NewRequest("PUT", "/api/v1/agents/test-agent-1/update-config", body), userID)
 		req.Header.Set("Content-Type", "application/json")
 		rr := httptest.NewRecorder()
@@ -177,12 +189,12 @@ func TestHandleAgentUpdateConfig(t *testing.T) {
 		}
 
 		if updatedAgent.UpdatePolicy != "scheduled" {
-			t.Errorf("Expected update_policy 'scheduled', got %s", updatedAgent.UpdatePolicy)
+			t.Errorf("Expected updatePolicy 'scheduled', got %s", updatedAgent.UpdatePolicy)
 		}
 	})
 
 	t.Run("PUT - invalid policy", func(t *testing.T) {
-		body := bytes.NewBufferString(`{"update_policy":"invalid"}`)
+		body := bytes.NewBufferString(`{"updatePolicy":"invalid"}`)
 		req := requestWithAdminContext(httptest.NewRequest("PUT", "/api/v1/agents/test-agent-1/update-config", body), userID)
 		req.Header.Set("Content-Type", "application/json")
 		rr := httptest.NewRecorder()
@@ -194,7 +206,7 @@ func TestHandleAgentUpdateConfig(t *testing.T) {
 	})
 
 	t.Run("PUT - scheduled without window", func(t *testing.T) {
-		body := bytes.NewBufferString(`{"update_policy":"scheduled"}`)
+		body := bytes.NewBufferString(`{"updatePolicy":"scheduled"}`)
 		req := requestWithAdminContext(httptest.NewRequest("PUT", "/api/v1/agents/test-agent-1/update-config", body), userID)
 		req.Header.Set("Content-Type", "application/json")
 		rr := httptest.NewRecorder()
@@ -257,9 +269,9 @@ func TestHandleAgentUpdateHistory(t *testing.T) {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
 
-		total, ok := response["total"].(float64)
-		if !ok || int(total) != 2 {
-			t.Errorf("Expected total 2, got %v", response["total"])
+		totalCount, ok := response["totalCount"].(float64)
+		if !ok || int(totalCount) != 2 {
+			t.Errorf("Expected totalCount 2, got %v", response["totalCount"])
 		}
 
 		items, ok := response["items"].([]interface{})
@@ -343,18 +355,33 @@ func TestHandleAgentsNeedingUpdate(t *testing.T) {
 			t.Errorf("Expected status %d, got %d: %s", http.StatusOK, rr.Code, rr.Body.String())
 		}
 
-		var agents []map[string]interface{}
-		if err := json.NewDecoder(rr.Body).Decode(&agents); err != nil {
+		var resp map[string]interface{}
+		if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
 
-		// Should only include the agent that needs an update
-		if len(agents) != 1 {
-			t.Errorf("Expected 1 agent needing update, got %d", len(agents))
+		// Verify paginated response structure
+		if _, ok := resp["items"]; !ok {
+			t.Error("Response missing 'items' field")
+		}
+		if _, ok := resp["totalCount"]; !ok {
+			t.Error("Response missing 'totalCount' field")
 		}
 
-		if len(agents) > 0 && agents[0]["ID"] != "agent-needs-update" {
-			t.Errorf("Expected agent-needs-update, got %v", agents[0]["ID"])
+		items, ok := resp["items"].([]interface{})
+		if !ok {
+			t.Fatalf("items is not an array")
+		}
+		// Should only include the agent that needs an update
+		if len(items) != 1 {
+			t.Errorf("Expected 1 agent needing update, got %d", len(items))
+		}
+
+		if len(items) > 0 {
+			agent := items[0].(map[string]interface{})
+			if agent["ID"] != "agent-needs-update" {
+				t.Errorf("Expected agent-needs-update, got %v", agent["ID"])
+			}
 		}
 	})
 }
@@ -412,11 +439,11 @@ func TestHandleTriggerAgentUpdate(t *testing.T) {
 		if response["status"] != "pending" {
 			t.Errorf("Expected status 'pending', got %v", response["status"])
 		}
-		if response["from_version"] != "1.0.0" {
-			t.Errorf("Expected from_version '1.0.0', got %v", response["from_version"])
+		if response["fromVersion"] != "1.0.0" {
+			t.Errorf("Expected fromVersion '1.0.0', got %v", response["fromVersion"])
 		}
-		if response["to_version"] != "2.0.0" {
-			t.Errorf("Expected to_version '2.0.0', got %v", response["to_version"])
+		if response["toVersion"] != "2.0.0" {
+			t.Errorf("Expected toVersion '2.0.0', got %v", response["toVersion"])
 		}
 		// When agent is not connected via gRPC, delivery should be heartbeat
 		if response["delivery"] != "heartbeat" {
@@ -526,7 +553,7 @@ func TestHandleAgentBinary(t *testing.T) {
 	}
 
 	t.Run("GET - get binary by id", func(t *testing.T) {
-		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/binaries/1", nil), userID)
+		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/binaries/"+binary.ID, nil), userID)
 		rr := httptest.NewRecorder()
 		s.handleAgentBinary(rr, req)
 
@@ -559,8 +586,8 @@ func TestHandleAgentBinary(t *testing.T) {
 		rr := httptest.NewRecorder()
 		s.handleAgentBinary(rr, req)
 
-		if rr.Code != http.StatusBadRequest {
-			t.Errorf("Expected status %d, got %d: %s", http.StatusBadRequest, rr.Code, rr.Body.String())
+		if rr.Code != http.StatusNotFound {
+			t.Errorf("Expected status %d, got %d: %s", http.StatusNotFound, rr.Code, rr.Body.String())
 		}
 	})
 
@@ -600,21 +627,17 @@ func TestHandleAgentBinary(t *testing.T) {
 			t.Fatalf("Failed to create binary to delete: %v", err)
 		}
 
-		req := requestWithAdminContext(httptest.NewRequest("DELETE", "/api/v1/binaries/2", nil), userID)
+		req := requestWithAdminContext(httptest.NewRequest("DELETE", "/api/v1/binaries/"+binaryToDelete.ID, nil), userID)
 		rr := httptest.NewRecorder()
 		s.handleAgentBinary(rr, req)
 
-		if rr.Code != http.StatusOK {
-			t.Errorf("Expected status %d, got %d: %s", http.StatusOK, rr.Code, rr.Body.String())
+		if rr.Code != http.StatusNoContent {
+			t.Errorf("Expected status %d, got %d: %s", http.StatusNoContent, rr.Code, rr.Body.String())
 		}
 
-		var result map[string]string
-		if err := json.NewDecoder(rr.Body).Decode(&result); err != nil {
-			t.Fatalf("Failed to decode response: %v", err)
-		}
-
-		if result["status"] != "deleted" {
-			t.Errorf("Expected status 'deleted', got %s", result["status"])
+		// 204 No Content should have empty body
+		if rr.Body.Len() != 0 {
+			t.Errorf("Expected empty body for 204, got %s", rr.Body.String())
 		}
 
 		// Verify deletion
@@ -662,7 +685,7 @@ func TestHandleAgentBinaryDownload(t *testing.T) {
 	}
 
 	t.Run("GET - download binary success", func(t *testing.T) {
-		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/binaries/1/download", nil), userID)
+		req := requestWithAdminContext(httptest.NewRequest("GET", "/api/v1/binaries/"+binary.ID+"/download", nil), userID)
 		rr := httptest.NewRecorder()
 		s.handleAgentBinary(rr, req)
 
@@ -743,7 +766,7 @@ func TestHandleSetCurrentBinary(t *testing.T) {
 	}
 
 	t.Run("POST - set current binary success", func(t *testing.T) {
-		req := requestWithAdminContext(httptest.NewRequest("POST", "/api/v1/binaries/2/current", nil), userID)
+		req := requestWithAdminContext(httptest.NewRequest("POST", "/api/v1/binaries/"+binary2.ID+"/current", nil), userID)
 		rr := httptest.NewRecorder()
 		s.handleAgentBinary(rr, req)
 

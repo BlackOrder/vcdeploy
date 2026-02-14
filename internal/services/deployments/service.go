@@ -9,6 +9,7 @@ import (
 
 	"github.com/BlackOrder/vcdeploy/internal/services"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
+	"github.com/rs/xid"
 )
 
 // Ensure Service implements the interface.
@@ -56,6 +57,25 @@ func (s *Service) ListRecent(ctx context.Context, limit int) ([]*storage.Deploym
 		return nil, fmt.Errorf("listing deployments: %w", err)
 	}
 	return deployments, nil
+}
+
+// ListPaginated returns deployments with pagination support.
+func (s *Service) ListPaginated(ctx context.Context, p services.Pagination) (*services.ListResult[*storage.DeploymentRecord], error) {
+	deployments, err := s.store.ListDeploymentsPaginated(ctx, p.Limit, p.Offset)
+	if err != nil {
+		return nil, fmt.Errorf("listing deployments: %w", err)
+	}
+
+	totalCount, err := s.store.CountDeployments(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("counting deployments: %w", err)
+	}
+
+	return &services.ListResult[*storage.DeploymentRecord]{
+		Items:      deployments,
+		TotalCount: totalCount,
+		Pagination: p,
+	}, nil
 }
 
 // CountByStatus returns deployment counts grouped by status.
@@ -110,12 +130,31 @@ func (s *Service) ListLogs(ctx context.Context, deploymentID string) ([]*storage
 }
 
 // ListLogsAfter returns logs for a deployment after a specific log ID.
-func (s *Service) ListLogsAfter(ctx context.Context, deploymentID string, afterID int64) ([]*storage.DeploymentLog, error) {
+func (s *Service) ListLogsAfter(ctx context.Context, deploymentID string, afterID string) ([]*storage.DeploymentLog, error) {
 	logs, err := s.store.ListDeploymentLogsAfter(ctx, deploymentID, afterID)
 	if err != nil {
 		return nil, fmt.Errorf("listing deployment logs: %w", err)
 	}
 	return logs, nil
+}
+
+// ListLogsPaginated returns logs for a deployment with pagination support.
+func (s *Service) ListLogsPaginated(ctx context.Context, deploymentID string, p services.Pagination) (*services.ListResult[*storage.DeploymentLog], error) {
+	logs, err := s.store.ListDeploymentLogsPaginated(ctx, deploymentID, p.Limit, p.Offset)
+	if err != nil {
+		return nil, fmt.Errorf("listing deployment logs: %w", err)
+	}
+
+	totalCount, err := s.store.CountDeploymentLogs(ctx, deploymentID)
+	if err != nil {
+		return nil, fmt.Errorf("counting deployment logs: %w", err)
+	}
+
+	return &services.ListResult[*storage.DeploymentLog]{
+		Items:      logs,
+		TotalCount: totalCount,
+		Pagination: p,
+	}, nil
 }
 
 // --- Scheduled deployment operations ---
@@ -174,8 +213,8 @@ func (s *Service) CreateLogsBatch(ctx context.Context, deploymentID string, logs
 
 	return s.store.RunInTransaction(ctx, func(tx *sql.Tx) error {
 		stmt, err := tx.PrepareContext(ctx, `
-			INSERT INTO deployment_logs (deployment_id, level, message, source, created_at)
-			VALUES (?, ?, ?, ?, ?)
+			INSERT INTO deployment_logs (id, deployment_id, level, message, source, created_at)
+			VALUES (?, ?, ?, ?, ?, ?)
 		`)
 		if err != nil {
 			return fmt.Errorf("preparing statement: %w", err)
@@ -183,6 +222,9 @@ func (s *Service) CreateLogsBatch(ctx context.Context, deploymentID string, logs
 		defer stmt.Close()
 
 		for _, log := range logs {
+			if log.ID == "" {
+				log.ID = xid.New().String()
+			}
 			if log.DeploymentID == "" {
 				log.DeploymentID = deploymentID
 			}
@@ -194,6 +236,7 @@ func (s *Service) CreateLogsBatch(ctx context.Context, deploymentID string, logs
 			}
 
 			_, err := stmt.ExecContext(ctx,
+				log.ID,
 				log.DeploymentID,
 				log.Level,
 				log.Message,

@@ -49,6 +49,23 @@ func (s *Service) List(ctx context.Context) ([]*storage.Agent, error) {
 	return agents, nil
 }
 
+// ListPaginated returns agents with pagination support.
+func (s *Service) ListPaginated(ctx context.Context, p services.Pagination) (*services.ListResult[*storage.Agent], error) {
+	agents, err := s.store.ListAgentsPaginated(ctx, p.Limit, p.Offset)
+	if err != nil {
+		return nil, fmt.Errorf("listing agents: %w", err)
+	}
+	count, err := s.store.CountAgents(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("counting agents: %w", err)
+	}
+	return &services.ListResult[*storage.Agent]{
+		Items:      agents,
+		TotalCount: count,
+		Pagination: p,
+	}, nil
+}
+
 // Delete removes an agent by ID.
 func (s *Service) Delete(ctx context.Context, id string) error {
 	if err := s.store.DeleteAgent(ctx, id); err != nil {
@@ -91,7 +108,7 @@ func (s *Service) UpdateStatus(ctx context.Context, id, status string) error {
 		return fmt.Errorf("getting agent: %w", err)
 	}
 
-	agent.Status = status
+	agent.Status = storage.AgentStatus(status)
 	agent.LastSeenAt = time.Now()
 
 	if err := s.store.UpsertAgent(ctx, agent); err != nil {

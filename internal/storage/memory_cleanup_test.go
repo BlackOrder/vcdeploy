@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/rs/xid"
 )
 
 func TestMemoryStore_CleanupExpiredSessions(t *testing.T) {
@@ -268,15 +270,15 @@ func TestMemoryStore_CleanupOrphanedWebhooks(t *testing.T) {
 
 	// Create a project
 	project := &Project{Name: "test-project"}
-	s.CreateProject(project)
+	s.CreateProject(context.Background(), project)
 
 	// Create webhook for the project
 	s.SetProjectWebhook(ctx, project.ID, "github", []byte("secret"), true, true)
 
 	// Create orphaned webhook (for non-existent project) directly in the map
 	s.mu.Lock()
-	orphanedID := nextID(&s.nextWebhookID)
-	s.webhooks[orphanedID] = &ProjectWebhook{ID: orphanedID, ProjectID: 99999, Provider: "gitlab"}
+	orphanedID := xid.New().String()
+	s.webhooks[orphanedID] = &ProjectWebhook{ID: orphanedID, ProjectID: "nonexistent", Provider: "gitlab"}
 	s.mu.Unlock()
 
 	count, err := s.CleanupOrphanedWebhooks(ctx)

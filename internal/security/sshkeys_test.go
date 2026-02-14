@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"golang.org/x/crypto/ssh"
 	_ "modernc.org/sqlite"
 )
@@ -16,62 +17,14 @@ func setupTestSSHDB(t *testing.T) (*sql.DB, *KMS) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	db, err := sql.Open("sqlite", dbPath+"?_journal_mode=WAL")
+	// Create storage first to run migrations
+	store, err := storage.Open(dbPath)
 	if err != nil {
-		t.Fatalf("open db: %v", err)
+		t.Fatalf("open store: %v", err)
 	}
 
-	// Create required tables
-	_, err = db.Exec(`
-		CREATE TABLE IF NOT EXISTS encryption_keys (
-			id TEXT PRIMARY KEY,
-			version INTEGER NOT NULL,
-			key_material_encrypted BLOB NOT NULL,
-			algorithm TEXT NOT NULL DEFAULT 'AES-256-GCM',
-			status TEXT NOT NULL DEFAULT 'active',
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			activated_at DATETIME,
-			deactivated_at DATETIME,
-			scheduled_deletion_at DATETIME,
-			deletion_cancelled_at DATETIME,
-			UNIQUE(version)
-		);
-		CREATE TABLE IF NOT EXISTS encryption_key_usage (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			key_id TEXT NOT NULL,
-			operation TEXT NOT NULL,
-			resource_type TEXT,
-			resource_id TEXT,
-			timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-		);
-		CREATE TABLE IF NOT EXISTS ssh_keys (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			name TEXT UNIQUE NOT NULL,
-			public_key TEXT NOT NULL,
-			private_key_encrypted BLOB NOT NULL,
-			key_type TEXT NOT NULL DEFAULT 'ed25519',
-			fingerprint TEXT NOT NULL,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			last_used_at DATETIME
-		);
-		CREATE TABLE IF NOT EXISTS known_hosts (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			hostname TEXT NOT NULL,
-			port INTEGER NOT NULL DEFAULT 22,
-			key_type TEXT NOT NULL,
-			public_key TEXT NOT NULL,
-			fingerprint TEXT NOT NULL,
-			added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			last_verified_at DATETIME,
-			UNIQUE(hostname, port, key_type)
-		);
-	`)
-	if err != nil {
-		t.Fatalf("create tables: %v", err)
-	}
-
-	// Create KMS
-	kms, err := NewKMS(db, nil)
+	// Create KMS using storage interface
+	kms, err := NewKMS(context.Background(), store, nil, testMasterKey(t))
 	if err != nil {
 		t.Fatalf("NewKMS: %v", err)
 	}
@@ -80,6 +33,13 @@ func setupTestSSHDB(t *testing.T) (*sql.DB, *KMS) {
 	if err := kms.Initialize(ctx); err != nil {
 		t.Fatalf("KMS.Initialize: %v", err)
 	}
+
+	// Get the raw sql.DB connection for SSHKeyManager which hasn't been refactored yet
+	db := store.Conn()
+
+	// Note: We keep store open (through db) since db is the underlying connection
+	// The test defers db.Close() which is actually a no-op but the store stays open
+	// This is a temporary workaround until SSHKeyManager is refactored to use Store
 
 	return db, kms
 }

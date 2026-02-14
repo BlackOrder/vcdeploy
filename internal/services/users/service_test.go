@@ -29,7 +29,7 @@ func TestService_Create(t *testing.T) {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	if user.ID == 0 {
+	if user.ID == "" {
 		t.Error("Create() did not set user ID")
 	}
 	if user.Username != "testuser" {
@@ -286,7 +286,7 @@ func TestService_GetByID_NotFound(t *testing.T) {
 	svc, _ := newTestService(t)
 	ctx := context.Background()
 
-	user, err := svc.GetByID(ctx, 99999)
+	user, err := svc.GetByID(ctx, "nonexistent")
 	if err == nil {
 		t.Fatal("GetByID() expected error for nonexistent user")
 	}
@@ -366,7 +366,7 @@ func TestService_UpdatePassword_UserNotFound(t *testing.T) {
 	svc, _ := newTestService(t)
 	ctx := context.Background()
 
-	err := svc.UpdatePassword(ctx, 99999, "StrongP@ss123!")
+	err := svc.UpdatePassword(ctx, "nonexistent", "StrongP@ss123!")
 	if err == nil {
 		t.Error("UpdatePassword() expected error for nonexistent user")
 	}
@@ -411,7 +411,7 @@ func TestService_SetTOTP_UserNotFound(t *testing.T) {
 	svc, _ := newTestService(t)
 	ctx := context.Background()
 
-	err := svc.SetTOTP(ctx, 99999, "JBSWY3DPEHPK3PXP", true)
+	err := svc.SetTOTP(ctx, "nonexistent", "JBSWY3DPEHPK3PXP", true)
 	if err == nil {
 		t.Error("SetTOTP() expected error for nonexistent user")
 	}
@@ -423,7 +423,7 @@ func TestService_Delete_NotFound(t *testing.T) {
 
 	// Delete doesn't return an error for non-existent users in SQLite
 	// This test documents the behavior
-	err := svc.Delete(ctx, 99999)
+	err := svc.Delete(ctx, "nonexistent")
 	_ = err // May or may not error depending on implementation
 }
 
@@ -587,9 +587,9 @@ func TestService_DeleteWithCleanup(t *testing.T) {
 
 	// Add an API key for this user
 	_, err = conn.ExecContext(ctx, `
-		INSERT INTO api_keys (user_id, name, key_hash, scopes)
-		VALUES (?, 'test-key', 'hash123', 'read,write')
-	`, user.ID)
+		INSERT INTO api_keys (id, user_id, name, key_hash, scopes)
+		VALUES (?, ?, 'test-key', 'hash123', 'read,write')
+	`, "apikey-cleanup-key", user.ID)
 	if err != nil {
 		t.Fatalf("Failed to insert API key: %v", err)
 	}
@@ -634,7 +634,7 @@ func TestService_DeleteWithCleanup_NotFound(t *testing.T) {
 	svc, _ := newTestService(t)
 	ctx := context.Background()
 
-	err := svc.DeleteWithCleanup(ctx, 99999)
+	err := svc.DeleteWithCleanup(ctx, "nonexistent")
 	if err == nil {
 		t.Error("DeleteWithCleanup() expected error for nonexistent user")
 	}
@@ -722,9 +722,9 @@ func TestService_DeleteWithCleanup_OnlyAPIKeys(t *testing.T) {
 	conn := db.Conn()
 	for i := 0; i < 3; i++ {
 		_, err = conn.ExecContext(ctx, `
-			INSERT INTO api_keys (user_id, name, key_hash, scopes)
-			VALUES (?, ?, ?, 'read')
-		`, user.ID, "key"+string(rune('0'+i)), "hash"+string(rune('0'+i)))
+			INSERT INTO api_keys (id, user_id, name, key_hash, scopes)
+			VALUES (?, ?, ?, ?, 'read')
+		`, "apikey-"+string(rune('0'+i)), user.ID, "key"+string(rune('0'+i)), "hash"+string(rune('0'+i)))
 		if err != nil {
 			t.Fatalf("Failed to insert API key %d: %v", i, err)
 		}
@@ -957,9 +957,9 @@ func TestService_DeleteWithCleanup_MultipleSessions(t *testing.T) {
 			t.Fatalf("Failed to insert session: %v", err)
 		}
 		_, err = conn.ExecContext(ctx, `
-			INSERT INTO api_keys (user_id, name, key_hash, scopes)
-			VALUES (?, ?, ?, 'read')
-		`, user.ID, "key"+string(rune('0'+i)), "hash-multi"+string(rune('0'+i)))
+			INSERT INTO api_keys (id, user_id, name, key_hash, scopes)
+			VALUES (?, ?, ?, ?, 'read')
+		`, "apikey-multi-"+string(rune('0'+i)), user.ID, "key"+string(rune('0'+i)), "hash-multi"+string(rune('0'+i)))
 		if err != nil {
 			t.Fatalf("Failed to insert API key: %v", err)
 		}

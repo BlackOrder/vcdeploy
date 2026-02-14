@@ -51,15 +51,15 @@ func ValidatePassword(password string) error {
 }
 
 // ValidateRole validates a user role.
-// Valid roles are: admin, user, readonly.
+// Valid roles are: admin, user, viewer.
 func ValidateRole(role string) error {
 	validRoles := map[string]bool{
-		"admin":    true,
-		"user":     true,
-		"readonly": true,
+		"admin":  true,
+		"user":   true,
+		"viewer": true,
 	}
 	if !validRoles[strings.ToLower(role)] {
-		return InvalidInput("validation", "role must be admin, user, or readonly")
+		return InvalidInput("validation", "role must be admin, user, or viewer")
 	}
 	return nil
 }
@@ -111,8 +111,8 @@ func ValidateOneOf(field, value string, allowed []string) error {
 }
 
 // ValidateID checks if an ID is positive.
-func ValidateID(field string, id int64) error {
-	if id <= 0 {
+func ValidateID(field string, id string) error {
+	if id == "" {
 		return InvalidInput("validation", field+" must be a positive integer")
 	}
 	return nil
@@ -125,6 +125,40 @@ func ValidateStringID(field, id string) error {
 	}
 	if len(id) > 255 {
 		return InvalidInput("validation", field+" exceeds maximum length")
+	}
+	return nil
+}
+
+// ValidAPIKeyScopes defines the valid scopes for API keys.
+var ValidAPIKeyScopes = map[string]bool{
+	"*":                 true, // admin/full access
+	"read:projects":     true,
+	"write:projects":    true,
+	"read:deployments":  true,
+	"write:deployments": true,
+	"read:agents":       true,
+	"write:agents":      true,
+	"read:users":        true,
+	"write:users":       true,
+	"read:settings":     true,
+	"write:settings":    true,
+	"read:secrets":      true,
+	"write:secrets":     true,
+	"read:apikeys":      true,
+	"write:apikeys":     true,
+	"admin":             true, // legacy admin scope
+}
+
+// ValidateAPIKeyScopes validates a list of API key scopes.
+// Returns an error if any scope is invalid.
+func ValidateAPIKeyScopes(scopes []string) error {
+	if len(scopes) == 0 {
+		return nil // Empty means default to "*", handled by caller
+	}
+	for _, scope := range scopes {
+		if !ValidAPIKeyScopes[scope] {
+			return InvalidInput("validation", "invalid scope: "+scope)
+		}
 	}
 	return nil
 }

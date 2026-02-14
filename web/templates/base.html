@@ -6,9 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.Title}} - vcdeploy</title>
     <link rel="icon" type="image/svg+xml" href="/static/images/icon.svg">
-    <script src="https://unpkg.com/htmx.org@1.9.10"{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}></script>
-    <script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/json-enc.js"{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}></script>
-    <script src="https://cdn.tailwindcss.com"{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}></script>
+    <script src="/static/js/vendor/htmx.min.js"{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}></script>
+    <script src="/static/js/vendor/htmx-json-enc.min.js"{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}></script>
+    <script src="/static/js/vendor/tailwind.min.js"{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}></script>
     <script{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}>
         tailwind.config = {
             darkMode: 'class',
@@ -138,23 +138,25 @@
             <div class="flex items-center justify-between h-16">
                 <div class="flex items-center">
                     <div class="flex-shrink-0">
-                        <a href="/dashboard"><img src="/static/images/logo.svg" alt="vcdeploy" class="h-8"></a>
+                        <a href="/stats"><img src="/static/images/logo.svg" alt="vcdeploy" class="h-8"></a>
                     </div>
                     <div class="hidden md:block ml-10">
                         <div class="flex items-baseline space-x-4">
-                            <a href="/dashboard" class="{{if eq .Active "dashboard"}}bg-dark-border text-white dark:text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white dark:hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Dashboard</a>
+                            <a href="/stats" class="{{if eq .Active "stats"}}bg-dark-border text-white dark:text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white dark:hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Stats</a>
                             <a href="/projects" class="{{if eq .Active "projects"}}bg-dark-border text-white dark:text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white dark:hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Projects</a>
                             <a href="/deployments" class="{{if eq .Active "deployments"}}bg-dark-border text-white dark:text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white dark:hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Deployments</a>
+                            <a href="/recipes" class="{{if or (eq .Active "recipes") (eq .Active "playbooks")}}bg-dark-border text-white dark:text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white dark:hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Recipes</a>
                             <a href="/agents" class="{{if eq .Active "agents"}}bg-dark-border text-white dark:text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white dark:hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Agents</a>
                             <a href="/secrets" class="{{if eq .Active "secrets"}}bg-dark-border text-white dark:text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white dark:hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Secrets</a>
                             <a href="/project-types" class="{{if eq .Active "project-types"}}bg-dark-border text-white dark:text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white dark:hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Types</a>
+                            <a href="/security/certificates" class="{{if eq .Active "certificates"}}bg-dark-border text-white dark:text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white dark:hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Security</a>
                             <a href="/audit" class="{{if eq .Active "audit"}}bg-dark-border text-white dark:text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white dark:hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Audit</a>
                             <a href="/settings" class="{{if eq .Active "settings"}}bg-dark-border text-white dark:text-white{{else}}text-dark-muted hover:bg-dark-border hover:text-white dark:hover:text-white{{end}} px-3 py-2 rounded-md text-sm font-medium">Settings</a>
                         </div>
                     </div>
                 </div>
                 <div class="flex items-center space-x-4">
-                    <span class="text-dark-muted text-sm">{{.Username}}</span>
+                    <a href="/profile" class="text-dark-muted hover:text-white text-sm">{{.Username}}</a>
                     <a href="/logout" class="text-dark-muted hover:text-white text-sm">Logout</a>
                 </div>
             </div>

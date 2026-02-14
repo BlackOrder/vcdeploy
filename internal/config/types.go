@@ -42,7 +42,7 @@ type TypeHooks struct {
 
 // LoadTypeConfig loads a type configuration from a file.
 func LoadTypeConfig(path string) (*TypeConfig, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 - path is admin-controlled config file location
 	if err != nil {
 		return nil, fmt.Errorf("reading type file: %w", err)
 	}
@@ -54,7 +54,7 @@ func LoadTypeConfig(path string) (*TypeConfig, error) {
 
 	// Apply defaults
 	if config.KeepReleases == 0 {
-		config.KeepReleases = 5
+		config.KeepReleases = DefaultKeepReleases
 	}
 
 	return &config, nil
@@ -63,6 +63,7 @@ func LoadTypeConfig(path string) (*TypeConfig, error) {
 // SaveTypeConfig saves a type configuration to a file.
 func SaveTypeConfig(config *TypeConfig, path string) error {
 	dir := filepath.Dir(path)
+	// #nosec G301 - Type directory needs group access for agents
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("creating type directory: %w", err)
 	}
@@ -72,6 +73,7 @@ func SaveTypeConfig(config *TypeConfig, path string) error {
 		return fmt.Errorf("marshaling type: %w", err)
 	}
 
+	// #nosec G306 - Type config needs to be readable by agents
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return fmt.Errorf("writing type file: %w", err)
 	}
@@ -98,7 +100,7 @@ func BuiltinTypes() map[string]*TypeConfig {
 			SharedDirs:   []string{"storage"},
 			SharedFiles:  []string{".env"},
 			WritableDirs: []string{"bootstrap/cache", "storage"},
-			KeepReleases: 5,
+			KeepReleases: DefaultKeepReleases,
 			Validation: TypeValidation{
 				RequiredFiles: []string{"artisan", "composer.json"},
 				Env: EnvValidation{
@@ -120,7 +122,7 @@ func BuiltinTypes() map[string]*TypeConfig {
 			SharedDirs:   []string{"var/log", "var/sessions"},
 			SharedFiles:  []string{".env.local"},
 			WritableDirs: []string{"var"},
-			KeepReleases: 5,
+			KeepReleases: DefaultKeepReleases,
 			Validation: TypeValidation{
 				RequiredFiles: []string{"bin/console", "composer.json"},
 			},
@@ -137,7 +139,7 @@ func BuiltinTypes() map[string]*TypeConfig {
 			Name:         "nextjs",
 			SharedDirs:   []string{".next/cache"},
 			SharedFiles:  []string{".env.local"},
-			KeepReleases: 5,
+			KeepReleases: DefaultKeepReleases,
 			Validation: TypeValidation{
 				RequiredFiles: []string{"package.json", "next.config.js"},
 			},
@@ -150,7 +152,7 @@ func BuiltinTypes() map[string]*TypeConfig {
 		},
 		"static": {
 			Name:         "static",
-			KeepReleases: 5,
+			KeepReleases: DefaultKeepReleases,
 			Validation: TypeValidation{
 				RequiredFiles: []string{"index.html"},
 			},
@@ -158,7 +160,7 @@ func BuiltinTypes() map[string]*TypeConfig {
 		"nodejs": {
 			Name:         "nodejs",
 			SharedFiles:  []string{".env"},
-			KeepReleases: 5,
+			KeepReleases: DefaultKeepReleases,
 			Validation: TypeValidation{
 				RequiredFiles: []string{"package.json"},
 			},

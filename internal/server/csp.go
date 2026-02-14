@@ -80,7 +80,7 @@ func (m *CSPMiddleware) Handler(next http.Handler) http.Handler {
 			var err error
 			nonce, err = GenerateCSPNonce(m.config.NonceLength)
 			if err != nil {
-				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+				WriteJSONError(w, http.StatusInternalServerError, "internal server error")
 				return
 			}
 			// Store nonce in context for template use

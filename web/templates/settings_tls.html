@@ -1,0 +1,225 @@
+{{template "base" .}}
+
+{{define "title"}}TLS Settings{{end}}
+
+{{define "content"}}
+<div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold">TLS Configuration</h1>
+    </div>
+
+    <!-- Current Status -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-8">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">Current TLS Status</h2>
+        </div>
+        <div class="p-6" id="tls-status" hx-get="/api/v1/tls/status" hx-trigger="load" hx-swap="innerHTML">
+            <div class="text-center py-4 text-gray-500">Loading TLS status...</div>
+        </div>
+    </div>
+
+    <!-- TLS Mode Configuration -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-8">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">TLS Mode</h2>
+            <p class="text-sm text-gray-500 mt-1">Configure how HTTPS is handled by the server</p>
+        </div>
+        <form hx-put="/api/v1/settings/tls/mode" hx-swap="none" hx-on::after-request="htmx.trigger('#tls-status', 'load')" class="p-6">
+            <div class="space-y-4">
+                <label class="flex items-start p-4 border rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 {{if eq .TLSConfig.Mode "disabled"}}border-accent-500 bg-accent-50 dark:bg-accent-900/20{{else}}border-gray-200 dark:border-gray-600{{end}}">
+                    <input type="radio" name="mode" value="disabled" {{if eq .TLSConfig.Mode "disabled"}}checked{{end}}
+                           class="mt-0.5 mr-3">
+                    <div>
+                        <div class="font-medium">Disabled</div>
+                        <div class="text-sm text-gray-500">HTTP only. Use when behind a TLS-terminating reverse proxy.</div>
+                    </div>
+                </label>
+
+                <label class="flex items-start p-4 border rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 {{if eq .TLSConfig.Mode "static"}}border-accent-500 bg-accent-50 dark:bg-accent-900/20{{else}}border-gray-200 dark:border-gray-600{{end}}">
+                    <input type="radio" name="mode" value="static" {{if eq .TLSConfig.Mode "static"}}checked{{end}}
+                           class="mt-0.5 mr-3">
+                    <div>
+                        <div class="font-medium">Static Certificates</div>
+                        <div class="text-sm text-gray-500">Use manually provided certificate and key files.</div>
+                    </div>
+                </label>
+
+                <label class="flex items-start p-4 border rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 {{if eq .TLSConfig.Mode "acme"}}border-accent-500 bg-accent-50 dark:bg-accent-900/20{{else}}border-gray-200 dark:border-gray-600{{end}}">
+                    <input type="radio" name="mode" value="acme" {{if eq .TLSConfig.Mode "acme"}}checked{{end}}
+                           class="mt-0.5 mr-3">
+                    <div>
+                        <div class="font-medium">ACME / Let's Encrypt</div>
+                        <div class="text-sm text-gray-500">Automatically obtain and renew certificates from Let's Encrypt.</div>
+                    </div>
+                </label>
+
+                <label class="flex items-start p-4 border rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 {{if eq .TLSConfig.Mode "self-signed"}}border-accent-500 bg-accent-50 dark:bg-accent-900/20{{else}}border-gray-200 dark:border-gray-600{{end}}">
+                    <input type="radio" name="mode" value="self-signed" {{if eq .TLSConfig.Mode "self-signed"}}checked{{end}}
+                           class="mt-0.5 mr-3">
+                    <div>
+                        <div class="font-medium">Self-Signed</div>
+                        <div class="text-sm text-gray-500">Generate self-signed certificates for development/testing.</div>
+                    </div>
+                </label>
+            </div>
+            <div class="mt-6 flex justify-end">
+                <button type="submit" class="bg-accent-600 hover:bg-accent-700 text-white px-4 py-2 rounded">
+                    Update TLS Mode
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Static Certificate Settings -->
+    <div id="static-settings" class="bg-white dark:bg-gray-800 rounded-lg shadow mb-8 {{if ne .TLSConfig.Mode "static"}}hidden{{end}}">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">Static Certificate Configuration</h2>
+        </div>
+        <form hx-put="/api/v1/settings/tls/static" hx-swap="none" hx-on::after-request="htmx.trigger('#tls-status', 'load')" class="p-6 space-y-4">
+            <div>
+                <label class="block text-sm font-medium mb-1">Certificate File Path</label>
+                <input type="text" name="cert_file" value="{{.TLSConfig.CertFile}}"
+                       class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600"
+                       placeholder="/etc/vcdeploy/cert.pem">
+            </div>
+            <div>
+                <label class="block text-sm font-medium mb-1">Private Key File Path</label>
+                <input type="text" name="key_file" value="{{.TLSConfig.KeyFile}}"
+                       class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600"
+                       placeholder="/etc/vcdeploy/key.pem">
+            </div>
+            <div class="flex justify-end">
+                <button type="submit" class="bg-accent-600 hover:bg-accent-700 text-white px-4 py-2 rounded">
+                    Save Certificate Paths
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- ACME Settings -->
+    <div id="acme-settings" class="bg-white dark:bg-gray-800 rounded-lg shadow mb-8 {{if ne .TLSConfig.Mode "acme"}}hidden{{end}}">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+            <div>
+                <h2 class="text-lg font-semibold">ACME / Let's Encrypt Configuration</h2>
+            </div>
+            <button hx-post="/api/v1/tls/acme/renew" 
+                    hx-confirm="Force renewal of ACME certificate?"
+                    hx-swap="none"
+                    hx-on::after-request="htmx.trigger('#tls-status', 'load')"
+                    class="text-sm text-accent-600 hover:text-accent-800">
+                Force Renewal
+            </button>
+        </div>
+        <form hx-put="/api/v1/settings/tls/acme" hx-swap="none" hx-on::after-request="htmx.trigger('#tls-status', 'load')" class="p-6 space-y-4">
+            <div>
+                <label class="block text-sm font-medium mb-1">Domain(s)</label>
+                <input type="text" name="domains" value="{{.TLSConfig.ACMEDomains}}"
+                       class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600"
+                       placeholder="example.com, www.example.com">
+                <p class="mt-1 text-xs text-gray-500">Comma-separated list of domains for the certificate</p>
+            </div>
+            <div>
+                <label class="block text-sm font-medium mb-1">Contact Email</label>
+                <input type="email" name="email" value="{{.TLSConfig.ACMEEmail}}"
+                       class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600"
+                       placeholder="admin@example.com">
+            </div>
+            <div>
+                <label class="block text-sm font-medium mb-1">ACME Directory URL</label>
+                <select name="directory_url" class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600">
+                    <option value="https://acme-v02.api.letsencrypt.org/directory" 
+                            {{if eq .TLSConfig.ACMEDirectoryURL "https://acme-v02.api.letsencrypt.org/directory"}}selected{{end}}>
+                        Let's Encrypt Production
+                    </option>
+                    <option value="https://acme-staging-v02.api.letsencrypt.org/directory"
+                            {{if eq .TLSConfig.ACMEDirectoryURL "https://acme-staging-v02.api.letsencrypt.org/directory"}}selected{{end}}>
+                        Let's Encrypt Staging (Testing)
+                    </option>
+                </select>
+                <p class="mt-1 text-xs text-gray-500">Use staging for testing to avoid rate limits</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <input type="checkbox" name="accept_tos" id="accept_tos" {{if .TLSConfig.ACMEAcceptTOS}}checked{{end}}>
+                <label for="accept_tos" class="text-sm">
+                    I accept the <a href="https://letsencrypt.org/documents/LE-SA-v1.3-September-21-2022.pdf" target="_blank" class="text-accent-600 hover:underline">Let's Encrypt Terms of Service</a>
+                </label>
+            </div>
+            <div class="flex justify-end">
+                <button type="submit" class="bg-accent-600 hover:bg-accent-700 text-white px-4 py-2 rounded">
+                    Save ACME Settings
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- ACME Certificates List -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow {{if ne .TLSConfig.Mode "acme"}}hidden{{end}}">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">Stored ACME Certificates</h2>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Domain</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Issuer</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Valid From</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Valid Until</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Auto Renew</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {{range .ACMECertificates}}
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td class="px-4 py-3 font-mono text-sm">{{.Domain}}</td>
+                        <td class="px-4 py-3 text-sm">{{.Issuer}}</td>
+                        <td class="px-4 py-3 text-sm">{{formatTime .NotBefore}}</td>
+                        <td class="px-4 py-3 text-sm">{{formatTime .NotAfter}}</td>
+                        <td class="px-4 py-3">
+                            {{if .AutoRenew}}<span class="text-green-600">✓ Enabled</span>{{else}}<span class="text-gray-400">Disabled</span>{{end}}
+                        </td>
+                        <td class="px-4 py-3">
+                            <button hx-delete="/api/v1/acme/certificates/{{.Domain}}"
+                                    hx-confirm="Delete this ACME certificate?"
+                                    hx-swap="none"
+                                    hx-on::after-request="location.reload()"
+                                    class="text-red-600 hover:text-red-800 text-sm">
+                                Delete
+                            </button>
+                        </td>
+                    </tr>
+                    {{else}}
+                    <tr>
+                        <td colspan="6" class="px-4 py-8 text-center text-gray-500">
+                            No ACME certificates stored. Certificates will appear here once obtained.
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+// Show/hide relevant settings based on TLS mode selection
+document.querySelectorAll('input[name="mode"]').forEach(function(radio) {
+    radio.addEventListener('change', function() {
+        const staticSettings = document.getElementById('static-settings');
+        const acmeSettings = document.getElementById('acme-settings');
+        
+        if (this.value === 'static') {
+            staticSettings.classList.remove('hidden');
+            acmeSettings.classList.add('hidden');
+        } else if (this.value === 'acme') {
+            staticSettings.classList.add('hidden');
+            acmeSettings.classList.remove('hidden');
+        } else {
+            staticSettings.classList.add('hidden');
+            acmeSettings.classList.add('hidden');
+        }
+    });
+});
+</script>
+{{end}}

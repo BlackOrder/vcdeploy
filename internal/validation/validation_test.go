@@ -848,3 +848,42 @@ func (m *mockRequest) toHTTPRequest() *http.Request {
 		ContentLength: m.contentLength,
 	}
 }
+
+func TestValidateBinaryPathComponent(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+		errMsg  string
+	}{
+		{"valid version", "v1.0.0", false, ""},
+		{"valid os", "linux", false, ""},
+		{"valid arch", "amd64", false, ""},
+		{"valid with hyphen", "v1.0.0-beta1", false, ""},
+		{"empty", "", true, "empty value"},
+		{"path traversal dotdot", "../../../etc/passwd", true, "path traversal not allowed"},
+		{"path traversal forward slash", "foo/bar", true, "path separators not allowed"},
+		{"path traversal backslash", "foo\\bar", true, "path separators not allowed"},
+		{"null byte", "v1.0\x00.0", true, "null bytes not allowed"},
+		{"control character", "v1.0\x1f.0", true, "control characters not allowed"},
+		{"double dots only", "..", true, "path traversal not allowed"},
+		{"mixed attack", "../linux/amd64", true, "path traversal not allowed"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateBinaryPathComponent(tt.input)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("ValidateBinaryPathComponent(%q) = nil, want error containing %q", tt.input, tt.errMsg)
+				} else if !strings.Contains(err.Error(), tt.errMsg) {
+					t.Errorf("ValidateBinaryPathComponent(%q) = %q, want error containing %q", tt.input, err.Error(), tt.errMsg)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("ValidateBinaryPathComponent(%q) = %v, want nil", tt.input, err)
+				}
+			}
+		})
+	}
+}

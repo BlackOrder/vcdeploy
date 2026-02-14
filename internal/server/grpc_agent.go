@@ -3,15 +3,18 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"sync"
 	"time"
 
 	"github.com/BlackOrder/vcdeploy/internal/alerting"
+	"github.com/BlackOrder/vcdeploy/internal/git"
 	"github.com/BlackOrder/vcdeploy/internal/metrics"
 	"github.com/BlackOrder/vcdeploy/internal/proto"
 	"github.com/BlackOrder/vcdeploy/internal/security"
@@ -19,6 +22,8 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 )
 
@@ -34,8 +39,20 @@ type AgentServer struct {
 	agentService      services.AgentServicer
 	deploymentService services.DeploymentServicer
 
+	// Git service for repository operations
+	gitService *git.Service
+
 	// Alert manager for system alerts
 	alertManager *alerting.Manager
+
+	// Event publisher callback for SSE events
+	onAgentEvent func(id, name, status, hostname string)
+
+	// allowAutoRegister enables agents to register without a pre-generated token (for testing)
+	allowAutoRegister bool
+
+	// isMaintenanceMode returns true when the server is in maintenance mode
+	isMaintenanceMode func() bool
 
 	// tokens maps agent IDs to their registration tokens
 	tokens     map[string]string
@@ -84,6 +101,30 @@ func (s *AgentServer) SetAlertManager(alertMgr *alerting.Manager) {
 	s.alertManager = alertMgr
 }
 
+// SetAgentEventCallback sets the callback function for agent events (for SSE).
+func (s *AgentServer) SetAgentEventCallback(cb func(id, name, status, hostname string)) {
+	s.onAgentEvent = cb
+}
+
+// SetMaintenanceCheck sets the function used to check maintenance mode.
+func (s *AgentServer) SetMaintenanceCheck(fn func() bool) {
+	s.isMaintenanceMode = fn
+}
+
+// SetGitService sets the git service for repository operations.
+func (s *AgentServer) SetGitService(gitSvc *git.Service) {
+	s.gitService = gitSvc
+}
+
+// SetAllowAutoRegister enables or disables auto-registration without pre-generated tokens.
+// This should only be enabled for testing environments.
+func (s *AgentServer) SetAllowAutoRegister(allow bool) {
+	s.allowAutoRegister = allow
+	if allow {
+		s.logger.Warn("Auto-registration enabled - agents can register without pre-generated tokens")
+	}
+}
+
 // RegisterToken adds a registration token for an agent.
 // This is called by the master when provisioning a new agent.
 func (s *AgentServer) RegisterToken(agentID, token string) {
@@ -103,18 +144,53 @@ func (s *AgentServer) RevokeToken(agentID string) {
 // Register handles agent registration requests.
 // The agent provides a one-time token and receives a certificate for mTLS.
 func (s *AgentServer) Register(ctx context.Context, req *proto.RegisterRequest) (*proto.RegisterResponse, error) {
-	if req.AgentId == "" || req.Token == "" {
+	if req.AgentId == "" {
 		return &proto.RegisterResponse{
 			Success: false,
-			Error:   "agent_id and token are required",
+			Error:   "agent_id is required",
 		}, nil
 	}
 
-	// Validate the registration token
-	if !s.validateToken(req.AgentId, req.Token) {
+	// Validate agent ID format
+	if err := security.ValidateAgentID(req.AgentId); err != nil {
+		s.logger.Warn("Invalid agent ID format",
+			zap.String("agent_id", req.AgentId),
+			zap.Error(err),
+		)
+		return &proto.RegisterResponse{
+			Success: false,
+			Error:   err.Error(),
+		}, nil
+	}
+
+	// Extract client IP for audit logging
+	clientIP := ExtractGRPCClientIP(ctx)
+
+	// In auto-register mode, allow agents to register without a pre-generated token
+	// This is only for testing environments
+	tokenValid := false
+	if s.allowAutoRegister && req.Token != "" {
+		// In auto-register mode, accept any non-empty token
+		s.logger.Info("Auto-registration mode: accepting agent registration",
+			zap.String("agent_id", req.AgentId),
+			zap.String("hostname", req.Hostname),
+			zap.String("client_ip", clientIP),
+		)
+		tokenValid = true
+	} else if req.Token != "" {
+		// Normal mode: validate the pre-generated token
+		// Try database token first, fall back to in-memory
+		tokenValid = s.validateDatabaseToken(ctx, req.AgentId, req.Token)
+		if !tokenValid {
+			tokenValid = s.validateToken(req.AgentId, req.Token)
+		}
+	}
+
+	if !tokenValid {
 		s.logger.Warn("Invalid registration token",
 			zap.String("agent_id", req.AgentId),
 			zap.String("hostname", req.Hostname),
+			zap.String("client_ip", clientIP),
 		)
 		return &proto.RegisterResponse{
 			Success: false,
@@ -125,6 +201,7 @@ func (s *AgentServer) Register(ctx context.Context, req *proto.RegisterRequest) 
 	s.logger.Info("Agent registration request",
 		zap.String("agent_id", req.AgentId),
 		zap.String("hostname", req.Hostname),
+		zap.String("client_ip", clientIP),
 	)
 
 	// Issue a certificate for the agent
@@ -146,6 +223,20 @@ func (s *AgentServer) Register(ctx context.Context, req *proto.RegisterRequest) 
 		s.logger.Error("Failed to marshal capabilities", zap.Error(err))
 		capabilities = []byte("{}")
 	}
+
+	// Generate HMAC secret for re-authentication
+	hmacSecret := make([]byte, 32)
+	if _, err := rand.Read(hmacSecret); err != nil {
+		s.logger.Error("Failed to generate HMAC secret",
+			zap.String("agent_id", req.AgentId),
+			zap.Error(err),
+		)
+		return &proto.RegisterResponse{
+			Success: false,
+			Error:   "failed to generate HMAC secret",
+		}, nil
+	}
+
 	agent := &storage.Agent{
 		ID:           req.AgentId,
 		Hostname:     req.Hostname,
@@ -154,6 +245,7 @@ func (s *AgentServer) Register(ctx context.Context, req *proto.RegisterRequest) 
 		Status:       "registered",
 		LastSeenAt:   time.Now(),
 		Certificate:  cert.SerialNumber,
+		HMACSecret:   hmacSecret,
 	}
 
 	if err := s.agentService.Upsert(ctx, agent); err != nil {
@@ -187,11 +279,17 @@ func (s *AgentServer) Register(ctx context.Context, req *proto.RegisterRequest) 
 		Success:       true,
 		Certificate:   []byte(cert.CertificatePEM + cert.PrivateKeyPEM),
 		CaCertificate: caCertPEM,
+		HmacSecret:    hmacSecret,
 	}, nil
 }
 
 // Connect handles bi-directional streaming between agent and master.
 func (s *AgentServer) Connect(stream proto.AgentService_ConnectServer) error {
+	// Reject new connections during maintenance mode
+	if s.isMaintenanceMode != nil && s.isMaintenanceMode() {
+		return status.Error(codes.Unavailable, "Server is in maintenance mode")
+	}
+
 	ctx := stream.Context()
 
 	// Wait for the AgentReady message to identify the agent
@@ -211,6 +309,11 @@ func (s *AgentServer) Connect(stream proto.AgentService_ConnectServer) error {
 	agentID := readyMsg.AgentId
 	if agentID == "" {
 		return status.Error(codes.InvalidArgument, "agent_id is required")
+	}
+
+	// Verify agent certificate matches claimed ID (mTLS verification)
+	if err := s.verifyAgentCert(ctx, agentID); err != nil {
+		return err
 	}
 
 	// Verify agent exists and is registered
@@ -276,6 +379,11 @@ func (s *AgentServer) Connect(stream proto.AgentService_ConnectServer) error {
 		s.logger.Warn("Failed to update agent status", zap.Error(err))
 	}
 
+	// Publish agent online event
+	if s.onAgentEvent != nil {
+		s.onAgentEvent(agentID, agent.Hostname, "online", agent.Hostname)
+	}
+
 	// Update metrics
 	metrics.AgentConnected.WithLabelValues(agentID, agent.Hostname).Set(1)
 
@@ -328,6 +436,11 @@ func (s *AgentServer) Connect(stream proto.AgentService_ConnectServer) error {
 func (s *AgentServer) Heartbeat(ctx context.Context, req *proto.HeartbeatRequest) (*proto.HeartbeatResponse, error) {
 	if req.AgentId == "" {
 		return nil, status.Error(codes.InvalidArgument, "agent_id is required")
+	}
+
+	// Verify agent certificate matches claimed ID (mTLS verification)
+	if err := s.verifyAgentCert(ctx, req.AgentId); err != nil {
+		return nil, err
 	}
 
 	// Get agent
@@ -386,6 +499,49 @@ func (s *AgentServer) Heartbeat(ctx context.Context, req *proto.HeartbeatRequest
 	return &proto.HeartbeatResponse{
 		Ok:              true,
 		ServerTimestamp: time.Now().Unix(),
+	}, nil
+}
+
+// GetCATrustBundle returns the current CA trust bundle for certificate validation.
+func (s *AgentServer) GetCATrustBundle(ctx context.Context, req *proto.GetCATrustBundleRequest) (*proto.GetCATrustBundleResponse, error) {
+	// Verify agent from mTLS cert
+	if err := s.verifyAgentCert(ctx, ""); err != nil {
+		// Allow unauthenticated requests - agents need this before they have valid certs
+		s.logger.Debug("GetCATrustBundle called without valid cert, allowing for CA sync")
+	}
+
+	// Get current trust pool version
+	version := s.ca.GetTrustPoolVersion(ctx)
+
+	// If client already has current version, return minimal response
+	if req.CurrentVersion == version && req.CurrentVersion != "" {
+		return &proto.GetCATrustBundleResponse{
+			Version: version,
+		}, nil
+	}
+
+	// Get all CA certificates
+	certs, err := s.ca.GetAllCACertificates(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get CA certificates: %w", err)
+	}
+
+	// Get current CA ID
+	currentCA := s.ca.GetCurrentCA()
+	var currentCAID string
+	if currentCA != nil {
+		currentCAID = currentCA.ID
+	}
+
+	s.logger.Debug("Returning CA trust bundle",
+		zap.String("version", version),
+		zap.Int("ca_count", len(certs)),
+		zap.String("current_ca", currentCAID))
+
+	return &proto.GetCATrustBundleResponse{
+		CaCertificates: certs,
+		CurrentCaId:    currentCAID,
+		Version:        version,
 	}, nil
 }
 
@@ -472,7 +628,7 @@ func (s *AgentServer) DisconnectAgent(agentID string) {
 	s.connectionMutex.Unlock()
 }
 
-// validateToken checks if a registration token is valid for an agent.
+// validateToken checks if a registration token is valid for an agent (in-memory).
 func (s *AgentServer) validateToken(agentID, token string) bool {
 	s.tokenMutex.RLock()
 	defer s.tokenMutex.RUnlock()
@@ -484,6 +640,105 @@ func (s *AgentServer) validateToken(agentID, token string) bool {
 
 	// Constant-time comparison to prevent timing attacks
 	return subtle.ConstantTimeCompare([]byte(expectedToken), []byte(token)) == 1
+}
+
+// validateDatabaseToken checks if a registration token is valid using the database.
+// It also marks the token as used if valid.
+func (s *AgentServer) validateDatabaseToken(ctx context.Context, agentID, token string) bool {
+	// Get token from database
+	dbToken, err := s.store.GetRegistrationToken(ctx, token)
+	if err != nil {
+		if !errors.Is(err, storage.ErrNotFound) {
+			s.logger.Error("Failed to get registration token from database",
+				zap.String("agent_id", agentID),
+				zap.Error(err),
+			)
+		}
+		return false
+	}
+
+	// Check if token is expired
+	if time.Now().After(dbToken.ExpiresAt) {
+		s.logger.Warn("Registration token expired",
+			zap.String("agent_id", agentID),
+			zap.Time("expired_at", dbToken.ExpiresAt),
+		)
+		return false
+	}
+
+	// Check if token was already used
+	if dbToken.UsedAt != nil {
+		s.logger.Warn("Registration token already used",
+			zap.String("agent_id", agentID),
+			zap.Time("used_at", *dbToken.UsedAt),
+		)
+		return false
+	}
+
+	// Check if token is for a specific agent
+	if dbToken.AgentID != "" && dbToken.AgentID != agentID {
+		s.logger.Warn("Registration token not valid for this agent",
+			zap.String("agent_id", agentID),
+			zap.String("token_agent_id", dbToken.AgentID),
+		)
+		return false
+	}
+
+	// Mark token as used
+	if err := s.store.MarkTokenUsed(ctx, token); err != nil {
+		s.logger.Error("Failed to mark token as used",
+			zap.String("agent_id", agentID),
+			zap.Error(err),
+		)
+		// Continue anyway - the token was valid
+	}
+
+	return true
+}
+
+// extractAgentIDFromCert extracts the agent ID from the client certificate in mTLS.
+// Returns empty string if no client certificate is present (e.g., during registration or tests).
+func extractAgentIDFromCert(ctx context.Context) (string, error) {
+	p, ok := peer.FromContext(ctx)
+	if !ok {
+		// No peer info - this happens in tests without TLS
+		return "", nil
+	}
+
+	tlsInfo, ok := p.AuthInfo.(credentials.TLSInfo)
+	if !ok {
+		// Not using TLS - this is okay during registration
+		return "", nil
+	}
+
+	if len(tlsInfo.State.PeerCertificates) == 0 {
+		// No client certificate - this is okay during registration
+		return "", nil
+	}
+
+	cert := tlsInfo.State.PeerCertificates[0]
+	// Agent ID is in the Common Name
+	return cert.Subject.CommonName, nil
+}
+
+// verifyAgentCert verifies the client certificate matches the claimed agent ID.
+// Used for authenticated RPCs like Heartbeat and Connect.
+func (s *AgentServer) verifyAgentCert(ctx context.Context, claimedAgentID string) error {
+	certAgentID, err := extractAgentIDFromCert(ctx)
+	if err != nil {
+		return err
+	}
+
+	// If we got an agent ID from the cert, verify it matches
+	if certAgentID != "" && certAgentID != claimedAgentID {
+		s.logger.Warn("Agent ID mismatch between certificate and request",
+			zap.String("cert_agent_id", certAgentID),
+			zap.String("claimed_agent_id", claimedAgentID),
+		)
+		return status.Errorf(codes.PermissionDenied, "agent ID mismatch: certificate says %s, request says %s", certAgentID, claimedAgentID)
+	}
+
+	return nil
 }
 
 // sendCommands sends pending commands to an agent over the stream.
@@ -534,6 +789,11 @@ func (s *AgentServer) cleanupConnection(agentID string) {
 			s.logger.Warn("Failed to update agent status to offline",
 				zap.String("agent_id", agentID),
 				zap.Error(err))
+		}
+
+		// Publish agent offline event
+		if s.onAgentEvent != nil {
+			s.onAgentEvent(agentID, agent.Hostname, "offline", agent.Hostname)
 		}
 
 		// Update metrics
@@ -699,7 +959,7 @@ func (s *AgentServer) updateDeploymentStatus(ctx context.Context, status *proto.
 		dbStatus = "unknown"
 	}
 
-	deployment.Status = dbStatus
+	deployment.Status = storage.DeploymentStatus(dbStatus)
 	if status.State == proto.DeploymentState_DEPLOYMENT_STATE_COMPLETED ||
 		status.State == proto.DeploymentState_DEPLOYMENT_STATE_FAILED ||
 		status.State == proto.DeploymentState_DEPLOYMENT_STATE_CANCELLED {
@@ -708,4 +968,135 @@ func (s *AgentServer) updateDeploymentStatus(ctx context.Context, status *proto.
 	}
 
 	return s.deploymentService.Update(ctx, deployment)
+}
+
+// StreamRepoArchive streams a repository archive to an agent.
+// The master clones the repository using stored credentials and streams the archive
+// to the agent. This ensures credentials never leave the master.
+func (s *AgentServer) StreamRepoArchive(req *proto.StreamRepoRequest, stream proto.AgentService_StreamRepoArchiveServer) error {
+	ctx := stream.Context()
+
+	// Verify agent from certificate
+	agentID, err := extractAgentIDFromCert(ctx)
+	if err != nil {
+		return err
+	}
+
+	if agentID == "" {
+		return status.Error(codes.Unauthenticated, "no client certificate")
+	}
+
+	s.logger.Info("StreamRepoArchive request",
+		zap.String("agent_id", agentID),
+		zap.String("deployment_id", req.DeploymentId),
+		zap.String("ref", req.Ref),
+	)
+
+	// Verify agent is assigned to this deployment (multi-agent deployment support)
+	if req.DeploymentId != "" {
+		deployment, err := s.deploymentService.GetByID(ctx, req.DeploymentId)
+		if err != nil {
+			return status.Errorf(codes.NotFound, "deployment not found: %v", err)
+		}
+		if deployment == nil {
+			return status.Error(codes.NotFound, "deployment not found")
+		}
+
+		// Check if this is a multi-agent deployment (has assignments in deployment_agents)
+		agents, err := s.store.GetDeploymentAgents(ctx, req.DeploymentId)
+		if err != nil {
+			return status.Errorf(codes.Internal, "failed to check deployment agents: %v", err)
+		}
+
+		// If deployment_agents has entries, verify this agent is assigned
+		if len(agents) > 0 {
+			assigned, err := s.store.IsAgentAssignedToDeployment(ctx, req.DeploymentId, agentID)
+			if err != nil {
+				return status.Errorf(codes.Internal, "failed to verify agent assignment: %v", err)
+			}
+			if !assigned {
+				return status.Errorf(codes.PermissionDenied, "agent %s not assigned to deployment %s", agentID, req.DeploymentId)
+			}
+		}
+		// For single-agent deployments (no entries in deployment_agents), allow any agent
+		// This maintains backward compatibility with existing single-agent deployments
+	}
+
+	// Check if git service is configured
+	if s.gitService == nil {
+		return status.Error(codes.Unavailable, "git service not configured")
+	}
+
+	// Clone and create archive
+	archive, err := s.gitService.CloneAndArchive(ctx, req.RepoUrl, req.Ref)
+	if err != nil {
+		s.logger.Error("Failed to clone and archive repository",
+			zap.String("agent_id", agentID),
+			zap.String("repo_url", req.RepoUrl),
+			zap.Error(err),
+		)
+		return status.Errorf(codes.Internal, "failed to clone repository: %v", err)
+	}
+	defer os.Remove(archive.Path) // Clean up archive after streaming
+
+	// Open archive file for streaming
+	file, err := os.Open(archive.Path)
+	if err != nil {
+		return status.Errorf(codes.Internal, "failed to open archive: %v", err)
+	}
+	defer file.Close()
+
+	// Stream archive to agent in 64KB chunks
+	const chunkSize = 64 * 1024
+	buf := make([]byte, chunkSize)
+	var bytesRead int64
+
+	for {
+		n, err := file.Read(buf)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return status.Errorf(codes.Internal, "failed to read archive: %v", err)
+		}
+
+		bytesRead += int64(n)
+		isLast := bytesRead >= archive.Size
+
+		chunk := &proto.RepoChunk{
+			Data:      buf[:n],
+			TotalSize: archive.Size,
+			IsLast:    isLast,
+		}
+
+		// Include checksum only in last chunk
+		if isLast {
+			chunk.Checksum = archive.Checksum
+		}
+
+		if err := stream.Send(chunk); err != nil {
+			s.logger.Error("Failed to send chunk",
+				zap.String("agent_id", agentID),
+				zap.Int64("bytes_sent", bytesRead),
+				zap.Error(err),
+			)
+			return err
+		}
+	}
+
+	s.logger.Info("StreamRepoArchive completed",
+		zap.String("agent_id", agentID),
+		zap.Int64("bytes_sent", bytesRead),
+		zap.String("checksum", archive.Checksum[:16]+"..."),
+	)
+
+	return nil
+}
+
+// Reauthenticate handles re-authentication requests.
+// On the main mTLS port, this returns an error directing agents to use the dedicated re-auth port.
+// The actual re-authentication is handled by ReauthOnlyServer on port 9444.
+func (s *AgentServer) Reauthenticate(ctx context.Context, req *proto.ReauthRequest) (*proto.ReauthResponse, error) {
+	// Re-authentication should use the dedicated port (9444) which doesn't require client certs
+	return nil, status.Error(codes.FailedPrecondition, "use the dedicated re-auth port (:9444) for re-authentication")
 }

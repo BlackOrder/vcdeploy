@@ -36,7 +36,7 @@ func TestMemoryStore_CreateUser(t *testing.T) {
 			}
 
 			if !tt.wantErr {
-				if tt.user.ID == 0 {
+				if tt.user.ID == "" {
 					t.Error("CreateUser() did not assign ID")
 				}
 				if tt.user.CreatedAt.IsZero() {
@@ -116,7 +116,7 @@ func TestMemoryStore_GetUserByID(t *testing.T) {
 		t.Fatalf("GetUserByID() error = %v", err)
 	}
 	if found.ID != user.ID {
-		t.Errorf("ID = %d, want %d", found.ID, user.ID)
+		t.Errorf("ID = %s, want %s", found.ID, user.ID)
 	}
 }
 
@@ -184,7 +184,7 @@ func TestMemoryStore_UpdateUserByID_NotFound(t *testing.T) {
 	s := NewMemoryStore(nil)
 	defer s.Close()
 
-	err := s.UpdateUserByID(context.Background(), &User{ID: 999})
+	err := s.UpdateUserByID(context.Background(), &User{ID: "nonexistent"})
 	if err != ErrNotFound {
 		t.Errorf("UpdateUserByID() error = %v, want ErrNotFound", err)
 	}
@@ -274,7 +274,7 @@ func TestMemoryStore_CreateSession(t *testing.T) {
 
 	session := &Session{
 		Token:     "session-token",
-		UserID:    1,
+		UserID:    "user-1",
 		ExpiresAt: time.Now().Add(time.Hour),
 	}
 
@@ -305,7 +305,7 @@ func TestMemoryStore_GetSessionByToken_Expired(t *testing.T) {
 
 	session := &Session{
 		Token:     "expired-token",
-		UserID:    1,
+		UserID:    "user-1",
 		ExpiresAt: time.Now().Add(-time.Hour), // Already expired
 	}
 	s.CreateSession(ctx, session)
@@ -322,24 +322,24 @@ func TestMemoryStore_DeleteUserSessions(t *testing.T) {
 	ctx := context.Background()
 
 	// Create sessions for two users
-	s.CreateSession(ctx, &Session{Token: "user1-1", UserID: 1, ExpiresAt: time.Now().Add(time.Hour)})
-	s.CreateSession(ctx, &Session{Token: "user1-2", UserID: 1, ExpiresAt: time.Now().Add(time.Hour)})
-	s.CreateSession(ctx, &Session{Token: "user2-1", UserID: 2, ExpiresAt: time.Now().Add(time.Hour)})
+	s.CreateSession(ctx, &Session{Token: "user1-1", UserID: "user-1", ExpiresAt: time.Now().Add(time.Hour)})
+	s.CreateSession(ctx, &Session{Token: "user1-2", UserID: "user-1", ExpiresAt: time.Now().Add(time.Hour)})
+	s.CreateSession(ctx, &Session{Token: "user2-1", UserID: "user-2", ExpiresAt: time.Now().Add(time.Hour)})
 
 	// Delete user 1's sessions
-	err := s.DeleteUserSessions(ctx, 1)
+	err := s.DeleteUserSessions(ctx, "user-1")
 	if err != nil {
 		t.Fatalf("DeleteUserSessions() error = %v", err)
 	}
 
 	// User 1's sessions should be gone
-	sessions, _ := s.ListUserSessions(ctx, 1)
+	sessions, _ := s.ListUserSessions(ctx, "user-1")
 	if len(sessions) != 0 {
 		t.Errorf("user 1 sessions = %d, want 0", len(sessions))
 	}
 
 	// User 2's session should still exist
-	sessions, _ = s.ListUserSessions(ctx, 2)
+	sessions, _ = s.ListUserSessions(ctx, "user-2")
 	if len(sessions) != 1 {
 		t.Errorf("user 2 sessions = %d, want 1", len(sessions))
 	}
@@ -353,7 +353,7 @@ func TestMemoryStore_CreateAPIKey(t *testing.T) {
 	ctx := context.Background()
 
 	key := &APIKey{
-		UserID:    1,
+		UserID:    "user-1",
 		Name:      "test-key",
 		KeyHash:   "hash123",
 		KeyPrefix: "vcd_",
@@ -364,7 +364,7 @@ func TestMemoryStore_CreateAPIKey(t *testing.T) {
 		t.Fatalf("CreateAPIKey() error = %v", err)
 	}
 
-	if key.ID == 0 {
+	if key.ID == "" {
 		t.Error("CreateAPIKey() did not assign ID")
 	}
 }
@@ -384,7 +384,7 @@ func TestMemoryStore_GetAPIKeyByHash(t *testing.T) {
 	defer s.Close()
 	ctx := context.Background()
 
-	key := &APIKey{UserID: 1, KeyHash: "findhash", Name: "findme"}
+	key := &APIKey{UserID: "user-1", KeyHash: "findhash", Name: "findme"}
 	s.CreateAPIKey(ctx, key)
 
 	found, err := s.GetAPIKeyByHash(ctx, "findhash")
@@ -402,7 +402,7 @@ func TestMemoryStore_GetAPIKeyByHash_Expired(t *testing.T) {
 	ctx := context.Background()
 
 	expiredTime := time.Now().Add(-time.Hour)
-	key := &APIKey{UserID: 1, KeyHash: "expiredhash", ExpiresAt: &expiredTime}
+	key := &APIKey{UserID: "user-1", KeyHash: "expiredhash", ExpiresAt: &expiredTime}
 	s.CreateAPIKey(ctx, key)
 
 	_, err := s.GetAPIKeyByHash(ctx, "expiredhash")
@@ -416,11 +416,11 @@ func TestMemoryStore_ListAPIKeys(t *testing.T) {
 	defer s.Close()
 	ctx := context.Background()
 
-	s.CreateAPIKey(ctx, &APIKey{UserID: 1, KeyHash: "key1", Name: "key1"})
-	s.CreateAPIKey(ctx, &APIKey{UserID: 1, KeyHash: "key2", Name: "key2"})
-	s.CreateAPIKey(ctx, &APIKey{UserID: 2, KeyHash: "key3", Name: "key3"})
+	s.CreateAPIKey(ctx, &APIKey{UserID: "user-1", KeyHash: "key1", Name: "key1"})
+	s.CreateAPIKey(ctx, &APIKey{UserID: "user-1", KeyHash: "key2", Name: "key2"})
+	s.CreateAPIKey(ctx, &APIKey{UserID: "user-2", KeyHash: "key3", Name: "key3"})
 
-	keys, err := s.ListAPIKeys(ctx, 1)
+	keys, err := s.ListAPIKeys(ctx, "user-1")
 	if err != nil {
 		t.Fatalf("ListAPIKeys() error = %v", err)
 	}
@@ -434,7 +434,7 @@ func TestMemoryStore_DeleteAPIKey(t *testing.T) {
 	defer s.Close()
 	ctx := context.Background()
 
-	key := &APIKey{UserID: 1, KeyHash: "deletehash", Name: "todelete"}
+	key := &APIKey{UserID: "user-1", KeyHash: "deletehash", Name: "todelete"}
 	s.CreateAPIKey(ctx, key)
 
 	err := s.DeleteAPIKey(ctx, key.ID)
@@ -453,7 +453,7 @@ func TestMemoryStore_UpdateAPIKeyUsage(t *testing.T) {
 	defer s.Close()
 	ctx := context.Background()
 
-	key := &APIKey{UserID: 1, KeyHash: "usagehash", Name: "usage"}
+	key := &APIKey{UserID: "user-1", KeyHash: "usagehash", Name: "usage"}
 	s.CreateAPIKey(ctx, key)
 
 	err := s.UpdateAPIKeyUsage(ctx, key.ID)

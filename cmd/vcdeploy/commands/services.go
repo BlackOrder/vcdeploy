@@ -2,9 +2,11 @@
 package commands
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
+	"github.com/BlackOrder/vcdeploy/internal/config"
 	"github.com/BlackOrder/vcdeploy/internal/security"
 	"github.com/BlackOrder/vcdeploy/internal/services"
 	"github.com/BlackOrder/vcdeploy/internal/services/agents"
@@ -74,11 +76,9 @@ func (c *AppContext) InitServices() error {
 }
 
 // Services returns the service container.
-// Panics if services haven't been initialized via InitServices.
+// Returns nil if services haven't been initialized via InitServices.
+// Callers should check HasServices() first or handle nil return.
 func (c *AppContext) Services() *Services {
-	if appServices == nil {
-		panic("services not initialized - call InitServices first")
-	}
 	return appServices
 }
 
@@ -94,9 +94,10 @@ var errStorageNotOpen = errors.New("storage not open - call OpenStorage first")
 // It provides a convenient way for CLI commands to access services.
 type CLIServices struct {
 	*Services
-	store  storage.Store
-	kms    *security.KMS
-	logger *zap.Logger
+	store     storage.Store
+	kms       *security.KMS
+	masterKey *security.MasterKey
+	logger    *zap.Logger
 }
 
 // InitCLIServices initializes services from a database path for CLI command use.
@@ -109,16 +110,27 @@ func InitCLIServices(dbPath string) (*CLIServices, func(), error) {
 
 	logger := zap.NewNop()
 
-	// Initialize KMS for encrypted operations (secrets, settings)
-	kms, err := security.NewKMS(db.Conn(), logger)
+	// Use the db as a Store interface (DB implements storage.Store)
+	var store storage.Store = db
+
+	// Load master key for envelope encryption
+	sysCfg, err := config.GetSystemConfig()
 	if err != nil {
-		db.Close()
-		return nil, nil, fmt.Errorf("initialize KMS: %w", err)
+		_ = db.Close()
+		return nil, nil, fmt.Errorf("load system config: %w", err)
+	}
+	masterKey, err := security.LoadOrGenerateMasterKey(sysCfg.Paths.DataDir)
+	if err != nil {
+		_ = db.Close()
+		return nil, nil, fmt.Errorf("load master key: %w", err)
 	}
 
-	// Use the db as a Store interface
-	// Use the db as a Store interface
-	var store storage.Store = db
+	// Initialize KMS for encrypted operations (secrets, settings)
+	kms, err := security.NewKMS(context.Background(), store, logger, masterKey)
+	if err != nil {
+		_ = db.Close() // #nosec G104 - best effort cleanup on error path
+		return nil, nil, fmt.Errorf("initialize KMS: %w", err)
+	}
 
 	svc := &CLIServices{
 		Services: &Services{
@@ -135,13 +147,14 @@ func InitCLIServices(dbPath string) (*CLIServices, func(), error) {
 			Webhooks:     webhooks.New(store, kms),
 			HostKeys:     hostkeys.New(store),
 		},
-		store:  store,
-		kms:    kms,
-		logger: logger,
+		store:     store,
+		kms:       kms,
+		masterKey: masterKey,
+		logger:    logger,
 	}
 
 	cleanup := func() {
-		store.Close()
+		_ = store.Close() // #nosec G104 - best effort cleanup
 	}
 
 	return svc, cleanup, nil
@@ -156,4 +169,9 @@ func (s *CLIServices) Store() storage.Store {
 // KMS returns the key management service.
 func (s *CLIServices) KMS() *security.KMS {
 	return s.kms
+}
+
+// MasterKey returns the master key for direct encryption/decryption.
+func (s *CLIServices) MasterKey() *security.MasterKey {
+	return s.masterKey
 }

@@ -20,6 +20,9 @@ coverage.txt
 # Dependency directories
 vendor/
 
+# Exception: keep UI vendor files
+!web/static/js/vendor/
+
 # IDE and editor files
 .idea/
 .vscode/
@@ -95,3 +98,8 @@ cpu.out
 mem.out
 *.sarif
 *.prompt.md
+*.report.md
+plan-template.md
+seeds.test
+storage.test
+server.test

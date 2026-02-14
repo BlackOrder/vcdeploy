@@ -25,7 +25,7 @@ func New(store storage.Store, kms *security.KMS) *Service {
 }
 
 // Get retrieves a webhook config for a project and provider.
-func (s *Service) Get(ctx context.Context, projectID int64, provider string) (*storage.ProjectWebhook, error) {
+func (s *Service) Get(ctx context.Context, projectID string, provider string) (*storage.ProjectWebhook, error) {
 	webhook, err := s.store.GetProjectWebhook(ctx, projectID, provider)
 	if err != nil {
 		return nil, err // Returns ErrNotFound if not found
@@ -35,7 +35,7 @@ func (s *Service) Get(ctx context.Context, projectID int64, provider string) (*s
 
 // Set creates or updates a webhook config.
 // The secret is encrypted before storage.
-func (s *Service) Set(ctx context.Context, projectID int64, provider string, secret []byte, enabled, requireSecret bool) error {
+func (s *Service) Set(ctx context.Context, projectID string, provider string, secret []byte, enabled, requireSecret bool) error {
 	var encryptedSecret []byte
 	var err error
 
@@ -57,7 +57,7 @@ func (s *Service) Set(ctx context.Context, projectID int64, provider string, sec
 }
 
 // List returns all webhooks for a project.
-func (s *Service) List(ctx context.Context, projectID int64) ([]*storage.ProjectWebhook, error) {
+func (s *Service) List(ctx context.Context, projectID string) ([]*storage.ProjectWebhook, error) {
 	webhooks, err := s.store.ListProjectWebhooks(ctx, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("listing webhooks: %w", err)
@@ -66,7 +66,7 @@ func (s *Service) List(ctx context.Context, projectID int64) ([]*storage.Project
 }
 
 // Delete removes a webhook config.
-func (s *Service) Delete(ctx context.Context, projectID int64, provider string) error {
+func (s *Service) Delete(ctx context.Context, projectID string, provider string) error {
 	if err := s.store.DeleteProjectWebhook(ctx, projectID, provider); err != nil {
 		return fmt.Errorf("deleting webhook: %w", err)
 	}
@@ -74,7 +74,7 @@ func (s *Service) Delete(ctx context.Context, projectID int64, provider string) 
 }
 
 // GetDecryptedSecret retrieves and decrypts a webhook secret.
-func (s *Service) GetDecryptedSecret(ctx context.Context, projectID int64, provider string) ([]byte, error) {
+func (s *Service) GetDecryptedSecret(ctx context.Context, projectID string, provider string) ([]byte, error) {
 	webhook, err := s.store.GetProjectWebhook(ctx, projectID, provider)
 	if err != nil {
 		return nil, err

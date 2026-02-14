@@ -1,7 +1,7 @@
 # vcdeploy Agent E2E Test Configuration
 
 master:
-  address: master:9090
+  address: master:9001
   token: "test-token"
   reconnect:
     initial_delay: 1s

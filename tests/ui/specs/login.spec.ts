@@ -144,7 +144,7 @@ test.describe('TOTP Authentication', () => {
     // After submitting, TOTP field should appear if TOTP is enabled
     // Note: The exact behavior depends on the implementation
     // Some implementations show TOTP on a second screen, others inline
-    await page.waitForTimeout(1000);
+    await page.waitForLoadState('networkidle');
     
     // Check if TOTP input became visible or if we got an error about TOTP
     const totpVisible = await loginPage.isTOTPVisible();

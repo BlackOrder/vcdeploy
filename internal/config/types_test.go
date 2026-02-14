@@ -11,8 +11,6 @@ func TestTypeConfig(t *testing.T) {
 	cfg := TypeConfig{
 		Name:         "laravel",
 		SharedDirs:   []string{"storage"},
-		SharedFiles:  []string{".env"},
-		WritableDirs: []string{"bootstrap/cache"},
 		KeepReleases: 5,
 	}
 
@@ -287,12 +285,10 @@ func TestTypeValidation(t *testing.T) {
 
 func TestTypeHooks(t *testing.T) {
 	hooks := TypeHooks{
-		PreDeploy:  []string{"npm install", "npm run build"},
-		PostDeploy: []string{"npm run migrate"},
+		PreDeploy: []string{"npm install", "npm run build"},
 		Reload: []ServiceAction{
 			{Service: "nginx", Action: "reload"},
 		},
-		Rollback: []string{"npm run rollback"},
 	}
 
 	if len(hooks.PreDeploy) != 2 {

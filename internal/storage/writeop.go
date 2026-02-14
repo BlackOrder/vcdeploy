@@ -84,7 +84,7 @@ func (b *WriteBatcher) FlushBatch(batch []WriteOp) (int, error) {
 	}
 	defer func() {
 		if tx != nil {
-			tx.Rollback() //nolint:errcheck // best effort rollback
+			_ = tx.Rollback() // #nosec G104 - best effort rollback
 		}
 	}()
 
@@ -126,7 +126,7 @@ func FlushBatchFunc(db *sql.DB, batch []WriteOp, executor WriteOpExecutor) (int,
 	}
 	defer func() {
 		if tx != nil {
-			tx.Rollback() //nolint:errcheck // best effort rollback
+			_ = tx.Rollback() // #nosec G104 - best effort rollback
 		}
 	}()
 

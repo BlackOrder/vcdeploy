@@ -21,7 +21,7 @@ The master server is the central control plane for vcdeploy, orchestrating deplo
 │  │                        Entry Points                                     │ │
 │  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌────────────┐ │ │
 │  │  │   REST API   │  │   Web UI     │  │   gRPC API   │  │  Webhooks  │ │ │
-│  │  │   :8080      │  │   :8080      │  │   :9001      │  │  :8080     │ │ │
+│  │  │   :9000      │  │   :9000      │  │   :9001      │  │  :9000     │ │ │
 │  │  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └─────┬──────┘ │ │
 │  └─────────┼─────────────────┼─────────────────┼────────────────┼────────┘ │
 │            │                 │                 │                │          │
@@ -47,6 +47,10 @@ The master server is the central control plane for vcdeploy, orchestrating deplo
 │  │  │   Audit   │  │  Host Key   │  │ Provision  │  │  Project Type   │ │ │
 │  │  │  Service  │  │   Service   │  │  Service   │  │    Service      │ │ │
 │  │  └───────────┘  └─────────────┘  └────────────┘  └─────────────────┘ │ │
+│  │  ┌───────────┐  ┌─────────────┐                                     │ │
+│  │  │  Target  │  │  Archive    │                                     │ │
+│  │  │  Service │  │   Service   │                                     │ │
+│  │  └───────────┘  └─────────────┘                                     │ │
 │  └────────────────────────────────┬──────────────────────────────────────┘ │
 │                                   │                                        │
 │  ┌────────┬───────────────────────┼─────────────────┬──────────┬────────┐ │
@@ -66,7 +70,7 @@ The master server is the central control plane for vcdeploy, orchestrating deplo
 
 ## Entry Points
 
-### REST API (Port 8080)
+### REST API (Port 9000)
 
 HTTP/JSON API for external integrations:
 
@@ -80,7 +84,7 @@ mux.HandleFunc("/api/v1/secrets", s.withAuth(s.handleSecretsAPI))
 // ... more routes
 ```
 
-### Web UI (Port 8080)
+### Web UI (Port 9000)
 
 HTML templates with HTMX for dynamic updates:
 - Dashboard with deployment overview
@@ -99,12 +103,12 @@ service AgentService {
 }
 ```
 
-### Webhooks (Port 8080)
+### Webhooks (Port 9000)
 
 Git provider callbacks:
-- GitHub: `/webhooks/github/{project}`
-- GitLab: `/webhooks/gitlab/{project}`
-- Bitbucket: `/webhooks/bitbucket/{project}`
+- GitHub: `/webhook/github/{project}`
+- GitLab: `/webhook/gitlab/{project}`
+- Bitbucket: `/webhook/bitbucket/{project}`
 
 ## Security Middleware
 
@@ -227,11 +231,12 @@ Single-file database with all system data:
 -- Core tables
 users, sessions, api_keys
 projects, project_types, project_webhooks
-agents, deployments, deployment_logs
+agents, targets, deployment_targets
+deployments, deployment_logs, deployment_env_snapshots
 secrets, settings, audit_log
 encryption_keys, encryption_key_usage
 ssh_host_keys, ssh_jump_servers
-health_check_configs
+health_check_configs, archive_cache
 ```
 
 ### Key Management System (KMS)
@@ -320,8 +325,8 @@ func (ca *CAManager) ValidateCertificate(cert *x509.Certificate) error
 ### 1. Trigger
 
 Deployment initiated via:
-- CLI: `vcdeploy deploy trigger myapp`
-- API: `POST /api/v1/projects/{name}/deploy`
+- CLI: `vcdeploy deploy create --project myapp --target production`
+- API: `POST /api/v1/deployments`
 - Webhook: Push event from Git provider
 - Web UI: Deploy button
 
@@ -330,9 +335,10 @@ Deployment initiated via:
 ```go
 func (s *MasterServer) validateDeployment(project *Project, target string) error {
     // Check project configuration
-    // Verify target agents are connected
+    // Resolve targets and verify agents are connected
     // Validate secrets are available
     // Check deployment locks
+    // Create env snapshot (capture secrets at deployment time)
 }
 ```
 
@@ -341,8 +347,9 @@ func (s *MasterServer) validateDeployment(project *Project, target string) error
 ```go
 func (s *MasterServer) scheduleDeployment(deploy *Deployment) error {
     // Create deployment record
-    // Determine target agents
-    // Queue commands for each agent
+    // Resolve deployment targets
+    // Create archive from repository
+    // Queue commands for each target's agent
 }
 ```
 
@@ -433,7 +440,7 @@ Master server is configured via `/etc/vcdeploy/master.yaml`:
 
 ```yaml
 server:
-  address: ":8080"
+  address: ":9000"
 
 grpc:
   address: ":9001"

@@ -33,7 +33,7 @@ func TestHandleHostKeys_List(t *testing.T) {
 	}
 	_ = server.hostKeyService.Create(ctx, key1)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/hostkeys", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/host-keys", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -43,12 +43,20 @@ func TestHandleHostKeys_List(t *testing.T) {
 		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
 
-	var keys []*storage.SSHHostKey
-	if err := json.NewDecoder(rec.Body).Decode(&keys); err != nil {
+	var result map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	if len(keys) < 1 {
+	// Verify paginated response structure
+	if _, ok := result["items"]; !ok {
+		t.Error("expected 'items' field in response")
+	}
+	if _, ok := result["totalCount"]; !ok {
+		t.Error("expected 'totalCount' field in response")
+	}
+	items, ok := result["items"].([]interface{})
+	if !ok || len(items) < 1 {
 		t.Error("expected at least one host key")
 	}
 }
@@ -62,13 +70,13 @@ func TestHandleHostKeys_Create(t *testing.T) {
 	body := bytes.NewBufferString(`{
 		"hostname": "newhost.example.com",
 		"port": 22,
-		"key_type": "ssh-ed25519",
-		"public_key": "AAAAC3...",
+		"keyType": "ssh-ed25519",
+		"publicKey": "AAAAC3...",
 		"fingerprint": "SHA256:abc123",
 		"trusted": false
 	}`)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/hostkeys", body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/host-keys", body)
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
@@ -88,7 +96,7 @@ func TestHandleHostKeys_CreateInvalidJSON(t *testing.T) {
 
 	body := bytes.NewBufferString(`{invalid json`)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/hostkeys", body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/host-keys", body)
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
@@ -108,11 +116,11 @@ func TestHandleHostKeys_CreateMissingHostname(t *testing.T) {
 
 	body := bytes.NewBufferString(`{
 		"port": 22,
-		"key_type": "ssh-ed25519",
-		"public_key": "AAAAC3..."
+		"keyType": "ssh-ed25519",
+		"publicKey": "AAAAC3..."
 	}`)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/hostkeys", body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/host-keys", body)
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
@@ -133,10 +141,10 @@ func TestHandleHostKeys_CreateMissingKeyType(t *testing.T) {
 	body := bytes.NewBufferString(`{
 		"hostname": "test.example.com",
 		"port": 22,
-		"public_key": "AAAAC3..."
+		"publicKey": "AAAAC3..."
 	}`)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/hostkeys", body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/host-keys", body)
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
@@ -157,10 +165,10 @@ func TestHandleHostKeys_CreateMissingPublicKey(t *testing.T) {
 	body := bytes.NewBufferString(`{
 		"hostname": "test.example.com",
 		"port": 22,
-		"key_type": "ssh-ed25519"
+		"keyType": "ssh-ed25519"
 	}`)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/hostkeys", body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/host-keys", body)
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
@@ -178,7 +186,7 @@ func TestHandleHostKeys_MethodNotAllowed(t *testing.T) {
 	server := newTestServer(t)
 	adminUserID := createTestAdminUser(t, server)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/hostkeys", http.NoBody)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/host-keys", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -209,7 +217,7 @@ func TestHandleHostKey_Get(t *testing.T) {
 	}
 	_ = server.hostKeyService.Create(ctx, key)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/hostkeys/1", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/host-keys/"+key.ID, http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -235,7 +243,7 @@ func TestHandleHostKey_GetNotFound(t *testing.T) {
 	server := newTestServer(t)
 	adminUserID := createTestAdminUser(t, server)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/hostkeys/999", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/host-keys/999", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -266,14 +274,14 @@ func TestHandleHostKey_Delete(t *testing.T) {
 	}
 	_ = server.hostKeyService.Create(ctx, key)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/hostkeys/1", http.NoBody)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/host-keys/"+key.ID, http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
 	server.handleHostKey(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	if rec.Code != http.StatusNoContent {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusNoContent, rec.Body.String())
 	}
 }
 
@@ -283,14 +291,14 @@ func TestHandleHostKey_InvalidID(t *testing.T) {
 	server := newTestServer(t)
 	adminUserID := createTestAdminUser(t, server)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/hostkeys/invalid", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/host-keys/invalid", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
 	server.handleHostKey(rec, req)
 
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
 	}
 }
 
@@ -315,7 +323,7 @@ func TestHandleHostKey_UpdateTrust(t *testing.T) {
 	_ = server.hostKeyService.Create(ctx, key)
 
 	body := bytes.NewBufferString(`{"trusted": true}`)
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/hostkeys/1", body)
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/host-keys/"+key.ID, body)
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
@@ -346,7 +354,7 @@ func TestHandleJumpServers_List(t *testing.T) {
 	}
 	_ = server.store.CreateJumpServer(ctx, js)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/jumpservers", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/jump-servers", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -356,12 +364,20 @@ func TestHandleJumpServers_List(t *testing.T) {
 		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
 
-	var servers []*storage.SSHJumpServer
-	if err := json.NewDecoder(rec.Body).Decode(&servers); err != nil {
+	var result map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	if len(servers) < 1 {
+	// Verify paginated response structure
+	if _, ok := result["items"]; !ok {
+		t.Error("expected 'items' field in response")
+	}
+	if _, ok := result["totalCount"]; !ok {
+		t.Error("expected 'totalCount' field in response")
+	}
+	items, ok := result["items"].([]interface{})
+	if !ok || len(items) < 1 {
 		t.Error("expected at least one jump server")
 	}
 }
@@ -379,7 +395,7 @@ func TestHandleJumpServers_Create(t *testing.T) {
 		"username": "admin"
 	}`)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/jumpservers", body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/jump-servers", body)
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
@@ -403,7 +419,7 @@ func TestHandleJumpServers_CreateMissingName(t *testing.T) {
 		"username": "admin"
 	}`)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/jumpservers", body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/jump-servers", body)
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
@@ -427,7 +443,7 @@ func TestHandleJumpServers_CreateMissingHost(t *testing.T) {
 		"username": "admin"
 	}`)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/jumpservers", body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/jump-servers", body)
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
@@ -451,7 +467,7 @@ func TestHandleJumpServers_CreateMissingUsername(t *testing.T) {
 		"port": 22
 	}`)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/jumpservers", body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/jump-servers", body)
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
@@ -471,7 +487,7 @@ func TestHandleJumpServers_CreateInvalidJSON(t *testing.T) {
 
 	body := bytes.NewBufferString(`{invalid json`)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/jumpservers", body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/jump-servers", body)
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
@@ -489,7 +505,7 @@ func TestHandleJumpServers_MethodNotAllowed(t *testing.T) {
 	server := newTestServer(t)
 	adminUserID := createTestAdminUser(t, server)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/jumpservers", http.NoBody)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/jump-servers", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -517,7 +533,7 @@ func TestHandleJumpServer_Get(t *testing.T) {
 	}
 	_ = server.store.CreateJumpServer(ctx, js)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/jumpservers/1", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/jump-servers/"+js.ID, http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -545,14 +561,14 @@ func TestHandleJumpServer_Delete(t *testing.T) {
 	}
 	_ = server.store.CreateJumpServer(ctx, js)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/jumpservers/1", http.NoBody)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/jump-servers/"+js.ID, http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
 	server.handleJumpServer(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	if rec.Code != http.StatusNoContent {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusNoContent, rec.Body.String())
 	}
 }
 
@@ -562,7 +578,7 @@ func TestHandleJumpServer_GetNotFound(t *testing.T) {
 	server := newTestServer(t)
 	adminUserID := createTestAdminUser(t, server)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/jumpservers/999", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/jump-servers/999", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -579,14 +595,14 @@ func TestHandleJumpServer_InvalidID(t *testing.T) {
 	server := newTestServer(t)
 	adminUserID := createTestAdminUser(t, server)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/jumpservers/invalid", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/jump-servers/invalid", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
 	server.handleJumpServer(rec, req)
 
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
 	}
 }
 
@@ -614,7 +630,7 @@ func TestHandleJumpServer_Update(t *testing.T) {
 		"username": "newuser"
 	}`)
 
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/jumpservers/1", body)
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/jump-servers/"+js.ID, body)
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
@@ -645,7 +661,7 @@ func TestHandleBlockedIPs_List(t *testing.T) {
 	}
 	_ = server.store.BlockIP(ctx, block)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/blocked", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/blocked-ips", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -663,12 +679,12 @@ func TestHandleBlockedIPs_Block(t *testing.T) {
 	adminUserID := createTestAdminUser(t, server)
 
 	body := bytes.NewBufferString(`{
-		"ip_address": "10.0.0.1",
+		"ipAddress": "10.0.0.1",
 		"reason": "automated test block",
 		"duration": "1h"
 	}`)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/blocked", body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/blocked-ips", body)
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
@@ -697,7 +713,7 @@ func TestHandleBlockedIP_Unblock(t *testing.T) {
 	}
 	_ = server.store.BlockIP(ctx, block)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/blocked/172.16.0.1", http.NoBody)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/blocked-ips/172.16.0.1", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -725,7 +741,7 @@ func TestHandleBlockedIP_Get(t *testing.T) {
 	}
 	_ = server.store.BlockIP(ctx, block)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/blocked/10.0.0.1", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/blocked-ips/10.0.0.1", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -742,7 +758,7 @@ func TestHandleBlockedIP_GetNotFound(t *testing.T) {
 	server := newTestServer(t)
 	adminUserID := createTestAdminUser(t, server)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/blocked/192.168.99.99", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/blocked-ips/192.168.99.99", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -759,7 +775,7 @@ func TestHandleBlockedIP_MethodNotAllowed(t *testing.T) {
 	server := newTestServer(t)
 	adminUserID := createTestAdminUser(t, server)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/blocked/10.0.0.1", http.NoBody)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/blocked-ips/10.0.0.1", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -788,7 +804,7 @@ func TestHandleProvisionJobs_List(t *testing.T) {
 	}
 	_ = server.provisionService.CreateJob(ctx, job)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/provision", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/provision-jobs", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -806,12 +822,12 @@ func TestHandleProvisionJobs_Create(t *testing.T) {
 	adminUserID := createTestAdminUser(t, server)
 
 	body := bytes.NewBufferString(`{
-		"target_host": "newtarget.example.com",
-		"target_port": 22,
-		"target_user": "admin"
+		"targetHost": "newtarget.example.com",
+		"targetPort": 22,
+		"targetUser": "admin"
 	}`)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/provision", body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/provision-jobs", body)
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
@@ -839,7 +855,7 @@ func TestHandleProvisionJob_Get(t *testing.T) {
 	}
 	_ = server.provisionService.CreateJob(ctx, job)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/provision/"+job.ID, http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/provision-jobs/"+job.ID, http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -866,14 +882,67 @@ func TestHandleProvisionJob_Cancel(t *testing.T) {
 	}
 	_ = server.provisionService.CreateJob(ctx, job)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/provision/"+job.ID, http.NoBody)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/provision-jobs/"+job.ID, http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
 	server.handleProvisionJob(rec, req)
 
+	if rec.Code != http.StatusNoContent {
+		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusNoContent, rec.Body.String())
+	}
+}
+
+func TestHandleProvisionJob_Logs(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	adminUserID := createTestAdminUser(t, server)
+	ctx := context.Background()
+
+	// Create a provision job
+	job := &storage.ProvisionJob{
+		TargetHost: "logstarget.example.com",
+		TargetPort: 22,
+		TargetUser: "root",
+		Status:     "running",
+		Stage:      "provisioning",
+	}
+	_ = server.provisionService.CreateJob(ctx, job)
+
+	// Add some logs
+	_ = server.store.SaveProvisionLog(ctx, job.ID, "info", "Starting provisioning")
+	_ = server.store.SaveProvisionLog(ctx, job.ID, "info", "Connecting via SSH")
+	_ = server.store.SaveProvisionLog(ctx, job.ID, "error", "Connection failed")
+
+	// Request logs via handleProvisionAgent
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/provision/"+job.ID+"/logs", http.NoBody)
+	req = requestWithAdminContext(req, adminUserID)
+	rec := httptest.NewRecorder()
+
+	server.handleProvisionAgent(rec, req)
+
 	if rec.Code != http.StatusOK {
 		t.Errorf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+
+	// Check logs are returned
+	logs, ok := result["logs"].([]interface{})
+	if !ok {
+		t.Fatalf("logs not an array: %T", result["logs"])
+	}
+	if len(logs) != 3 {
+		t.Errorf("expected 3 logs, got %d", len(logs))
+	}
+
+	// Verify jobId is included
+	if result["jobId"] != job.ID {
+		t.Errorf("jobId = %v, want %v", result["jobId"], job.ID)
 	}
 }
 
@@ -883,7 +952,7 @@ func TestHandleProvisionJob_GetNotFound(t *testing.T) {
 	server := newTestServer(t)
 	adminUserID := createTestAdminUser(t, server)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/provision/nonexistent-job-id", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/provision-jobs/nonexistent-job-id", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -900,7 +969,7 @@ func TestHandleProvisionJob_EmptyID(t *testing.T) {
 	server := newTestServer(t)
 	adminUserID := createTestAdminUser(t, server)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/provision/", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/provision-jobs/", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -917,7 +986,7 @@ func TestHandleProvisionJob_MethodNotAllowed(t *testing.T) {
 	server := newTestServer(t)
 	adminUserID := createTestAdminUser(t, server)
 
-	req := httptest.NewRequest(http.MethodPatch, "/api/v1/provision/some-id", http.NoBody)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/provision-jobs/some-id", http.NoBody)
 	req = requestWithAdminContext(req, adminUserID)
 	rec := httptest.NewRecorder()
 
@@ -951,10 +1020,10 @@ func TestNewEndpoints_RequireAdminAccess(t *testing.T) {
 		method string
 		path   string
 	}{
-		{http.MethodGet, "/api/v1/blocked"},
-		{http.MethodPost, "/api/v1/blocked"},
-		{http.MethodGet, "/api/v1/provision"},
-		{http.MethodPost, "/api/v1/provision"},
+		{http.MethodGet, "/api/v1/blocked-ips"},
+		{http.MethodPost, "/api/v1/blocked-ips"},
+		{http.MethodGet, "/api/v1/provision-jobs"},
+		{http.MethodPost, "/api/v1/provision-jobs"},
 	}
 
 	for _, ep := range endpoints {
@@ -975,9 +1044,9 @@ func TestNewEndpoints_RequireAdminAccess(t *testing.T) {
 			rec := httptest.NewRecorder()
 
 			switch ep.path {
-			case "/api/v1/blocked":
+			case "/api/v1/blocked-ips":
 				server.handleBlockedIPs(rec, req)
-			case "/api/v1/provision":
+			case "/api/v1/provision-jobs":
 				server.handleProvisionJobs(rec, req)
 			}
 

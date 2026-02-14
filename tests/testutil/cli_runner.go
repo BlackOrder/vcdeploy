@@ -52,7 +52,8 @@ func (r *CLIRunner) Run(args ...string) *CLIResult {
 	ctx, cancel := context.WithTimeout(context.Background(), r.timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, r.binaryPath, args...) //nolint:gosec // Test utility requires running CLI commands
+	// #nosec G204 - Test utility requires running CLI commands with test binary
+	cmd := exec.CommandContext(ctx, r.binaryPath, args...)
 	if r.workDir != "" {
 		cmd.Dir = r.workDir
 	}
@@ -85,7 +86,8 @@ func (r *CLIRunner) RunWithInput(input string, args ...string) *CLIResult {
 	ctx, cancel := context.WithTimeout(context.Background(), r.timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, r.binaryPath, args...) //nolint:gosec // Test utility requires running CLI commands
+	// #nosec G204 - Test utility requires running CLI commands with test binary
+	cmd := exec.CommandContext(ctx, r.binaryPath, args...)
 	if r.workDir != "" {
 		cmd.Dir = r.workDir
 	}

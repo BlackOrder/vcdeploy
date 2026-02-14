@@ -62,8 +62,8 @@ func loadConfig() *Config {
 
 	return &Config{
 		// Master URLs
-		MasterHTTPURL: getEnvOrDefault("E2E_MASTER_HTTP_URL", "http://localhost:18080"),
-		MasterGRPCURL: getEnvOrDefault("E2E_MASTER_GRPC_URL", "localhost:19090"),
+		MasterHTTPURL: getEnvOrDefault("E2E_MASTER_HTTP_URL", "http://localhost:19000"),
+		MasterGRPCURL: getEnvOrDefault("E2E_MASTER_GRPC_URL", "localhost:19001"),
 
 		// SSH Target
 		TargetSSHHost: getEnvOrDefault("E2E_TARGET_SSH_HOST", "localhost"),

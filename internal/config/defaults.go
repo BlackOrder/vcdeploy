@@ -1,6 +1,8 @@
 // Package config provides configuration types and defaults for vcdeploy.
 package config
 
+import "time"
+
 // Default values for security and service configuration.
 // These can be overridden via configuration files.
 const (
@@ -28,4 +30,16 @@ const (
 
 	// DefaultGRPCPort is the default gRPC server port.
 	DefaultGRPCPort = 9001
+
+	// DefaultKeepReleases is the default number of releases to keep during deployments.
+	DefaultKeepReleases = 5
+
+	// DefaultExecutionTimeout is the default timeout for deployment execution.
+	DefaultExecutionTimeout = 10 * time.Minute
+
+	// DefaultHTTPAddr is the default HTTP server address.
+	DefaultHTTPAddr = ":9000"
+
+	// DefaultGRPCAddr is the default gRPC server address.
+	DefaultGRPCAddr = ":9001"
 )

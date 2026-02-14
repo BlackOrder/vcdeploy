@@ -35,15 +35,6 @@ func (a *Assertions) StatusCreated(resp *http.Response) {
 	}
 }
 
-// StatusCreatedOrOK asserts that the response status is 200 OK or 201 Created.
-func (a *Assertions) StatusCreatedOrOK(resp *http.Response) {
-	a.t.Helper()
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(resp.Body)
-		a.t.Errorf("expected status 200 or 201, got %d: %s", resp.StatusCode, string(body))
-	}
-}
-
 // StatusNoContent asserts that the response status is 204 No Content.
 func (a *Assertions) StatusNoContent(resp *http.Response) {
 	a.t.Helper()
@@ -132,6 +123,19 @@ func (a *Assertions) NoServerError(resp *http.Response) {
 		body, _ := io.ReadAll(resp.Body)
 		a.t.Errorf("unexpected server error %d: %s", resp.StatusCode, string(body))
 	}
+}
+
+// StatusOneOf asserts that the response status is one of the expected statuses.
+// Use this instead of NoServerError for more specific assertions.
+func (a *Assertions) StatusOneOf(resp *http.Response, expected ...int) {
+	a.t.Helper()
+	for _, e := range expected {
+		if resp.StatusCode == e {
+			return
+		}
+	}
+	body, _ := io.ReadAll(resp.Body)
+	a.t.Errorf("expected status one of %v, got %d: %s", expected, resp.StatusCode, string(body))
 }
 
 // HasField asserts that a map has the given field.

@@ -45,7 +45,7 @@ COPY --from=builder /build/vcdeploy-agent /usr/local/bin/vcdeploy-agent
 # Set permissions
 RUN chmod +x /usr/local/bin/vcdeploy-agent
 
-# Expose gRPC port (for debugging)
+# Expose health/metrics port
 EXPOSE 9091
 
 # Health check

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"time"
+
+	"github.com/rs/xid"
 )
 
 // --- Audit methods ---
@@ -13,7 +15,9 @@ func (s *MemoryStore) LogAudit(ctx context.Context, entry *AuditEntry) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	entry.ID = nextID(&s.nextAuditID)
+	if entry.ID == "" {
+		entry.ID = xid.New().String()
+	}
 	if entry.Timestamp.IsZero() {
 		entry.Timestamp = time.Now()
 	}
@@ -122,7 +126,36 @@ func (s *MemoryStore) SetSetting(ctx context.Context, category, key, value, valu
 	}
 
 	setting := &Setting{
-		ID:        nextID(&s.nextSettingID),
+		ID:        xid.New().String(),
+		Category:  category,
+		Key:       key,
+		Value:     value,
+		ValueType: valueType,
+		Encrypted: encrypted,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	s.settings[k] = setting
+	s.queueWrite(s.coreWrites, NewWriteOp(WriteOpInsert, "settings", setting))
+	return nil
+}
+
+// InitSetting seeds a setting only if it does not already exist.
+// Used for runtime settings where user edits should survive server restarts.
+// The id parameter must be a stable XID so settings are identical across installations.
+func (s *MemoryStore) InitSetting(ctx context.Context, id, category, key, value, valueType string, encrypted bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	k := settingKey(category, key)
+	if _, exists := s.settings[k]; exists {
+		return nil // Already exists, do not overwrite
+	}
+
+	now := time.Now()
+	setting := &Setting{
+		ID:        id,
 		Category:  category,
 		Key:       key,
 		Value:     value,

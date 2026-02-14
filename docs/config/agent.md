@@ -11,8 +11,7 @@ The vcdeploy agent is configured via a YAML file, typically located at `/etc/vcd
 master:
   address: "master.example.com:9001"   # Master gRPC address
   token: ""                            # Authentication token (set after registration)
-  cert: /etc/vcdeploy/agent/cert.pem   # TLS certificate for mTLS
-  allow_insecure: false                # Allow unencrypted connection (NOT recommended)
+  ca_cert: /etc/vcdeploy/agent/ca.pem  # CA certificate for TLS verification
   reconnect:
     initial_delay: 1s                  # Initial reconnect delay
     max_delay: 5m                      # Maximum reconnect delay
@@ -31,8 +30,13 @@ agent:
 
 # Local paths
 paths:
-  repos: /var/lib/vcdeploy/repos/      # Git repository cache
+  data: /var/lib/vcdeploy/agent/       # Agent database directory
   releases: /var/www/                  # Release deployment root
+
+# Archive cache settings
+archive:
+  cache_dir: /var/lib/vcdeploy/cache/archives  # Archive cache directory
+  keep_count: 5                                 # Max cached archives per project
 
 # Command execution settings
 execution:
@@ -66,8 +70,7 @@ Connection settings for the master server.
 |-------|------|---------|-------------|
 | `address` | string | - | Master gRPC address (host:port) |
 | `token` | string | - | Authentication token |
-| `cert` | string | `/etc/vcdeploy/agent/cert.pem` | TLS certificate path |
-| `allow_insecure` | bool | `false` | Allow unencrypted connection |
+| `ca_cert` | string | `/etc/vcdeploy/agent/ca.pem` | CA certificate for TLS verification |
 | `reconnect.initial_delay` | duration | `1s` | Initial reconnect delay |
 | `reconnect.max_delay` | duration | `5m` | Maximum reconnect delay |
 | `reconnect.heartbeat_interval` | duration | `10s` | Heartbeat frequency |
@@ -98,8 +101,17 @@ Local filesystem paths for deployments.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `repos` | string | `/var/lib/vcdeploy/repos/` | Git repository cache directory |
+| `data` | string | `/var/lib/vcdeploy/agent/` | Agent database and state directory |
 | `releases` | string | `/var/www/` | Root directory for release deployments |
+
+### Archive
+
+Archive caching configuration for deployment archives.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `cache_dir` | string | `/var/lib/vcdeploy/cache/archives` | Local archive cache directory |
+| `keep_count` | int | `5` | Maximum cached archives per project |
 
 ### Execution
 
@@ -314,7 +326,7 @@ sudo launchctl load /Library/LaunchDaemons/com.blackorder.vcdeploy-agent.plist
 | Reconnect max delay | `5m` |
 | Heartbeat interval | `10s` |
 | Update policy | `immediate` |
-| Repos path | `/var/lib/vcdeploy/repos/` |
+| Archive cache dir | `/var/lib/vcdeploy/cache/archives` |\n| Archive keep count | `5` |
 | Releases path | `/var/www/` |
 | Execution user | `www-data` |
 | Execution timeout | `10 minutes` |
@@ -351,7 +363,7 @@ sudo launchctl load /Library/LaunchDaemons/com.blackorder.vcdeploy-agent.plist
 
 2. Verify paths exist and are writable:
    ```bash
-   ls -la /var/lib/vcdeploy/repos/
+   ls -la /var/lib/vcdeploy/cache/archives/
    ls -la /var/www/
    ```
 

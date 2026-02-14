@@ -120,7 +120,7 @@ vcdeploy deploy logs <deployment-id> --level error
 Each deployment log entry contains:
 - **Timestamp**: When the log was created
 - **Level**: Log severity (debug, info, warn, error)
-- **Source**: Where the log came from (git, hook name, etc.)
+- **Source**: Where the log came from (archive extraction, hook name, etc.)
 - **Message**: Log content
 
 ### Log Retention

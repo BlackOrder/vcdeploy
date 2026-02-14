@@ -3,14 +3,33 @@
 
 server:
   listen: ":9000"
+  https_address: ":9443"  # Optional separate HTTPS port
   tls:
-    enabled: true
-    cert: /etc/vcdeploy/tls/cert.pem
-    key: /etc/vcdeploy/tls/key.pem
+    # TLS mode: "disabled", "static", or "acme"
+    mode: "static"
+    
+    # Static mode: provide certificate and key files
+    cert_file: /etc/vcdeploy/tls/cert.pem
+    key_file: /etc/vcdeploy/tls/key.pem
+    
+    # ACME (Let's Encrypt) mode configuration
+    acme:
+      email: "admin@example.com"
+      domains:
+        - "vcdeploy.example.com"
+      staging: false  # Set to true for testing
+      cache_dir: /var/lib/vcdeploy/acme
+    
+    # Force HTTP to HTTPS redirect
+    force_https: true
+    
+    # Minimum TLS version ("1.2" or "1.3")
+    min_version: "1.2"
 
 grpc:
   listen: ":9001"
 
+# SSH settings (for provisioning and git repo access — not used for deployment)
 ssh:
   default_user: deploy
   default_key: /etc/vcdeploy/keys/default.pem
@@ -69,6 +88,13 @@ webhooks:
     enabled: true
     path: /webhook/bitbucket
 
+# Archive settings
+archive:
+  storage_dir: /var/lib/vcdeploy/archives
+  keep_count: 10                    # Max cached archives per project
+  max_total_size: 5GB               # Max total cache size
+  signed_url_expiry: 10m            # HMAC signed URL expiry
+
 notifications:
   providers:
     slack:
@@ -84,6 +110,23 @@ notifications:
 
 api:
   enabled: true
+  rate_limit:
+    enabled: true
+    requests_per_second: 10
+    burst_size: 20
+
+# Tracing configuration (OpenTelemetry)
+tracing:
+  enabled: false
+  endpoint: "localhost:4317"
+  service_name: "vcdeploy-master"
+
+# Resource alerting thresholds
+alerting:
+  enabled: false
+  cpu_threshold: 80
+  memory_threshold: 85
+  disk_threshold: 90
 
 appearance:
   theme: dark

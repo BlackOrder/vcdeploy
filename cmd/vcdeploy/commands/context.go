@@ -133,7 +133,10 @@ func (c *AppContext) Errorln(args ...interface{}) {
 // LoadConfig loads the configuration from ConfigPath.
 func (c *AppContext) LoadConfig() error {
 	if c.ConfigPath == "" {
-		sysCfg := config.MustGetSystemConfig()
+		sysCfg, err := config.GetSystemConfig()
+		if err != nil {
+			return fmt.Errorf("load system config: %w", err)
+		}
 		c.ConfigPath = sysCfg.MasterConfigPath()
 	}
 
@@ -177,18 +180,34 @@ func (c *AppContext) InitLogger() error {
 }
 
 // OpenStorage opens the database connection.
+// If Storage.UseMemoryCache is enabled (default), uses an in-memory cache with
+// batched SQLite persistence to eliminate SQLITE_BUSY errors from concurrent access.
 func (c *AppContext) OpenStorage() error {
 	if c.Config == nil {
 		return fmt.Errorf("config not loaded")
 	}
 
 	// Use default database path if not configured
-	sysCfg := config.MustGetSystemConfig()
+	sysCfg, err := config.GetSystemConfig()
+	if err != nil {
+		return fmt.Errorf("load system config: %w", err)
+	}
 	dbPath := sysCfg.DatabasePath()
 	if c.Config.Backup.Database.Path != "" {
 		dbPath = c.Config.Backup.Database.Path
 	}
 
+	// Use memory-cached store if enabled (default)
+	if c.Config.Storage.UseMemoryCache {
+		cachedStore, err := storage.NewCachedStore(dbPath, c.Logger)
+		if err != nil {
+			return fmt.Errorf("open cached storage: %w", err)
+		}
+		c.Storage = cachedStore
+		return nil
+	}
+
+	// Fall back to direct SQLite access
 	db, err := storage.New(dbPath, c.Logger)
 	if err != nil {
 		return fmt.Errorf("open storage: %w", err)
@@ -200,7 +219,7 @@ func (c *AppContext) OpenStorage() error {
 // Close cleans up resources.
 func (c *AppContext) Close() {
 	if c.Storage != nil {
-		c.Storage.Close()
+		_ = c.Storage.Close() // #nosec G104 - best effort cleanup
 	}
 	if c.Logger != nil {
 		_ = c.Logger.Sync()
@@ -235,7 +254,7 @@ func NewProjectListRunner(ctx *AppContext) *ProjectListRunner {
 
 // Run executes the project list command.
 func (r *ProjectListRunner) Run() error {
-	projects, err := r.ctx.Storage.ListProjects()
+	projects, err := r.ctx.Storage.ListProjects(context.Background())
 	if err != nil {
 		return fmt.Errorf("list projects: %w", err)
 	}
@@ -249,7 +268,7 @@ func (r *ProjectListRunner) Run() error {
 	r.ctx.Println("------------------------------------------------------------")
 
 	for _, p := range projects {
-		r.ctx.Printf("%-20s %-15s %-40s\n", p.Name, p.Type, p.Repository)
+		r.ctx.Printf("%-20s %-15s %-40s\n", p.Name, derefTypeID(p.TypeID), p.Repository)
 	}
 
 	return nil
@@ -360,4 +379,11 @@ func (r *MasterStatusRunner) Run() error {
 
 	r.ctx.Printf("\n  Address: %s\n", r.masterAddr)
 	return nil
+}
+
+func derefTypeID(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

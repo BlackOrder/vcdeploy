@@ -17,7 +17,7 @@ A deployment platform with master-agent architecture for automated, webhook-driv
 ## Features
 
 - **Webhook-driven deployments** from GitHub, GitLab, and Bitbucket
-- **Hybrid deployment targets**: Agent-based (real-time logs) or SSH-based (no agent required)
+- **Deployment targets**: Agent-based (real-time logs) or master-local (no agent required)
 - **Zero-downtime deployments** using symlink-based releases
 - **Centralized configuration**: Project configs and secrets stored on master
 - **Full web UI** for management with dark mode default
@@ -62,14 +62,14 @@ sudo dnf install https://github.com/BlackOrder/vcdeploy/releases/latest/download
 │  • Webhook receiver                                            │
 └────────────────────────────────────────────────────────────────┘
         │                                    │
-        │ gRPC (persistent)                  │ SSH (on-demand)
-        ▼                                    ▼
+        │ gRPC (persistent)
+        ▼
 ┌─────────────────┐                ┌─────────────────┐
-│    Agent        │                │   SSH Target    │
-│  • Real-time    │                │  • Jump server  │
-│    log stream   │                │    support      │
-│  • Health       │                │  • No agent     │
-│    metrics      │                │    required     │
+│    Agent        │                │  Master-Local  │
+│  • Real-time    │                │  • No agent     │
+│    log stream   │                │    required    │
+│  • Health       │                │  • Direct       │
+│    metrics      │                │    extraction  │
 └─────────────────┘                └─────────────────┘
 ```
 
@@ -180,7 +180,7 @@ vcdeploy-agent start
 vcdeploy type create my-custom-type
 
 # Add project
-vcdeploy project add my-app
+vcdeploy project create my-app
 
 # Set secrets
 vcdeploy secret set my-app/_default DB_HOST
@@ -188,7 +188,7 @@ vcdeploy secret set my-app/production DB_PASSWORD
 vcdeploy secret set my-app/staging DB_PASSWORD
 
 # Deploy
-vcdeploy project deploy my-app --target=staging
+vcdeploy deploy create --project my-app --target staging --wait 30
 ```
 
 ## Configuration
@@ -227,9 +227,11 @@ watch:
 
 targets:
   production:
-    agents: [prod-web-01, prod-web-02]
-    branch: main
+    agent: prod-web-01
     path: /var/www/my-app
+  staging:
+    agent: staging-01
+    path: /var/www/my-app-staging
 ```
 
 See `configs/` directory for complete examples.
@@ -243,12 +245,15 @@ vcdeploy master rotate-key
 vcdeploy master backup create|list|restore
 
 # Project management
-vcdeploy project list|add|edit|delete|validate
-vcdeploy project deploy <name> [--target=x] [--dry-run] [--force]
-vcdeploy project rollback <name> [--target=x] [--release=n]
+vcdeploy project list|create|show|update|delete|validate
+vcdeploy deploy create --project <name> [--target=x] [--dry-run] [--wait=30]
+vcdeploy deploy rollback <id> [--target=x]
 
 # Type management
 vcdeploy type list|create|edit|delete
+
+# Target management
+vcdeploy target list|create|show|update|delete --project <name>
 
 # Secrets management
 vcdeploy secret set <project/scope> <key>
@@ -258,9 +263,67 @@ vcdeploy secret import <project/scope>
 vcdeploy secret backup --output=file.vcbackup
 vcdeploy secret restore file.vcbackup
 
-# Admin management (lockout recovery)
-vcdeploy admin --username admin --email admin@example.com
+# Admin management (lockout reset)
+vcdeploy admin reset --username admin --email admin@example.com
 ```
+
+## API Reference
+
+The REST API is available at `http://localhost:9000/api/v1/` (or your configured server address).
+
+### Authentication
+
+Authenticate using one of these methods:
+- **Session cookie**: Login via `/api/v1/auth/login`
+- **Bearer token**: Include `Authorization: Bearer <token>` header
+- **API key**: Include `X-API-Key: <key>` header
+
+### Key Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/healthz` | Liveness probe |
+| `GET` | `/readyz` | Readiness probe |
+| `GET` | `/api/v1/health` | Detailed health status |
+| `POST` | `/api/v1/auth/login` | User authentication |
+| `GET` | `/api/v1/users` | List users (paginated) |
+| `POST` | `/api/v1/users` | Create user |
+| `GET` | `/api/v1/projects` | List projects (paginated) |
+| `POST` | `/api/v1/projects` | Create project |
+| `GET` | `/api/v1/agents` | List agents (paginated) |
+| `GET` | `/api/v1/deployments` | List deployments |
+| `POST` | `/api/v1/deployments` | Create deployment |
+| `GET` | `/api/v1/secrets` | List secrets (metadata only) |
+| `POST` | `/api/v1/webhooks/{provider}` | Webhook endpoint |
+
+### Pagination
+
+List endpoints support pagination with query parameters:
+- `page`: Page number (1-indexed, default: 1)
+- `pageSize`: Items per page (default: 20, max: 100)
+
+Response format:
+```json
+{
+  "items": [...],
+  "total": 100,
+  "page": 1,
+  "pageSize": 20,
+  "hasMore": true
+}
+```
+
+### Error Responses
+
+All errors return a consistent format:
+```json
+{
+  "error": true,
+  "message": "Description of what went wrong"
+}
+```
+
+For complete API documentation, see [docs/api/openapi.yaml](docs/api/openapi.yaml) or run the server and access the OpenAPI spec at `/api/v1/openapi.yaml`.
 
 ## Environment Variables
 
@@ -287,6 +350,15 @@ On startup, vcdeploy checks for admin credentials via environment variables. Thi
 | `VCDEPLOY_CONFIG_DIR` | Configuration directory | `/etc/vcdeploy` |
 | `VCDEPLOY_RUN_DIR` | Runtime directory (PID files) | `/var/run/vcdeploy` |
 | `VCDEPLOY_LOG_DIR` | Log directory | `/var/log/vcdeploy` |
+| `VCDEPLOY_SYSTEM_CONFIG` | Path to system config file (overrides default search paths) | - |
+
+### Security
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VCDEPLOY_MASTER_KEY` | Master encryption key for secrets (32-byte hex string). If not set, a key is auto-generated and stored in `$VCDEPLOY_DATA_DIR/.master-key` | Auto-generated |
+
+> **Security Note:** In production, set `VCDEPLOY_MASTER_KEY` explicitly via environment or secrets management (e.g., Kubernetes Secrets, HashiCorp Vault). Never commit the key to version control.
 
 ### CLI Access
 
@@ -413,7 +485,7 @@ On first run, vcdeploy requires admin account setup via one of these methods:
 
 2. **Setup Wizard**: If no password is set and no users exist, the web UI redirects to `/setup` for initial configuration.
 
-3. **CLI** (also for lockout recovery):
+3. **CLI** (also for lockout reset):
    ```bash
    vcdeploy admin --username admin --email admin@example.com
    # You will be prompted for a password

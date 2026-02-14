@@ -127,7 +127,7 @@ func BenchmarkService_CountByStatus(b *testing.B) {
 			Target:        "production",
 			Branch:        "main",
 			CommitHash:    fmt.Sprintf("commit%d", i),
-			Status:        statuses[i%len(statuses)],
+			Status:        storage.DeploymentStatus(statuses[i%len(statuses)]),
 			ReleaseNumber: i + 1,
 			StartedAt:     time.Now(),
 			TriggeredBy:   "benchmark",

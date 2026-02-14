@@ -20,31 +20,11 @@ import (
 	"golang.org/x/term"
 )
 
-// adminCmd handles administrator account management
-var adminCmd = &cobra.Command{
-	Use:   "admin",
-	Short: "Administrator account management",
-	Long: `Manage the administrator account.
-
-This command can create or update admin credentials either locally (direct database access)
-or remotely (via API when --master and --token are provided).
-
-Local mode (lockout recovery):
-  vcdeploy admin --username admin --email admin@example.com
-
-Remote mode (requires authentication):
-  vcdeploy admin --master localhost:9000 --token <api-token> --username admin
-
-When --password is not provided, you will be prompted to enter it interactively.`,
-	RunE: runAdmin,
-}
+// adminCmd is kept for backward compatibility reference only.
+// The admin functionality has been moved to "user recovery".
 
 func init() {
-	// Admin command with flags
-	adminCmd.Flags().StringP("username", "u", "admin", "Admin username")
-	adminCmd.Flags().StringP("password", "p", "", "Admin password (if not set, will prompt)")
-	adminCmd.Flags().StringP("email", "e", "admin@localhost", "Admin email address")
-	rootCmd.AddCommand(adminCmd)
+	// apiClient and helpers remain here as shared utilities
 }
 
 // --- API Client Helper ---
@@ -106,8 +86,95 @@ func (c *apiClient) post(path string, body io.Reader) (*http.Response, error) {
 	return c.do("POST", path, body)
 }
 
+func (c *apiClient) put(path string, body io.Reader) (*http.Response, error) {
+	return c.do("PUT", path, body)
+}
+
 func (c *apiClient) delete(path string) (*http.Response, error) {
 	return c.do("DELETE", path, nil)
+}
+
+// Get performs a GET request and decodes the JSON response.
+func (c *apiClient) Get(path string) (map[string]interface{}, error) {
+	resp, err := c.get(path)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("request failed with status %d", resp.StatusCode)
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	return result, nil
+}
+
+// Post performs a POST request with JSON body and decodes the response.
+func (c *apiClient) Post(path string, payload interface{}) (map[string]interface{}, error) {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	resp, err := c.post(path, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("request failed with status %d", resp.StatusCode)
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		// Some endpoints may return empty body on success
+		return nil, nil
+	}
+	return result, nil
+}
+
+// Put performs a PUT request with JSON body and decodes the response.
+func (c *apiClient) Put(path string, payload interface{}) (map[string]interface{}, error) {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	resp, err := c.do("PUT", path, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("request failed with status %d", resp.StatusCode)
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		// Some endpoints may return empty body on success
+		return nil, nil
+	}
+	return result, nil
+}
+
+// Delete performs a DELETE request.
+func (c *apiClient) Delete(path string) error {
+	resp, err := c.delete(path)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("request failed with status %d", resp.StatusCode)
+	}
+	return nil
 }
 
 // --- Admin Command ---
@@ -178,7 +245,10 @@ func promptPassword() (string, error) {
 // runAdminLocal handles admin setup via direct database access.
 func runAdminLocal(username, password, email string) error {
 	// Initialize config to get database path
-	sysCfg := config.MustGetSystemConfig()
+	sysCfg, err := config.GetSystemConfig()
+	if err != nil {
+		return fmt.Errorf("load system config: %w", err)
+	}
 	dbPath := sysCfg.DatabasePath()
 
 	// Check if server might be running by trying to connect to the configured port
@@ -241,16 +311,16 @@ func runAdminRemote(cmd *cobra.Command, username, password, email string) error 
 		return fmt.Errorf("API request failed: %w", err)
 	}
 
-	var usersList []map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&usersList); err != nil {
-		resp.Body.Close()
+	var result paginatedResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		_ = resp.Body.Close() // #nosec G104 - best effort cleanup
 		return fmt.Errorf("failed to decode users list: %w", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close() // #nosec G104 - best effort cleanup
 
 	// Look for user by username
 	var userID float64
-	for _, u := range usersList {
+	for _, u := range result.Items {
 		if u["username"] == username {
 			id, ok := u["id"].(float64)
 			if ok {
@@ -304,14 +374,15 @@ func runAdminRemote(cmd *cobra.Command, username, password, email string) error 
 }
 
 // isServerRunning checks if the server appears to be running.
-func isServerRunning(sysCfg *config.SystemConfig) bool {
-	// Try to connect to common ports
-	ports := []string{":8080", ":9090"}
+// Uses default ports since MasterConfig may not be loaded yet.
+func isServerRunning(_ *config.SystemConfig) bool {
+	// Try to connect to default ports (9000 for HTTP, 9001 for gRPC)
+	ports := []string{":9000", ":9001"}
 
 	for _, port := range ports {
 		conn, err := net.DialTimeout("tcp", "localhost"+port, 500*time.Millisecond)
 		if err == nil {
-			conn.Close()
+			_ = conn.Close() // #nosec G104 - best effort cleanup
 			return true
 		}
 	}

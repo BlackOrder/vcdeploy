@@ -28,7 +28,7 @@ func createTestDeployment(t *testing.T, svc *Service, id, status string) *storag
 		Target:        "production",
 		Branch:        "main",
 		CommitHash:    "abc123",
-		Status:        status,
+		Status:        storage.DeploymentStatus(status),
 		ReleaseNumber: 1,
 		StartedAt:     time.Now(),
 		TriggeredBy:   "test",
@@ -371,7 +371,7 @@ func TestService_ListLogsAfter(t *testing.T) {
 	deployment := createTestDeployment(t, svc, "log-deploy-after", "running")
 
 	// Create multiple logs
-	var lastID int64
+	var lastID string
 	for i := 0; i < 5; i++ {
 		log := &storage.DeploymentLog{
 			DeploymentID: deployment.ID,
@@ -1000,7 +1000,7 @@ func TestService_ListLogsAfter_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
-	_, err := db.ListDeploymentLogsAfter(ctx, deployment.ID, 0)
+	_, err := db.ListDeploymentLogsAfter(ctx, deployment.ID, "")
 	if err == nil {
 		t.Error("ListDeploymentLogsAfter() expected error for cancelled context")
 	}
@@ -1092,7 +1092,7 @@ func TestService_CountByStatus_AllStatuses(t *testing.T) {
 			Target:        "production",
 			Branch:        "main",
 			CommitHash:    "abc123",
-			Status:        status,
+			Status:        storage.DeploymentStatus(status),
 			ReleaseNumber: i,
 			StartedAt:     time.Now(),
 			TriggeredBy:   "test",

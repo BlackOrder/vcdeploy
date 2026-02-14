@@ -94,10 +94,12 @@ func TestValidateRole(t *testing.T) {
 	}{
 		{"admin", "admin", false},
 		{"user", "user", false},
-		{"readonly", "readonly", false},
+		{"viewer", "viewer", false},
 		{"admin uppercase", "ADMIN", false},
 		{"admin mixed", "Admin", false},
+		{"viewer uppercase", "VIEWER", false},
 		{"invalid", "superuser", true},
+		{"invalid readonly", "readonly", true},
 		{"empty", "", true},
 	}
 
@@ -241,20 +243,19 @@ func TestValidateOneOf(t *testing.T) {
 func TestValidateID(t *testing.T) {
 	tests := []struct {
 		name    string
-		id      int64
+		id      string
 		wantErr bool
 	}{
-		{"positive", 1, false},
-		{"large positive", 9999999, false},
-		{"zero", 0, true},
-		{"negative", -1, true},
+		{"valid", "abc123", false},
+		{"valid-long", "abc123xyz789", false},
+		{"empty", "", true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := ValidateID("user_id", tt.id)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("ValidateID(%d) error = %v, wantErr %v", tt.id, err, tt.wantErr)
+				t.Errorf("ValidateID(%q) error = %v, wantErr %v", tt.id, err, tt.wantErr)
 			}
 		})
 	}
@@ -277,6 +278,41 @@ func TestValidateStringID(t *testing.T) {
 			err := ValidateStringID("deployment_id", tt.id)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ValidateStringID(%q) error = %v, wantErr %v", tt.id, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestValidateAPIKeyScopes(t *testing.T) {
+	tests := []struct {
+		name    string
+		scopes  []string
+		wantErr bool
+	}{
+		{"empty scopes (valid, defaults handled by caller)", []string{}, false},
+		{"wildcard", []string{"*"}, false},
+		{"admin scope", []string{"admin"}, false},
+		{"single read scope", []string{"read:projects"}, false},
+		{"single write scope", []string{"write:deployments"}, false},
+		{"multiple valid scopes", []string{"read:projects", "write:projects", "read:agents"}, false},
+		{"all valid scopes", []string{"read:projects", "write:projects", "read:deployments", "write:deployments", "read:agents", "write:agents", "read:users", "write:users", "read:settings", "write:settings"}, false},
+		{"invalid scope", []string{"invalid:scope"}, true},
+		{"mix valid and invalid", []string{"read:projects", "invalid:scope"}, true},
+		{"typo in scope", []string{"read:project"}, true},
+		{"wrong format", []string{"projects"}, true},
+		{"empty string scope", []string{""}, true},
+		{"read:secrets valid", []string{"read:secrets"}, false},
+		{"write:apikeys valid", []string{"write:apikeys"}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateAPIKeyScopes(tt.scopes)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateAPIKeyScopes(%v) error = %v, wantErr %v", tt.scopes, err, tt.wantErr)
+			}
+			if err != nil && !IsInvalidInput(err) {
+				t.Errorf("ValidateAPIKeyScopes(%v) should return InvalidInput error", tt.scopes)
 			}
 		})
 	}

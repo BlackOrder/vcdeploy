@@ -25,7 +25,7 @@ func TestMemoryStore_CreateSSHHostKey(t *testing.T) {
 		t.Fatalf("CreateSSHHostKey() error = %v", err)
 	}
 
-	if key.ID == 0 {
+	if key.ID == "" {
 		t.Error("CreateSSHHostKey() did not assign ID")
 	}
 }
@@ -175,7 +175,7 @@ func TestMemoryStore_CreateJumpServer(t *testing.T) {
 		t.Fatalf("CreateJumpServer() error = %v", err)
 	}
 
-	if js.ID == 0 {
+	if js.ID == "" {
 		t.Error("CreateJumpServer() did not assign ID")
 	}
 }
@@ -431,7 +431,7 @@ func TestMemoryStore_CreateHealthCheckConfig(t *testing.T) {
 		t.Fatalf("CreateHealthCheckConfig() error = %v", err)
 	}
 
-	if config.ID == 0 {
+	if config.ID == "" {
 		t.Error("CreateHealthCheckConfig() did not assign ID")
 	}
 }
@@ -475,10 +475,10 @@ func TestMemoryStore_GetHealthCheckConfigForProject(t *testing.T) {
 	defer s.Close()
 	ctx := context.Background()
 
-	projectID := int64(42)
+	projectID := "project-42"
 	s.CreateHealthCheckConfig(ctx, &HealthCheckConfig{Name: "project-config", ProjectID: &projectID})
 
-	config, err := s.GetHealthCheckConfigForProject(ctx, 42)
+	config, err := s.GetHealthCheckConfigForProject(ctx, "project-42")
 	if err != nil {
 		t.Fatalf("GetHealthCheckConfigForProject() error = %v", err)
 	}

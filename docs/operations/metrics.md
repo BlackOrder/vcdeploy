@@ -69,7 +69,7 @@ Add vcdeploy to your Prometheus scrape configuration:
 scrape_configs:
   - job_name: 'vcdeploy'
     static_configs:
-      - targets: ['vcdeploy-master:8080']
+      - targets: ['vcdeploy-master:9000']
     metrics_path: /metrics
     scrape_interval: 15s
 ```
@@ -213,13 +213,13 @@ spec:
           livenessProbe:
             httpGet:
               path: /livez
-              port: 8080
+              port: 9000
             initialDelaySeconds: 5
             periodSeconds: 10
           readinessProbe:
             httpGet:
               path: /readyz
-              port: 8080
+              port: 9000
             initialDelaySeconds: 5
             periodSeconds: 5
 ```

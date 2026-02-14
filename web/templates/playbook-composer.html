@@ -1,0 +1,494 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-4">
+            <a href="/playbooks" class="text-dark-muted hover:text-white">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                </svg>
+            </a>
+            <div>
+                <h1 class="text-2xl font-bold">{{if .Playbook}}Edit Playbook{{else}}Playbook Composer{{end}}</h1>
+                {{if .Playbook}}
+                <p class="text-sm text-dark-muted">{{.Playbook.Name}} ({{.Playbook.Version}})</p>
+                {{end}}
+            </div>
+        </div>
+        <div class="flex items-center space-x-3">
+            <button onclick="validatePlaybook()" class="px-4 py-2 text-sm font-medium text-dark-muted hover:text-white border border-dark-border rounded-md">
+                Validate
+            </button>
+            <button onclick="savePlaybook()" class="px-4 py-2 text-sm font-medium text-white bg-accent-600 hover:bg-accent-700 rounded-md">
+                Save Changes
+            </button>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-6">
+        <!-- Left Panel: Available Components -->
+        <div class="col-span-1 space-y-4">
+            <div class="bg-dark-card border border-dark-border rounded-lg">
+                <div class="px-4 py-3 border-b border-dark-border">
+                    <h3 class="text-sm font-medium">Available Components</h3>
+                </div>
+                <div class="p-4 space-y-2 max-h-96 overflow-y-auto" id="available-components">
+                    {{if .Components}}
+                    {{range .Components}}
+                    <div class="component-item bg-dark-bg border border-dark-border rounded-lg p-3 cursor-grab hover:border-accent-500/50"
+                        draggable="true"
+                        data-component-id="{{.ID}}"
+                        data-component-ref="{{.Namespace}}:{{.Slug}}:{{.Version}}"
+                        data-component-name="{{.Name}}"
+                        data-is-raw="{{.IsRaw}}"
+                        ondragstart="dragStart(event)">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm font-medium text-dark-text">{{.Name}}</span>
+                            {{if .IsRaw}}
+                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-500/20 text-red-400">RAW</span>
+                            {{end}}
+                        </div>
+                        <p class="text-xs text-dark-muted mt-1">{{.Namespace}}:{{.Slug}}:{{.Version}}</p>
+                    </div>
+                    {{end}}
+                    {{else}}
+                    <div class="text-center py-4 text-sm text-dark-muted">
+                        No components available. Create components first.
+                    </div>
+                    {{end}}
+                </div>
+            </div>
+
+            <!-- Validation Results -->
+            <div id="validation-results" class="hidden bg-dark-card border border-dark-border rounded-lg">
+                <div class="px-4 py-3 border-b border-dark-border flex items-center justify-between">
+                    <h3 class="text-sm font-medium">Validation</h3>
+                    <button onclick="document.getElementById('validation-results').classList.add('hidden')" class="text-dark-muted hover:text-white">
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div id="validation-content" class="p-4">
+                    <!-- Populated via JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Center Panel: Step Composer -->
+        <div class="col-span-2 space-y-4">
+            <!-- Phase Sections -->
+            <div class="space-y-4" id="composer-phases">
+                <!-- Pre-Deploy Phase -->
+                <div class="bg-dark-card border border-dark-border rounded-lg">
+                    <div class="px-4 py-3 border-b border-dark-border flex items-center justify-between">
+                        <h3 class="text-sm font-medium">Pre-Deploy</h3>
+                        <span class="text-xs text-dark-muted">Runs before deployment</span>
+                    </div>
+                    <div class="p-4 min-h-24 step-drop-zone"
+                        data-phase="pre_deploy"
+                        ondragover="dragOver(event)"
+                        ondrop="drop(event, 'pre_deploy')">
+                        <div id="steps-pre_deploy" class="space-y-2">
+                            {{range .Steps}}
+                            {{if eq .Phase "pre_deploy"}}
+                            <div class="step-item bg-dark-bg border border-dark-border rounded-lg p-3 flex items-center space-x-3"
+                                data-step-order="{{.Order}}"
+                                data-component-ref="{{.ComponentRef}}"
+                                draggable="true"
+                                ondragstart="dragStepStart(event)">
+                                <svg class="h-4 w-4 text-dark-muted cursor-grab" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"></path>
+                                </svg>
+                                <span class="flex-1 text-sm font-mono text-dark-text">{{.ComponentRef}}</span>
+                                <button onclick="editStep(this.parentElement)" class="text-dark-muted hover:text-accent-400">
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                    </svg>
+                                </button>
+                                <button onclick="removeStep(this.parentElement)" class="text-dark-muted hover:text-red-400">
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                            {{end}}
+                            {{end}}
+                        </div>
+                        <div class="empty-state text-center py-6 text-sm text-dark-muted" style="display: none;">
+                            Drop components here
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Deploy Phase -->
+                <div class="bg-dark-card border border-dark-border rounded-lg">
+                    <div class="px-4 py-3 border-b border-dark-border flex items-center justify-between">
+                        <h3 class="text-sm font-medium">Deploy</h3>
+                        <span class="text-xs text-dark-muted">Main deployment steps</span>
+                    </div>
+                    <div class="p-4 min-h-24 step-drop-zone"
+                        data-phase="deploy"
+                        ondragover="dragOver(event)"
+                        ondrop="drop(event, 'deploy')">
+                        <div id="steps-deploy" class="space-y-2">
+                            {{range .Steps}}
+                            {{if eq .Phase "deploy"}}
+                            <div class="step-item bg-dark-bg border border-dark-border rounded-lg p-3 flex items-center space-x-3"
+                                data-step-order="{{.Order}}"
+                                data-component-ref="{{.ComponentRef}}"
+                                draggable="true"
+                                ondragstart="dragStepStart(event)">
+                                <svg class="h-4 w-4 text-dark-muted cursor-grab" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"></path>
+                                </svg>
+                                <span class="flex-1 text-sm font-mono text-dark-text">{{.ComponentRef}}</span>
+                                <button onclick="editStep(this.parentElement)" class="text-dark-muted hover:text-accent-400">
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                    </svg>
+                                </button>
+                                <button onclick="removeStep(this.parentElement)" class="text-dark-muted hover:text-red-400">
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                            {{end}}
+                            {{end}}
+                        </div>
+                        <div class="empty-state text-center py-6 text-sm text-dark-muted">
+                            Drop components here
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Post-Deploy Phase -->
+                <div class="bg-dark-card border border-dark-border rounded-lg">
+                    <div class="px-4 py-3 border-b border-dark-border flex items-center justify-between">
+                        <h3 class="text-sm font-medium">Post-Deploy</h3>
+                        <span class="text-xs text-dark-muted">Runs after deployment</span>
+                    </div>
+                    <div class="p-4 min-h-24 step-drop-zone"
+                        data-phase="post_deploy"
+                        ondragover="dragOver(event)"
+                        ondrop="drop(event, 'post_deploy')">
+                        <div id="steps-post_deploy" class="space-y-2">
+                            {{range .Steps}}
+                            {{if eq .Phase "post_deploy"}}
+                            <div class="step-item bg-dark-bg border border-dark-border rounded-lg p-3 flex items-center space-x-3"
+                                data-step-order="{{.Order}}"
+                                data-component-ref="{{.ComponentRef}}"
+                                draggable="true"
+                                ondragstart="dragStepStart(event)">
+                                <svg class="h-4 w-4 text-dark-muted cursor-grab" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"></path>
+                                </svg>
+                                <span class="flex-1 text-sm font-mono text-dark-text">{{.ComponentRef}}</span>
+                                <button onclick="editStep(this.parentElement)" class="text-dark-muted hover:text-accent-400">
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                    </svg>
+                                </button>
+                                <button onclick="removeStep(this.parentElement)" class="text-dark-muted hover:text-red-400">
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                            {{end}}
+                            {{end}}
+                        </div>
+                        <div class="empty-state text-center py-6 text-sm text-dark-muted" style="display: none;">
+                            Drop components here
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Rollback Phase -->
+                <div class="bg-dark-card border border-dark-border rounded-lg">
+                    <div class="px-4 py-3 border-b border-dark-border flex items-center justify-between">
+                        <h3 class="text-sm font-medium">Rollback</h3>
+                        <span class="text-xs text-dark-muted">Runs on deployment failure</span>
+                    </div>
+                    <div class="p-4 min-h-24 step-drop-zone"
+                        data-phase="rollback"
+                        ondragover="dragOver(event)"
+                        ondrop="drop(event, 'rollback')">
+                        <div id="steps-rollback" class="space-y-2">
+                            {{range .Steps}}
+                            {{if eq .Phase "rollback"}}
+                            <div class="step-item bg-dark-bg border border-dark-border rounded-lg p-3 flex items-center space-x-3"
+                                data-step-order="{{.Order}}"
+                                data-component-ref="{{.ComponentRef}}"
+                                draggable="true"
+                                ondragstart="dragStepStart(event)">
+                                <svg class="h-4 w-4 text-dark-muted cursor-grab" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"></path>
+                                </svg>
+                                <span class="flex-1 text-sm font-mono text-dark-text">{{.ComponentRef}}</span>
+                                <button onclick="editStep(this.parentElement)" class="text-dark-muted hover:text-accent-400">
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                    </svg>
+                                </button>
+                                <button onclick="removeStep(this.parentElement)" class="text-dark-muted hover:text-red-400">
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                            {{end}}
+                            {{end}}
+                        </div>
+                        <div class="empty-state text-center py-6 text-sm text-dark-muted" style="display: none;">
+                            Drop components here
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Step Edit Modal -->
+<div id="step-edit-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-dark-card border border-dark-border rounded-lg max-w-lg w-full mx-4">
+        <div class="px-6 py-4 border-b border-dark-border flex items-center justify-between">
+            <h3 class="text-lg font-medium">Edit Step</h3>
+            <button onclick="document.getElementById('step-edit-modal').classList.add('hidden')" class="text-dark-muted hover:text-white">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        <div class="p-6 space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-dark-muted mb-1">Component Reference</label>
+                <input type="text" id="step-component-ref" readonly
+                    class="block w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text font-mono text-sm">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-dark-muted mb-1">Condition (optional)</label>
+                <input type="text" id="step-condition" placeholder="e.g., env == 'production'"
+                    class="block w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-md text-dark-text text-sm focus:outline-none focus:ring-2 focus:ring-accent-500">
+                <p class="mt-1 text-xs text-dark-muted">Step will only run if condition evaluates to true</p>
+            </div>
+            <div id="step-variables" class="space-y-3">
+                <label class="block text-sm font-medium text-dark-muted">Variable Bindings</label>
+                <!-- Populated dynamically -->
+            </div>
+        </div>
+        <div class="px-6 py-4 border-t border-dark-border flex justify-end space-x-3">
+            <button type="button" onclick="document.getElementById('step-edit-modal').classList.add('hidden')"
+                class="px-4 py-2 text-sm font-medium text-dark-muted hover:text-white border border-dark-border rounded-md">
+                Cancel
+            </button>
+            <button type="button" onclick="saveStepEdit()"
+                class="px-4 py-2 text-sm font-medium text-white bg-accent-600 hover:bg-accent-700 rounded-md">
+                Save
+            </button>
+        </div>
+    </div>
+</div>
+
+<script{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}>
+    // State
+    let playbookId = {{if .Playbook}}{{.Playbook.ID}}{{else}}0{{end}};
+    let currentEditStep = null;
+    let hasChanges = false;
+
+    // Drag and drop for components
+    function dragStart(event) {
+        event.dataTransfer.setData('text/plain', JSON.stringify({
+            type: 'component',
+            ref: event.target.dataset.componentRef,
+            name: event.target.dataset.componentName,
+            isRaw: event.target.dataset.isRaw === 'true'
+        }));
+        event.target.classList.add('opacity-50');
+    }
+
+    // Drag and drop for existing steps (reordering)
+    function dragStepStart(event) {
+        event.dataTransfer.setData('text/plain', JSON.stringify({
+            type: 'step',
+            ref: event.target.dataset.componentRef
+        }));
+        event.target.classList.add('opacity-50');
+    }
+
+    function dragOver(event) {
+        event.preventDefault();
+        event.currentTarget.classList.add('border-accent-500', 'bg-accent-500/5');
+    }
+
+    function dragLeave(event) {
+        event.currentTarget.classList.remove('border-accent-500', 'bg-accent-500/5');
+    }
+
+    function drop(event, phase) {
+        event.preventDefault();
+        event.currentTarget.classList.remove('border-accent-500', 'bg-accent-500/5');
+        
+        const data = JSON.parse(event.dataTransfer.getData('text/plain'));
+        const container = document.getElementById('steps-' + phase);
+        
+        if (data.type === 'component') {
+            // Adding new component
+            addStep(container, data.ref, data.name, phase, data.isRaw);
+        }
+        
+        updateEmptyStates();
+        hasChanges = true;
+    }
+
+    function addStep(container, ref, name, phase, isRaw) {
+        const step = document.createElement('div');
+        step.className = 'step-item bg-dark-bg border border-dark-border rounded-lg p-3 flex items-center space-x-3';
+        step.dataset.componentRef = ref;
+        step.dataset.phase = phase;
+        step.draggable = true;
+        step.ondragstart = dragStepStart;
+        
+        let rawBadge = isRaw ? '<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-500/20 text-red-400 mr-2">RAW</span>' : '';
+        
+        step.innerHTML = `
+            <svg class="h-4 w-4 text-dark-muted cursor-grab" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"></path>
+            </svg>
+            ${rawBadge}
+            <span class="flex-1 text-sm font-mono text-dark-text">${escapeHtml(ref)}</span>
+            <button onclick="editStep(this.parentElement)" class="text-dark-muted hover:text-accent-400">
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                </svg>
+            </button>
+            <button onclick="removeStep(this.parentElement)" class="text-dark-muted hover:text-red-400">
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                </svg>
+            </button>
+        `;
+        
+        container.appendChild(step);
+    }
+
+    function removeStep(element) {
+        element.remove();
+        updateEmptyStates();
+        hasChanges = true;
+    }
+
+    function editStep(element) {
+        currentEditStep = element;
+        document.getElementById('step-component-ref').value = element.dataset.componentRef;
+        document.getElementById('step-condition').value = element.dataset.condition || '';
+        document.getElementById('step-edit-modal').classList.remove('hidden');
+    }
+
+    function saveStepEdit() {
+        if (currentEditStep) {
+            currentEditStep.dataset.condition = document.getElementById('step-condition').value;
+        }
+        document.getElementById('step-edit-modal').classList.add('hidden');
+        hasChanges = true;
+    }
+
+    function updateEmptyStates() {
+        ['pre_deploy', 'deploy', 'post_deploy', 'rollback'].forEach(phase => {
+            const container = document.getElementById('steps-' + phase);
+            const emptyState = container.parentElement.querySelector('.empty-state');
+            if (container.children.length === 0) {
+                emptyState.style.display = 'block';
+            } else {
+                emptyState.style.display = 'none';
+            }
+        });
+    }
+
+    function collectSteps() {
+        const steps = [];
+        let order = 1;
+        
+        ['pre_deploy', 'deploy', 'post_deploy', 'rollback'].forEach(phase => {
+            const container = document.getElementById('steps-' + phase);
+            container.querySelectorAll('.step-item').forEach(item => {
+                steps.push({
+                    order: order++,
+                    component_ref: item.dataset.componentRef,
+                    phase: phase,
+                    condition: item.dataset.condition || '',
+                    variable_bindings: item.dataset.bindings ? JSON.parse(item.dataset.bindings) : {}
+                });
+            });
+        });
+        
+        return steps;
+    }
+
+    function validatePlaybook() {
+        const steps = collectSteps();
+        const resultsDiv = document.getElementById('validation-results');
+        const contentDiv = document.getElementById('validation-content');
+        
+        if (steps.length === 0) {
+            contentDiv.innerHTML = '<div class="flex items-center text-yellow-400"><svg class="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>No steps defined</div>';
+        } else {
+            contentDiv.innerHTML = '<div class="flex items-center text-green-400"><svg class="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>Playbook is valid (' + steps.length + ' steps)</div>';
+        }
+        
+        resultsDiv.classList.remove('hidden');
+    }
+
+    function savePlaybook() {
+        if (!playbookId) {
+            alert('No playbook selected');
+            return;
+        }
+        
+        const steps = collectSteps();
+        
+        fetch('/api/v1/recipes/playbooks/' + playbookId + '/steps', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({steps: steps})
+        })
+        .then(response => {
+            if (response.ok) {
+                hasChanges = false;
+                alert('Playbook saved successfully');
+            } else {
+                alert('Failed to save playbook');
+            }
+        })
+        .catch(err => {
+            alert('Error saving playbook: ' + err.message);
+        });
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // Initialize drop zones
+    document.querySelectorAll('.step-drop-zone').forEach(zone => {
+        zone.addEventListener('dragleave', dragLeave);
+    });
+
+    // Update empty states on load
+    updateEmptyStates();
+
+    // Warn about unsaved changes
+    window.addEventListener('beforeunload', function(e) {
+        if (hasChanges) {
+            e.preventDefault();
+            e.returnValue = '';
+        }
+    });
+</script>
+{{end}}

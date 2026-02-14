@@ -34,6 +34,9 @@ service AgentService {
   
   // Heartbeat for health monitoring
   rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+  
+  // StreamRepoArchive streams a deployment archive from master to agent
+  rpc StreamRepoArchive(ArchiveRequest) returns (stream ArchiveChunk);
 }
 ```
 
@@ -47,7 +50,7 @@ service AgentService {
 
 **Master → Agent:**
 - `Acknowledged`: Registration confirmation
-- `DeployCommand`: Start deployment
+- `DeployCommand`: Start deployment (includes archive delivery via gRPC streaming or HMAC-signed HTTP fallback)
 - `CancelCommand`: Abort deployment
 - `ConfigUpdate`: Configuration changes
 

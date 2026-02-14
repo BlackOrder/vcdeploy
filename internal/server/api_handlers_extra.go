@@ -10,6 +10,7 @@ import (
 
 	"github.com/BlackOrder/vcdeploy/internal/services"
 	"github.com/BlackOrder/vcdeploy/internal/storage"
+	"github.com/BlackOrder/vcdeploy/internal/validation"
 	"go.uber.org/zap"
 )
 
@@ -23,62 +24,79 @@ func (s *MasterServer) handleHostKeys(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		// Check read access
 		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
 		keys, err := s.hostKeyService.List(ctx)
 		if err != nil {
 			s.logger.Error("Failed to list host keys", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(keys); err != nil {
-			s.logger.Error("Failed to encode host keys", zap.Error(err))
+		// Apply pagination
+		p := parsePagination(r)
+		totalCount := len(keys)
+
+		// Apply offset
+		if p.Offset >= totalCount {
+			keys = []*storage.SSHHostKey{}
+		} else {
+			keys = keys[p.Offset:]
+			// Apply limit
+			if p.Limit > 0 && p.Limit < len(keys) {
+				keys = keys[:p.Limit]
+			}
 		}
+
+		s.jsonResponse(w, PaginatedResponse{
+			Items:      keys,
+			TotalCount: int64(totalCount),
+			Limit:      p.Limit,
+			Offset:     p.Offset,
+		})
 
 	case http.MethodPost:
 		// Check admin access for creating host keys
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
 		var input struct {
 			Hostname    string `json:"hostname"`
 			Port        int    `json:"port"`
-			KeyType     string `json:"key_type"`
-			PublicKey   string `json:"public_key"`
+			KeyType     string `json:"keyType"`
+			PublicKey   string `json:"publicKey"`
 			Fingerprint string `json:"fingerprint"`
 			Trusted     bool   `json:"trusted"`
 		}
 
-		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-			http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&input); err != nil {
+			s.jsonError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
 
 		if input.Hostname == "" {
-			http.Error(w, "hostname is required", http.StatusBadRequest)
+			s.jsonError(w, http.StatusBadRequest, "hostname is required")
 			return
 		}
 		if input.Port == 0 {
 			input.Port = 22
 		}
 		if input.KeyType == "" {
-			http.Error(w, "key_type is required", http.StatusBadRequest)
+			s.jsonError(w, http.StatusBadRequest, "key_type is required")
 			return
 		}
 		if input.PublicKey == "" {
-			http.Error(w, "public_key is required", http.StatusBadRequest)
+			s.jsonError(w, http.StatusBadRequest, "public_key is required")
 			return
 		}
 
 		userID, _ := GetUserIDFromContext(ctx)
 		addedBy := "system"
-		if userID > 0 {
+		if userID != "" {
 			if user, err := s.userService.GetByID(ctx, userID); err == nil {
 				addedBy = user.Username
 			}
@@ -97,40 +115,36 @@ func (s *MasterServer) handleHostKeys(w http.ResponseWriter, r *http.Request) {
 
 		if err := s.hostKeyService.Create(ctx, key); err != nil {
 			s.logger.Error("Failed to create host key", zap.Error(err))
-			http.Error(w, "Failed to create host key", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "failed to create host key")
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		if err := json.NewEncoder(w).Encode(key); err != nil {
-			s.logger.Error("Failed to encode host key", zap.Error(err))
-		}
+		s.writeJSON(w, http.StatusCreated, key)
 
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
 // handleHostKey handles operations on a specific host key:
-// GET /api/v1/hostkeys/{id} - get details
-// PUT /api/v1/hostkeys/{id} - update trust status
-// DELETE /api/v1/hostkeys/{id} - delete
+// GET /api/v1/host-keys/{id} - get details
+// PUT /api/v1/host-keys/{id} - update trust status
+// DELETE /api/v1/host-keys/{id} - delete
 func (s *MasterServer) handleHostKey(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	// Extract ID from path
-	path := strings.TrimPrefix(r.URL.Path, "/api/v1/hostkeys/")
-	id, err := strconv.ParseInt(path, 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid host key ID", http.StatusBadRequest)
+	path := strings.TrimPrefix(r.URL.Path, "/api/v1/host-keys/")
+	id := path
+	if id == "" {
+		s.jsonError(w, http.StatusBadRequest, "invalid host key ID")
 		return
 	}
 
 	switch r.Method {
 	case http.MethodGet:
 		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -138,7 +152,7 @@ func (s *MasterServer) handleHostKey(w http.ResponseWriter, r *http.Request) {
 		keys, err := s.hostKeyService.List(ctx)
 		if err != nil {
 			s.logger.Error("Failed to list host keys", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}
 
@@ -151,18 +165,15 @@ func (s *MasterServer) handleHostKey(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if found == nil {
-			http.Error(w, "Host key not found", http.StatusNotFound)
+			s.jsonError(w, http.StatusNotFound, "host key not found")
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(found); err != nil {
-			s.logger.Error("Failed to encode host key", zap.Error(err))
-		}
+		s.jsonResponse(w, found)
 
 	case http.MethodPut:
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -170,14 +181,14 @@ func (s *MasterServer) handleHostKey(w http.ResponseWriter, r *http.Request) {
 			Trusted bool `json:"trusted"`
 		}
 
-		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-			http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&input); err != nil {
+			s.jsonError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
 
 		userID, _ := GetUserIDFromContext(ctx)
 		verifiedBy := "system"
-		if userID > 0 {
+		if userID != "" {
 			if user, err := s.userService.GetByID(ctx, userID); err == nil {
 				verifiedBy = user.Username
 			}
@@ -185,30 +196,28 @@ func (s *MasterServer) handleHostKey(w http.ResponseWriter, r *http.Request) {
 
 		if err := s.hostKeyService.UpdateTrust(ctx, id, input.Trusted, verifiedBy); err != nil {
 			s.logger.Error("Failed to update host key trust", zap.Error(err))
-			http.Error(w, "Failed to update host key", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "failed to update host key")
 			return
 		}
 
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
+		s.jsonResponse(w, StatusResponse{Status: "ok"})
 
 	case http.MethodDelete:
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
 		if err := s.hostKeyService.Delete(ctx, id); err != nil {
 			s.logger.Error("Failed to delete host key", zap.Error(err))
-			http.Error(w, "Failed to delete host key", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "failed to delete host key")
 			return
 		}
 
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"deleted"}`))
+		w.WriteHeader(http.StatusNoContent)
 
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
@@ -221,54 +230,71 @@ func (s *MasterServer) handleJumpServers(w http.ResponseWriter, r *http.Request)
 	switch r.Method {
 	case http.MethodGet:
 		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
 		servers, err := s.store.ListJumpServers(ctx)
 		if err != nil {
 			s.logger.Error("Failed to list jump servers", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(servers); err != nil {
-			s.logger.Error("Failed to encode jump servers", zap.Error(err))
+		// Apply pagination
+		p := parsePagination(r)
+		totalCount := len(servers)
+
+		// Apply offset
+		if p.Offset >= totalCount {
+			servers = []*storage.SSHJumpServer{}
+		} else {
+			servers = servers[p.Offset:]
+			// Apply limit
+			if p.Limit > 0 && p.Limit < len(servers) {
+				servers = servers[:p.Limit]
+			}
 		}
+
+		s.jsonResponse(w, PaginatedResponse{
+			Items:      servers,
+			TotalCount: int64(totalCount),
+			Limit:      p.Limit,
+			Offset:     p.Offset,
+		})
 
 	case http.MethodPost:
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
 		var input struct {
-			Name     string `json:"name"`
-			Host     string `json:"host"`
-			Port     int    `json:"port"`
-			Username string `json:"username"`
-			SSHKeyID *int64 `json:"ssh_key_id,omitempty"`
+			Name     string  `json:"name"`
+			Host     string  `json:"host"`
+			Port     int     `json:"port"`
+			Username string  `json:"username"`
+			SSHKeyID *string `json:"sshKeyId,omitempty"`
 		}
 
-		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-			http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&input); err != nil {
+			s.jsonError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
 
 		if input.Name == "" {
-			http.Error(w, "name is required", http.StatusBadRequest)
+			s.jsonError(w, http.StatusBadRequest, "name is required")
 			return
 		}
 		if input.Host == "" {
-			http.Error(w, "host is required", http.StatusBadRequest)
+			s.jsonError(w, http.StatusBadRequest, "host is required")
 			return
 		}
 		if input.Port == 0 {
 			input.Port = 22
 		}
 		if input.Username == "" {
-			http.Error(w, "username is required", http.StatusBadRequest)
+			s.jsonError(w, http.StatusBadRequest, "username is required")
 			return
 		}
 
@@ -283,18 +309,14 @@ func (s *MasterServer) handleJumpServers(w http.ResponseWriter, r *http.Request)
 
 		if err := s.store.CreateJumpServer(ctx, server); err != nil {
 			s.logger.Error("Failed to create jump server", zap.Error(err))
-			http.Error(w, "Failed to create jump server", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "failed to create jump server")
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		if err := json.NewEncoder(w).Encode(server); err != nil {
-			s.logger.Error("Failed to encode jump server", zap.Error(err))
-		}
+		s.writeJSON(w, http.StatusCreated, server)
 
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
@@ -303,52 +325,49 @@ func (s *MasterServer) handleJumpServer(w http.ResponseWriter, r *http.Request) 
 	ctx := r.Context()
 
 	// Extract ID from path
-	path := strings.TrimPrefix(r.URL.Path, "/api/v1/jumpservers/")
-	id, err := strconv.ParseInt(path, 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid jump server ID", http.StatusBadRequest)
+	path := strings.TrimPrefix(r.URL.Path, "/api/v1/jump-servers/")
+	id := path
+	if id == "" {
+		s.jsonError(w, http.StatusBadRequest, "invalid jump server ID")
 		return
 	}
 
 	switch r.Method {
 	case http.MethodGet:
 		if msg, status, ok := s.enforcementMiddleware.CheckReadAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
 		server, err := s.store.GetJumpServer(ctx, id)
 		if err != nil {
 			if services.IsNotFound(err) {
-				http.Error(w, "Jump server not found", http.StatusNotFound)
+				s.jsonError(w, http.StatusNotFound, "jump server not found")
 				return
 			}
 			s.logger.Error("Failed to get jump server", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(server); err != nil {
-			s.logger.Error("Failed to encode jump server", zap.Error(err))
-		}
+		s.jsonResponse(w, server)
 
 	case http.MethodPut:
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
 		var input struct {
-			Name     string `json:"name"`
-			Host     string `json:"host"`
-			Port     int    `json:"port"`
-			Username string `json:"username"`
-			SSHKeyID *int64 `json:"ssh_key_id,omitempty"`
+			Name     string  `json:"name"`
+			Host     string  `json:"host"`
+			Port     int     `json:"port"`
+			Username string  `json:"username"`
+			SSHKeyID *string `json:"sshKeyId,omitempty"`
 		}
 
-		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-			http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&input); err != nil {
+			s.jsonError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
 
@@ -363,80 +382,94 @@ func (s *MasterServer) handleJumpServer(w http.ResponseWriter, r *http.Request) 
 
 		if err := s.store.UpdateJumpServer(ctx, server); err != nil {
 			s.logger.Error("Failed to update jump server", zap.Error(err))
-			http.Error(w, "Failed to update jump server", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "failed to update jump server")
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(server); err != nil {
-			s.logger.Error("Failed to encode jump server", zap.Error(err))
-		}
+		s.jsonResponse(w, server)
 
 	case http.MethodDelete:
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
 		if err := s.store.DeleteJumpServer(ctx, id); err != nil {
 			s.logger.Error("Failed to delete jump server", zap.Error(err))
-			http.Error(w, "Failed to delete jump server", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "failed to delete jump server")
 			return
 		}
 
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"deleted"}`))
+		w.WriteHeader(http.StatusNoContent)
 
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
 // --- Blocked IPs API Handlers ---
 
-// handleBlockedIPs handles GET /api/v1/blocked (list) and POST /api/v1/blocked (block IP).
+// handleBlockedIPs handles GET /api/v1/blocked-ips (list) and POST /api/v1/blocked-ips (block IP).
 func (s *MasterServer) handleBlockedIPs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	switch r.Method {
 	case http.MethodGet:
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
-		// Use pagination with reasonable defaults
-		blocked, _, err := s.store.ListBlockedIPs(ctx, 100, 0)
+		// M5 FIX: Use query params for pagination instead of hardcoded values
+		limit := 100
+		offset := 0
+		if l := r.URL.Query().Get("limit"); l != "" {
+			if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 && parsed <= 1000 {
+				limit = parsed
+			}
+		}
+		if o := r.URL.Query().Get("offset"); o != "" {
+			if parsed, err := strconv.Atoi(o); err == nil && parsed >= 0 {
+				offset = parsed
+			}
+		}
+
+		blocked, total, err := s.store.ListBlockedIPs(ctx, limit, offset)
 		if err != nil {
 			s.logger.Error("Failed to list blocked IPs", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(blocked); err != nil {
-			s.logger.Error("Failed to encode blocked IPs", zap.Error(err))
+		// Return paginated response with total count
+		response := map[string]interface{}{
+			"items":  blocked,
+			"total":  total,
+			"limit":  limit,
+			"offset": offset,
 		}
+
+		s.jsonResponse(w, response)
 
 	case http.MethodPost:
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
 		var input struct {
-			IPAddress string `json:"ip_address"`
+			IPAddress string `json:"ipAddress"`
 			Reason    string `json:"reason"`
 			Duration  string `json:"duration"` // e.g., "24h", "7d"
 		}
 
-		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-			http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&input); err != nil {
+			s.jsonError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
 
 		if input.IPAddress == "" {
-			http.Error(w, "ip_address is required", http.StatusBadRequest)
+			s.jsonError(w, http.StatusBadRequest, "ipAddress is required")
 			return
 		}
 
@@ -444,7 +477,7 @@ func (s *MasterServer) handleBlockedIPs(w http.ResponseWriter, r *http.Request) 
 		if input.Duration != "" {
 			d, err := time.ParseDuration(input.Duration)
 			if err != nil {
-				http.Error(w, "Invalid duration format (use Go duration syntax like '24h', '7d')", http.StatusBadRequest)
+				s.jsonError(w, http.StatusBadRequest, "invalid duration format (use Go duration syntax like '24h', '7d')")
 				return
 			}
 			duration = d
@@ -452,7 +485,7 @@ func (s *MasterServer) handleBlockedIPs(w http.ResponseWriter, r *http.Request) 
 
 		userID, _ := GetUserIDFromContext(ctx)
 		blockedBy := "system"
-		if userID > 0 {
+		if userID != "" {
 			if user, err := s.userService.GetByID(ctx, userID); err == nil {
 				blockedBy = user.Username
 			}
@@ -468,85 +501,77 @@ func (s *MasterServer) handleBlockedIPs(w http.ResponseWriter, r *http.Request) 
 
 		if err := s.store.BlockIP(ctx, blocked); err != nil {
 			s.logger.Error("Failed to block IP", zap.Error(err))
-			http.Error(w, "Failed to block IP", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "failed to block IP")
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		if err := json.NewEncoder(w).Encode(blocked); err != nil {
-			s.logger.Error("Failed to encode blocked IP", zap.Error(err))
-		}
+		s.writeJSON(w, http.StatusCreated, blocked)
 
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
-// handleBlockedIP handles DELETE /api/v1/blocked/{ip} (unblock).
+// handleBlockedIP handles DELETE /api/v1/blocked-ips/{ip} (unblock).
 func (s *MasterServer) handleBlockedIP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	// Extract IP from path
-	ip := strings.TrimPrefix(r.URL.Path, "/api/v1/blocked/")
+	ip := strings.TrimPrefix(r.URL.Path, "/api/v1/blocked-ips/")
 	if ip == "" {
-		http.Error(w, "IP address required", http.StatusBadRequest)
+		s.jsonError(w, http.StatusBadRequest, "IP address required")
 		return
 	}
 
 	switch r.Method {
 	case http.MethodGet:
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
 		blocked, err := s.store.GetBlockedIP(ctx, ip)
 		if err != nil {
 			if services.IsNotFound(err) {
-				http.Error(w, "IP not blocked", http.StatusNotFound)
+				s.jsonError(w, http.StatusNotFound, "IP not blocked")
 				return
 			}
 			s.logger.Error("Failed to get blocked IP", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(blocked); err != nil {
-			s.logger.Error("Failed to encode blocked IP", zap.Error(err))
-		}
+		s.jsonResponse(w, blocked)
 
 	case http.MethodDelete:
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
 		if err := s.store.UnblockIP(ctx, ip); err != nil {
 			s.logger.Error("Failed to unblock IP", zap.Error(err))
-			http.Error(w, "Failed to unblock IP", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "failed to unblock IP")
 			return
 		}
 
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"unblocked"}`))
+		s.jsonResponse(w, StatusResponse{Status: "unblocked"})
 
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
 // --- Provision API Handlers ---
 
-// handleProvisionJobs handles GET /api/v1/provision (list) and POST /api/v1/provision (create job).
+// handleProvisionJobs handles GET /api/v1/provision-jobs (list) and POST /api/v1/provision-jobs (create job).
 func (s *MasterServer) handleProvisionJobs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	switch r.Method {
 	case http.MethodGet:
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
@@ -554,36 +579,53 @@ func (s *MasterServer) handleProvisionJobs(w http.ResponseWriter, r *http.Reques
 		jobs, err := s.provisionService.ListPending(ctx)
 		if err != nil {
 			s.logger.Error("Failed to list provision jobs", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(jobs); err != nil {
-			s.logger.Error("Failed to encode provision jobs", zap.Error(err))
+		// Apply pagination
+		p := parsePagination(r)
+		totalCount := len(jobs)
+
+		// Apply offset
+		if p.Offset >= totalCount {
+			jobs = []*storage.ProvisionJob{}
+		} else {
+			jobs = jobs[p.Offset:]
+			// Apply limit
+			if p.Limit > 0 && p.Limit < len(jobs) {
+				jobs = jobs[:p.Limit]
+			}
 		}
+
+		s.jsonResponse(w, PaginatedResponse{
+			Items:      jobs,
+			TotalCount: int64(totalCount),
+			Limit:      p.Limit,
+			Offset:     p.Offset,
+		})
 
 	case http.MethodPost:
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
 		var input struct {
-			TargetHost    string `json:"target_host"`
-			TargetPort    int    `json:"target_port"`
-			TargetUser    string `json:"target_user"`
-			SSHKeyID      *int64 `json:"ssh_key_id,omitempty"`
-			AgentBinaryID *int64 `json:"agent_binary_id,omitempty"`
+			TargetHost    string  `json:"targetHost"`
+			TargetPort    int     `json:"targetPort"`
+			TargetUser    string  `json:"targetUser"`
+			SSHKeyID      *string `json:"sshKeyId,omitempty"`
+			AgentBinaryID *string `json:"agentBinaryId,omitempty"`
 		}
 
-		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-			http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, validation.DefaultMaxBodySize)).Decode(&input); err != nil {
+			s.jsonError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
 
 		if input.TargetHost == "" {
-			http.Error(w, "target_host is required", http.StatusBadRequest)
+			s.jsonError(w, http.StatusBadRequest, "targetHost is required")
 			return
 		}
 		if input.TargetPort == 0 {
@@ -604,18 +646,14 @@ func (s *MasterServer) handleProvisionJobs(w http.ResponseWriter, r *http.Reques
 
 		if err := s.provisionService.CreateJob(ctx, job); err != nil {
 			s.logger.Error("Failed to create provision job", zap.Error(err))
-			http.Error(w, "Failed to create provision job", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "failed to create provision job")
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		if err := json.NewEncoder(w).Encode(job); err != nil {
-			s.logger.Error("Failed to encode provision job", zap.Error(err))
-		}
+		s.writeJSON(w, http.StatusCreated, job)
 
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
@@ -623,49 +661,62 @@ func (s *MasterServer) handleProvisionJobs(w http.ResponseWriter, r *http.Reques
 func (s *MasterServer) handleProvisionJob(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// Extract ID from path
-	jobID := strings.TrimPrefix(r.URL.Path, "/api/v1/provision/")
-	if jobID == "" {
-		http.Error(w, "Job ID required", http.StatusBadRequest)
+	// Extract ID and sub-path from path: /api/v1/provision-jobs/{id}[/action]
+	path := strings.TrimPrefix(r.URL.Path, "/api/v1/provision-jobs/")
+	if path == "" {
+		s.jsonError(w, http.StatusBadRequest, "job ID required")
+		return
+	}
+
+	parts := strings.SplitN(path, "/", 2)
+	jobID := parts[0]
+
+	// Handle sub-routes
+	if len(parts) == 2 {
+		if parts[1] == "logs" {
+			if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
+				s.jsonError(w, status, msg)
+				return
+			}
+			s.handleGetProvisionLogs(w, r, jobID)
+			return
+		}
+		s.jsonError(w, http.StatusNotFound, "not found")
 		return
 	}
 
 	switch r.Method {
 	case http.MethodGet:
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
 		job, err := s.provisionService.GetJob(ctx, jobID)
 		if err != nil {
 			s.logger.Error("Failed to get provision job", zap.Error(err))
-			http.Error(w, "Provision job not found", http.StatusNotFound)
+			s.jsonError(w, http.StatusNotFound, "provision job not found")
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(job); err != nil {
-			s.logger.Error("Failed to encode provision job", zap.Error(err))
-		}
+		s.jsonResponse(w, job)
 
 	case http.MethodDelete:
 		if msg, status, ok := s.enforcementMiddleware.CheckAdminAccess(ctx); !ok {
-			http.Error(w, msg, status)
+			s.jsonError(w, status, msg)
 			return
 		}
 
 		// Cancel the job (marks as cancelled rather than actual deletion)
 		if err := s.provisionService.Cancel(ctx, jobID); err != nil {
 			s.logger.Error("Failed to cancel provision job", zap.Error(err))
-			http.Error(w, "Failed to cancel provision job", http.StatusInternalServerError)
+			s.jsonError(w, http.StatusInternalServerError, "failed to cancel provision job")
 			return
 		}
 
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"cancelled"}`))
+		w.WriteHeader(http.StatusNoContent)
 
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }

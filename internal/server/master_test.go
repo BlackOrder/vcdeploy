@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -31,6 +32,21 @@ import (
 	"github.com/BlackOrder/vcdeploy/internal/storage"
 	"go.uber.org/zap"
 )
+
+// TestMain sets up a temp data directory so NewMasterServer can save/load
+// the master key without requiring /var/lib/vcdeploy to exist.
+func TestMain(m *testing.M) {
+	tmpDir, err := os.MkdirTemp("", "vcdeploy-server-test-*")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to create temp dir: %v\n", err)
+		os.Exit(1)
+	}
+	os.Setenv("VCDEPLOY_DATA_DIR", tmpDir)
+	config.ResetSystemConfig() // reset singleton so it picks up the env var
+	code := m.Run()
+	os.RemoveAll(tmpDir)
+	os.Exit(code)
+}
 
 // loadTemplatesOrSkip loads templates for a server, skipping the test if templates aren't available.
 func loadTemplatesOrSkip(t *testing.T, server *MasterServer) {
@@ -74,16 +90,8 @@ func newTestServer(t *testing.T) *MasterServer {
 		db.Close()       //nolint:errcheck
 	})
 
-	// Set up KMS for tests
-	kms, err := security.NewKMS(db.Conn(), nil)
-	if err != nil {
-		t.Fatalf("failed to create KMS: %v", err)
-	}
-	// Initialize KMS with an encryption key for tests
-	if err := kms.Initialize(context.Background()); err != nil {
-		t.Fatalf("failed to initialize KMS: %v", err)
-	}
-	server.kms = kms
+	// Use the KMS already initialized by NewMasterServer
+	kms := server.kms
 
 	// Initialize all services for tests
 	server.secretService = secrets.New(db, kms)
@@ -108,7 +116,7 @@ func newTestServer(t *testing.T) *MasterServer {
 
 // newTestServerWithAuth creates a test server with a test user, API key, and session.
 // Returns the server, the raw API key, the session token, and the user ID.
-func newTestServerWithAuth(t *testing.T) (*MasterServer, string, string, int64) {
+func newTestServerWithAuth(t *testing.T) (*MasterServer, string, string, string) {
 	t.Helper()
 
 	server := newTestServer(t)
@@ -161,7 +169,7 @@ func newTestServerWithAuth(t *testing.T) (*MasterServer, string, string, int64) 
 
 // createTestAdminUser creates an admin user in the test server and returns their ID.
 // Use this when testing handlers that require authentication without full middleware.
-func createTestAdminUser(t *testing.T, server *MasterServer) int64 {
+func createTestAdminUser(t *testing.T, server *MasterServer) string {
 	t.Helper()
 	ctx := context.Background()
 
@@ -180,7 +188,7 @@ func createTestAdminUser(t *testing.T, server *MasterServer) int64 {
 }
 
 // requestWithAdminContext creates a request with admin user context for testing.
-func requestWithAdminContext(req *http.Request, userID int64) *http.Request {
+func requestWithAdminContext(req *http.Request, userID string) *http.Request {
 	ctx := context.WithValue(req.Context(), contextKeyUserID, userID)
 	return req.WithContext(ctx)
 }
@@ -196,20 +204,20 @@ func TestNewMasterServer(t *testing.T) {
 	t.Cleanup(func() { db.Close() })
 
 	cfg := &config.MasterConfig{
-		Server: config.ServerConfig{Listen: ":8080"},
-		GRPC:   config.GRPCConfig{Listen: ":9090"},
+		Server: config.ServerConfig{Listen: ":9000"},
+		GRPC:   config.GRPCConfig{Listen: ":9001"},
 	}
 
 	server, err := NewMasterServer(cfg, db, logger)
+	if err != nil {
+		t.Fatalf("NewMasterServer() error = %v", err)
+	}
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		server.Stop(ctx) //nolint:errcheck
 	})
 
-	if err != nil {
-		t.Fatalf("NewMasterServer() error = %v", err)
-	}
 	if server == nil {
 		t.Fatal("NewMasterServer() returned nil")
 	}
@@ -402,7 +410,7 @@ func TestWithUIAuth_NoCookie(t *testing.T) {
 		called = true
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	req := httptest.NewRequest(http.MethodGet, "/stats", nil)
 	rec := httptest.NewRecorder()
 
 	handler(rec, req)
@@ -425,7 +433,7 @@ func TestWithUIAuth_ValidCookie(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	req := httptest.NewRequest(http.MethodGet, "/stats", nil)
 	req.AddCookie(&http.Cookie{Name: "session", Value: sessionToken})
 	rec := httptest.NewRecorder()
 
@@ -750,8 +758,8 @@ func TestHandleSecretsPost(t *testing.T) {
 	server.handleSecrets(rec, req)
 
 	// Should succeed with services configured
-	if rec.Code != http.StatusCreated && rec.Code != http.StatusOK {
-		t.Errorf("status = %d, want %d or %d, body: %s", rec.Code, http.StatusOK, http.StatusCreated, rec.Body.String())
+	if rec.Code != http.StatusCreated {
+		t.Errorf("status = %d, want %d, body: %s", rec.Code, http.StatusCreated, rec.Body.String())
 	}
 }
 
@@ -805,8 +813,8 @@ func TestHandleSecretsDelete(t *testing.T) {
 
 	server.handleSecrets(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	if rec.Code != http.StatusNoContent {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNoContent)
 	}
 }
 
@@ -827,9 +835,17 @@ func TestHandleProjectTypes(t *testing.T) {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
 
-	var types []interface{}
-	if err := json.NewDecoder(rec.Body).Decode(&types); err != nil {
+	var result map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 		t.Fatalf("decode error: %v", err)
+	}
+
+	// Verify paginated response structure
+	if _, ok := result["items"]; !ok {
+		t.Error("expected 'items' field in response")
+	}
+	if _, ok := result["totalCount"]; !ok {
+		t.Error("expected 'totalCount' field in response")
 	}
 }
 
@@ -840,7 +856,7 @@ func TestHandleProjectTypesPost(t *testing.T) {
 	adminUserID := createTestAdminUser(t, server)
 
 	// Create a project type
-	body := bytes.NewBufferString(`{"name":"nodejs","description":"Node.js application","build_cmd":"npm install && npm run build"}`)
+	body := bytes.NewBufferString(`{"name":"nodejs","description":"Node.js application","buildCmd":"npm install && npm run build"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/project-types", body)
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithAdminContext(req, adminUserID)
@@ -848,8 +864,9 @@ func TestHandleProjectTypesPost(t *testing.T) {
 
 	server.handleProjectTypes(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Errorf("status = %d, want %d, body: %s", rec.Code, http.StatusOK, rec.Body.String())
+	// H4 FIX: POST endpoints now return 201 Created for new resources
+	if rec.Code != http.StatusCreated {
+		t.Errorf("status = %d, want %d, body: %s", rec.Code, http.StatusCreated, rec.Body.String())
 	}
 
 	// Verify it was created
@@ -858,18 +875,25 @@ func TestHandleProjectTypesPost(t *testing.T) {
 	rec = httptest.NewRecorder()
 	server.handleProjectTypes(rec, req)
 
-	var types []*storage.ProjectType
-	_ = json.NewDecoder(rec.Body).Decode(&types)
+	var result map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
 
 	found := false
-	for _, pt := range types {
-		if pt.Name == "nodejs" {
-			found = true
-			break
+	if items, ok := result["items"].([]interface{}); ok {
+		for _, item := range items {
+			if m, ok := item.(map[string]interface{}); ok {
+				// JSON struct uses Name, not name
+				if m["Name"] == "nodejs" {
+					found = true
+					break
+				}
+			}
 		}
 	}
 	if !found {
-		t.Error("project type 'nodejs' was not created")
+		t.Errorf("project type 'nodejs' was not created, result: %v", result)
 	}
 }
 
@@ -886,7 +910,7 @@ func TestHandleProjectType(t *testing.T) {
 		BuildCmd:    "pip install -r requirements.txt",
 		CreatedAt:   time.Now(),
 	}
-	if err := server.store.CreateProjectType(pt); err != nil {
+	if err := server.store.CreateProjectType(context.Background(), pt); err != nil {
 		t.Fatalf("failed to create project type: %v", err)
 	}
 
@@ -923,7 +947,7 @@ func TestHandleProjectTypeDelete(t *testing.T) {
 		Description: "To be deleted",
 		CreatedAt:   time.Now(),
 	}
-	if err := server.store.CreateProjectType(pt); err != nil {
+	if err := server.store.CreateProjectType(context.Background(), pt); err != nil {
 		t.Fatalf("failed to create project type: %v", err)
 	}
 
@@ -934,12 +958,12 @@ func TestHandleProjectTypeDelete(t *testing.T) {
 
 	server.handleProjectType(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	if rec.Code != http.StatusNoContent {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNoContent)
 	}
 
 	// Verify it was deleted
-	_, err := server.store.GetProjectTypeByName("delete-me")
+	_, err := server.store.GetProjectTypeByName(context.Background(), "delete-me")
 	if err == nil {
 		t.Error("project type should have been deleted")
 	}
@@ -958,12 +982,12 @@ func TestHandleProjectTypePut(t *testing.T) {
 		BuildCmd:    "npm build",
 		CreatedAt:   time.Now(),
 	}
-	if err := server.store.CreateProjectType(pt); err != nil {
+	if err := server.store.CreateProjectType(context.Background(), pt); err != nil {
 		t.Fatalf("failed to create project type: %v", err)
 	}
 
 	// Update it
-	body := bytes.NewBufferString(`{"description":"Updated description","build_cmd":"npm run build"}`)
+	body := bytes.NewBufferString(`{"description":"Updated description","buildCmd":"npm run build"}`)
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/project-types/update-me", body)
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithAdminContext(req, adminUserID)
@@ -976,7 +1000,7 @@ func TestHandleProjectTypePut(t *testing.T) {
 	}
 
 	// Verify the update
-	updated, err := server.store.GetProjectTypeByName("update-me")
+	updated, err := server.store.GetProjectTypeByName(context.Background(), "update-me")
 	if err != nil {
 		t.Fatalf("failed to get updated project type: %v", err)
 	}
@@ -984,7 +1008,7 @@ func TestHandleProjectTypePut(t *testing.T) {
 		t.Errorf("description = %q, want %q", updated.Description, "Updated description")
 	}
 	if updated.BuildCmd != "npm run build" {
-		t.Errorf("build_cmd = %q, want %q", updated.BuildCmd, "npm run build")
+		t.Errorf("buildCmd = %q, want %q", updated.BuildCmd, "npm run build")
 	}
 }
 
@@ -1034,7 +1058,7 @@ func TestHandleProjectType_MethodNotAllowed(t *testing.T) {
 		Description: "Test",
 		CreatedAt:   time.Now(),
 	}
-	if err := server.store.CreateProjectType(pt); err != nil {
+	if err := server.store.CreateProjectType(context.Background(), pt); err != nil {
 		t.Fatalf("failed to create project type: %v", err)
 	}
 
@@ -1061,7 +1085,7 @@ func TestHandleProjectType_InvalidJSON(t *testing.T) {
 		Description: "Test",
 		CreatedAt:   time.Now(),
 	}
-	if err := server.store.CreateProjectType(pt); err != nil {
+	if err := server.store.CreateProjectType(context.Background(), pt); err != nil {
 		t.Fatalf("failed to create project type: %v", err)
 	}
 
@@ -1086,7 +1110,7 @@ func TestHandleDeploymentLogs(t *testing.T) {
 
 	// Create a test project
 	project := &storage.Project{Name: "test-project", Repository: "https://github.com/test/test"}
-	_ = server.store.CreateProject(project)
+	_ = server.store.CreateProject(context.Background(), project)
 
 	// Create a test deployment
 	deployment := &storage.DeploymentRecord{
@@ -1247,9 +1271,9 @@ func TestUIAgentsPage(t *testing.T) {
 	if !strings.Contains(body, "Agents") {
 		t.Error("response should contain 'Agents' title")
 	}
-	// Check for stats dashboard elements
+	// Check for stats page elements
 	if !strings.Contains(body, "stats-card") {
-		t.Error("response should contain stats dashboard")
+		t.Error("response should contain stats page")
 	}
 }
 
@@ -1279,15 +1303,15 @@ func TestUIDeploymentsPage(t *testing.T) {
 	}
 }
 
-func TestUIDashboardPage(t *testing.T) {
+func TestUIStatsPage(t *testing.T) {
 	t.Parallel()
 
 	server := newTestServer(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	req := httptest.NewRequest(http.MethodGet, "/stats", nil)
 	rec := httptest.NewRecorder()
 
-	server.handleDashboard(rec, req)
+	server.handleStatsUI(rec, req)
 
 	skipIfNoTemplates(t, rec)
 
@@ -1296,8 +1320,8 @@ func TestUIDashboardPage(t *testing.T) {
 	}
 
 	body := rec.Body.String()
-	if !strings.Contains(body, "Dashboard") {
-		t.Error("response should contain 'Dashboard' title")
+	if !strings.Contains(body, "Stats") {
+		t.Error("response should contain 'Stats' title")
 	}
 }
 
@@ -1372,7 +1396,7 @@ func TestUIAPIKeysPage(t *testing.T) {
 
 	server := newTestServer(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/apikeys", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api-keys", nil)
 	rec := httptest.NewRecorder()
 
 	server.handleAPIKeysUI(rec, req)
@@ -1498,7 +1522,7 @@ func TestWithUIAuth_ExpiredSession(t *testing.T) {
 		called = true
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	req := httptest.NewRequest(http.MethodGet, "/stats", nil)
 	req.AddCookie(&http.Cookie{Name: "session", Value: "expired-session-token"})
 	rec := httptest.NewRecorder()
 
@@ -1521,7 +1545,7 @@ func TestWithUIAuth_InvalidSession(t *testing.T) {
 		called = true
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	req := httptest.NewRequest(http.MethodGet, "/stats", nil)
 	req.AddCookie(&http.Cookie{Name: "session", Value: "invalid-session-token"})
 	rec := httptest.NewRecorder()
 
@@ -1607,8 +1631,8 @@ func TestHandleAPILogin(t *testing.T) {
 		if userResp["username"] != "loginuser" {
 			t.Errorf("username = %v, want 'loginuser'", userResp["username"])
 		}
-		if int64(userResp["id"].(float64)) != user.ID {
-			t.Errorf("user id = %v, want %d", userResp["id"], user.ID)
+		if userResp["id"].(string) != user.ID {
+			t.Errorf("user id = %v, want %s", userResp["id"], user.ID)
 		}
 	})
 
@@ -1872,14 +1896,17 @@ func TestSetCAManager(t *testing.T) {
 
 	server := newTestServer(t)
 
-	// Initially nil
+	// caManager is now initialized by newTestServer (via NewMasterServer when KMS is available)
+	// Verify we can set it to a different value
+	initialCA := server.caManager
+	server.SetCAManager(nil)
+
 	if server.caManager != nil {
-		t.Error("caManager should be nil initially")
+		t.Error("caManager should be nil after setting to nil")
 	}
 
-	// Can't easily test with real CA, but we can verify the method exists
-	// and sets the field (with nil just to verify no panic)
-	server.SetCAManager(nil)
+	// Restore for other tests that might use this server
+	server.SetCAManager(initialCA)
 }
 
 func TestSetKMS(t *testing.T) {
@@ -1902,15 +1929,15 @@ func TestGetUserIDFromContext(t *testing.T) {
 
 	// Test with user ID in context
 	req := httptest.NewRequest("GET", "/", nil)
-	ctx := context.WithValue(req.Context(), contextKeyUserID, int64(123))
+	ctx := context.WithValue(req.Context(), contextKeyUserID, "test-user-123")
 	req = req.WithContext(ctx)
 
 	userID, ok := GetUserIDFromContext(req.Context())
 	if !ok {
 		t.Error("expected ok = true")
 	}
-	if userID != 123 {
-		t.Errorf("userID = %d, want 123", userID)
+	if userID != "test-user-123" {
+		t.Errorf("userID = %s, want test-user-123", userID)
 	}
 }
 
@@ -1923,8 +1950,8 @@ func TestGetUserIDFromContext_Missing(t *testing.T) {
 	if ok {
 		t.Error("expected ok = false for missing context")
 	}
-	if userID != 0 {
-		t.Errorf("userID = %d, want 0 for missing context", userID)
+	if userID != "" {
+		t.Errorf("userID = %s, want empty for missing context", userID)
 	}
 }
 
@@ -1932,15 +1959,15 @@ func TestGetUserIDFromContext_WrongType(t *testing.T) {
 	t.Parallel()
 
 	req := httptest.NewRequest("GET", "/", nil)
-	ctx := context.WithValue(req.Context(), contextKeyUserID, "not-an-int")
+	ctx := context.WithValue(req.Context(), contextKeyUserID, int64(123))
 	req = req.WithContext(ctx)
 
 	userID, ok := GetUserIDFromContext(req.Context())
 	if ok {
 		t.Error("expected ok = false for wrong type")
 	}
-	if userID != 0 {
-		t.Errorf("userID = %d, want 0 for wrong type", userID)
+	if userID != "" {
+		t.Errorf("userID = %s, want empty for wrong type", userID)
 	}
 }
 
@@ -1957,8 +1984,8 @@ func TestNewMasterServer_WithRateLimiter(t *testing.T) {
 	t.Cleanup(func() { db.Close() })
 
 	cfg := &config.MasterConfig{
-		Server: config.ServerConfig{Listen: ":8080"},
-		GRPC:   config.GRPCConfig{Listen: ":9090"},
+		Server: config.ServerConfig{Listen: ":9000"},
+		GRPC:   config.GRPCConfig{Listen: ":9001"},
 	}
 
 	server, err := NewMasterServer(cfg, db, logger)
@@ -1988,8 +2015,8 @@ func TestNewMasterServer_WithSecurityMiddleware(t *testing.T) {
 	t.Cleanup(func() { db.Close() })
 
 	cfg := &config.MasterConfig{
-		Server: config.ServerConfig{Listen: ":8080"},
-		GRPC:   config.GRPCConfig{Listen: ":9090"},
+		Server: config.ServerConfig{Listen: ":9000"},
+		GRPC:   config.GRPCConfig{Listen: ":9001"},
 	}
 
 	server, err := NewMasterServer(cfg, db, logger)
@@ -2163,7 +2190,7 @@ func TestSetupRequiredMiddleware_RedirectsWhenSetupRequired(t *testing.T) {
 		wantRedirect   bool
 		wantStatusCode int
 	}{
-		{"dashboard redirects", "/dashboard", true, http.StatusSeeOther},
+		{"stats redirects", "/stats", true, http.StatusSeeOther},
 		{"login redirects", "/login", true, http.StatusSeeOther},
 		{"api redirects", "/api/v1/users", true, http.StatusSeeOther},
 		{"setup allowed", "/setup", false, http.StatusOK},
@@ -2212,7 +2239,7 @@ func TestSetupRequiredMiddleware_PassesThroughWhenNotRequired(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	req := httptest.NewRequest(http.MethodGet, "/stats", nil)
 	rec := httptest.NewRecorder()
 
 	handler.ServeHTTP(rec, req)
@@ -2263,13 +2290,13 @@ func TestHandleSetup_POST_CreatesAdminUser(t *testing.T) {
 
 	server.handleSetup(rec, req)
 
-	// Should redirect to dashboard on success
+	// Should redirect to stats on success
 	if rec.Code != http.StatusSeeOther {
 		t.Errorf("status = %d, want %d (body: %s)", rec.Code, http.StatusSeeOther, rec.Body.String())
 	}
 	location := rec.Header().Get("Location")
-	if location != "/dashboard" {
-		t.Errorf("Location = %q, want /dashboard", location)
+	if location != "/stats" {
+		t.Errorf("Location = %q, want /stats", location)
 	}
 
 	// Verify user was created
@@ -2493,13 +2520,13 @@ func TestHandleLogin_POST_ValidCredentials(t *testing.T) {
 
 	server.handleLogin(rec, req)
 
-	// Should redirect to dashboard
+	// Should redirect to stats
 	if rec.Code != http.StatusSeeOther {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusSeeOther)
 	}
 	location := rec.Header().Get("Location")
-	if location != "/dashboard" {
-		t.Errorf("Location = %q, want /dashboard", location)
+	if location != "/stats" {
+		t.Errorf("Location = %q, want /stats", location)
 	}
 
 	// Should set session cookie
@@ -2695,13 +2722,13 @@ func TestHandleLogin_POST_TOTPValid(t *testing.T) {
 
 	server.handleLogin(rec, req)
 
-	// Should redirect to dashboard
+	// Should redirect to stats
 	if rec.Code != http.StatusSeeOther {
 		t.Errorf("status = %d, want %d; body = %s", rec.Code, http.StatusSeeOther, rec.Body.String())
 	}
 	location := rec.Header().Get("Location")
-	if location != "/dashboard" {
-		t.Errorf("Location = %q, want /dashboard", location)
+	if location != "/stats" {
+		t.Errorf("Location = %q, want /stats", location)
 	}
 }
 
@@ -3162,13 +3189,13 @@ func TestHandleChangePassword_POST_Success(t *testing.T) {
 
 	server.handleChangePassword(rec, req)
 
-	// Should redirect to dashboard
+	// Should redirect to stats
 	if rec.Code != http.StatusSeeOther {
 		t.Errorf("status = %d, want %d; body = %s", rec.Code, http.StatusSeeOther, rec.Body.String())
 	}
 	location := rec.Header().Get("Location")
-	if location != "/dashboard" {
-		t.Errorf("Location = %q, want /dashboard", location)
+	if location != "/stats" {
+		t.Errorf("Location = %q, want /stats", location)
 	}
 
 	// Verify password was actually changed - should be able to verify new password
@@ -3215,7 +3242,7 @@ func TestHandleChangePassword_POST_ClearsMustChangeFlag(t *testing.T) {
 
 	server.handleChangePassword(rec, req)
 
-	// Should redirect to dashboard
+	// Should redirect to stats
 	if rec.Code != http.StatusSeeOther {
 		t.Errorf("status = %d, want %d; body = %s", rec.Code, http.StatusSeeOther, rec.Body.String())
 	}
@@ -3228,6 +3255,73 @@ func TestHandleChangePassword_POST_ClearsMustChangeFlag(t *testing.T) {
 
 	if updatedUser.MustChangePassword {
 		t.Error("MustChangePassword flag should be cleared after successful password change")
+	}
+}
+
+func TestHandleChangePassword_POST_InvalidatesSessions(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(t)
+	ctx := context.Background()
+
+	// Create a test user
+	user, err := server.userService.Create(ctx, "sessioninvalidate", "TestPass@123!", "sessioninvalidate@test.com", "user")
+	if err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	// Create multiple sessions for the user
+	session1, err := server.sessionService.Create(ctx, user.ID, "192.168.1.1", "TestAgent1", 24*time.Hour)
+	if err != nil {
+		t.Fatalf("failed to create session 1: %v", err)
+	}
+	session2, err := server.sessionService.Create(ctx, user.ID, "192.168.1.2", "TestAgent2", 24*time.Hour)
+	if err != nil {
+		t.Fatalf("failed to create session 2: %v", err)
+	}
+
+	// Verify sessions exist
+	sessions, err := server.sessionService.ListForUser(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("failed to list sessions: %v", err)
+	}
+	if len(sessions) != 2 {
+		t.Fatalf("expected 2 sessions, got %d", len(sessions))
+	}
+
+	// Change password
+	form := strings.NewReader("current_password=TestPass@123!&new_password=NewPass@456!&confirm_password=NewPass@456!")
+	req := httptest.NewRequest(http.MethodPost, "/change-password", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	ctx = context.WithValue(req.Context(), contextKeyUserID, user.ID)
+	ctx = WithUserContext(ctx, user)
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	server.handleChangePassword(rec, req)
+
+	// Should redirect to stats
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want %d; body = %s", rec.Code, http.StatusSeeOther, rec.Body.String())
+	}
+
+	// Verify all sessions were invalidated
+	sessions, err = server.sessionService.ListForUser(context.Background(), user.ID)
+	if err != nil {
+		t.Fatalf("failed to list sessions after password change: %v", err)
+	}
+	if len(sessions) != 0 {
+		t.Errorf("expected 0 sessions after password change, got %d", len(sessions))
+	}
+
+	// Verify old session tokens are invalid
+	_, err = server.sessionService.GetByToken(context.Background(), session1.Token)
+	if err == nil {
+		t.Error("session 1 should be invalid after password change")
+	}
+	_, err = server.sessionService.GetByToken(context.Background(), session2.Token)
+	if err == nil {
+		t.Error("session 2 should be invalid after password change")
 	}
 }
 
@@ -3469,7 +3563,7 @@ func TestAuthFlow_WithUIAuth_ExpiredSession(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	req := httptest.NewRequest(http.MethodGet, "/stats", nil)
 	req.AddCookie(&http.Cookie{Name: "session", Value: expiredSession.ID})
 	rec := httptest.NewRecorder()
 
