@@ -15,9 +15,6 @@ on:
       - '*.md'
       - 'LICENSE'
       - '.gitignore'
-  schedule:
-    # Run daily at midnight UTC
-    - cron: "0 0 * * *"
 
 # Cancel in-progress runs when a new commit is pushed to the same branch
 concurrency:
